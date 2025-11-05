@@ -2,6 +2,14 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/okTurtles/forkana)
 
+## Getting started
+
+### Prerequisites
+
+- Go 1.25
+- node
+- pnpm
+
 -----------
 
 # Gitea
