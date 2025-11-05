@@ -469,3 +469,126 @@ func processGitCommits(ctx *context.Context, gitCommits []*git.Commit) ([]*git_m
 	}
 	return commits, nil
 }
+
+// ArticleView handles the /article/{username}/{subjectname} route
+// If a "version" query parameter is present, it shows the commit view
+// Otherwise, it shows the repository home view
+func ArticleView(ctx *context.Context) {
+	// Check if version parameter is present
+	commitHash := ctx.FormString("version")
+	if commitHash != "" {
+		// Show commit view
+		ArticleCommitView(ctx)
+	} else {
+		// Show home view - need to set up ref context first
+		SetEditorconfigIfExists(ctx)
+		if ctx.Written() {
+			return
+		}
+
+		// Set up branch reference (default branch)
+		if ctx.Repo.Repository.IsEmpty {
+			ctx.Repo.BranchName = ctx.Repo.Repository.DefaultBranch
+			ctx.Repo.RefFullName = git.RefNameFromBranch(ctx.Repo.BranchName)
+			ctx.Data["BranchName"] = ctx.Repo.BranchName
+			ctx.Data["TreePath"] = ""
+		} else {
+			refShortName := ctx.Repo.Repository.DefaultBranch
+			if !gitrepo.IsBranchExist(ctx, ctx.Repo.Repository, refShortName) {
+				brs, _, err := ctx.Repo.GitRepo.GetBranchNames(0, 1)
+				if err == nil && len(brs) != 0 {
+					refShortName = brs[0]
+				}
+			}
+			ctx.Repo.RefFullName = git.RefNameFromBranch(refShortName)
+			ctx.Repo.BranchName = refShortName
+			ctx.Repo.TreePath = "" // Set to empty string for root path
+
+			var err error
+			ctx.Repo.Commit, err = ctx.Repo.GitRepo.GetBranchCommit(refShortName)
+			if err == nil {
+				ctx.Repo.CommitID = ctx.Repo.Commit.ID.String()
+				ctx.Repo.CommitsCount, _ = ctx.Repo.GetCommitsCount()
+			} else if !strings.Contains(err.Error(), "fatal: not a git repository") && !strings.Contains(err.Error(), "object does not exist") {
+				ctx.ServerError("GetBranchCommit", err)
+				return
+			}
+
+			// Set all required context data for templates
+			ctx.Data["RefFullName"] = ctx.Repo.RefFullName
+			ctx.Data["BranchName"] = ctx.Repo.BranchName
+			ctx.Data["CommitsCount"] = ctx.Repo.CommitsCount
+			ctx.Data["TreePath"] = "" // Explicitly set to empty string for root path
+			ctx.Data["CommitID"] = ctx.Repo.CommitID
+			ctx.Data["RefTypeNameSubURL"] = ctx.Repo.RefTypeNameSubURL()
+		}
+
+		Home(ctx)
+	}
+}
+
+// ArticleCommitView renders the repository file browser view at a specific commit
+// for the /article/{username}/{subjectname}?version={commit-hash} route
+// This is equivalent to the /{username}/{reponame}/src/commit/{hash} route
+func ArticleCommitView(ctx *context.Context) {
+	// Get the commit hash from the "version" query parameter
+	commitHash := ctx.FormString("version")
+	if commitHash == "" {
+		ctx.NotFound(errors.New("version parameter is required"))
+		return
+	}
+
+	// Validate that the commit hash looks like a valid git commit ID
+	if !git.IsStringLikelyCommitID(ctx.Repo.GetObjectFormat(), commitHash, 7) {
+		ctx.NotFound(errors.New("invalid commit hash"))
+		return
+	}
+
+	// Get the commit from the repository
+	commit, err := ctx.Repo.GitRepo.GetCommit(commitHash)
+	if err != nil {
+		if git.IsErrNotExist(err) {
+			ctx.NotFound(err)
+		} else {
+			ctx.ServerError("GetCommit", err)
+		}
+		return
+	}
+
+	// Set up the repository context similar to RepoRefByType(git.RefTypeCommit)
+	ctx.Repo.Commit = commit
+	ctx.Repo.CommitID = commit.ID.String()
+	ctx.Repo.RefFullName = git.RefNameFromCommit(ctx.Repo.CommitID)
+	ctx.Repo.TreePath = ""
+	// BranchName is empty when viewing a commit (not a branch)
+	// This prevents template errors and disables edit/upload buttons
+	ctx.Repo.BranchName = ""
+
+	// Calculate commits count for this commit
+	// Use "." instead of "" to count all commits in the repository
+	commitsCount, err := ctx.Repo.GitRepo.FileCommitsCount(ctx.Repo.CommitID, ".")
+	if err != nil {
+		log.Error("FileCommitsCount: %v", err)
+		ctx.Repo.CommitsCount = 0
+	} else {
+		ctx.Repo.CommitsCount = commitsCount
+	}
+
+	// Set all required context data for templates
+	ctx.Data["RefFullName"] = ctx.Repo.RefFullName
+	ctx.Data["CommitsCount"] = ctx.Repo.CommitsCount
+	ctx.Data["CommitID"] = ctx.Repo.CommitID
+	ctx.Data["TreePath"] = ""   // Explicitly set to empty string for root path
+	ctx.Data["BranchName"] = "" // Empty string for commits (not a branch)
+	ctx.Data["RefTypeNameSubURL"] = ctx.Repo.RefTypeNameSubURL()
+
+	// Set up editor config (required for Home view)
+	SetEditorconfigIfExists(ctx)
+	if ctx.Written() {
+		return
+	}
+
+	// Call the Home handler to render the repository file browser at this commit
+	// This is the same view as /{username}/{reponame}/src/commit/{hash}
+	Home(ctx)
+}
