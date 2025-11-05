@@ -1180,6 +1180,44 @@ func registerWebRoutes(m *web.Router) {
 	m.Get("/article/repo/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, explore.RepoArticle)
 	m.Get("/article/{username}/{subjectname}", optSignIn, context.RepoAssignmentByOwnerAndSubject, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, explore.RepoArticle)
 
+	// Article-based file operation routes - mirror the repository-based routes but use subject name
+	m.Group("/article/{username}/{subjectname}", func() {
+		m.Group("", func() {
+			m.Group("", func() {
+				// "GET" requests only need "code reader" permission, "POST" requests need "code writer" permission.
+				// Because reader can "fork and edit"
+				canWriteToBranch := context.CanWriteToBranch()
+				m.Post("/_preview/*", repo.DiffPreviewPost) // read-only, fine with "code reader"
+				m.Post("/_fork/*", repo.ForkToEditPost)     // read-only, fork to own repo, fine with "code reader"
+
+				// the path params are used in PrepareCommitFormOptions to construct the correct form action URL
+				m.Combo("/{editor_action:_edit}/*").
+					Get(repo.EditFile).
+					Post(web.Bind(forms.EditRepoFileForm{}), canWriteToBranch, repo.EditFilePost)
+				m.Combo("/{editor_action:_new}/*").
+					Get(repo.EditFile).
+					Post(web.Bind(forms.EditRepoFileForm{}), canWriteToBranch, repo.EditFilePost)
+				m.Combo("/{editor_action:_delete}/*").
+					Get(repo.DeleteFile).
+					Post(web.Bind(forms.DeleteRepoFileForm{}), canWriteToBranch, repo.DeleteFilePost)
+				m.Combo("/{editor_action:_upload}/*", repo.MustBeAbleToUpload).
+					Get(repo.UploadFile).
+					Post(web.Bind(forms.UploadRepoFileForm{}), canWriteToBranch, repo.UploadFilePost)
+				m.Combo("/{editor_action:_diffpatch}/*").
+					Get(repo.NewDiffPatch).
+					Post(web.Bind(forms.EditRepoFileForm{}), canWriteToBranch, repo.NewDiffPatchPost)
+				m.Combo("/{editor_action:_cherrypick}/{sha:([a-f0-9]{7,64})}/*").
+					Get(repo.CherryPick).
+					Post(web.Bind(forms.CherryPickForm{}), canWriteToBranch, repo.CherryPickPost)
+			}, context.RepoRefByType(git.RefTypeBranch), repo.WebGitOperationCommonData)
+			m.Group("", func() {
+				m.Post("/upload-file", repo.UploadFileToServer)
+				m.Post("/upload-remove", repo.RemoveUploadFileFromServer)
+			}, repo.MustBeAbleToUpload, reqRepoCodeWriter)
+		}, repo.MustBeEditable, context.RepoMustNotBeArchived())
+	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
+	// end "/article/{username}/{subjectname}": article-based file operations
+
 	// user/org home, including rss feeds like "/{username}/{reponame}.rss"
 	m.Get("/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, repo.Home)
 

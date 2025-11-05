@@ -536,6 +536,7 @@ func RepoAssignment(ctx *Context) {
 
 	ctx.Repo.RepoLink = repo.Link()
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
+	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
 
 	unit, err := ctx.Repo.Repository.GetUnit(ctx, unit_model.TypeExternalTracker)
@@ -1118,6 +1119,7 @@ func RepoAssignmentBySubject(ctx *Context) {
 	// Set up repository link data
 	ctx.Repo.RepoLink = repo.Link()
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
+	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
 
 	// Set up release count data
@@ -1194,6 +1196,7 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	// Set up repository link data
 	ctx.Repo.RepoLink = repo.Link()
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
+	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
 
 	// Initialize Git repository (required for RepoRefByType middleware)

@@ -44,7 +44,12 @@
             {{.CsrfTokenHtml}}
             <input type="hidden" name="last_commit" value="{{.LastCommitID}}">
             <input type="hidden" name="tree_path" value="{{.ReadmeTreePath}}">
-            
+            {{/* Required commit choice field - default to direct commit */}}
+            <input type="hidden" name="commit_choice" value="direct">
+            {{/* Optional commit message fields - will use default if empty */}}
+            <input type="hidden" name="commit_summary" value="">
+            <input type="hidden" name="commit_message" value="">
+
              <div class="field">
                  <div class="tw-p-0">
                      <textarea id="edit_area" name="content" class="tw-hidden" data-id="repo-{{.Repository.Name}}-{{.ReadmeTreePath}}">{{.FileContent}}</textarea>
