@@ -1,4 +1,5 @@
 import {createToastEditor} from './toast-editor.ts';
+import {submitFormFetchAction} from './common-fetch-action.ts';
 
 export function initArticleEditor() {
   const editForm = document.querySelector<HTMLFormElement>('#article-edit-form');
@@ -27,11 +28,8 @@ export function initArticleEditor() {
         // Update textarea with editor content before submission
         textarea.value = editor.getMarkdown();
 
-        // For now, just show a message - in production this would submit to backend
-        alert(`Submit functionality would be implemented here.\n\nContent length: ${textarea.value.length} characters`);
-
-        // Uncomment to actually submit:
-        // editForm.submit();
+        // Submit the form using fetch action to handle JSON redirect response
+        await submitFormFetchAction(editForm);
       });
     }
   })();
