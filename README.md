@@ -10,6 +10,55 @@
 - node
 - pnpm
 
+
+### Installation
+
+Add `gitea/custom/conf/app.ini`. See details below for file content.
+
+<details>
+
+```ini
+WORK_PATH = /Users/{YOUR PATH}/Sites/forkana
+
+[server]
+PROTOCOL = http
+DOMAIN = localhost
+HTTP_PORT = 3000
+ROOT_URL = http://localhost:3000/
+RUN_MODE = dev
+; LANDING_PAGE = explore
+
+[database]
+DB_TYPE = sqlite3
+PATH = data/gitea.db
+
+[security]
+INSTALL_LOCK = true
+SECRET_KEY = changeme
+INTERNAL_TOKEN = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYmYiOjE3NTY3NDU2NjZ9.luRdwGyyCdO0dyjghYinzVgC7Uu8JXTlst2HkrjE80k
+
+[oauth2]
+JWT_SECRET = 9l225INhfQSZkuiCA1bu3rDvR3TDf6DckPy0m3qAGmE
+
+[ui]
+DEFAULT_THEME = gitea-light
+EXPLORE_PAGING_DEFAULT_SORT = alphabetically
+```
+
+</details>
+
+Then run
+
+To build the project:
+
+TAGS="bindata sqlite sqlite_unlock_notify" make build
+
+To run the project:
+
+    TAGS="sqlite sqlite_unlock_notify" make watch
+
+Note that you need to build once in any case, before running continuously with watch.
+
 -----------
 
 # Gitea
