@@ -76,14 +76,14 @@ function buildSubjectUrlWithMode(base: string, view: ViewKey, mode?: string) {
   return url.pathname + url.search;
 }
 
-function buildArticleUrl(articleRepoBase: string, selection: RepoSelection, mode: string) {
-  const base = articleRepoBase.replace(/\/+$/, '');
+function buildArticleUrl(articleBase: string, selection: RepoSelection, mode: string) {
+  const base = articleBase.replace(/\/+$/, '');
   const owner = encodeURIComponent(selection.owner);
-  const repo = encodeURIComponent(selection.repo);
-  const url = new URL(`${base}/${owner}/${repo}`, window.location.origin);
+  // Use subject for the URL path (subject is what identifies the article)
+  const subject = encodeURIComponent(selection.subject || selection.repo);
+  const url = new URL(`${base}/${owner}/${subject}`, window.location.origin);
   url.searchParams.set('view', 'article');
-  url.searchParams.set('mode', mode || 'read');
-  if (selection.subject) url.searchParams.set('subject', selection.subject);
+  if (mode && mode !== 'read') url.searchParams.set('mode', mode);
   return url.pathname + url.search;
 }
 
@@ -130,7 +130,7 @@ export function initRepoHistory() {
   const subjectUrl = root.getAttribute('data-subject-url') || window.location.pathname;
   const bubbleUrl = root.getAttribute('data-bubble-url') || buildSubjectUrl(subjectUrl, 'bubble');
   const tableUrl = root.getAttribute('data-table-url') || buildSubjectUrl(subjectUrl, 'table');
-  const articleRepoBase = root.getAttribute('data-article-repo-base') || `${appSubUrl}/article/repo`;
+  const articleBase = root.getAttribute('data-article-base') || `${appSubUrl}/article`;
 
   const bubbleSection = root.querySelector<HTMLElement>('[data-view="bubble"]');
   const tableSection = root.querySelector<HTMLElement>('[data-view="table"]');
@@ -245,7 +245,7 @@ export function initRepoHistory() {
 
     let url: string;
     if (view === 'article' && selection) {
-      url = buildArticleUrl(articleRepoBase, selection, mode);
+      url = buildArticleUrl(articleBase, selection, mode);
     } else if (view === 'table') {
       url = tableUrl;
     } else if (view === 'bubble') {
@@ -445,7 +445,7 @@ export function initRepoHistory() {
     loadError.value = '';
     updateArticleStatus();
     showArticleContent();
-    const url = buildArticleUrl(articleRepoBase, selection, mode);
+    const url = buildArticleUrl(articleBase, selection, mode);
     try {
       const response = await GET(url);
       if (!response.ok) throw new Error(`Failed with status ${response.status}`);
