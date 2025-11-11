@@ -121,11 +121,15 @@ If you have any suggestions or would like to contribute to it, you can visit the
 
 From the root of the source tree, run:
 
-    TAGS="bindata" make build
+```
+TAGS="bindata" make build
+```
 
 or if SQLite support is required:
 
-    TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
+TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
 
 The `build` target is split into two sub-targets:
 
