@@ -55,15 +55,19 @@ $ pnpm install
 To build the project:
 
 ```bash
-$ [GO=go1.25.2] TAGS="bindata sqlite sqlite_unlock_notify" make build
+$ TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
 
-`GO` version specification is optional but *might* be necessary depending on your system's configuration.
+Note that it might be necessary, depending on your system's configuration, to prepend a `GO` version specification.
+
+```bash
+$ GO=go1.25.2 TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
 
 To run the project:
 
 ```bash
-$ [GO=go1.25.2] TAGS="sqlite sqlite_unlock_notify" make watch
+$ TAGS="sqlite sqlite_unlock_notify" make watch
 ```
 
 Note that you need to build once in any case, before running continuously with watch.
