@@ -58,7 +58,7 @@ To build the project:
 $ TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
 
-Note that it might be necessary, depending on your system's configuration, to prepend a `GO` specification (indicating the name of the executable).
+Note that it might be necessary, depending on your system's configuration, to prepend a `GO` specification (indicating the name of the executable, if different from just `go`).
 
 ```bash
 $ GO=go1.25.2 TAGS="bindata sqlite sqlite_unlock_notify" make build
