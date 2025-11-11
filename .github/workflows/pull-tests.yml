@@ -1,0 +1,76 @@
+name: tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  files-changed:
+    uses: ./.github/workflows/files-changed.yml
+
+  test-frontend:
+    if: needs.files-changed.outputs.frontend == 'true'
+    needs: files-changed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: make deps-frontend
+
+      - name: Run frontend tests
+        run: make test-frontend
+
+  test-backend:
+    if: needs.files-changed.outputs.backend == 'true'
+    needs: files-changed
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: Install backend dependencies
+        run: make deps-backend
+
+      - name: Build backend
+        run: make backend
+        env:
+          TAGS: bindata
+
+      - name: Run backend tests with coverage
+        run: make unit-test-coverage test-check
+        env:
+          TAGS: bindata
+          CI: "" # Unset CI to skip tests requiring external services (Redis, Elasticsearch, Meilisearch, Azure Storage)
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v5
+        if: always()
+        with:
+          files: ./coverage.out
+          flags: unittests
+          name: backend-unit-tests
