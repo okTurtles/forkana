@@ -140,14 +140,23 @@ export function initRepoHistory() {
 
   const navEl = document.querySelector('#subject-view-tabs');
 
-  const storedSelection = readStoredSelection();
-  let initialSelection: RepoSelection | null = storedSelection;
-
   const initialView = root.getAttribute('data-initial-view');
   const initialOwner = root.getAttribute('data-initial-owner');
   const initialRepo = root.getAttribute('data-initial-repo');
   const initialSubject = root.getAttribute('data-initial-subject');
   const initialMode = root.getAttribute('data-initial-mode');
+
+  // Read stored selection and validate it matches the current page's subject
+  const storedSelection = readStoredSelection();
+  let initialSelection: RepoSelection | null = null;
+
+  // Only use stored selection if it matches the current page's subject
+  if (storedSelection && initialSubject && storedSelection.subject === initialSubject) {
+    initialSelection = storedSelection;
+  } else if (storedSelection) {
+    // Clear stored selection if subject doesn't match
+    writeStoredSelection(null);
+  }
 
   if (!initialSelection && initialView === 'article' && initialOwner && (initialRepo || initialSubject)) {
     initialSelection = {
