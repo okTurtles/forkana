@@ -144,7 +144,9 @@ More info: https://docs.gitea.com/installation/install-from-source
 
 After building, a binary file named `gitea` will be generated in the root of the source tree by default. To run it, use:
 
-    ./gitea web
+```
+./gitea web
+```
 
 > [!NOTE]
 > If you're interested in using our APIs, we have experimental support with [documentation](https://docs.gitea.com/api).
