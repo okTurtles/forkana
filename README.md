@@ -48,6 +48,10 @@ EXPLORE_PAGING_DEFAULT_SORT = alphabetically
 
 Then run
 
+```bash
+$ pnpm install
+```
+
 To build the project:
 
 ```bash
