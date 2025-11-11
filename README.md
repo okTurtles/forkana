@@ -54,6 +54,8 @@ To build the project:
 $ [GO=go1.25.2] TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
 
+`GO` version specification is optional but *might* be necessary depending on your system's configuration.
+
 To run the project:
 
 ```bash
