@@ -6,19 +6,18 @@
 
 ### Prerequisites
 
-- Go 1.25
+- Go 1.25. See https://go.dev/doc/manage-install
 - node
 - pnpm
 
-
 ### Installation
 
-Add `gitea/custom/conf/app.ini`. See details below for file content.
+Add `gitea/custom/conf/app.ini`. See details below for file content. Make sure to properly set `WORK_PATH`.
 
 <details>
 
 ```ini
-WORK_PATH = /Users/{YOUR PATH}/Sites/forkana
+WORK_PATH = /path/to/forkana ; the only line which needs modification
 
 [server]
 PROTOCOL = http
@@ -51,13 +50,19 @@ Then run
 
 To build the project:
 
-TAGS="bindata sqlite sqlite_unlock_notify" make build
+```bash
+$ [GO=go1.25.2] TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
 
 To run the project:
 
-    TAGS="sqlite sqlite_unlock_notify" make watch
+```bash
+$ [GO=go1.25.2] TAGS="sqlite sqlite_unlock_notify" make watch
+```
 
 Note that you need to build once in any case, before running continuously with watch.
+
+Finally, visit http://localhost:3000 and you are ready to go to fork with Forkana!
 
 -----------
 
