@@ -182,4 +182,3 @@ func TestGetRepositoryByOwnerAndSubject_ReturnsCorrectRepo(t *testing.T) {
 	assert.Equal(t, repo1.ID, foundRepo.ID)
 	assert.Equal(t, repo1.Owner.Name, foundRepo.OwnerName)
 }
-
