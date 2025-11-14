@@ -94,7 +94,7 @@ func TestBatchLoadingIdenticalResults(t *testing.T) {
 	// Verify both graphs have same structure
 	assert.Equal(t, graph1.Root.ID, graph2.Root.ID)
 	assert.Equal(t, graph1.Metadata.VisibleForks, graph2.Metadata.VisibleForks)
-	assert.Equal(t, len(graph1.Root.Children), len(graph2.Root.Children))
+	assert.Len(t, graph2.Root.Children, len(graph1.Root.Children))
 
 	// Verify repository data is loaded correctly
 	if graph1.Root.Repository != nil {
@@ -382,7 +382,7 @@ func TestCountForkTreeNodes(t *testing.T) {
 	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	count1, err := repo_model.CountForkTreeNodes(ctx, repo1.ID)
 	assert.NoError(t, err)
-	assert.Greater(t, count1, 0, "Repo 1 should have at least itself in the tree")
+	assert.Positive(t, count1, "Repo 1 should have at least itself in the tree")
 	t.Logf("Repo 1 fork tree has %d nodes", count1)
 
 	// Test with a repository that has no forks
@@ -405,7 +405,7 @@ func TestCountForkTreeNodesPerformance(t *testing.T) {
 	elapsed := time.Since(start)
 
 	assert.NoError(t, err)
-	assert.Greater(t, count, 0)
+	assert.Positive(t, count)
 
 	t.Logf("CountForkTreeNodes executed in %v for %d nodes", elapsed, count)
 
@@ -501,4 +501,3 @@ func BenchmarkCountForkTreeNodes(b *testing.B) {
 		}
 	}
 }
-
