@@ -108,7 +108,7 @@ export function initRepoNew() {
 
   // Handle manual repo name changes
   inputRepoName.addEventListener('input', () => {
-    userHasEditedRepoName = !!inputRepoName.value.trim();
+    userHasEditedRepoName = Boolean(inputRepoName.value.trim());
     if (!userHasEditedRepoName) {
       updateRepoNameFromSubject();
     }
