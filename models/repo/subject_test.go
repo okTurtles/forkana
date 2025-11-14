@@ -326,7 +326,6 @@ func TestGetSubjectBySlug(t *testing.T) {
 	assert.True(t, repo_model.IsErrSubjectNotExist(err))
 }
 
-
 // TestCreateSubject_RaceCondition tests concurrent subject creation
 func TestCreateSubject_RaceCondition(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
