@@ -206,14 +206,14 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 	// Check depth limit
 	if level >= params.MaxDepth {
 		*maxDepthReached = true
-		return createLeafNode(ctx, repo, level, params, doer)
+		return createLeafNode(repo, level, params)
 	}
 
 	// Get direct forks
 	forks, err := getDirectForks(ctx, repo.ID, doer, params)
 	if err != nil {
 		log.Error("Failed to get forks for repo %d: %v", repo.ID, err)
-		return createLeafNode(ctx, repo, level, params, doer)
+		return createLeafNode(repo, level, params)
 	}
 
 	// Build children
@@ -260,7 +260,7 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 }
 
 // createLeafNode creates a leaf node without children
-func createLeafNode(ctx context.Context, repo *repo_model.Repository, level int, params ForkGraphParams, doer *user_model.User) (*ForkNode, error) {
+func createLeafNode(repo *repo_model.Repository, level int, params ForkGraphParams) (*ForkNode, error) {
 	node := &ForkNode{
 		ID:       fmt.Sprintf("repo_%d", repo.ID),
 		Level:    level,
