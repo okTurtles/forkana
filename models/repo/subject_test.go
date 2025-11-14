@@ -448,5 +448,3 @@ func TestMultipleRepositoriesSameSubject(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, count, int64(2), "At least 2 repositories should have this subject")
 }
-
-

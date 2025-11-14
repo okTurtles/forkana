@@ -348,4 +348,3 @@ func IsErrSubjectSlugAlreadyExists(err error) bool {
 func (err ErrSubjectSlugAlreadyExists) Error() string {
 	return fmt.Sprintf("subject slug already exists [slug: %s, name: %s]", err.Slug, err.Name)
 }
-

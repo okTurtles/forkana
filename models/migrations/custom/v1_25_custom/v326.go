@@ -1,13 +1,14 @@
 // Copyright 2025 okTurtles Foundation. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-package v1_25_custom //nolint:dupl
+package v1_25_custom
 
 import (
 	"fmt"
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/log"
+
 	"xorm.io/xorm"
 )
 
