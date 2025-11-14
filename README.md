@@ -2,6 +2,78 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/okTurtles/forkana)
 
+## Getting started
+
+### Prerequisites
+
+- Go 1.25. See https://go.dev/doc/manage-install
+- node
+- pnpm
+
+### Installation
+
+Add `gitea/custom/conf/app.ini`. See details below for file content. Make sure to properly set `WORK_PATH`.
+
+<details>
+
+```ini
+WORK_PATH = /path/to/forkana ; the only line which needs modification
+
+[server]
+PROTOCOL = http
+DOMAIN = localhost
+HTTP_PORT = 3000
+ROOT_URL = http://localhost:3000/
+RUN_MODE = dev
+; LANDING_PAGE = explore
+
+[database]
+DB_TYPE = sqlite3
+PATH = data/gitea.db
+
+[security]
+INSTALL_LOCK = true
+SECRET_KEY = changeme
+INTERNAL_TOKEN = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYmYiOjE3NTY3NDU2NjZ9.luRdwGyyCdO0dyjghYinzVgC7Uu8JXTlst2HkrjE80k
+
+[oauth2]
+JWT_SECRET = 9l225INhfQSZkuiCA1bu3rDvR3TDf6DckPy0m3qAGmE
+
+[ui]
+DEFAULT_THEME = gitea-light
+EXPLORE_PAGING_DEFAULT_SORT = alphabetically
+```
+
+</details>
+
+Then run
+
+```bash
+$ pnpm install
+```
+
+To build the project:
+
+```bash
+$ TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
+
+Note that it might be necessary, depending on your system's configuration, to prepend a `GO` specification (indicating the name of the executable, if different from just `go`).
+
+```bash
+$ GO=go1.25.2 TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
+
+To run the project:
+
+```bash
+$ TAGS="sqlite sqlite_unlock_notify" make watch
+```
+
+Note that you need to build once in any case, before running continuously with watch.
+
+Finally, visit http://localhost:3000 and you are ready to go to fork with Forkana!
+
 -----------
 
 # Gitea
@@ -49,11 +121,15 @@ If you have any suggestions or would like to contribute to it, you can visit the
 
 From the root of the source tree, run:
 
-    TAGS="bindata" make build
+```
+TAGS="bindata" make build
+```
 
 or if SQLite support is required:
 
-    TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
+TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
 
 The `build` target is split into two sub-targets:
 
@@ -68,7 +144,9 @@ More info: https://docs.gitea.com/installation/install-from-source
 
 After building, a binary file named `gitea` will be generated in the root of the source tree by default. To run it, use:
 
-    ./gitea web
+```
+./gitea web
+```
 
 > [!NOTE]
 > If you're interested in using our APIs, we have experimental support with [documentation](https://docs.gitea.com/api).
