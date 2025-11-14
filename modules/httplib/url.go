@@ -169,9 +169,7 @@ func ParseGiteaSiteURL(ctx context.Context, s string) *GiteaSiteURL {
 	pathWithoutPrefix := strings.TrimPrefix(ret.RoutePath, "/")
 
 	// Handle /article/ prefix for subject-based URLs
-	if strings.HasPrefix(pathWithoutPrefix, "article/") {
-		pathWithoutPrefix = strings.TrimPrefix(pathWithoutPrefix, "article/")
-	}
+	pathWithoutPrefix = strings.TrimPrefix(pathWithoutPrefix, "article/")
 
 	fields := strings.SplitN(pathWithoutPrefix, "/", 3)
 
