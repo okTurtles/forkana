@@ -1,12 +1,13 @@
 // Copyright 2025 okTurtles Foundation. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-package v1_25_custom //nolint
+package v1_25_custom //nolint:dupl
 
 import (
 	"fmt"
 
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/modules/log"
 	"xorm.io/xorm"
 )
 
@@ -30,7 +31,7 @@ func AddSubjectSlugColumn(x *xorm.Engine) error {
 		return fmt.Errorf("failed to fetch existing subjects: %w", err)
 	}
 
-	fmt.Printf("Migration v326: Processing %d existing subjects...\n", len(subjects))
+	log.Info("Migration v326: Processing %d existing subjects...", len(subjects))
 
 	// Pre-migration validation - check for potential slug collisions
 	slugPreview := make(map[string][]string) // slug -> list of names
@@ -44,15 +45,15 @@ func AddSubjectSlugColumn(x *xorm.Engine) error {
 	for slug, names := range slugPreview {
 		if len(names) > 1 {
 			potentialCollisions++
-			fmt.Printf("  WARNING: Multiple subjects will share slug '%s':\n", slug)
+			log.Warn("  WARNING: Multiple subjects will share slug '%s':", slug)
 			for _, name := range names {
-				fmt.Printf("    - '%s'\n", name)
+				log.Info("    - '%s'", name)
 			}
 		}
 	}
 
 	if potentialCollisions > 0 {
-		fmt.Printf("Migration v326: Found %d slug collisions. These will be resolved by appending numeric suffixes.\n", potentialCollisions)
+		log.Info("Migration v326: Found %d slug collisions. These will be resolved by appending numeric suffixes.", potentialCollisions)
 	}
 
 	// Generate and assign slugs
@@ -68,7 +69,7 @@ func AddSubjectSlugColumn(x *xorm.Engine) error {
 			usedSlugs[slug] = count + 1
 			slug = fmt.Sprintf("%s-%d", baseSlug, count+1)
 			collisionCount++
-			fmt.Printf("  Assigning slug '%s' to subject '%s' (ID: %d)\n",
+			log.Info("  Assigning slug '%s' to subject '%s' (ID: %d)",
 				slug, subjects[i].Name, subjects[i].ID)
 		} else {
 			usedSlugs[slug] = 1
@@ -84,9 +85,9 @@ func AddSubjectSlugColumn(x *xorm.Engine) error {
 	}
 
 	if collisionCount > 0 {
-		fmt.Printf("Migration v326: Resolved %d slug collisions by appending numeric suffixes\n", collisionCount)
+		log.Info("Migration v326: Resolved %d slug collisions by appending numeric suffixes", collisionCount)
 	}
-	fmt.Printf("Migration v326: Successfully generated slugs for all %d subjects\n", len(subjects))
+	log.Info("Migration v326: Successfully generated slugs for all %d subjects", len(subjects))
 
 	// Verify all subjects have slugs before adding constraints
 	var subjectsWithoutSlug int64
@@ -180,8 +181,8 @@ func AddSubjectSlugColumn(x *xorm.Engine) error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	fmt.Printf("Migration v326: Successfully added UNIQUE constraint to slug column\n")
-	fmt.Printf("Migration v326: Migration completed successfully!\n")
+	log.Info("Migration v326: Successfully added UNIQUE constraint to slug column")
+	log.Info("Migration v326: Migration completed successfully!")
 
 	return nil
 }
