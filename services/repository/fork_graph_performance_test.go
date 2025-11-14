@@ -297,8 +297,7 @@ func BenchmarkBuildForkGraph(b *testing.B) {
 
 	ctx := context.Background()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := BuildForkGraph(ctx, repo, params, user)
 		if err != nil {
 			b.Fatal(err)
@@ -311,8 +310,7 @@ func BenchmarkCollectRepositories(b *testing.B) {
 	// Create a test tree with 100 nodes
 	root := createTestTree(100)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		repos := collectRepositories(root)
 		if len(repos) == 0 {
 			b.Fatal("No repositories collected")
@@ -344,7 +342,7 @@ func createTestTree(nodeCount int) *ForkNode {
 		for _, parent := range currentLevel {
 			// Add 2-3 children per node
 			childCount := min(3, nodesToCreate)
-			for i := 0; i < childCount; i++ {
+			for range childCount {
 				child := &ForkNode{
 					ID:       fmt.Sprintf("repo_%d", nextID),
 					Level:    parent.Level + 1,
@@ -493,8 +491,7 @@ func BenchmarkCountForkTreeNodes(b *testing.B) {
 	ctx := context.Background()
 	repo := unittest.AssertExistsAndLoadBean(b, &repo_model.Repository{ID: 1})
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := repo_model.CountForkTreeNodes(ctx, repo.ID)
 		if err != nil {
 			b.Fatal(err)

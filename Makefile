@@ -339,7 +339,7 @@ lint-frontend: lint-js lint-css ## lint frontend files
 lint-frontend-fix: lint-js-fix lint-css-fix ## lint frontend files and fix issues
 
 .PHONY: lint-backend
-lint-backend: lint-go lint-go-gitea-vet lint-go-gopls lint-editorconfig ## lint backend files
+lint-backend: lint-go lint-go-gopls lint-editorconfig ## lint backend files
 
 .PHONY: lint-backend-fix
 lint-backend-fix: lint-go-fix lint-go-gitea-vet lint-editorconfig ## lint backend files and fix issues

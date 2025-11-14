@@ -336,7 +336,7 @@ func TestCreateSubject_RaceCondition(t *testing.T) {
 	subjects := make([]*repo_model.Subject, numGoroutines)
 
 	// Try to create the same subject concurrently
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
@@ -353,7 +353,7 @@ func TestCreateSubject_RaceCondition(t *testing.T) {
 	failureCount := 0
 	var successfulSubject *repo_model.Subject
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		if errors[i] == nil {
 			successCount++
 			successfulSubject = subjects[i]
@@ -381,7 +381,7 @@ func TestGetOrCreateSubject_RaceCondition(t *testing.T) {
 	errors := make([]error, numGoroutines)
 
 	// Try to get or create the same subject concurrently
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
@@ -394,7 +394,7 @@ func TestGetOrCreateSubject_RaceCondition(t *testing.T) {
 	wg.Wait()
 
 	// All should succeed
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		assert.NoError(t, errors[i], "GetOrCreateSubject should not fail")
 		assert.NotNil(t, subjects[i])
 	}
