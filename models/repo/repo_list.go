@@ -31,9 +31,9 @@ const RepositoryListDefaultPageSize = 64
 
 const (
 	// Search keyword validation limits to prevent DoS attacks
-	maxSearchKeywordLength       = 500 // Maximum total search string length
-	maxSearchKeywords            = 10  // Maximum number of comma-separated keywords
-	maxIndividualKeywordLength   = 100 // Maximum length of each individual keyword
+	maxSearchKeywordLength     = 500 // Maximum total search string length
+	maxSearchKeywords          = 10  // Maximum number of comma-separated keywords
+	maxIndividualKeywordLength = 100 // Maximum length of each individual keyword
 )
 
 // RepositoryList contains a list of repositories
