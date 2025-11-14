@@ -5,6 +5,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -39,9 +40,10 @@ func (s *Subject) TableName() string {
 
 // GenerateSlugFromName creates a URL-safe slug from a subject display name
 // Examples:
-//   "The Moon" → "the-moon"
-//   "the moon!" → "the-moon"
-//   "El Camiño?" → "el-camino"
+//
+//	"The Moon" → "the-moon"
+//	"the moon!" → "the-moon"
+//	"El Camiño?" → "el-camino"
 func GenerateSlugFromName(name string) string {
 	// Normalize Unicode (NFD = decompose accents)
 	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
@@ -85,7 +87,7 @@ func GenerateSlugFromName(name string) string {
 // Returns ErrSubjectSlugAlreadyExists if a subject with the same slug already exists
 func CreateSubject(ctx context.Context, name string) (*Subject, error) {
 	if name == "" {
-		return nil, fmt.Errorf("subject name cannot be empty")
+		return nil, errors.New("subject name cannot be empty")
 	}
 
 	slug := GenerateSlugFromName(name)
@@ -118,7 +120,6 @@ func CreateSubject(ctx context.Context, name string) (*Subject, error) {
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
