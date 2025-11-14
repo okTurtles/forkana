@@ -27,7 +27,6 @@ var (
 	ErrTooManyNodes      = errors.New("too many nodes in graph")
 	ErrProcessingTimeout = errors.New("processing timeout")
 	ErrCycleDetected     = errors.New("cycle detected in fork graph")
-	errAwaitGeneration   = errors.New("generation took longer than expected")
 )
 
 // IsErrMaxDepthExceeded checks if an error is ErrMaxDepthExceeded
@@ -111,7 +110,6 @@ const (
 
 // BuildForkGraph builds the fork graph for a repository
 func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params ForkGraphParams, doer *user_model.User) (*ForkGraphResponse, error) {
-
 	// Find the root repository (traverse up the fork chain)
 	// This ensures we always build the graph from the true root, even if a fork was passed in
 	rootRepo := repo
