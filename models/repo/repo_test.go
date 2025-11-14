@@ -287,7 +287,6 @@ func TestGetPublicRepositoryByName_PrefersRootOverFork(t *testing.T) {
 	// and the API fork graph endpoint builds the hierarchy from the correct root.
 }
 
-
 func TestGenerateRepoNameFromSubject(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -598,7 +597,7 @@ func TestGenerateRepoNameFromSubject_MatchesSlugGeneration(t *testing.T) {
 	// GenerateRepoNameFromSubject returns "" for empty input (used in forms)
 	// while GenerateSlugFromName returns "subject" (used for database storage)
 	t.Run("Empty string special case", func(t *testing.T) {
-		assert.Equal(t, "", GenerateRepoNameFromSubject(""))
+		assert.Empty(t, GenerateRepoNameFromSubject(""))
 		assert.Equal(t, "subject", GenerateSlugFromName(""))
 	})
 }
