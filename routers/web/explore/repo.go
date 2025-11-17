@@ -452,7 +452,7 @@ func renderRepositoryHistory(ctx *context.Context) {
 
 	// For Article view, handle mode parameter and load README content
 	if ctx.Data["IsArticleView"] == true {
-		prepareArticleView(ctx, gitRepo, commit, entries, defaultBranch)
+		prepareArticleView(ctx, gitRepo, entries, defaultBranch)
 		if ctx.Written() {
 			return
 		}
@@ -498,7 +498,7 @@ func handleRepoHistoryFeed(ctx *context.Context) bool {
 }
 
 // prepareArticleView prepares data for the article view (README display with read/edit/history modes)
-func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, commit *git.Commit, entries []*git.TreeEntry, defaultBranch string) {
+func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries []*git.TreeEntry, defaultBranch string) {
 	// Determine mode (read/edit/history)
 	mode := ctx.FormString("mode")
 	if mode == "" {
@@ -543,9 +543,11 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, commit *g
 		ctx.Data["ReadmeLastCommit"] = lastCommit
 	}
 
-	// For read mode, render the README content
-	if mode == "read" {
-		buf, dataRc, err := getReadmeContent(gitRepo, blob)
+	// Handle different modes
+	switch mode {
+	case "read":
+		// For read mode, render the README content
+		buf, dataRc, err := getReadmeContent(blob)
 		if err != nil {
 			ctx.ServerError("getReadmeContent", err)
 			return
@@ -594,9 +596,9 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, commit *g
 
 		ctx.Data["FileSize"] = fileSize
 		ctx.Data["CanEditReadmeFile"] = ctx.Repo.Repository.CanEnableEditor()
-	} else if mode == "edit" {
+	case "edit":
 		// For edit mode, load raw content
-		buf, dataRc, err := getReadmeContent(gitRepo, blob)
+		buf, dataRc, err := getReadmeContent(blob)
 		if err != nil {
 			ctx.ServerError("getReadmeContent", err)
 			return
@@ -619,7 +621,7 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, commit *g
 			}
 		}
 		ctx.Data["FileSize"] = fileSize
-	} else if mode == "history" {
+	case "history":
 		// For history mode, get file commit history
 		commitsCount, err := gitRepo.FileCommitsCount(defaultBranch, readmeTreePath)
 		if err != nil {
@@ -675,7 +677,7 @@ func findReadmeInEntries(entries []*git.TreeEntry) *git.TreeEntry {
 }
 
 // getReadmeContent reads content from a blob
-func getReadmeContent(gitRepo *git.Repository, blob *git.Blob) ([]byte, io.ReadCloser, error) {
+func getReadmeContent(blob *git.Blob) ([]byte, io.ReadCloser, error) {
 	dataRc, err := blob.DataAsync()
 	if err != nil {
 		return nil, nil, err

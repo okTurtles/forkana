@@ -67,4 +67,3 @@ func TestExploreSubjectsSorting(t *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.Code, "Sort type %s should work", sortType)
 	}
 }
-

@@ -73,7 +73,7 @@ func Test_CreateSubjectsTable(t *testing.T) {
 		var subjects []Subject
 		err = x.Table("subject").Asc("name").Find(&subjects)
 		assert.NoError(t, err)
-		assert.Equal(t, 4, len(subjects), "Should have 4 distinct subjects")
+		assert.Len(t, subjects, 4, "Should have 4 distinct subjects")
 
 		// Verify subject names are correct (alphabetically sorted)
 		expectedNames := []string{"Biology", "Chemistry", "Mathematics", "Physics"}
@@ -114,7 +114,7 @@ func Test_CreateSubjectsTable(t *testing.T) {
 		var subjects []Subject
 		err = x.Table("subject").Asc("name").Find(&subjects)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, len(subjects), "Should have 2 distinct non-empty subjects")
+		assert.Len(t, subjects, 2, "Should have 2 distinct non-empty subjects")
 
 		// Verify subject names
 		assert.Equal(t, "Valid", subjects[0].Name)
@@ -151,7 +151,7 @@ func Test_CreateSubjectsTable(t *testing.T) {
 		var subjects []Subject
 		err = x.Table("subject").Asc("name").Find(&subjects)
 		assert.NoError(t, err)
-		assert.Equal(t, 3, len(subjects), "Should have 3 distinct subjects despite duplicates")
+		assert.Len(t, subjects, 3, "Should have 3 distinct subjects despite duplicates")
 
 		// Verify subject names
 		expectedNames := []string{"Computer Science", "Mathematics", "Physics"}
@@ -239,7 +239,7 @@ func Test_CreateSubjectsTable(t *testing.T) {
 		var subjects []Subject
 		err = x.Table("subject").Asc("name").Find(&subjects)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, len(subjects), "Should have 2 distinct non-empty subjects")
+		assert.Len(t, subjects, 2, "Should have 2 distinct non-empty subjects")
 
 		// Verify subject names
 		assert.Equal(t, "Astronomy", subjects[0].Name)
@@ -282,4 +282,3 @@ func Test_CreateSubjectsTable(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
-

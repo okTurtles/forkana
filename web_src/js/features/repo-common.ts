@@ -183,7 +183,7 @@ export function generateRepoNameFromSubject(subject: string): string {
 
   // Normalize Unicode characters (remove accents)
   // This matches the backend's Unicode normalization in GenerateSlugFromName
-  let normalized = subject.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const normalized = subject.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
   // Convert to lowercase
   let name = normalized.toLowerCase();

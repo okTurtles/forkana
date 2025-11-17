@@ -909,26 +909,6 @@ func GetRepositoryByName(ctx context.Context, ownerID int64, name string) (*Repo
 	return &repo, err
 }
 
-// GetPublicRepositoryByName returns the first public repository with the given name.
-// This function searches across all owners and prioritizes root repositories (non-forks)
-// over forks to ensure the original repository is returned when multiple repos share the same name.
-func GetPublicRepositoryByName(ctx context.Context, name string) (*Repository, error) {
-	var repo Repository
-	has, err := db.GetEngine(ctx).
-		Where("`lower_name`=?", strings.ToLower(name)).
-		And("`is_private`=?", false).
-		OrderBy("`is_fork` ASC, `updated_unix` DESC"). // Prefer root repos (is_fork=false), then most recently updated
-		NoAutoCondition().
-		Get(&repo)
-
-	if err != nil {
-		return nil, err
-	} else if !has {
-		return nil, ErrRepoNotExist{0, 0, "", name}
-	}
-	return &repo, nil
-}
-
 // GetPublicRepositoryBySubject returns the first public repository with the given subject name.
 // This function searches across all owners and prioritizes root repositories (non-forks)
 // over forks to ensure the original repository is returned when multiple repos share the same subject.

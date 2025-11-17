@@ -94,7 +94,7 @@ func TestBatchLoadingIdenticalResults(t *testing.T) {
 	// Verify both graphs have same structure
 	assert.Equal(t, graph1.Root.ID, graph2.Root.ID)
 	assert.Equal(t, graph1.Metadata.VisibleForks, graph2.Metadata.VisibleForks)
-	assert.Equal(t, len(graph1.Root.Children), len(graph2.Root.Children))
+	assert.Len(t, graph2.Root.Children, len(graph1.Root.Children))
 
 	// Verify repository data is loaded correctly
 	if graph1.Root.Repository != nil {
@@ -297,8 +297,7 @@ func BenchmarkBuildForkGraph(b *testing.B) {
 
 	ctx := context.Background()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := BuildForkGraph(ctx, repo, params, user)
 		if err != nil {
 			b.Fatal(err)
@@ -311,8 +310,7 @@ func BenchmarkCollectRepositories(b *testing.B) {
 	// Create a test tree with 100 nodes
 	root := createTestTree(100)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		repos := collectRepositories(root)
 		if len(repos) == 0 {
 			b.Fatal("No repositories collected")
@@ -344,7 +342,7 @@ func createTestTree(nodeCount int) *ForkNode {
 		for _, parent := range currentLevel {
 			// Add 2-3 children per node
 			childCount := min(3, nodesToCreate)
-			for i := 0; i < childCount; i++ {
+			for range childCount {
 				child := &ForkNode{
 					ID:       fmt.Sprintf("repo_%d", nextID),
 					Level:    parent.Level + 1,
@@ -382,7 +380,7 @@ func TestCountForkTreeNodes(t *testing.T) {
 	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	count1, err := repo_model.CountForkTreeNodes(ctx, repo1.ID)
 	assert.NoError(t, err)
-	assert.Greater(t, count1, 0, "Repo 1 should have at least itself in the tree")
+	assert.Positive(t, count1, "Repo 1 should have at least itself in the tree")
 	t.Logf("Repo 1 fork tree has %d nodes", count1)
 
 	// Test with a repository that has no forks
@@ -405,7 +403,7 @@ func TestCountForkTreeNodesPerformance(t *testing.T) {
 	elapsed := time.Since(start)
 
 	assert.NoError(t, err)
-	assert.Greater(t, count, 0)
+	assert.Positive(t, count)
 
 	t.Logf("CountForkTreeNodes executed in %v for %d nodes", elapsed, count)
 
@@ -493,12 +491,10 @@ func BenchmarkCountForkTreeNodes(b *testing.B) {
 	ctx := context.Background()
 	repo := unittest.AssertExistsAndLoadBean(b, &repo_model.Repository{ID: 1})
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := repo_model.CountForkTreeNodes(ctx, repo.ID)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
-

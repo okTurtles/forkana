@@ -415,5 +415,5 @@ func TestCycleDetection_DeepForkChain(t *testing.T) {
 	assert.NotNil(t, node)
 
 	// Verify visited map has entries (cycle detection is working)
-	assert.Greater(t, len(visited), 0)
+	assert.NotEmpty(t, visited)
 }

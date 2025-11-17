@@ -6,6 +6,7 @@ package repo
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -57,20 +58,20 @@ func (p *ForkGraphParams) setDefaults() {
 // validate validates the parameters
 func (p *ForkGraphParams) validate() error {
 	if p.ContributorDays < 1 || p.ContributorDays > 365 {
-		return fmt.Errorf("contributor_days must be between 1 and 365")
+		return errors.New("contributor_days must be between 1 and 365")
 	}
 	if p.MaxDepth < 1 || p.MaxDepth > 20 {
-		return fmt.Errorf("max_depth must be between 1 and 20")
+		return errors.New("max_depth must be between 1 and 20")
 	}
 	if p.Limit < 1 || p.Limit > 100 {
-		return fmt.Errorf("limit must be between 1 and 100")
+		return errors.New("limit must be between 1 and 100")
 	}
 	if p.Page < 1 {
-		return fmt.Errorf("page must be at least 1")
+		return errors.New("page must be at least 1")
 	}
 	validSorts := map[string]bool{"updated": true, "created": true, "stars": true, "forks": true}
 	if !validSorts[p.Sort] {
-		return fmt.Errorf("sort must be one of: updated, created, stars, forks")
+		return errors.New("sort must be one of: updated, created, stars, forks")
 	}
 	return nil
 }
@@ -96,16 +97,8 @@ func hashParams(params ForkGraphParams) string {
 	return hex.EncodeToString(hash[:8]) // First 8 bytes for brevity
 }
 
-// getUserID safely gets the user ID
-func getUserID(doer interface{}) int64 {
-	if doer == nil {
-		return 0
-	}
-	return doer.(int64)
-}
-
 // getCacheTTL returns the cache TTL based on repository and parameters
-func getCacheTTL(isPrivate bool, includeContributors bool) time.Duration {
+func getCacheTTL(isPrivate, includeContributors bool) time.Duration {
 	if isPrivate {
 		return 5 * time.Minute
 	}

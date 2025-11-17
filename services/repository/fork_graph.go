@@ -27,7 +27,6 @@ var (
 	ErrTooManyNodes      = errors.New("too many nodes in graph")
 	ErrProcessingTimeout = errors.New("processing timeout")
 	ErrCycleDetected     = errors.New("cycle detected in fork graph")
-	errAwaitGeneration   = errors.New("generation took longer than expected")
 )
 
 // IsErrMaxDepthExceeded checks if an error is ErrMaxDepthExceeded
@@ -111,7 +110,6 @@ const (
 
 // BuildForkGraph builds the fork graph for a repository
 func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params ForkGraphParams, doer *user_model.User) (*ForkGraphResponse, error) {
-
 	// Find the root repository (traverse up the fork chain)
 	// This ensures we always build the graph from the true root, even if a fork was passed in
 	rootRepo := repo
@@ -208,14 +206,14 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 	// Check depth limit
 	if level >= params.MaxDepth {
 		*maxDepthReached = true
-		return createLeafNode(ctx, repo, level, params, doer)
+		return createLeafNode(repo, level, params)
 	}
 
 	// Get direct forks
 	forks, err := getDirectForks(ctx, repo.ID, doer, params)
 	if err != nil {
 		log.Error("Failed to get forks for repo %d: %v", repo.ID, err)
-		return createLeafNode(ctx, repo, level, params, doer)
+		return createLeafNode(repo, level, params)
 	}
 
 	// Build children
@@ -262,7 +260,7 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 }
 
 // createLeafNode creates a leaf node without children
-func createLeafNode(ctx context.Context, repo *repo_model.Repository, level int, params ForkGraphParams, doer *user_model.User) (*ForkNode, error) {
+func createLeafNode(repo *repo_model.Repository, level int, params ForkGraphParams) (*ForkNode, error) {
 	node := &ForkNode{
 		ID:       fmt.Sprintf("repo_%d", repo.ID),
 		Level:    level,
