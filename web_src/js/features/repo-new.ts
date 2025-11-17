@@ -125,14 +125,14 @@ export function initRepoNew() {
   // Handle template_requirements checkbox validation
   const inputTemplateRequirements = form.querySelector<HTMLInputElement>('#template_requirements');
   const elSubmitButton = form.querySelector<HTMLButtonElement>('#create-repo-submit-button');
-  
+
   const updateSubmitButtonState = () => {
     if (!elSubmitButton || !inputTemplateRequirements) return;
-    
+
     const isTemplateRequirementsChecked = inputTemplateRequirements.checked;
     const elCreateRepoErrorMessage = form.querySelector('#create-repo-error-message');
     const hasOwnerError = elCreateRepoErrorMessage && elCreateRepoErrorMessage.textContent?.trim() !== '';
-    
+
     // Disable submit button if template_requirements is not checked or if there's an owner error
     elSubmitButton.disabled = !isTemplateRequirementsChecked || hasOwnerError;
   };
