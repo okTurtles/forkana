@@ -74,6 +74,41 @@ Note that you need to build once in any case, before running continuously with w
 
 Finally, visit http://localhost:3000 and you are ready to go to fork with Forkana!
 
+### Populate
+
+Forkana includes tools to automatically populate your instance with content from Wikipedia. The `wiki2md` tool fetches Wikipedia articles and converts them to Markdown, while the `article-creator` tool creates Forkana repositories from those Markdown files. These tools can be used separately or combined via the `make populate` command for a streamlined workflow.
+
+#### Quick Start
+
+To populate your Forkana instance with 50 random Wikipedia articles:
+
+```bash
+GITEA_URL=http://localhost:3000 GITEA_TOKEN=your_api_token make populate
+```
+
+To fetch articles from a specific category:
+
+```bash
+GITEA_URL=http://localhost:3000 GITEA_TOKEN=your_api_token ARTICLE_COUNT=100 CATEGORY="Category:Physics" make populate
+```
+
+#### Configuration
+
+The `make populate` command accepts the following environment variables:
+
+- `GITEA_URL` (required) - Your Forkana instance URL
+- `GITEA_TOKEN` (required) - API token with repository creation permissions
+- `ARTICLE_COUNT` (optional, default: 50) - Number of articles to fetch
+- `CATEGORY` (optional) - Wikipedia category to fetch from (e.g., "Category:Physics")
+- `PRIVATE` (optional, default: false) - Set to "true" to create private repositories
+
+#### Detailed Documentation
+
+For more information about the individual tools:
+
+- [wiki2md](custom/services/wiki2md/README.md) - Fetch and convert Wikipedia articles to Markdown
+- [article-creator](custom/services/article-creator/README.md) - Create Forkana repositories from Markdown files
+
 -----------
 
 # Gitea

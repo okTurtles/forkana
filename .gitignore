@@ -55,6 +55,8 @@ cpu.out
 /gitea-vet
 /debug
 /integrations.test
+/wiki2md
+/article-creator
 
 /bin
 /dist
