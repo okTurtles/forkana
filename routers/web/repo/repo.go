@@ -169,6 +169,11 @@ func Create(ctx *context.Context) {
 	ctx.Data["default_branch"] = setting.Repository.DefaultBranch
 	ctx.Data["repo_template_name"] = ctx.Tr("repo.template_select")
 
+	// Prefill subject from query parameter if provided
+	if subject := ctx.FormTrim("subject"); subject != "" {
+		ctx.Data["subject"] = subject
+	}
+
 	templateID := ctx.FormInt64("template_id")
 	if templateID > 0 {
 		templateRepo, err := repo_model.GetRepositoryByID(ctx, templateID)

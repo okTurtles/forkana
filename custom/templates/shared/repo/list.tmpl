@@ -54,8 +54,14 @@
 			</div>
 		</div>
 	{{else}}
-	<div>
-		{{ctx.Locale.Tr "search.no_results"}}
-	</div>
+		<div>
+			<h3 class="tw-font-bold tw-text-base">{{ctx.Locale.Tr "search.search_results_for" $.Keyword}}</h3>
+			<p class="tw-flex tw-items-center tw-gap-2 tw-italic tw-text-xs tw-text-gray-500">{{svg "octicon-skip" 16}} {{ctx.Locale.Tr "search.no_exact_page_found" $.Keyword}}</p>
+			{{if $.Keyword}}
+				<a class="ui primary button tw-ml-6" href="{{AppSubUrl}}/repo/create?subject={{QueryEscape $.Keyword}}">
+				  {{ctx.Locale.Tr "search.create_new_subject"}}
+				</a>
+			{{end}}
+		</div>
 	{{end}}
 </div>
