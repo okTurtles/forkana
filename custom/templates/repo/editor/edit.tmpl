@@ -1,5 +1,13 @@
 {{template "base/head" .}}
 <div role="main" aria-label="{{.Title}}" class="page-content repository file editor edit">
+	{{if and .IsCreatingFirstArticle .IsSigned}}
+    <div class="ui success message tw-mt-0">
+        <div class="tw-flex tw-items-center tw-gap-2">
+            {{svg "octicon-check-circle" 16}}
+            <span class="ui text black">{{ctx.Locale.Tr "repo.editor.first_article_message"}}</span>
+        </div>
+    </div>
+    {{end}}
 	{{template "repo/header" .}}
 	<div class="ui container">
 		{{template "base/alert" .}}
