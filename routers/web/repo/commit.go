@@ -474,6 +474,11 @@ func processGitCommits(ctx *context.Context, gitCommits []*git.Commit) ([]*git_m
 // If a "version" query parameter is present, it shows the commit view
 // Otherwise, it shows the repository home view
 func ArticleView(ctx *context.Context) {
+	// Set ArticleLink for templates to use in history view
+	// This ensures commit links point back to the article route, not the repo route
+	articleLink := setting.AppSubURL + "/article/" + ctx.Repo.Owner.Name + "/" + ctx.Repo.Repository.Name
+	ctx.Data["ArticleLink"] = articleLink
+
 	// Check if version parameter is present
 	commitHash := ctx.FormString("version")
 	if commitHash != "" {

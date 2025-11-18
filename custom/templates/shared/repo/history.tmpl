@@ -56,7 +56,7 @@
                             </div>
                         </td>
                         <td class="sha">
-                            <a href="{{$.RepoLink}}?version={{.ID.String}}" rel="nofollow" class="muted">
+                            <a href="{{or $.ArticleLink $.RepoLink}}?version={{.ID.String}}" rel="nofollow" class="muted">
                                 {{ShortSha .ID.String}}
                             </a>
                         </td>
