@@ -66,8 +66,8 @@ function handleCreateArticle(event: Event) {
         />
         
         <g transform="translate(160, 135)">
-          <line x1="0" y1="-25" x2="0" y2="25" stroke="#000000" stroke-width="4" stroke-linecap="round" />
-          <line x1="-25" y1="0" x2="25" y2="0" stroke="#000000" stroke-width="4" stroke-linecap="round" />
+          <line x1="0" y1="-25" x2="0" y2="25" stroke="#000000" stroke-width="4" stroke-linecap="round"/>
+          <line x1="-25" y1="0" x2="25" y2="0" stroke="#000000" stroke-width="4" stroke-linecap="round"/>
         </g>
         
         <text

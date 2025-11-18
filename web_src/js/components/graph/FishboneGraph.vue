@@ -1099,9 +1099,8 @@ function onBubbleView(n: Node){
   background-color: transparent;
 }
 
-/* Error and empty states have opaque backgrounds and block interaction */
-.error-state,
-.empty-state {
+/* Error state has opaque background and blocks interaction */
+.error-state {
   background-color: rgba(255, 255, 255, 0.98);
   pointer-events: auto !important; /* Re-enable interaction for buttons */
 }
@@ -1122,10 +1121,6 @@ function onBubbleView(n: Node){
 
 .error-icon {
   color: #ef4444;
-}
-
-.empty-icon {
-  color: #64748b;
 }
 
 .state-title {
