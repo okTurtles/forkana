@@ -11,6 +11,8 @@ import {submitFormFetchAction} from './common-fetch-action.ts';
 
 function initEditPreviewTab(elForm: HTMLFormElement) {
   const elTabMenu = elForm.querySelector('.repo-editor-menu');
+  if (!elTabMenu) return; // Skip if no tab menu exists
+  
   fomanticQuery(elTabMenu.querySelectorAll('.item')).tab();
 
   const elPreviewTab = elTabMenu.querySelector('a[data-tab="preview"]');
@@ -175,7 +177,7 @@ export function initRepoEditor() {
       initialEditType: 'wysiwyg',
       previewStyle: 'vertical',
       usageStatistics: false,
-      hideModeSwitch: true,
+      hideModeSwitch: false,
     });
 
     // Update the editor from query params, if available,
