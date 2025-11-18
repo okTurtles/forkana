@@ -118,6 +118,8 @@ export function initRepoNew() {
     updateUiRepoName();
   });
 
+  // Ensure repo name is populated on initial load (e.g., when subject is prefilled)
+  updateRepoNameFromSubject();
   updateUiRepoName();
 
   // Handle template_requirements checkbox validation
