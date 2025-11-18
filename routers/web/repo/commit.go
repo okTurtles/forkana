@@ -569,15 +569,9 @@ func ArticleCommitView(ctx *context.Context) {
 	// This prevents template errors and disables edit/upload buttons
 	ctx.Repo.BranchName = ""
 
-	// Calculate commits count for this commit
-	// Use "." instead of "" to count all commits in the repository
-	commitsCount, err := ctx.Repo.GitRepo.FileCommitsCount(ctx.Repo.CommitID, ".")
-	if err != nil {
-		log.Error("FileCommitsCount: %v", err)
-		ctx.Repo.CommitsCount = 0
-	} else {
-		ctx.Repo.CommitsCount = commitsCount
-	}
+	// Calculate total number of commits reachable from this commit
+	// This matches the behavior of the non-versioned article view
+	ctx.Repo.CommitsCount, _ = ctx.Repo.GetCommitsCount()
 
 	// Set all required context data for templates
 	ctx.Data["RefFullName"] = ctx.Repo.RefFullName
