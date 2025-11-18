@@ -21,6 +21,7 @@ import type { ZoomBehavior, ZoomTransform } from "d3-zoom";
 
 import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
+import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 
 // Inline types replacing former seeds module
 type Side = -1 | 1;
@@ -203,7 +204,22 @@ function announceToScreenReader(message: string) {
 /* Component state management (loading, error, empty) */
 const isLoading = ref(false);
 const errorMessage = ref<string | null>(null);
-const hasData = computed(() => Object.keys(state.graph).length > 0);
+const hasData = computed(() => {
+  const nodes = Object.values(state.graph);
+  if (nodes.length === 0) return false;
+  
+  // Treat as empty if there's only one node (root) with no activity and no children
+  if (nodes.length === 1) {
+    const rootNode = nodes[0];
+    const hasNoActivity = rootNode.contributors === 0 || !rootNode.contributors;
+    const hasNoChildren = !rootNode.children || rootNode.children.length === 0;
+    if (hasNoActivity && hasNoChildren) {
+      return false;
+    }
+  }
+  
+  return true;
+});
 
 /* Container width affects responsive dials; observe it. */
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -1015,18 +1031,12 @@ function onBubbleView(n: Node){
         </div>
 
         <!-- Empty State -->
-        <div v-else-if="!hasData" class="state-overlay empty-state">
-          <div class="state-message">
-            <svg class="state-icon empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <h3 class="state-title">No Forks Found</h3>
-            <p class="state-description">This repository doesn't have any forks yet.</p>
-          </div>
-        </div>
+        <CreateFirstArticleBubble 
+          v-if="!hasData"
+          :owner="props.owner"
+          :repo="props.repo"
+          :subject="props.subject"
+        />
       </div>
       <!-- End graph-container -->
 
@@ -1093,7 +1103,7 @@ function onBubbleView(n: Node){
 .error-state,
 .empty-state {
   background-color: rgba(255, 255, 255, 0.98);
-  pointer-events: auto; /* Re-enable interaction for buttons */
+  pointer-events: auto !important; /* Re-enable interaction for buttons */
 }
 
 .state-message {
