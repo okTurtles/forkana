@@ -3,15 +3,19 @@
 	{{template "repo/header" .}}
 	<div class="ui container">
 		{{template "base/alert" .}}
-		<form class="ui edit form form-fetch-action" method="post" action="{{.CommitFormOptions.TargetFormAction}}"
+		<form {{if .IsCreatingFirstArticle}}id="first-article-form"{{end}} class="ui edit form form-fetch-action" method="post" action="{{.CommitFormOptions.TargetFormAction}}"
 					data-text-empty-confirm-header="{{ctx.Locale.Tr "repo.editor.commit_empty_file_header"}}"
 					data-text-empty-confirm-content="{{ctx.Locale.Tr "repo.editor.commit_empty_file_text"}}"
 		>
 			{{.CsrfTokenHtml}}
 			{{template "repo/editor/common_top" .}}
-			<div class="repo-editor-header">
-				{{template "repo/editor/common_breadcrumb" .}}
+				{{if .IsCreatingFirstArticle}}
+					{{template "repo/editor/first_article_header" .}}
+				{{else}}
+					<div class="repo-editor-header">	
+					{{template "repo/editor/common_breadcrumb" .}}
 			</div>
+				{{end}}
 			{{if not .NotEditableReason}}
 				<div class="field">
 					<div class="ui top attached header">
@@ -47,7 +51,11 @@
 					</div>
 				</div>
 			{{end}}
-			{{template "repo/editor/commit_form" .}}
+			{{if .IsCreatingFirstArticle}}
+				{{template "repo/editor/first_article_commit_form" .}}
+			{{else}}
+				{{template "repo/editor/commit_form" .}}
+			{{end}}
 		</form>
 	</div>
 </div>

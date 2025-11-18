@@ -861,23 +861,38 @@ func RepoRefByType(detectRefType git.RefType) func(*Context) {
 	return func(ctx *Context) {
 		var err error
 		refType := detectRefType
+		reqPath := ctx.PathParam("*")
+
 		if ctx.Repo.Repository.IsBeingCreated() || ctx.Repo.Repository.IsBroken() {
 			return // no git repo, so do nothing, users will see a "migrating" UI provided by "migrate/migrating.tmpl", or empty repo guide
 		}
 		// Empty repository does not have reference information.
 		if ctx.Repo.Repository.IsEmpty {
-			// assume the user is viewing the (non-existent) default branch
-			ctx.Repo.BranchName = ctx.Repo.Repository.DefaultBranch
-			ctx.Repo.RefFullName = git.RefNameFromBranch(ctx.Repo.BranchName)
+			branchName := ctx.Repo.Repository.DefaultBranch
+			treePath := ""
+			if reqPath != "" {
+				reqPath = strings.TrimPrefix(reqPath, "/")
+				if reqPath != "" {
+					parts := strings.SplitN(reqPath, "/", 2)
+					if parts[0] != "" {
+						branchName = parts[0]
+					}
+					if len(parts) == 2 {
+						treePath = parts[1]
+					}
+				}
+			}
+			ctx.Repo.BranchName = branchName
+			ctx.Repo.RefFullName = git.RefNameFromBranch(branchName)
+			ctx.Repo.TreePath = treePath
 			// these variables are used by the template to "add/upload" new files
-			ctx.Data["BranchName"] = ctx.Repo.BranchName
-			ctx.Data["TreePath"] = ""
+			ctx.Data["BranchName"] = branchName
+			ctx.Data["TreePath"] = treePath
 			return
 		}
 
 		// Get default branch.
 		var refShortName string
-		reqPath := ctx.PathParam("*")
 		if reqPath == "" {
 			refShortName = ctx.Repo.Repository.DefaultBranch
 			if !gitrepo.IsBranchExist(ctx, ctx.Repo.Repository, refShortName) {
