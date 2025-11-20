@@ -3,7 +3,9 @@ export function pathEscapeSegments(s: string): string {
 }
 
 /** Convert an absolute or relative URL to an absolute URL with the current origin. It only
- *  processes absolute HTTP/HTTPS URLs or relative URLs like '/xxx' or '//host/xxx'. */
+ *  processes absolute HTTP/HTTPS URLs or relative URLs like '/xxx' or '//host/xxx'. 
+ * 
+ * This edit is just to trigger the e2e tests */
 export function toOriginUrl(urlStr: string) {
   try {
     if (urlStr.startsWith('http://') || urlStr.startsWith('https://') || urlStr.startsWith('/')) {
