@@ -1,12 +1,12 @@
-import { test, expect } from '@playwright/test';
-import { login_user, save_visual, load_logged_in_context } from './utils_e2e.ts';
+import {test, expect} from '@playwright/test';
+import {login_user, save_visual, load_logged_in_context} from './utils_e2e.ts';
 
-test.beforeAll(async ({ browser }, workerInfo) => {
+test.beforeAll(async ({browser}, workerInfo) => {
   await login_user(browser, workerInfo, 'user2');
 });
 
 /*
-test('homepage', async ({ page }) => {
+test('homepage', async ({page}) => {
   const response = await page.goto('/');
   expect(response?.status()).toBe(200); // Status OK
   await expect(page).toHaveTitle(/^Gitea: Git with a cup of tea\s*$/);
@@ -15,7 +15,7 @@ test('homepage', async ({ page }) => {
 */
 
 /*
-test('register', async ({ page }, workerInfo) => {
+test('register', async ({page}, workerInfo) => {
   const response = await page.goto('/user/sign_up');
   expect(response?.status()).toBe(200); // Status OK
   await page.locator('input[name=user_name]').fill(`e2e-test-${workerInfo.workerIndex}`);
@@ -32,7 +32,7 @@ test('register', async ({ page }, workerInfo) => {
 });
 */
 
-test('login', async ({ page }, workerInfo) => {
+test('login', async ({page}, workerInfo) => {
   const response = await page.goto('/user/login');
   expect(response?.status()).toBe(200); // Status OK
 
@@ -40,14 +40,14 @@ test('login', async ({ page }, workerInfo) => {
   await page.locator('input[name=password]').fill(`password`);
   await page.click('button:has-text("Sign In")');
 
-  await page.waitForURL(`${workerInfo.project.use.baseURL}/`, { timeout: 10000 });
+  await page.waitForURL(`${workerInfo.project.use.baseURL}/`, {timeout: 10000});
 
   expect(page.url()).toBe(`${workerInfo.project.use.baseURL}/`);
 
   save_visual(page);
 });
 
-test('logged in user', async ({ browser }, workerInfo) => {
+test('logged in user', async ({browser}, workerInfo) => {
   const context = await load_logged_in_context(browser, workerInfo, 'user2');
   const page = await context.newPage();
 
