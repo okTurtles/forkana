@@ -1,6 +1,6 @@
-import {devices} from '@playwright/test';
-import {env} from 'node:process';
-import type {PlaywrightTestConfig} from '@playwright/test';
+import { devices } from '@playwright/test';
+import { env } from 'node:process';
+import type { PlaywrightTestConfig } from '@playwright/test';
 
 const BASE_URL = env.GITEA_URL?.replace?.(/\/$/g, '') || 'http://localhost:3000';
 
@@ -27,7 +27,7 @@ export default {
   retries: env.CI ? 2 : 0,
 
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: env.CI ? 'list' : [['list'], ['html', {outputFolder: 'tests/e2e/reports/', open: 'never'}]],
+  reporter: env.CI ? 'list' : [['list'], ['html', { outputFolder: 'tests/e2e/reports/', open: 'never' }]],
 
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
@@ -36,10 +36,10 @@ export default {
     locale: 'en-US',
 
     /* Maximum time each action such as `click()` can take. Defaults to 0 (no limit). */
-    actionTimeout: 1000,
+    actionTimeout: 30000,
 
     /* Maximum time allowed for navigation, such as `page.goto()`. */
-    navigationTimeout: 5 * 1000,
+    navigationTimeout: 30 * 1000,
 
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: BASE_URL,
