@@ -1,6 +1,6 @@
-import { devices } from '@playwright/test';
-import { env } from 'node:process';
-import type { PlaywrightTestConfig } from '@playwright/test';
+import {devices} from '@playwright/test';
+import {env} from 'node:process';
+import type {PlaywrightTestConfig} from '@playwright/test';
 
 const BASE_URL = env.GITEA_URL?.replace?.(/\/$/g, '') || 'http://localhost:3000';
 
