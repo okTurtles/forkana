@@ -168,9 +168,7 @@
             data-subject-url="{{$subjectPath}}"
             data-bubble-url="{{QueryBuild $subjectPath "view" "bubble"}}"
             data-table-url="{{QueryBuild $subjectPath "view" "table"}}"
-            data-article-base="{{printf "%s/article" AppSubUrl}}"
-            data-article-repo-base="{{printf "%s/article/repo" AppSubUrl}}"
-            data-current-uri="{{.Link}}">
+            data-article-base="{{printf "%s/article" AppSubUrl}}">
             {{template "shared/repo/bubble" .}}
             {{template "shared/repo/table" .}}
             {{if .IsArticleView}}
