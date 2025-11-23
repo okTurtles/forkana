@@ -238,7 +238,8 @@ interface FishboneGraphProps {
   owner?: string | null;
   repo?: string | null;
   subject?: string | null;
-  
+  defaultBranch?: string | null;
+
   // API query parameters (with sensible defaults from constants)
   includeContributors?: boolean;
   contributorDays?: number;
@@ -252,6 +253,7 @@ const props = withDefaults(defineProps<FishboneGraphProps>(), {
   owner: null,
   repo: null,
   subject: null,
+  defaultBranch: null,
   includeContributors: true,
   contributorDays: API_CONTRIBUTOR_DAYS,
   maxDepth: API_MAX_DEPTH,
@@ -1031,11 +1033,12 @@ function onBubbleView(n: Node){
         </div>
 
         <!-- Empty State -->
-        <CreateFirstArticleBubble 
+        <CreateFirstArticleBubble
           v-if="!hasData"
           :owner="props.owner"
           :repo="props.repo"
           :subject="props.subject"
+          :default-branch="props.defaultBranch"
         />
       </div>
       <!-- End graph-container -->

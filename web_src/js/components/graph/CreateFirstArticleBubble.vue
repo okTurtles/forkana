@@ -3,6 +3,7 @@ const props = defineProps<{
   owner: string | null;
   repo: string | null;
   subject?: string | null;
+  defaultBranch?: string | null;
 }>();
 
 function handleCreateArticle(event: Event) {
@@ -14,8 +15,8 @@ function handleCreateArticle(event: Event) {
   }
   
   const appSubUrl = (window as any).config?.appSubUrl || '';
-  const defaultBranch = 'main';
-  const createUrl = `${appSubUrl}/${encodeURIComponent(props.owner)}/${encodeURIComponent(props.repo)}/_new/${defaultBranch}/README.md`;
+  const branch = props.defaultBranch || 'main';
+  const createUrl = `${appSubUrl}/${encodeURIComponent(props.owner)}/${encodeURIComponent(props.repo)}/_new/${branch}/README.md`;
   
   const isSignedIn = document.body.classList.contains('signed-in');
   
