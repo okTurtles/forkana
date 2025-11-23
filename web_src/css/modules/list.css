@@ -189,7 +189,7 @@
   margin-top: 1.25rem;
 }
 .ui.bulleted.list .list>.item, .ui.bulleted.list>.item, ul.ui.list li {
-  position: relative
+  position: relative;
 }
 
 .ui.bulleted.list .list>.item::before, .ui.bulleted.list>.item::before, ul.ui.list li::before {
@@ -208,9 +208,9 @@
 }
 
 .ui.bulleted.list .list>a.item::before, .ui.bulleted.list>a.item::before, ul.ui.list li::before {
-  color: rgba(0,0,0,.87)
+  color: rgba(0,0,0,.87);
 }
 
 .ui.bulleted.list .list:not(.icon), ul.ui.list ul {
-  padding-left: 1.25rem
+  padding-left: 1.25rem;
 }
