@@ -875,7 +875,8 @@ func RepoRefByType(detectRefType git.RefType) func(*Context) {
 				if reqPath != "" {
 					parts := strings.SplitN(reqPath, "/", 2)
 					if parts[0] != "" {
-						branchName = parts[0]
+						// Sanitize branch name from URL to prevent injection of invalid characters
+						branchName = git.SanitizeRefPattern(parts[0])
 					}
 					if len(parts) == 2 {
 						treePath = parts[1]
