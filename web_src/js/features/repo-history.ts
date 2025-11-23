@@ -76,7 +76,7 @@ function buildSubjectUrlWithMode(base: string, view: ViewKey, mode?: string) {
   return url.pathname + url.search;
 }
 
-function buildArticleUrl(articleBase: string, selection: RepoSelection, mode: string) {
+function buildArticleUrl(articleBase: string, selection: RepoSelection, mode?: string) {
   const base = articleBase.replace(/\/+$/, '');
   const owner = encodeURIComponent(selection.owner);
   // Use subject for the URL path (subject is what identifies the article)
