@@ -20,9 +20,9 @@
 				{{if .IsCreatingFirstArticle}}
 					{{template "repo/editor/first_article_header" .}}
 				{{else}}
-					<div class="repo-editor-header">	
+					<div class="repo-editor-header">
 					{{template "repo/editor/common_breadcrumb" .}}
-			</div>
+					</div>
 				{{end}}
 			{{if not .NotEditableReason}}
 				<div class="field">
