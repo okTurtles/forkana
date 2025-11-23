@@ -297,6 +297,9 @@ func CreatePost(ctx *context.Context) {
 		if err == nil {
 			log.Trace("Repository generated [%d]: %s/%s", repo.ID, ctxUser.Name, repo.Name)
 			subject := repo.GetSubject(ctx)
+			if subject == "" {
+				subject = repo.Name
+			}
 			ctx.Redirect(setting.AppSubURL + "/subject/" + util.PathEscapeSegments(subject) + "?view=bubble")
 			return
 		}
@@ -319,6 +322,9 @@ func CreatePost(ctx *context.Context) {
 		if err == nil {
 			log.Trace("Repository created [%d]: %s/%s", repo.ID, ctxUser.Name, repo.Name)
 			subject := repo.GetSubject(ctx)
+			if subject == "" {
+				subject = repo.Name
+			}
 			ctx.Redirect(setting.AppSubURL + "/subject/" + util.PathEscapeSegments(subject) + "?view=bubble")
 			return
 		}
