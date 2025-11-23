@@ -227,7 +227,7 @@ func ctxDataSet(args ...any) func(ctx *context.Context) {
 	}
 }
 
-// registerRepoFileEditorRoutes registers common file editor routes for repositories.
+// registerRepoFileEditorRoutes registers common file editor routes for both repositories and article-based file operations.
 // This includes routes for editing, creating, deleting, uploading files, applying patches, and cherry-picking commits.
 func registerRepoFileEditorRoutes(m *web.Router, reqRepoCodeWriter func(*context.Context)) {
 	m.Group("", func() {
