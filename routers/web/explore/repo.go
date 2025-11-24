@@ -462,26 +462,6 @@ func renderRepositoryHistory(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, "explore/repo_history")
 }
 
-// RepoArticle renders the dedicated article page (Read/Edit/History tabs)
-// It reuses the repository history renderer but forces the view to "article".
-func RepoArticle(ctx *context.Context) {
-	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - Article"
-	ctx.Data["PageIsExploreRepositories"] = true
-	ctx.Data["PageIsRepoHistory"] = true
-	ctx.Data["IsRepoHistoryView"] = true
-	ctx.Data["IsSubjectContext"] = true
-	ctx.Data["IsRepoHistoryView"] = true
-	ctx.Data["IsSubjectContext"] = false
-
-	// Force article view (set flags directly)
-	ctx.Data["HistoryView"] = "article"
-	ctx.Data["IsBubbleView"] = false
-	ctx.Data["IsTableView"] = false
-	ctx.Data["IsArticleView"] = true
-
-	renderRepositoryHistory(ctx)
-}
-
 // handleRepoHistoryFeed handles RSS/Atom feed requests for repository history
 func handleRepoHistoryFeed(ctx *context.Context) bool {
 	if !setting.Other.EnableFeed {
