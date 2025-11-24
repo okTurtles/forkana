@@ -298,7 +298,7 @@ func EditFile(ctx *context.Context) {
 	// Check if this is creating the first article (README.md in empty repo)
 	treePath := strings.Trim(ctx.Repo.TreePath, "/")
 	fileName := strings.ToLower(path.Base(treePath))
-	isCreatingFirstArticle := isNewFile && ctx.Repo.Repository.IsEmpty && (fileName == "readme.md" || strings.ToLower(treePath) == "readme.md")
+	isCreatingFirstArticle := isNewFile && ctx.Repo.Repository.IsEmpty && (fileName == "readme.md" || strings.EqualFold(treePath, "readme.md"))
 	ctx.Data["IsCreatingFirstArticle"] = isCreatingFirstArticle
 
 	if !isNewFile {
