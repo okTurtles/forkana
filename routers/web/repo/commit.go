@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 
@@ -30,6 +31,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/templates"
 	"code.gitea.io/gitea/modules/util"
+	"code.gitea.io/gitea/routers/web/explore"
 	asymkey_service "code.gitea.io/gitea/services/asymkey"
 	"code.gitea.io/gitea/services/context"
 	git_service "code.gitea.io/gitea/services/git"
@@ -472,69 +474,39 @@ func processGitCommits(ctx *context.Context, gitCommits []*git.Commit) ([]*git_m
 
 // ArticleView handles the /article/{username}/{subjectname} route
 // If a "version" query parameter is present, it shows the commit view
-// Otherwise, it shows the repository home view
+// Otherwise, it shows the article view with read/edit/history modes
 func ArticleView(ctx *context.Context) {
-	// Set ArticleLink for templates to use in history view
-	// This ensures commit links point back to the article route, not the repo route
-	articleLink := setting.AppSubURL + "/article/" + ctx.Repo.Owner.Name + "/" + ctx.Repo.Repository.Name
+	// Get the subject name for the article link (use subject, not repo name)
+	subject := ctx.Repo.Repository.GetSubject(ctx)
+	articleLink := setting.AppSubURL + "/article/" + url.PathEscape(ctx.Repo.Owner.Name) + "/" + url.PathEscape(subject)
 	ctx.Data["ArticleLink"] = articleLink
 
 	// Check if version parameter is present
 	commitHash := ctx.FormString("version")
 	if commitHash != "" {
-		// Show commit view
+		// Show commit view for a specific version
 		ArticleCommitView(ctx)
-	} else {
-		// Show home view - need to set up ref context first
-		SetEditorconfigIfExists(ctx)
-		if ctx.Written() {
-			return
-		}
-
-		// Set up branch reference (default branch)
-		if ctx.Repo.Repository.IsEmpty {
-			ctx.Repo.BranchName = ctx.Repo.Repository.DefaultBranch
-			ctx.Repo.RefFullName = git.RefNameFromBranch(ctx.Repo.BranchName)
-			ctx.Data["BranchName"] = ctx.Repo.BranchName
-			ctx.Data["TreePath"] = ""
-		} else {
-			refShortName := ctx.Repo.Repository.DefaultBranch
-			if !gitrepo.IsBranchExist(ctx, ctx.Repo.Repository, refShortName) {
-				brs, _, err := ctx.Repo.GitRepo.GetBranchNames(0, 1)
-				if err == nil && len(brs) != 0 {
-					refShortName = brs[0]
-				}
-			}
-			ctx.Repo.RefFullName = git.RefNameFromBranch(refShortName)
-			ctx.Repo.BranchName = refShortName
-			ctx.Repo.TreePath = "" // Set to empty string for root path
-
-			var err error
-			ctx.Repo.Commit, err = ctx.Repo.GitRepo.GetBranchCommit(refShortName)
-			if err == nil {
-				ctx.Repo.CommitID = ctx.Repo.Commit.ID.String()
-				ctx.Repo.CommitsCount, _ = ctx.Repo.GetCommitsCount()
-			} else if !strings.Contains(err.Error(), "fatal: not a git repository") && !strings.Contains(err.Error(), "object does not exist") {
-				ctx.ServerError("GetBranchCommit", err)
-				return
-			}
-
-			// Set all required context data for templates
-			ctx.Data["RefFullName"] = ctx.Repo.RefFullName
-			ctx.Data["BranchName"] = ctx.Repo.BranchName
-			ctx.Data["CommitsCount"] = ctx.Repo.CommitsCount
-			ctx.Data["TreePath"] = "" // Explicitly set to empty string for root path
-			ctx.Data["CommitID"] = ctx.Repo.CommitID
-			ctx.Data["RefTypeNameSubURL"] = ctx.Repo.RefTypeNameSubURL()
-		}
-
-		Home(ctx)
+		return
 	}
+
+	// Set up page metadata for article view
+	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - Article"
+	ctx.Data["PageIsExploreRepositories"] = true
+	ctx.Data["PageIsRepoHistory"] = true
+	ctx.Data["IsRepoHistoryView"] = true
+
+	// Force article view mode (this is the /article/ route, not /subject/)
+	ctx.Data["HistoryView"] = "article"
+	ctx.Data["IsBubbleView"] = false
+	ctx.Data["IsTableView"] = false
+	ctx.Data["IsArticleView"] = true
+
+	// Render the repository history view which handles article display
+	explore.RenderRepositoryHistory(ctx)
 }
 
-// ArticleCommitView renders the repository file browser view at a specific commit
+// ArticleCommitView renders the article view at a specific commit
 // for the /article/{username}/{subjectname}?version={commit-hash} route
-// This is equivalent to the /{username}/{reponame}/src/commit/{hash} route
 func ArticleCommitView(ctx *context.Context) {
 	// Get the commit hash from the "version" query parameter
 	commitHash := ctx.FormString("version")
@@ -560,34 +532,37 @@ func ArticleCommitView(ctx *context.Context) {
 		return
 	}
 
-	// Set up the repository context similar to RepoRefByType(git.RefTypeCommit)
+	// Set up the repository context for the specific commit
 	ctx.Repo.Commit = commit
 	ctx.Repo.CommitID = commit.ID.String()
 	ctx.Repo.RefFullName = git.RefNameFromCommit(ctx.Repo.CommitID)
 	ctx.Repo.TreePath = ""
 	// BranchName is empty when viewing a commit (not a branch)
-	// This prevents template errors and disables edit/upload buttons
 	ctx.Repo.BranchName = ""
 
 	// Calculate total number of commits reachable from this commit
-	// This matches the behavior of the non-versioned article view
 	ctx.Repo.CommitsCount, _ = ctx.Repo.GetCommitsCount()
 
 	// Set all required context data for templates
 	ctx.Data["RefFullName"] = ctx.Repo.RefFullName
 	ctx.Data["CommitsCount"] = ctx.Repo.CommitsCount
 	ctx.Data["CommitID"] = ctx.Repo.CommitID
-	ctx.Data["TreePath"] = ""   // Explicitly set to empty string for root path
-	ctx.Data["BranchName"] = "" // Empty string for commits (not a branch)
+	ctx.Data["TreePath"] = ""
+	ctx.Data["BranchName"] = ""
 	ctx.Data["RefTypeNameSubURL"] = ctx.Repo.RefTypeNameSubURL()
 
-	// Set up editor config (required for Home view)
-	SetEditorconfigIfExists(ctx)
-	if ctx.Written() {
-		return
-	}
+	// Set up page metadata for article view
+	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - Article (Version)"
+	ctx.Data["PageIsExploreRepositories"] = true
+	ctx.Data["PageIsRepoHistory"] = true
+	ctx.Data["IsRepoHistoryView"] = true
 
-	// Call the Home handler to render the repository file browser at this commit
-	// This is the same view as /{username}/{reponame}/src/commit/{hash}
-	Home(ctx)
+	// Force article view mode
+	ctx.Data["HistoryView"] = "article"
+	ctx.Data["IsBubbleView"] = false
+	ctx.Data["IsTableView"] = false
+	ctx.Data["IsArticleView"] = true
+
+	// Render the repository history view which handles article display
+	explore.RenderRepositoryHistory(ctx)
 }

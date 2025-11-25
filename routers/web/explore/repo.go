@@ -301,11 +301,12 @@ func RepoHistory(ctx *context.Context) {
 
 	// Call the main repository home logic
 	// This duplicates the functionality of repo.Home but in the explore context
-	renderRepositoryHistory(ctx)
+	RenderRepositoryHistory(ctx)
 }
 
-// renderRepositoryHistory duplicates repo.Home functionality for the history view
-func renderRepositoryHistory(ctx *context.Context) {
+// RenderRepositoryHistory duplicates repo.Home functionality for the history view
+// This is exported so it can be called from the article route handler
+func RenderRepositoryHistory(ctx *context.Context) {
 	// Handle feed requests
 	if handleRepoHistoryFeed(ctx) {
 		return
