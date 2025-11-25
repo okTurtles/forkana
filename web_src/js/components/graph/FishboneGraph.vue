@@ -453,7 +453,8 @@ async function fetchForkGraphAndSet(){
 function buildGraphFromApi(root:any): Graph{
   const g:Graph = {};
   if(!root) return g;
-  const visit = (n:any, parentId: string | null)=>{
+  const visit = (n:any, parentId: string | null): string =>{
+    if (!n) return '';
     const id: string = n?.id ?? (n?.repository?.full_name ?? Math.random().toString(36).slice(2));
     const baseContrib: number = Number(n?.contributors?.total_count ?? n?.contributors?.recent_count ?? 0);
     const contributors: number = Number.isFinite(baseContrib) ? baseContrib : 0;
@@ -482,10 +483,12 @@ function buildGraphFromApi(root:any): Graph{
     }
     g[id] = node;
     for(const child of (n?.children ?? [])){
-      const childId: string = child?.id ?? (child?.repository?.full_name ?? Math.random().toString(36).slice(2));
-      node.children.push(childId);
-      visit(child, id);
+      const childId = visit(child, id);
+      if (childId) {
+        node.children.push(childId);
+      }
     }
+    return id;
   };
   visit(root, null);
   return g;
@@ -503,15 +506,22 @@ function rFor(n:number){
   return base * (state.radiusScale || 1);
 }
 
-function getRoot(g:Graph){ return Object.values(g).find(n=>n.parentId===null)!; }
+function getRoot(g:Graph){ return Object.values(g).find(n=>n.parentId===null) ?? null; }
 
 function computeDepths(g:Graph){
   /* BFS depth tagging so we can place parents top-down and sort render order. */
-  const root = getRoot(g) as any; (root as any).depth = 0;
+  const root = getRoot(g) as any; 
+  if (!root) return;
+  (root as any).depth = 0;
   const q = [root];
   while(q.length){
     const n:any = q.shift();
-    for(const cid of n.children){ const c:any = g[cid]; c.depth = (n.depth ?? 0) + 1; q.push(c); }
+    for(const cid of n.children){ 
+      const c:any = g[cid]; 
+      if (!c) continue;
+      c.depth = (n.depth ?? 0) + 1; 
+      q.push(c); 
+    }
   }
 }
 
@@ -568,18 +578,45 @@ type Arc  = { cx:number; cy:number; r:number };
 type HRun = { x0:number; x1:number; y:number };
 
 function layoutFishbone(g:Graph){
+  const nodeCount = Object.keys(g).length;
+  if (nodeCount === 0) {
+    nodesList.value = [];
+    edgesList.value = [];
+    trunksList.value = [];
+    jointDots.value = [];
+    return;
+  }
+  
   computeDepths(g);
-  const root:any = getRoot(g); root.x = 0; root.y = 0;
+  const root:any = getRoot(g);
+  if (!root) {
+    nodesList.value = [];
+    edgesList.value = [];
+    trunksList.value = [];
+    jointDots.value = [];
+    return;
+  }
+  root.x = 0; root.y = 0;
 
   // Update global max contributors for relative radius scaling
   state.maxContrib = Math.max(1, ...Object.values(g).map(n => n.contributors || 0));
 
   const discs: Disc[] = [{ x:root.x, y:root.y, r:rFor(root.contributors), id:root.id }];
   const trunks: SegV[] = []; const arcs: Arc[] = []; const runs: HRun[] = [];
-  const parents = Object.values(g).sort((a:any,b:any)=> (a.depth - b.depth));
+  const allNodes = Object.values(g);
+  const nodesWithDepth = allNodes.filter((n:any) => n.depth !== undefined);
+  if (nodesWithDepth.length < allNodes.length) {
+    console.warn('FishboneGraph:', allNodes.length - nodesWithDepth.length, 'nodes missing depth property');
+  }
+  const parents = nodesWithDepth.sort((a:any,b:any)=> (a.depth - b.depth));
 
   for(const p of parents){
-    const kids = p.children.map(id=>g[id]);
+    const kidsWithUndefined = p.children.map(id=>g[id]);
+    const kids = kidsWithUndefined.filter((k): k is Node => k !== undefined);
+    if (kidsWithUndefined.length !== kids.length) {
+      const missingIds = p.children.filter(id => !g[id]);
+      console.warn(`FishboneGraph: Parent node ${p.id} has ${missingIds.length} missing child(ren):`, missingIds);
+    }
     if(!kids.length) continue;
 
     const px = p.x ?? 0, py = p.y ?? 0, pr = rFor(p.contributors);
@@ -662,7 +699,7 @@ function layoutFishbone(g:Graph){
       prevJoint = reqY - R;
     }
 
-    const childYs = p.children.map(id => (g as any)[id].y ?? baseY);
+    const childYs = p.children.map(id => g[id]).filter((c): c is Node => c !== undefined).map(c => (c as any).y ?? baseY);
     const lastJoint = (childYs.length ? Math.max(...childYs) - state.elbowR : yStart);
     trunks.push({ x: px, y1: py + pr, y2: lastJoint });
 
@@ -672,7 +709,9 @@ function layoutFishbone(g:Graph){
   // Prepare arrays for Vue rendering
   nodesList.value = Object.values(g) as any;
 
-  const links = nodesList.value.filter(n=>n.parentId).map(n => ({ source: (g as any)[n.parentId!], target: n }));
+  const links = nodesList.value
+    .filter(n=>n.parentId && g[n.parentId])
+    .map(n => ({ source: (g as any)[n.parentId!], target: n }));
   const R = state.elbowR;
   const edges = links.map(l=>{
     const side: Side = (l.target.x! >= l.source.x!) ? +1 : -1;
@@ -686,7 +725,7 @@ function layoutFishbone(g:Graph){
   trunksList.value = nodesList.value.filter(n=>n.children.length>0).map(n=>{
     const rs = rFor(n.contributors);
     const yStart = n.y! + rs + STEM_LEN_PARENT;
-    const ys = n.children.map(id => (g as any)[id].y! - R);
+    const ys = n.children.map(id => g[id]).filter((c): c is Node => c !== undefined).map(c => (c as any).y! - R);
     const y2 = Math.max(yStart, ...ys);
     return { x: n.x!, y1: n.y! + rs, y2, id: n.id };
   });
@@ -695,12 +734,18 @@ function layoutFishbone(g:Graph){
 
   const maxY = Math.max(...nodesList.value.map(n => (n.y ?? 0) + rFor(n.contributors)));
   svgHeight.value = Math.max(containerHeight, maxY + SVG_BOTTOM_PADDING);
+  
+  console.log('FishboneGraph: Layout complete.', nodesList.value.length, 'nodes positioned');
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────-
    VIEW FITTING (responsive reset + tiny-graph elegance)
    ─────────────────────────────────────────────────────────────────────────── */
 function contentBounds(){
+  if (nodesList.value.length === 0) {
+    console.warn('FishboneGraph: contentBounds called with empty nodesList');
+    return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
+  }
   const minX = Math.min(...nodesList.value.map(n => (n.x ?? 0) - rFor(n.contributors)));
   const maxX = Math.max(...nodesList.value.map(n => (n.x ?? 0) + rFor(n.contributors)));
   const minY = Math.min(...nodesList.value.map(n => (n.y ?? 0) - rFor(n.contributors)));
@@ -718,11 +763,23 @@ function resetView(animated=false){
     requestAnimationFrame(() => resetView(animated));
     return;
   }
+  
+  if (nodesList.value.length === 0) {
+    console.warn('FishboneGraph: resetView called with no nodes');
+    return;
+  }
+  
   const usableH = box.height - VIEW_TOP_OFFSET;
 
   const forks = forkCount(state.graph);
   const b = contentBounds();
   const contentW = b.maxX - b.minX, contentH = b.maxY - b.minY;
+  
+  // Validate bounds
+  if (!isFinite(contentW) || !isFinite(contentH) || !isFinite(b.minX) || !isFinite(b.minY)) {
+    console.error('FishboneGraph: Invalid content bounds', b);
+    return;
+  }
 
   // Calculate fill fraction based on number of forks (more forks = fill more of viewport)
   const fillFrac = FILL_FRACTION_MIN + (FILL_FRACTION_MAX - FILL_FRACTION_MIN) * Math.min(1, forks / COMPLEXITY_THRESHOLD);
@@ -735,10 +792,12 @@ function resetView(animated=false){
   // Special handling for single-fork graphs: make the bubble nicely sized
   if (forks <= 1) {
     const root = getRoot(state.graph);
-    const r = rFor(root.contributors);
-    const desiredD = Math.max(SINGLE_FORK_DIAMETER_MIN, Math.min(Math.floor(box.width * SINGLE_FORK_WIDTH_RATIO), SINGLE_FORK_DIAMETER_MAX));
-    const sBubble  = desiredD / (2 * r);
-    targetScale = Math.min(ZOOM_MAX, Math.max(sBubble, targetScale));
+    if (root) {
+      const r = rFor(root.contributors);
+      const desiredD = Math.max(SINGLE_FORK_DIAMETER_MIN, Math.min(Math.floor(box.width * SINGLE_FORK_WIDTH_RATIO), SINGLE_FORK_DIAMETER_MAX));
+      const sBubble  = desiredD / (2 * r);
+      targetScale = Math.min(ZOOM_MAX, Math.max(sBubble, targetScale));
+    }
   }
 
   // Center horizontally
@@ -748,6 +807,12 @@ function resetView(animated=false){
   // Position vertically with top margin
   const targetTop = VIEW_TOP_OFFSET + RESET_TOP_MARGIN;
   const ty = targetTop - (b.minY * targetScale);
+
+  // Validate transform values before applying
+  if (!isFinite(tx) || !isFinite(ty) || !isFinite(targetScale)) {
+    console.error('FishboneGraph: Invalid transform values', { tx, ty, targetScale, bounds: b });
+    return;
+  }
 
   const t = zoomIdentity.translate(tx, ty).scale(targetScale);
   (animated ? svgSel.transition().duration(VIEW_TRANSITION_DURATION) : svgSel).call(zoomBehavior.transform as any, t);
