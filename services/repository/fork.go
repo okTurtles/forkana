@@ -195,15 +195,21 @@ func ForkRepository(ctx context.Context, doer, owner *user_model.User, opts Fork
 	}
 
 	// 3 - Clone the repository
-	cloneCmd := gitcmd.NewCommand("clone", "--bare")
-	if opts.SingleBranch != "" {
-		cloneCmd.AddArguments("--single-branch", "--branch").AddDynamicArguments(opts.SingleBranch)
-	}
-	var stdout []byte
-	if stdout, _, err = cloneCmd.AddDynamicArguments(opts.BaseRepo.RepoPath(), repo.RepoPath()).
-		RunStdBytes(ctx, &gitcmd.RunOpts{Timeout: 10 * time.Minute}); err != nil {
-		log.Error("Fork Repository (git clone) Failed for %v (from %v):\nStdout: %s\nError: %v", repo, opts.BaseRepo, stdout, err)
-		return nil, fmt.Errorf("git clone: %w", err)
+	if opts.BaseRepo.IsEmpty {
+		if err = gitrepo.InitRepository(ctx, repo, repo.ObjectFormatName); err != nil {
+			return nil, fmt.Errorf("InitRepository: %w", err)
+		}
+	} else {
+		cloneCmd := gitcmd.NewCommand("clone", "--bare")
+		if opts.SingleBranch != "" {
+			cloneCmd.AddArguments("--single-branch", "--branch").AddDynamicArguments(opts.SingleBranch)
+		}
+		var stdout []byte
+		if stdout, _, err = cloneCmd.AddDynamicArguments(opts.BaseRepo.RepoPath(), repo.RepoPath()).
+			RunStdBytes(ctx, &gitcmd.RunOpts{Timeout: 10 * time.Minute}); err != nil {
+			log.Error("Fork Repository (git clone) Failed for %v (from %v):\nStdout: %s\nError: %v", repo, opts.BaseRepo, stdout, err)
+			return nil, fmt.Errorf("git clone: %w", err)
+		}
 	}
 
 	// 4 - Update the git repository

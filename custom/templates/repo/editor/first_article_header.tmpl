@@ -1,0 +1,31 @@
+<div class="secondary-nav tw-mb-8">
+	<div class="repo-button-row">
+		<div class="repo-button-row-left tw-flex-col tw-items-start">
+			<div class="breadcrumb tw-font-bold">
+				<a class="section" href="{{.RepoLink}}">{{.Repository.Owner.Name}}</a>
+				<div class="breadcrumb-divider">/</div>
+				<span class="active section">{{.Repository.GetSubject ctx}}</span>
+			</div>
+			<div class="ui basic label tw-rounded-xl tw-bg-transparent tw-text-primary">
+				{{svg "octicon-sparkles-fill" 14}}
+				{{ctx.Locale.Tr "repo.new_subject"}}
+			</div>
+		</div>
+		<div class="repo-button-row-right">
+			<div class="ui labeled button" tabindex="0">
+				<a class="ui basic button" href="{{.RepoLink}}/forks">
+					{{ctx.Locale.Tr "repo.fork"}}
+				</a>
+				<div class="ui basic label">
+					0
+				</div>
+			</div>
+			<button id="commit-button" type="submit" form="first-article-form" class="ui primary button">
+				{{ctx.Locale.Tr "repo.editor.create_article"}}
+			</button>
+		</div>
+	</div>
+
+</div>
+<!-- Hidden input required by repo-editor.ts JavaScript -->
+<input type="hidden" id="file-name" value="{{.TreePath}}">

@@ -17,5 +17,8 @@ gitea-theme-meta-info {
   --color-warning-border: #d4a72c66;
   --color-warning-text: #9A6700;
   --color-warning-bg: #FFF8C5;
+
+  --color-success-border: #4AC26B66;
+  --color-success-bg: #DAFBE1;
 }
 

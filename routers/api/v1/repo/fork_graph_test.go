@@ -193,9 +193,9 @@ func TestForkGraphCacheKey(t *testing.T) {
 		Limit:               50,
 	}
 
-	key1 := getCacheKey(1, params1, 1)
-	key2 := getCacheKey(1, params2, 1)
-	key3 := getCacheKey(1, params3, 1)
+	key1 := getCacheKey(1, false, params1, 1)
+	key2 := getCacheKey(1, false, params2, 1)
+	key3 := getCacheKey(1, false, params3, 1)
 
 	// Same params should generate same key
 	assert.Equal(t, key1, key2)
@@ -214,7 +214,7 @@ func TestForkGraphCacheKeyIncludesVersion(t *testing.T) {
 		Limit:               50,
 	}
 
-	key := getCacheKey(1, params, 1)
+	key := getCacheKey(1, false, params, 1)
 
 	// Verify cache key includes the version
 	assert.Contains(t, key, forkGraphCacheVersion, "Cache key should include version for cache invalidation")
