@@ -662,11 +662,18 @@ func (repo *Repository) RepoPath() string {
 	return RepoPath(repo.OwnerName, repo.Name)
 }
 
-// Link returns the repository relative url
+// Link returns the repository relative url for viewing articles
 // Uses subject name if available, falls back to repository name
 func (repo *Repository) Link() string {
 	subject := repo.GetSubject(context.Background())
 	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(subject)
+}
+
+// OperationsLink returns the repository relative url for repository operations
+// This is used for file editing, forking, settings, and other repository management operations
+// It always uses the repository name, not the subject name
+func (repo *Repository) OperationsLink() string {
+	return setting.AppSubURL + "/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(repo.Name)
 }
 
 // ComposeCompareURL returns the repository comparison URL

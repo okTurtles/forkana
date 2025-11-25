@@ -326,10 +326,15 @@ func renderRepositoryHistory(ctx *context.Context) {
 	ctx.Data["PageIsViewCode"] = true
 	ctx.Data["RepositoryUploadEnabled"] = false // Disable uploads in history view
 
-	// Handle empty or broken repositories
+	// For empty/broken repositories, render the history view which will show a "Create first article" bubble
 	if ctx.Repo.Repository.IsEmpty || ctx.Repo.Repository.IsBroken() {
 		ctx.Data["IsRepoEmpty"] = true
-		ctx.HTML(http.StatusOK, "repo/empty")
+		ctx.Data["BranchName"] = ctx.Repo.Repository.DefaultBranch
+		ctx.Data["RepoLink"] = ctx.Repo.Repository.Link()
+		if ctx.Doer != nil {
+			ctx.Data["CloneButtonOriginLink"] = ctx.Repo.Repository.CloneLink(ctx, ctx.Doer)
+		}
+		ctx.HTML(http.StatusOK, "explore/repo_history")
 		return
 	}
 
