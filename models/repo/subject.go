@@ -253,10 +253,10 @@ func FindSubjects(ctx context.Context, opts FindSubjectsOptions) ([]*Subject, in
 // FindSubjectsOptions represents options for finding subjects
 type FindSubjectsOptions struct {
 	db.ListOptions
-	Keyword       string
-	OrderBy       string
-	ExcludeIDs    []int64 // IDs to exclude from results
-	ExactMatchOnly bool   // Only find exact matches
+	Keyword        string
+	OrderBy        string
+	ExcludeIDs     []int64 // IDs to exclude from results
+	ExactMatchOnly bool    // Only find exact matches
 }
 
 // ToConds converts options to database conditions
@@ -285,7 +285,7 @@ func FindSimilarSubjects(ctx context.Context, keyword string, limit int, exclude
 	}
 
 	keyword = strings.ToLower(strings.TrimSpace(keyword))
-	
+
 	// Find subjects that contain the keyword but are not exact matches
 	subjects := make([]*Subject, 0, limit)
 	err := db.GetEngine(ctx).
@@ -294,7 +294,6 @@ func FindSimilarSubjects(ctx context.Context, keyword string, limit int, exclude
 		OrderBy("updated_unix DESC").
 		Limit(limit).
 		Find(&subjects)
-	
 	if err != nil {
 		return nil, err
 	}
