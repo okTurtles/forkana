@@ -55,7 +55,7 @@ $ pnpm install
 To build the project:
 
 ```bash
-$ GODEBUG="netdns=go+4" GOPROXY="direct" TAGS="bindata sqlite sqlite_unlock_notify" make build
+$ TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
 
 For troubleshooting see 
