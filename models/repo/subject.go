@@ -253,17 +253,104 @@ func FindSubjects(ctx context.Context, opts FindSubjectsOptions) ([]*Subject, in
 // FindSubjectsOptions represents options for finding subjects
 type FindSubjectsOptions struct {
 	db.ListOptions
-	Keyword string
-	OrderBy string
+	Keyword       string
+	OrderBy       string
+	ExcludeIDs    []int64 // IDs to exclude from results
+	ExactMatchOnly bool   // Only find exact matches
 }
 
 // ToConds converts options to database conditions
 func (opts FindSubjectsOptions) ToConds() builder.Cond {
 	cond := builder.NewCond()
 	if opts.Keyword != "" {
-		cond = cond.And(builder.Like{"LOWER(name)", opts.Keyword})
+		if opts.ExactMatchOnly {
+			// Exact match on name
+			cond = cond.And(builder.Eq{"LOWER(name)": strings.ToLower(opts.Keyword)})
+		} else {
+			// Fuzzy match using LIKE
+			cond = cond.And(builder.Like{"LOWER(name)", strings.ToLower(opts.Keyword)})
+		}
+	}
+	if len(opts.ExcludeIDs) > 0 {
+		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
 	return cond
+}
+
+// FindSimilarSubjects finds subjects similar to the given keyword
+// It returns subjects that partially match the keyword, excluding exact matches
+func FindSimilarSubjects(ctx context.Context, keyword string, limit int, excludeIDs []int64) ([]*Subject, error) {
+	if keyword == "" {
+		return nil, nil
+	}
+
+	keyword = strings.ToLower(strings.TrimSpace(keyword))
+	
+	// Find subjects that contain the keyword but are not exact matches
+	subjects := make([]*Subject, 0, limit)
+	err := db.GetEngine(ctx).
+		Where("LOWER(name) LIKE ? AND LOWER(name) != ?", "%"+keyword+"%", keyword).
+		NotIn("id", excludeIDs).
+		OrderBy("updated_unix DESC").
+		Limit(limit).
+		Find(&subjects)
+	
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate similarity scores and sort by relevance
+	type subjectWithScore struct {
+		subject *Subject
+		score   int
+	}
+
+	scoredSubjects := make([]subjectWithScore, 0, len(subjects))
+	for _, subject := range subjects {
+		score := calculateSimilarityScore(keyword, strings.ToLower(subject.Name))
+		scoredSubjects = append(scoredSubjects, subjectWithScore{subject, score})
+	}
+
+	// Sort by score (lower is better)
+	for i := 0; i < len(scoredSubjects)-1; i++ {
+		for j := i + 1; j < len(scoredSubjects); j++ {
+			if scoredSubjects[j].score < scoredSubjects[i].score {
+				scoredSubjects[i], scoredSubjects[j] = scoredSubjects[j], scoredSubjects[i]
+			}
+		}
+	}
+
+	// Extract sorted subjects
+	result := make([]*Subject, 0, len(scoredSubjects))
+	for _, s := range scoredSubjects {
+		result = append(result, s.subject)
+	}
+
+	return result, nil
+}
+
+// calculateSimilarityScore calculates a similarity score between keyword and subject name
+// Lower score means more similar
+// 1 = starts with keyword, 2 = contains keyword at word boundary, 3 = contains keyword anywhere
+func calculateSimilarityScore(keyword, subjectName string) int {
+	keyword = strings.ToLower(keyword)
+	subjectName = strings.ToLower(subjectName)
+
+	// Check if subject name starts with keyword
+	if strings.HasPrefix(subjectName, keyword) {
+		return 1
+	}
+
+	// Check if keyword appears at word boundary
+	words := strings.Fields(subjectName)
+	for _, word := range words {
+		if strings.HasPrefix(word, keyword) {
+			return 2
+		}
+	}
+
+	// Keyword is contained somewhere in the name
+	return 3
 }
 
 // SubjectSortType represents the sort type for subjects

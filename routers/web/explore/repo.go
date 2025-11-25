@@ -228,50 +228,136 @@ func Subjects(ctx *context.Context) {
 	keyword := ctx.FormTrim("q")
 	ctx.Data["Keyword"] = keyword
 
-	// Search subjects
-	subjects, count, err := repo_model.FindSubjects(ctx, repo_model.FindSubjectsOptions{
-		ListOptions: db.ListOptions{
-			Page:     page,
-			PageSize: setting.UI.ExplorePagingNum,
-		},
-		Keyword: keyword,
-		OrderBy: orderBy,
-	})
-	if err != nil {
-		ctx.ServerError("FindSubjects", err)
-		return
-	}
-
-	// For each subject, get the repository count
+	// Helper type for subjects with counts
 	type SubjectWithCount struct {
 		*repo_model.Subject
 		RepoCount     int64
 		RootRepoCount int64
 	}
 
-	subjectsWithCount := make([]*SubjectWithCount, 0, len(subjects))
-	for _, subject := range subjects {
-		repoCount, err := repo_model.CountRepositoriesBySubject(ctx, subject.ID)
-		if err != nil {
-			ctx.ServerError("CountRepositoriesBySubject", err)
-			return
-		}
+	var exactMatch *SubjectWithCount
+	var similarSubjects []*SubjectWithCount
+	var allSubjects []*SubjectWithCount
+	var count int64
 
-		rootRepoCount, err := repo_model.CountRootRepositoriesBySubject(ctx, subject.ID)
-		if err != nil {
-			ctx.ServerError("CountRootRepositoriesBySubject", err)
-			return
-		}
-
-		subjectsWithCount = append(subjectsWithCount, &SubjectWithCount{
-			Subject:       subject,
-			RepoCount:     repoCount,
-			RootRepoCount: rootRepoCount,
+	// If there's a search keyword, separate exact matches from similar matches
+	if keyword != "" {
+		// First, find exact match
+		exactSubjects, exactCount, err := repo_model.FindSubjects(ctx, repo_model.FindSubjectsOptions{
+			ListOptions: db.ListOptions{
+				Page:     1,
+				PageSize: 1,
+			},
+			Keyword:        keyword,
+			OrderBy:        orderBy,
+			ExactMatchOnly: true,
 		})
+		if err != nil {
+			ctx.ServerError("FindSubjects (exact)", err)
+			return
+		}
+
+		// If we found an exact match, get its counts
+		excludeIDs := make([]int64, 0)
+		if exactCount > 0 && len(exactSubjects) > 0 {
+			subject := exactSubjects[0]
+			repoCount, err := repo_model.CountRepositoriesBySubject(ctx, subject.ID)
+			if err != nil {
+				ctx.ServerError("CountRepositoriesBySubject", err)
+				return
+			}
+
+			rootRepoCount, err := repo_model.CountRootRepositoriesBySubject(ctx, subject.ID)
+			if err != nil {
+				ctx.ServerError("CountRootRepositoriesBySubject", err)
+				return
+			}
+
+			exactMatch = &SubjectWithCount{
+				Subject:       subject,
+				RepoCount:     repoCount,
+				RootRepoCount: rootRepoCount,
+			}
+			excludeIDs = append(excludeIDs, subject.ID)
+		}
+
+		// Find similar subjects (excluding the exact match)
+		similarResults, err := repo_model.FindSimilarSubjects(ctx, keyword, 20, excludeIDs)
+		if err != nil {
+			ctx.ServerError("FindSimilarSubjects", err)
+			return
+		}
+
+		// Get counts for similar subjects
+		similarSubjects = make([]*SubjectWithCount, 0, len(similarResults))
+		for _, subject := range similarResults {
+			repoCount, err := repo_model.CountRepositoriesBySubject(ctx, subject.ID)
+			if err != nil {
+				ctx.ServerError("CountRepositoriesBySubject", err)
+				return
+			}
+
+			rootRepoCount, err := repo_model.CountRootRepositoriesBySubject(ctx, subject.ID)
+			if err != nil {
+				ctx.ServerError("CountRootRepositoriesBySubject", err)
+				return
+			}
+
+			similarSubjects = append(similarSubjects, &SubjectWithCount{
+				Subject:       subject,
+				RepoCount:     repoCount,
+				RootRepoCount: rootRepoCount,
+			})
+		}
+
+		// For pagination total, we count exact + similar
+		count = int64(len(similarSubjects))
+		if exactMatch != nil {
+			count++
+		}
+	} else {
+		// No search keyword - show all subjects with pagination
+		subjects, totalCount, err := repo_model.FindSubjects(ctx, repo_model.FindSubjectsOptions{
+			ListOptions: db.ListOptions{
+				Page:     page,
+				PageSize: setting.UI.ExplorePagingNum,
+			},
+			Keyword: keyword,
+			OrderBy: orderBy,
+		})
+		if err != nil {
+			ctx.ServerError("FindSubjects", err)
+			return
+		}
+
+		allSubjects = make([]*SubjectWithCount, 0, len(subjects))
+		for _, subject := range subjects {
+			repoCount, err := repo_model.CountRepositoriesBySubject(ctx, subject.ID)
+			if err != nil {
+				ctx.ServerError("CountRepositoriesBySubject", err)
+				return
+			}
+
+			rootRepoCount, err := repo_model.CountRootRepositoriesBySubject(ctx, subject.ID)
+			if err != nil {
+				ctx.ServerError("CountRootRepositoriesBySubject", err)
+				return
+			}
+
+			allSubjects = append(allSubjects, &SubjectWithCount{
+				Subject:       subject,
+				RepoCount:     repoCount,
+				RootRepoCount: rootRepoCount,
+			})
+		}
+		count = totalCount
 	}
 
 	ctx.Data["Total"] = count
-	ctx.Data["Subjects"] = subjectsWithCount
+	ctx.Data["Subjects"] = allSubjects
+	ctx.Data["ExactMatch"] = exactMatch
+	ctx.Data["SimilarSubjects"] = similarSubjects
+	ctx.Data["HasSearchKeyword"] = keyword != ""
 
 	pager := context.NewPagination(int(count), setting.UI.ExplorePagingNum, page, 5)
 	pager.AddParamFromRequest(ctx.Req)
