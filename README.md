@@ -79,6 +79,8 @@ Do the same for the following `make watch` command.
 
 </details>
 
+### Starting the application for development
+
 To run the project:
 
 ```bash
