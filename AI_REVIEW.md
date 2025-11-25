@@ -5,7 +5,7 @@ Here's how to review PRs using AI.
 ## Template
 
 ````
-Attached are a set of changes to a Go project that uses Vuejs, along with some source to serve as useful context.
+Attached are a set of changes to a Go project that uses Vuejs.
 
 Please have a look at these changes and thoroughly check it for any bugs or security issues. Also check if anything could be improved. When providing feedback, be specific and quote the concrete lines that are problematic, and then give your code improvement suggestions complete with actual code. When replying, always use Markdown and Markdown code fences to quote any lines. Avoid commenting on code that has nothing wrong with it.
 
