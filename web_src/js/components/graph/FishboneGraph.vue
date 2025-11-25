@@ -443,12 +443,14 @@ async function fetchForkGraphAndSet(){
     const json = await res.json();
     const graph = buildGraphFromApi(json?.root);
     state.graph = graph;
-    
+
     // Clear loading state before layout/render
     isLoading.value = false;
-    
+
     // Only layout and render if we have data
     if(Object.keys(graph).length > 0) {
+      // Wait for Vue to update the DOM with the new graph data before calculating layout
+      await nextTick();
       layoutAndRender();
       resetView();
       restoreSelectionAfterGraphLoad();
