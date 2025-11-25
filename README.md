@@ -58,7 +58,7 @@ To build the project:
 $ TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
 
-For troubleshooting see 
+For troubleshooting, see the details below:
 
 <details>
 
