@@ -41,6 +41,7 @@ type Node = {
   repoName?: string;
   repoSubject?: string;
   fullName?: string;
+  isEmpty?: boolean;
 };
 type Graph = Record<string, Node>;
 
@@ -207,18 +208,32 @@ const errorMessage = ref<string | null>(null);
 const hasData = computed(() => {
   const nodes = Object.values(state.graph);
   if (nodes.length === 0) return false;
-  
-  // Treat as empty if there's only one node (root) with no activity and no children
+
+  // If we have multiple nodes (forks), always show the graph
+  if (nodes.length > 1) {
+    return true;
+  }
+
+  // For a single node (root repository), check if it has content
   if (nodes.length === 1) {
     const rootNode = nodes[0];
-    const hasNoActivity = rootNode.contributors === 0 || !rootNode.contributors;
-    const hasNoChildren = !rootNode.children || rootNode.children.length === 0;
-    if (hasNoActivity && hasNoChildren) {
-      return false;
+
+    // If repository has the isEmpty flag set, use that (most reliable)
+    if (rootNode.isEmpty !== undefined) {
+      // If isEmpty is false, the repo has content - show the bubble
+      // If isEmpty is true, the repo is empty - don't show
+      return !rootNode.isEmpty;
     }
+
+    // Fallback: check for meaningful activity indicators
+    const hasChildren = rootNode.children && rootNode.children.length > 0;
+    const hasContributors = rootNode.contributors && rootNode.contributors > 0;
+
+    // Show the bubble if there are children or at least 1 contributor
+    return hasChildren || hasContributors;
   }
-  
-  return true;
+
+  return false;
 });
 
 /* Container width affects responsive dials; observe it. */
@@ -453,11 +468,15 @@ async function fetchForkGraphAndSet(){
 function buildGraphFromApi(root:any): Graph{
   const g:Graph = {};
   if(!root) return g;
+
+  // Store the root API data so we can check repository.empty flag
+  let rootApiData = root;
+
   const visit = (n:any, parentId: string | null): string =>{
     if (!n) return '';
     const id: string = n?.id ?? (n?.repository?.full_name ?? Math.random().toString(36).slice(2));
     const baseContrib: number = Number(n?.contributors?.total_count ?? n?.contributors?.recent_count ?? 0);
-    const contributors: number = Number.isFinite(baseContrib) ? baseContrib : 0;
+    let contributors: number = Number.isFinite(baseContrib) ? baseContrib : 0;
     const updatedAt: string | undefined = n?.repository?.updated_at ?? n?.repository?.updated ?? undefined;
     const repo = n?.repository ?? {};
     const ownerName: string | null =
@@ -466,6 +485,13 @@ function buildGraphFromApi(root:any): Graph{
     const repoSubject: string | null =
       repo?.subject ?? repo?.subject_slug ?? repo?.subject_name ?? repoName ?? null;
     const fullName: string | null = repo?.full_name ?? (ownerName && repoName ? `${ownerName}/${repoName}` : null);
+    const isEmpty: boolean = repo?.empty === true;
+
+    // If repository is not empty but contributors shows 0, it means stats are still generating
+    // In this case, we know there's at least 1 contributor (the person who created the content)
+    if (!isEmpty && contributors === 0) {
+      contributors = 1;
+    }
 
     const node: Node = {
       id,
@@ -477,6 +503,7 @@ function buildGraphFromApi(root:any): Graph{
       repoName: repoName ?? undefined,
       repoSubject: repoSubject ?? undefined,
       fullName: fullName ?? undefined,
+      isEmpty: isEmpty,
     };
     if (!node.repoSubject && parentId === null && props.subject) {
       node.repoSubject = props.subject;
@@ -490,7 +517,7 @@ function buildGraphFromApi(root:any): Graph{
     }
     return id;
   };
-  visit(root, null);
+  visit(rootApiData, null);
   return g;
 }
 

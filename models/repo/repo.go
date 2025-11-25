@@ -917,8 +917,9 @@ func GetRepositoryByName(ctx context.Context, ownerID int64, name string) (*Repo
 }
 
 // GetPublicRepositoryBySubject returns the first public repository with the given subject name.
-// This function searches across all owners and prioritizes root repositories (non-forks)
-// over forks to ensure the original repository is returned when multiple repos share the same subject.
+// This function searches across all owners and prioritizes non-empty repositories first,
+// then root repositories (non-forks) to ensure the first person to create content
+// becomes the owner of the original version (first bubble).
 func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Repository, error) {
 	// First, get the subject by name
 	subject, err := GetSubjectByName(ctx, subjectName)
@@ -926,12 +927,16 @@ func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Rep
 		return nil, err
 	}
 
-	// Find the first public repository with this subject_id, preferring root repos
+	// Find the first public repository with this subject_id
+	// Priority order:
+	// 1. Non-empty repos (is_empty=false)
+	// 2. Root repos (is_fork=false)
+	// 3. Most recently updated
 	var repo Repository
 	has, err := db.GetEngine(ctx).
 		Where("`subject_id`=?", subject.ID).
 		And("`is_private`=?", false).
-		OrderBy("`is_fork` ASC, `updated_unix` DESC"). // Prefer root repos (is_fork=false), then most recently updated
+		OrderBy("`is_empty` ASC, `is_fork` ASC, `updated_unix` DESC").
 		NoAutoCondition().
 		Get(&repo)
 

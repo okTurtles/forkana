@@ -286,6 +286,16 @@ func pushNewBranch(ctx context.Context, repo *repo_model.Repository, pusher *use
 		if err := repo_model.UpdateRepositoryColsWithAutoTime(ctx, repo, "default_branch", "is_empty"); err != nil {
 			return nil, fmt.Errorf("UpdateRepositoryCols: %w", err)
 		}
+
+		// Trigger contributor stats generation for newly non-empty repositories
+		// This ensures stats are ready when the bubble view is first loaded
+		go func() {
+			c := cache.GetCache()
+			if c != nil {
+				// Trigger stats generation asynchronously (will be cached for future use)
+				_, _ = GetContributorStats(ctx, c, repo, repo.DefaultBranch)
+			}
+		}()
 	}
 
 	l, err := newCommit.CommitsBeforeLimit(10)
