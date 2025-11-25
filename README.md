@@ -91,7 +91,7 @@ Note that you need to build once in any case, before running continuously with w
 
 Finally, visit http://localhost:3000 and you are ready to go to fork with Forkana!
 
-**Note** that the expectation is that you see the landing page of Forkana, **not** the database setup dialog of Gitea. If you see it, something went wrong. Our using `sqlite` was to prevent that on a first quick install.
+**Note** that the expectation is that you see the landing page of Forkana, **not** the database setup dialog of Gitea. If you see it, something went wrong.  Using `sqlite` should prevent precisely this during initial setup.
 
 ### Useful commands
 
