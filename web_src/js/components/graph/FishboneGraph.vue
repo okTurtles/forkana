@@ -603,20 +603,10 @@ function layoutFishbone(g:Graph){
 
   const discs: Disc[] = [{ x:root.x, y:root.y, r:rFor(root.contributors), id:root.id }];
   const trunks: SegV[] = []; const arcs: Arc[] = []; const runs: HRun[] = [];
-  const allNodes = Object.values(g);
-  const nodesWithDepth = allNodes.filter((n:any) => n.depth !== undefined);
-  if (nodesWithDepth.length < allNodes.length) {
-    console.warn('FishboneGraph:', allNodes.length - nodesWithDepth.length, 'nodes missing depth property');
-  }
-  const parents = nodesWithDepth.sort((a:any,b:any)=> (a.depth - b.depth));
+  const parents = Object.values(g).filter((n:any) => n.depth !== undefined).sort((a:any,b:any)=> (a.depth - b.depth));
 
   for(const p of parents){
-    const kidsWithUndefined = p.children.map(id=>g[id]);
-    const kids = kidsWithUndefined.filter((k): k is Node => k !== undefined);
-    if (kidsWithUndefined.length !== kids.length) {
-      const missingIds = p.children.filter(id => !g[id]);
-      console.warn(`FishboneGraph: Parent node ${p.id} has ${missingIds.length} missing child(ren):`, missingIds);
-    }
+    const kids = p.children.map(id=>g[id]).filter((k): k is Node => k !== undefined);
     if(!kids.length) continue;
 
     const px = p.x ?? 0, py = p.y ?? 0, pr = rFor(p.contributors);
@@ -734,8 +724,6 @@ function layoutFishbone(g:Graph){
 
   const maxY = Math.max(...nodesList.value.map(n => (n.y ?? 0) + rFor(n.contributors)));
   svgHeight.value = Math.max(containerHeight, maxY + SVG_BOTTOM_PADDING);
-  
-  console.log('FishboneGraph: Layout complete.', nodesList.value.length, 'nodes positioned');
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────-
@@ -743,7 +731,6 @@ function layoutFishbone(g:Graph){
    ─────────────────────────────────────────────────────────────────────────── */
 function contentBounds(){
   if (nodesList.value.length === 0) {
-    console.warn('FishboneGraph: contentBounds called with empty nodesList');
     return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
   }
   const minX = Math.min(...nodesList.value.map(n => (n.x ?? 0) - rFor(n.contributors)));
@@ -764,10 +751,7 @@ function resetView(animated=false){
     return;
   }
   
-  if (nodesList.value.length === 0) {
-    console.warn('FishboneGraph: resetView called with no nodes');
-    return;
-  }
+  if (nodesList.value.length === 0) return;
   
   const usableH = box.height - VIEW_TOP_OFFSET;
 
@@ -777,7 +761,6 @@ function resetView(animated=false){
   
   // Validate bounds
   if (!isFinite(contentW) || !isFinite(contentH) || !isFinite(b.minX) || !isFinite(b.minY)) {
-    console.error('FishboneGraph: Invalid content bounds', b);
     return;
   }
 
@@ -810,7 +793,6 @@ function resetView(animated=false){
 
   // Validate transform values before applying
   if (!isFinite(tx) || !isFinite(ty) || !isFinite(targetScale)) {
-    console.error('FishboneGraph: Invalid transform values', { tx, ty, targetScale, bounds: b });
     return;
   }
 
