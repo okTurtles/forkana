@@ -22,5 +22,5 @@
 .ui.popup,
 .ui.form .field > .ui.input > input,
 .ui.form .field > .ui.input > textarea {
-  border-radius: var(--border-radius) !important;
+  border-radius: var(--border-radius);
 }

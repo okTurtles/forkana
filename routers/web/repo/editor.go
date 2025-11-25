@@ -215,6 +215,13 @@ func redirectForCommitChoice[T any](ctx *context.Context, parsed *preparedEditor
 		}
 	}
 
+	// Check if the request came from an article-based route
+	// If so, redirect back to the article view instead of the file view
+	if strings.HasPrefix(ctx.Req.URL.Path, "/article/") {
+		ctx.JSONRedirect(ctx.Repo.RepoLink)
+		return
+	}
+
 	// redirect to the newly updated file
 	redirectTo := util.URLJoin(ctx.Repo.RepoLink, "src/branch", util.PathEscapeSegments(parsed.NewBranchName), util.PathEscapeSegments(treePath))
 	ctx.JSONRedirect(redirectTo)
@@ -287,6 +294,12 @@ func EditFile(ctx *context.Context) {
 	if ctx.Written() {
 		return
 	}
+
+	// Check if this is creating the first article (README.md in empty repo)
+	treePath := strings.Trim(ctx.Repo.TreePath, "/")
+	fileName := strings.ToLower(path.Base(treePath))
+	isCreatingFirstArticle := isNewFile && ctx.Repo.Repository.IsEmpty && (fileName == "readme.md" || strings.EqualFold(treePath, "readme.md"))
+	ctx.Data["IsCreatingFirstArticle"] = isCreatingFirstArticle
 
 	if !isNewFile {
 		prefetch, dataRc, fInfo := editFileOpenExisting(ctx)
