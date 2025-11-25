@@ -341,8 +341,8 @@ func calculateSimilarityScore(keyword, subjectName string) int {
 	}
 
 	// Check if keyword appears at word boundary
-	words := strings.Fields(subjectName)
-	for _, word := range words {
+	words := strings.FieldsSeq(subjectName)
+	for word := range words {
 		if strings.HasPrefix(word, keyword) {
 			return 2
 		}
