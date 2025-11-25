@@ -68,8 +68,8 @@ Note that it might be necessary, depending on your system's configuration, to pr
 $ GO=go1.25.2 TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
 
-Also, in some situations, one might encounter a network connectivity issue with IPv6. The Go proxy is trying to connect over 
-IPv6 and failing with "socket is not connected" errors. Solution is to modify the command by prefixing two additional vars:
+Also, in some situations, one might encounter a network connectivity issue with IPv6. The Go proxy is trying to connect over IPv6 and failing with "socket is not connected" errors.
+The solution is to modify the command by prefixing two additional vars:
 
 ```bash
 $ GODEBUG="netdns=go+4" GOPROXY="direct" TAGS="bindata sqlite sqlite_unlock_notify" make build
