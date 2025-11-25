@@ -12,7 +12,7 @@
 
 ### Installation
 
-Add `gitea/custom/conf/app.ini`. See details below for file content. Make sure to properly set `WORK_PATH`.
+Add `custom/conf/app.ini`. See details below for file content. Make sure to properly set `WORK_PATH`.
 
 <details>
 
@@ -55,14 +55,29 @@ $ pnpm install
 To build the project:
 
 ```bash
-$ TAGS="bindata sqlite sqlite_unlock_notify" make build
+$ GODEBUG="netdns=go+4" GOPROXY="direct" TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
+
+For troubleshooting see 
+
+<details>
 
 Note that it might be necessary, depending on your system's configuration, to prepend a `GO` specification (indicating the name of the executable, if different from just `go`).
 
 ```bash
 $ GO=go1.25.2 TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
+
+Also, in some situations, one might encounter a network connectivity issue with IPv6. The Go proxy is trying to connect over 
+IPv6 and failing with "socket is not connected" errors. Solution is to modify the command by prefixing two additional vars:
+
+```bash
+$ GODEBUG="netdns=go+4" GOPROXY="direct" TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
+
+Do the same for the following `make watch` command.
+
+</details>
 
 To run the project:
 
@@ -73,6 +88,18 @@ $ TAGS="sqlite sqlite_unlock_notify" make watch
 Note that you need to build once in any case, before running continuously with watch.
 
 Finally, visit http://localhost:3000 and you are ready to go to fork with Forkana!
+
+**Note** that the expectation is that you see the landing page of Forkana, **not** the database setup dialog of Gitea. If you see it, something went wrong. Our using `sqlite` was to prevent that on a first quick install.
+
+### Useful commands
+
+To clean up
+
+```bash
+$ make clean-all
+$ rm -rf data # to remove the sqlite database
+$ make test-e2e-sqlite # run e2e tests
+```
 
 -----------
 
