@@ -350,18 +350,26 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	// Get default branch
 	defaultBranch := ctx.Repo.Repository.DefaultBranch
 
-	// Get commit for default branch
-	commit, err := gitRepo.GetBranchCommit(defaultBranch)
-	if err != nil {
-		ctx.ServerError("GetBranchCommit", err)
-		return
+	// Check if a commit is already set (e.g., from ArticleCommitView for versioned views)
+	// If so, use that commit instead of fetching from the default branch
+	var commit *git.Commit
+	if ctx.Repo.Commit != nil {
+		// Use the pre-set commit (for versioned article views)
+		commit = ctx.Repo.Commit
+	} else {
+		// Get commit for default branch
+		commit, err = gitRepo.GetBranchCommit(defaultBranch)
+		if err != nil {
+			ctx.ServerError("GetBranchCommit", err)
+			return
+		}
+		ctx.Repo.Commit = commit
+		ctx.Repo.CommitID = commit.ID.String()
+		ctx.Repo.BranchName = defaultBranch
 	}
 
 	// Set up repository context
 	ctx.Repo.GitRepo = gitRepo
-	ctx.Repo.BranchName = defaultBranch
-	ctx.Repo.Commit = commit
-	ctx.Repo.CommitID = commit.ID.String()
 	ctx.Repo.TreePath = ""
 
 	// Get repository tree entries
@@ -458,7 +466,16 @@ func RenderRepositoryHistory(ctx *context.Context) {
 
 	// For Article view, handle mode parameter and load README content
 	if ctx.Data["IsArticleView"] == true {
-		prepareArticleView(ctx, gitRepo, entries, defaultBranch)
+		// Determine the reference path for rendering (branch or commit)
+		var refPath string
+		if ctx.Repo.BranchName != "" {
+			refPath = path.Join("branch", util.PathEscapeSegments(ctx.Repo.BranchName))
+		} else if ctx.Repo.CommitID != "" {
+			refPath = path.Join("commit", ctx.Repo.CommitID)
+		} else {
+			refPath = path.Join("branch", util.PathEscapeSegments(defaultBranch))
+		}
+		prepareArticleView(ctx, gitRepo, entries, refPath)
 		if ctx.Written() {
 			return
 		}
@@ -484,7 +501,8 @@ func handleRepoHistoryFeed(ctx *context.Context) bool {
 }
 
 // prepareArticleView prepares data for the article view (README display with read/edit/history modes)
-func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries []*git.TreeEntry, defaultBranch string) {
+// refPath is the reference path for rendering (e.g., "branch/main" or "commit/abc123")
+func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries []*git.TreeEntry, refPath string) {
 	// Determine mode (read/edit/history)
 	mode := ctx.FormString("mode")
 	if mode == "" {
@@ -513,7 +531,8 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		return
 	}
 
-	// Get contributor count for the readme file
+	// Get contributor count for the readme file (use default branch for contributor count)
+	defaultBranch := ctx.Repo.Repository.DefaultBranch
 	contributorCount, err := getFileContributorCount(gitRepo, defaultBranch, readmeTreePath)
 	if err != nil {
 		log.Warn("Failed to get contributor count: %v", err)
@@ -553,7 +572,7 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			ctx.Data["MarkupType"] = markupType
 
 			rctx := renderhelper.NewRenderContextRepoFile(ctx, ctx.Repo.Repository, renderhelper.RepoFileOptions{
-				CurrentRefPath:  path.Join("branch", util.PathEscapeSegments(defaultBranch)),
+				CurrentRefPath:  refPath,
 				CurrentTreePath: "",
 			}).
 				WithMarkupType(markupType).
