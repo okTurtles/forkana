@@ -485,7 +485,7 @@ func ArticleView(ctx *context.Context) {
 	commitHash := ctx.FormString("version")
 	if commitHash != "" {
 		// Show commit view for a specific version
-		ArticleCommitView(ctx)
+		articleCommitView(ctx, commitHash)
 		return
 	}
 
@@ -505,16 +505,10 @@ func ArticleView(ctx *context.Context) {
 	explore.RenderRepositoryHistory(ctx)
 }
 
-// ArticleCommitView renders the article view at a specific commit
-// for the /article/{username}/{subjectname}?version={commit-hash} route
-func ArticleCommitView(ctx *context.Context) {
-	// Get the commit hash from the "version" query parameter
-	commitHash := ctx.FormString("version")
-	if commitHash == "" {
-		ctx.NotFound(errors.New("version parameter is required"))
-		return
-	}
-
+// articleCommitView renders the article view at a specific commit
+// for the /article/{username}/{subjectname}?version={commit-hash} route.
+// The commitHash parameter must be non-empty and is passed from ArticleView.
+func articleCommitView(ctx *context.Context, commitHash string) {
 	// Validate that the commit hash looks like a valid git commit ID
 	if !git.IsStringLikelyCommitID(ctx.Repo.GetObjectFormat(), commitHash, 7) {
 		ctx.NotFound(errors.New("invalid commit hash"))
