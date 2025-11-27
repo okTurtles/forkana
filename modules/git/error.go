@@ -144,6 +144,6 @@ func (err *ErrMoreThanOne) Error() string {
 func IsErrCanceledOrKilled(err error) bool {
 	// When "cancel()" a git command's context, the returned error of "Run()" could be one of them:
 	// - context.Canceled
-	// - *exec.ExitError: "signal: killed"
-	return err != nil && (errors.Is(err, context.Canceled) || err.Error() == "signal: killed")
+	// - *exec.ExitError caused by SIGKILL (process killed)
+	return err != nil && (errors.Is(err, context.Canceled) || isExitErrorKilled(err))
 }

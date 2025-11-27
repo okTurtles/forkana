@@ -1215,8 +1215,9 @@ func registerWebRoutes(m *web.Router) {
 	)
 	// end "/{username}/{reponame}/settings"
 
-	m.Get("/article/repo/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, explore.RepoArticle)
-	m.Get("/article/{username}/{subjectname}", optSignIn, context.RepoAssignmentByOwnerAndSubject, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, explore.RepoArticle)
+	m.Get("/article/repo/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, explore.RepoHistory)
+	// Article route - shows commit view if version parameter is present, otherwise shows home
+	m.Get("/article/{username}/{subjectname}", optSignIn, context.RepoAssignmentByOwnerAndSubject, repo.ArticleView)
 
 	// Article-based file operation routes - mirror the repository-based routes but use subject name
 	m.Group("/article/{username}/{subjectname}", func() {

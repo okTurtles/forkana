@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 
@@ -30,6 +31,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/templates"
 	"code.gitea.io/gitea/modules/util"
+	"code.gitea.io/gitea/routers/web/explore"
 	asymkey_service "code.gitea.io/gitea/services/asymkey"
 	"code.gitea.io/gitea/services/context"
 	git_service "code.gitea.io/gitea/services/git"
@@ -468,4 +470,93 @@ func processGitCommits(ctx *context.Context, gitCommits []*git.Commit) ([]*git_m
 		}
 	}
 	return commits, nil
+}
+
+// ArticleView handles the /article/{username}/{subjectname} route
+// If a "version" query parameter is present, it shows the commit view
+// Otherwise, it shows the article view with read/edit/history modes
+func ArticleView(ctx *context.Context) {
+	// Get the subject name for the article link (use subject, not repo name)
+	subject := ctx.Repo.Repository.GetSubject(ctx)
+	articleLink := setting.AppSubURL + "/article/" + url.PathEscape(ctx.Repo.Owner.Name) + "/" + url.PathEscape(subject)
+	ctx.Data["ArticleLink"] = articleLink
+
+	// Check if version parameter is present
+	commitHash := ctx.FormString("version")
+	if commitHash != "" {
+		// Show commit view for a specific version
+		articleCommitView(ctx, commitHash)
+		return
+	}
+
+	// Set up page metadata for article view
+	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - Article"
+	ctx.Data["PageIsExploreRepositories"] = true
+	ctx.Data["PageIsRepoHistory"] = true
+	ctx.Data["IsRepoHistoryView"] = true
+
+	// Force article view mode (this is the /article/ route, not /subject/)
+	ctx.Data["HistoryView"] = "article"
+	ctx.Data["IsBubbleView"] = false
+	ctx.Data["IsTableView"] = false
+	ctx.Data["IsArticleView"] = true
+
+	// Render the repository history view which handles article display
+	explore.RenderRepositoryHistory(ctx)
+}
+
+// articleCommitView renders the article view at a specific commit
+// for the /article/{username}/{subjectname}?version={commit-hash} route.
+// The commitHash parameter must be non-empty and is passed from ArticleView.
+func articleCommitView(ctx *context.Context, commitHash string) {
+	// Validate that the commit hash looks like a valid git commit ID
+	if !git.IsStringLikelyCommitID(ctx.Repo.GetObjectFormat(), commitHash, 7) {
+		ctx.NotFound(errors.New("invalid commit hash"))
+		return
+	}
+
+	// Get the commit from the repository
+	commit, err := ctx.Repo.GitRepo.GetCommit(commitHash)
+	if err != nil {
+		if git.IsErrNotExist(err) {
+			ctx.NotFound(err)
+		} else {
+			ctx.ServerError("GetCommit", err)
+		}
+		return
+	}
+
+	// Set up the repository context for the specific commit
+	ctx.Repo.Commit = commit
+	ctx.Repo.CommitID = commit.ID.String()
+	ctx.Repo.RefFullName = git.RefNameFromCommit(ctx.Repo.CommitID)
+	ctx.Repo.TreePath = ""
+	// BranchName is empty when viewing a commit (not a branch)
+	ctx.Repo.BranchName = ""
+
+	// Calculate total number of commits reachable from this commit
+	ctx.Repo.CommitsCount, _ = ctx.Repo.GetCommitsCount()
+
+	// Set all required context data for templates
+	ctx.Data["RefFullName"] = ctx.Repo.RefFullName
+	ctx.Data["CommitsCount"] = ctx.Repo.CommitsCount
+	ctx.Data["CommitID"] = ctx.Repo.CommitID
+	ctx.Data["TreePath"] = ""
+	ctx.Data["BranchName"] = ""
+	ctx.Data["RefTypeNameSubURL"] = ctx.Repo.RefTypeNameSubURL()
+
+	// Set up page metadata for article view
+	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - Article (Version)"
+	ctx.Data["PageIsExploreRepositories"] = true
+	ctx.Data["PageIsRepoHistory"] = true
+	ctx.Data["IsRepoHistoryView"] = true
+
+	// Force article view mode
+	ctx.Data["HistoryView"] = "article"
+	ctx.Data["IsBubbleView"] = false
+	ctx.Data["IsTableView"] = false
+	ctx.Data["IsArticleView"] = true
+
+	// Render the repository history view which handles article display
+	explore.RenderRepositoryHistory(ctx)
 }
