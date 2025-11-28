@@ -41,6 +41,23 @@ var (
 	client    = &http.Client{Timeout: 30 * time.Second}
 )
 
+// processResult represents the outcome of processing an article
+type processResult int
+
+const (
+	resultSuccess  processResult = iota // Article was successfully converted
+	resultSkipped                       // Article was skipped (redirect or empty)
+	resultError                         // Article processing failed with an error
+)
+
+// skipReason describes why an article was skipped
+type skipReason string
+
+const (
+	skipRedirect     skipReason = "redirect"
+	skipEmptyContent skipReason = "empty_content"
+)
+
 type config struct {
 	outputDir     string
 	count         int
@@ -117,47 +134,83 @@ func run(cfg config) error {
 	}
 	defer errorLog.Close()
 
-	// Fetch and convert articles
-	converted := 0
+	// Open skip log for tracking skipped articles
+	skipLogPath := filepath.Join(cfg.outputDir, "skipped.log")
+	skipLog, err := os.OpenFile(skipLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to open skip log: %w", err)
+	}
+	defer skipLog.Close()
+
+	// Fetch and convert articles with detailed tracking
+	var stats struct {
+		converted int
+		skipped   int
+		errors    int
+		redirects int
+		empty     int
+	}
+
 	for i, title := range titles {
-		if err := processArticle(title, cfg.outputDir, indexFile, errorLog); err != nil {
+		result, reason, err := processArticle(title, cfg.outputDir, indexFile)
+
+		switch result {
+		case resultSuccess:
+			stats.converted++
+		case resultSkipped:
+			stats.skipped++
+			fmt.Fprintf(skipLog, "%s\t%s\n", title, reason)
+			switch reason {
+			case skipRedirect:
+				stats.redirects++
+			case skipEmptyContent:
+				stats.empty++
+			}
+		case resultError:
+			stats.errors++
 			fmt.Fprintf(errorLog, "%s\t%v\n", title, err)
-			continue
 		}
-		converted++
 
 		if i < len(titles)-1 {
 			time.Sleep(cfg.sleepInterval)
 		}
 	}
 
-	fmt.Printf("Done. Converted %d articles to Markdown in: %s\n", converted, cfg.outputDir)
+	// Print summary
+	fmt.Printf("Done. Processed %d articles in: %s\n", len(titles), cfg.outputDir)
+	fmt.Printf("  Converted: %d\n", stats.converted)
+	fmt.Printf("  Skipped:   %d (redirects: %d, empty: %d)\n", stats.skipped, stats.redirects, stats.empty)
+	if stats.errors > 0 {
+		fmt.Printf("  Errors:    %d (see %s)\n", stats.errors, errorLogPath)
+	}
 	return nil
 }
 
-func processArticle(title, outputDir string, indexFile, errorLog io.Writer) error {
+// processArticle fetches and converts a Wikipedia article to Markdown.
+// It returns the processing result and any skip reason or error.
+func processArticle(title, outputDir string, indexFile io.Writer) (processResult, skipReason, error) {
 	// Check if redirect
 	isRedir, err := isRedirect(title)
 	if err != nil {
-		return fmt.Errorf("redirect check failed: %w", err)
+		return resultError, "", fmt.Errorf("redirect check failed: %w", err)
 	}
 	if isRedir {
-		return nil // Skip redirects silently
+		return resultSkipped, skipRedirect, nil
 	}
 
 	// Fetch HTML
 	htmlContent, err := getParsoidHTML(title)
 	if err != nil {
-		return fmt.Errorf("failed to fetch HTML: %w", err)
+		return resultError, "", fmt.Errorf("failed to fetch HTML: %w", err)
 	}
 	if htmlContent == "" {
-		return nil // Skip empty content silently
+		return resultSkipped, skipEmptyContent, nil
 	}
 
 	// Convert to Markdown
 	md, err := htmlToMarkdown(htmlContent)
 	if err != nil {
-		return fmt.Errorf("failed to convert to markdown: %w", err)
+		return resultError, "", fmt.Errorf("failed to convert to markdown: %w", err)
 	}
 
 	// Normalize image URLs
@@ -169,7 +222,7 @@ func processArticle(title, outputDir string, indexFile, errorLog io.Writer) erro
 	// Generate unique filename
 	filename, err := writeMarkdown(outputDir, title, md)
 	if err != nil {
-		return fmt.Errorf("failed to write markdown: %w", err)
+		return resultError, "", fmt.Errorf("failed to write markdown: %w", err)
 	}
 
 	// Write to index
@@ -181,11 +234,11 @@ func processArticle(title, outputDir string, indexFile, errorLog io.Writer) erro
 	}
 	recordJSON, err := json.Marshal(record)
 	if err != nil {
-		return fmt.Errorf("failed to marshal record: %w", err)
+		return resultError, "", fmt.Errorf("failed to marshal record: %w", err)
 	}
 	fmt.Fprintf(indexFile, "%s\n", recordJSON)
 
-	return nil
+	return resultSuccess, "", nil
 }
 
 func getRandomTitles(count int, sleepInterval time.Duration) ([]string, error) {

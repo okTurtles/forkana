@@ -415,3 +415,54 @@ func TestSafeFilenameUnicodeNeverInvalid(t *testing.T) {
 	}
 }
 
+func TestProcessResultConstants(t *testing.T) {
+	// Verify the process result constants are distinct
+	if resultSuccess == resultSkipped {
+		t.Error("resultSuccess should not equal resultSkipped")
+	}
+	if resultSuccess == resultError {
+		t.Error("resultSuccess should not equal resultError")
+	}
+	if resultSkipped == resultError {
+		t.Error("resultSkipped should not equal resultError")
+	}
+}
+
+func TestSkipReasonStrings(t *testing.T) {
+	// Verify skip reasons are meaningful strings
+	tests := []struct {
+		reason   skipReason
+		expected string
+	}{
+		{skipRedirect, "redirect"},
+		{skipEmptyContent, "empty_content"},
+	}
+
+	for _, tt := range tests {
+		if string(tt.reason) != tt.expected {
+			t.Errorf("skipReason %v = %q, want %q", tt.reason, string(tt.reason), tt.expected)
+		}
+	}
+}
+
+func TestSkipReasonLoggable(t *testing.T) {
+	// Verify skip reasons can be formatted for logging
+	reasons := []skipReason{skipRedirect, skipEmptyContent}
+
+	for _, reason := range reasons {
+		// Should be non-empty
+		if reason == "" {
+			t.Error("skip reason should not be empty")
+		}
+
+		// Should be safe for tab-separated log format (no tabs or newlines)
+		s := string(reason)
+		if strings.Contains(s, "\t") {
+			t.Errorf("skip reason %q contains tab character", s)
+		}
+		if strings.Contains(s, "\n") {
+			t.Errorf("skip reason %q contains newline character", s)
+		}
+	}
+}
+
