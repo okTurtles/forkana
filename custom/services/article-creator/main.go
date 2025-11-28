@@ -22,11 +22,18 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+)
+
+// Pre-compiled regexes for createSlug (Issue 5: avoid recompiling in hot path)
+var (
+	slugInvalidCharsRE = regexp.MustCompile(`[^a-z0-9\-]`)
+	multiHyphenRE      = regexp.MustCompile(`-+`)
 )
 
 type config struct {
@@ -292,8 +299,8 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 }
 
 func (c *giteaClient) checkRepoExists(username, repoName string) bool {
-	url := fmt.Sprintf("%s/api/v1/repos/%s/%s", c.baseURL, username, repoName)
-	req, err := http.NewRequest("GET", url, nil)
+	apiURL := fmt.Sprintf("%s/api/v1/repos/%s/%s", c.baseURL, url.PathEscape(username), url.PathEscape(repoName))
+	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return false
 	}
@@ -369,8 +376,8 @@ func (c *giteaClient) createReadmeFile(username, repoName, content string) error
 		return err
 	}
 
-	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/contents/README.md", c.baseURL, username, repoName)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	apiURL := fmt.Sprintf("%s/api/v1/repos/%s/%s/contents/README.md", c.baseURL, url.PathEscape(username), url.PathEscape(repoName))
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}
@@ -471,13 +478,11 @@ func createSlug(filename string) string {
 		slug = strings.ReplaceAll(slug, old, new)
 	}
 
-	// Replace special characters with hyphens
-	re := regexp.MustCompile(`[^a-z0-9\-]`)
-	slug = re.ReplaceAllString(slug, "-")
+	// Replace special characters with hyphens (using pre-compiled regex)
+	slug = slugInvalidCharsRE.ReplaceAllString(slug, "-")
 
-	// Collapse multiple consecutive hyphens
-	re2 := regexp.MustCompile(`-+`)
-	slug = re2.ReplaceAllString(slug, "-")
+	// Collapse multiple consecutive hyphens (using pre-compiled regex)
+	slug = multiHyphenRE.ReplaceAllString(slug, "-")
 
 	// Remove leading/trailing hyphens
 	slug = strings.Trim(slug, "-")

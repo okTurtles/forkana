@@ -466,3 +466,65 @@ func TestSkipReasonLoggable(t *testing.T) {
 	}
 }
 
+func TestNormalizeImageURLs(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "protocol-relative URL",
+			input:    "![alt](//upload.wikimedia.org/image.png)",
+			expected: "![alt](https://upload.wikimedia.org/image.png)",
+		},
+		{
+			name:     "absolute path with leading slash",
+			input:    "![alt](/wiki/File:Image.png)",
+			expected: "![alt](https://en.wikipedia.org/wiki/File:Image.png)",
+		},
+		{
+			name:     "relative path without leading slash",
+			input:    "![alt](wiki/File:Image.png)",
+			expected: "![alt](https://en.wikipedia.org/wiki/File:Image.png)",
+		},
+		{
+			name:     "already absolute https URL",
+			input:    "![alt](https://example.com/image.png)",
+			expected: "![alt](https://example.com/image.png)",
+		},
+		{
+			name:     "already absolute http URL",
+			input:    "![alt](http://example.com/image.png)",
+			expected: "![alt](http://example.com/image.png)",
+		},
+		{
+			name:     "empty alt text gets default",
+			input:    "![](https://example.com/image.png)",
+			expected: "![image](https://example.com/image.png)",
+		},
+		{
+			name:     "alt text with ./ prefix cleaned",
+			input:    "![./photo](https://example.com/image.png)",
+			expected: "![photo](https://example.com/image.png)",
+		},
+		{
+			name:     "multiple images in text",
+			input:    "Text ![a](//a.com/1.png) more ![b](/wiki/2.png) end",
+			expected: "Text ![a](https://a.com/1.png) more ![b](https://en.wikipedia.org/wiki/2.png) end",
+		},
+		{
+			name:     "no images in text",
+			input:    "Just some text without images",
+			expected: "Just some text without images",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeImageURLs(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizeImageURLs(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}

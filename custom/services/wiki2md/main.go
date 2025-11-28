@@ -36,9 +36,14 @@ const (
 	wikiREST = "https://en.wikipedia.org/api/rest_v1"
 )
 
+const userAgent = "wiki2md/1.0 (Gitea; +https://github.com/go-gitea/gitea)"
+
 var (
-	userAgent = "wiki2md/1.0 (Gitea; +https://github.com/go-gitea/gitea)"
-	client    = &http.Client{Timeout: 30 * time.Second}
+	client = &http.Client{Timeout: 30 * time.Second}
+
+	// Pre-compiled regexes for safeFilename (Issue 4: avoid recompiling in hot path)
+	safeFilenameRE = regexp.MustCompile(`[^\w.\- ]+`)
+	multiSpaceRE   = regexp.MustCompile(`[_\s]+`)
 )
 
 // processResult represents the outcome of processing an article
@@ -228,7 +233,7 @@ func processArticle(title, outputDir string, indexFile io.Writer) (processResult
 	// Write to index
 	record := articleRecord{
 		Title:     title,
-		Source:    fmt.Sprintf("https://en.wikipedia.org/wiki/%s", strings.ReplaceAll(title, " ", "_")),
+		Source:    fmt.Sprintf("https://en.wikipedia.org/wiki/%s", url.PathEscape(strings.ReplaceAll(title, " ", "_"))),
 		SavedAs:   filename,
 		FetchedAt: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 	}
@@ -268,7 +273,7 @@ func getRandomTitles(count int, sleepInterval time.Duration) ([]string, error) {
 		}
 
 		if err := apiRequest(wikiAPI, params, &result); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("random titles API request failed: %w", err)
 		}
 
 		for _, r := range result.Query.Random {
@@ -487,18 +492,16 @@ func truncateToByteLimit(s string, maxBytes int) string {
 }
 
 func safeFilename(title string, maxLength int) string {
-	// Replace problematic characters with underscores
-	re := regexp.MustCompile(`[^\w.\- ]+`)
-	name := re.ReplaceAllString(title, "_")
+	// Replace problematic characters with underscores (using pre-compiled regex)
+	name := safeFilenameRE.ReplaceAllString(title, "_")
 	name = strings.TrimSpace(name)
 
 	if name == "" {
 		return "untitled"
 	}
 
-	// Replace multiple consecutive underscores/spaces with single underscore
-	re2 := regexp.MustCompile(`[_\s]+`)
-	name = re2.ReplaceAllString(name, "_")
+	// Replace multiple consecutive underscores/spaces with single underscore (using pre-compiled regex)
+	name = multiSpaceRE.ReplaceAllString(name, "_")
 
 	// Remove leading/trailing underscores
 	name = strings.Trim(name, "_")
@@ -539,20 +542,32 @@ func getUniqueFilename(outputDir, baseName string) string {
 	fname := baseName + ".md"
 	path := filepath.Join(outputDir, fname)
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return fname
-	}
-
-	// File exists, add counter
-	counter := 1
-	for {
-		fname = fmt.Sprintf("%s_%d.md", baseName, counter)
-		path = filepath.Join(outputDir, fname)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
 			return fname
 		}
-		counter++
+		// Log unexpected errors but continue (file might exist)
+		log.Printf("Warning: unexpected error checking %s: %v", path, err)
 	}
+
+	// File exists or error occurred, add counter with bounds checking
+	const maxAttempts = 10000
+	for counter := 1; counter <= maxAttempts; counter++ {
+		fname = fmt.Sprintf("%s_%d.md", baseName, counter)
+		path = filepath.Join(outputDir, fname)
+		_, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fname
+			}
+			// Log unexpected errors but continue
+			log.Printf("Warning: unexpected error checking %s: %v", path, err)
+		}
+	}
+
+	// Fallback with timestamp to ensure uniqueness
+	return fmt.Sprintf("%s_%d.md", baseName, time.Now().UnixNano())
 }
 
 func writeMarkdown(outputDir, title, md string) (string, error) {
@@ -600,11 +615,3 @@ func apiRequest(apiURL string, params url.Values, result interface{}) error {
 
 	return json.NewDecoder(resp.Body).Decode(result)
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
