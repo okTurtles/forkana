@@ -945,6 +945,59 @@ docker:
 	docker build --disable-content-trust=false -t $(DOCKER_REF) .
 # support also build args docker build --build-arg GITEA_VERSION=v1.2.3 --build-arg TAGS="bindata sqlite sqlite_unlock_notify"  .
 
+# Custom service tools
+.PHONY: wiki2md
+wiki2md: ## build wiki2md tool
+	cd custom/services/wiki2md && $(GO) build -o ../../../wiki2md .
+
+.PHONY: article-creator
+article-creator: ## build article-creator tool
+	cd custom/services/article-creator && $(GO) build -o ../../../article-creator .
+
+.PHONY: tools
+tools: wiki2md article-creator ## build all custom service tools
+
+# Populate Forkana with Wikipedia articles
+# Usage: make populate [ARTICLE_COUNT=50] [GITEA_URL=...] [GITEA_TOKEN=...] [CATEGORY="Category:Physics"]
+# Environment variables:
+#   ARTICLE_COUNT - Number of articles to fetch (default: 50)
+#   GITEA_URL     - Gitea instance URL (required)
+#   GITEA_TOKEN   - API token (required)
+#   CATEGORY      - Wikipedia category to fetch from (optional)
+#   PRIVATE       - Set to "true" to create private repositories (default: false)
+ARTICLE_COUNT ?= 50
+CATEGORY ?=
+PRIVATE ?= false
+
+.PHONY: populate
+populate: tools ## fetch Wikipedia articles and create Forkana repositories
+	@if [ -z "$(GITEA_URL)" ]; then \
+		echo "Error: GITEA_URL is required. Usage: GITEA_URL=... GITEA_TOKEN=... make populate"; \
+		exit 1; \
+	fi
+	@if [ -z "$(GITEA_TOKEN)" ]; then \
+		echo "Error: GITEA_TOKEN is required. Usage: GITEA_URL=... GITEA_TOKEN=... make populate"; \
+		exit 1; \
+	fi
+	@TEMP_DIR=$$(mktemp -d /tmp/forkana-articles-XXXXXX); \
+	echo "Fetching $(ARTICLE_COUNT) Wikipedia articles to $$TEMP_DIR..."; \
+	if [ -n "$(CATEGORY)" ]; then \
+		./wiki2md --out "$$TEMP_DIR" --count $(ARTICLE_COUNT) --category "$(CATEGORY)" || { rm -rf "$$TEMP_DIR"; exit 1; }; \
+	else \
+		./wiki2md --out "$$TEMP_DIR" --count $(ARTICLE_COUNT) || { rm -rf "$$TEMP_DIR"; exit 1; }; \
+	fi; \
+	echo ""; \
+	echo "Creating Forkana repositories from $$TEMP_DIR..."; \
+	if [ "$(PRIVATE)" = "true" ]; then \
+		./article-creator --url "$(GITEA_URL)" --token "$(GITEA_TOKEN)" --input "$$TEMP_DIR" --private || { rm -rf "$$TEMP_DIR"; exit 1; }; \
+	else \
+		./article-creator --url "$(GITEA_URL)" --token "$(GITEA_TOKEN)" --input "$$TEMP_DIR" || { rm -rf "$$TEMP_DIR"; exit 1; }; \
+	fi; \
+	echo ""; \
+	echo "Cleaning up temporary directory $$TEMP_DIR..."; \
+	rm -rf "$$TEMP_DIR"; \
+	echo "Done!"
+
 # This endif closes the if at the top of the file
 endif
 

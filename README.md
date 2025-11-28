@@ -93,6 +93,39 @@ Finally, visit http://localhost:3000 and you are ready to go to fork with Forkan
 
 **Note** that the expectation is that you see the landing page of Forkana, **not** the database setup dialog of Gitea. If you see it, something went wrong.  Using `sqlite` should prevent precisely this during initial setup.
 
+### Populate
+
+Forkana includes tools to automatically populate your instance with content. For more information, see the details below:
+
+<details>
+
+#### Configuration
+
+Prior to running this command, make sure you have created an API token for your user. See the [API token configuration guide](custom/services/article-creator/README.md#required-configuration) for instructions.
+
+The `make populate` command accepts the following environment variables:
+
+- `GITEA_URL` (required) - Your Forkana instance URL
+- `GITEA_TOKEN` (required) - API token with repository creation permissions
+- `ARTICLE_COUNT` (optional, default: 50) - Number of articles to fetch
+- `CATEGORY` (optional) - Wikipedia category to fetch from (e.g., "Category:Physics")
+- `PRIVATE` (optional, default: false) - Set to "true" to create private repositories
+
+To populate your Forkana instance with 50 random Wikipedia articles:
+
+```bash
+GITEA_URL=http://localhost:3000 GITEA_TOKEN=your_api_token make populate
+```
+
+#### Detailed Documentation
+
+For more information about the individual tools:
+
+- [wiki2md](custom/services/wiki2md/README.md) - Fetch and convert Wikipedia articles to Markdown
+- [article-creator](custom/services/article-creator/README.md) - Create Forkana repositories from Markdown files
+
+</details>
+
 ### Useful commands
 
 To clean up
