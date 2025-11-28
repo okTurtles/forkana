@@ -435,13 +435,15 @@ func extractYAMLTitle(content string) string {
 
 	title := strings.TrimSpace(matches[1])
 
-	// Handle quoted strings
-	if (strings.HasPrefix(title, `"`) && strings.HasSuffix(title, `"`)) ||
-		(strings.HasPrefix(title, `'`) && strings.HasSuffix(title, `'`)) {
-		title = title[1 : len(title)-1]
-		// Unescape quotes
-		title = strings.ReplaceAll(title, `\"`, `"`)
-		title = strings.ReplaceAll(title, `\'`, `'`)
+	// Handle quoted strings (must be at least 2 chars to have opening and closing quotes)
+	if len(title) > 1 {
+		if (strings.HasPrefix(title, `"`) && strings.HasSuffix(title, `"`)) ||
+			(strings.HasPrefix(title, `'`) && strings.HasSuffix(title, `'`)) {
+			title = title[1 : len(title)-1]
+			// Unescape quotes
+			title = strings.ReplaceAll(title, `\"`, `"`)
+			title = strings.ReplaceAll(title, `\'`, `'`)
+		}
 	}
 
 	return title
