@@ -884,6 +884,24 @@ func (err ErrRepoWithSubjectNotExist) Unwrap() error {
 	return util.ErrNotExist
 }
 
+// ErrRootArticleAlreadyExists represents an error when trying to create a root article
+// for a subject that already has one. This is used to signal that the creation should
+// be converted to a fork operation.
+type ErrRootArticleAlreadyExists struct {
+	SubjectID  int64
+	RootRepoID int64
+}
+
+// IsErrRootArticleAlreadyExists checks if an error is a ErrRootArticleAlreadyExists.
+func IsErrRootArticleAlreadyExists(err error) bool {
+	_, ok := err.(ErrRootArticleAlreadyExists)
+	return ok
+}
+
+func (err ErrRootArticleAlreadyExists) Error() string {
+	return fmt.Sprintf("root article already exists for subject [subject_id: %d, root_repo_id: %d]", err.SubjectID, err.RootRepoID)
+}
+
 // GetRepositoryByOwnerAndName returns the repository by given owner name and repo name
 func GetRepositoryByOwnerAndName(ctx context.Context, ownerName, repoName string) (*Repository, error) {
 	var repo Repository
@@ -948,6 +966,26 @@ func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Rep
 
 	// Load the subject relation
 	repo.SubjectRelation = subject
+
+	return &repo, nil
+}
+
+// GetSubjectRootRepository returns the root (non-fork) repository for a given subject ID.
+// This function finds the first non-fork repository created for the subject, ordered by creation time.
+// Returns ErrRepoNotExist if no root repository exists for the subject.
+func GetSubjectRootRepository(ctx context.Context, subjectID int64) (*Repository, error) {
+	var repo Repository
+	has, err := db.GetEngine(ctx).
+		Where("subject_id = ?", subjectID).
+		And("is_fork = ?", false).
+		OrderBy("created_unix ASC").
+		Get(&repo)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, ErrRepoNotExist{0, 0, "", ""}
+	}
 
 	return &repo, nil
 }
