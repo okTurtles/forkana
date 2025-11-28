@@ -101,7 +101,7 @@ Forkana includes tools to automatically populate your instance with content. For
 
 #### Configuration
 
-Prior to running this command, make sure you have created an API token for your user. You can find instructions [here](custom/services/article-creator/README.md#required-configuration).
+Prior to running this command, make sure you have created an API token for your user. See the [API token configuration guide](custom/services/article-creator/README.md#required-configuration) for instructions.
 
 The `make populate` command accepts the following environment variables:
 
@@ -123,7 +123,6 @@ For more information about the individual tools:
 
 - [wiki2md](custom/services/wiki2md/README.md) - Fetch and convert Wikipedia articles to Markdown
 - [article-creator](custom/services/article-creator/README.md) - Create Forkana repositories from Markdown files
-
 
 </details>
 
