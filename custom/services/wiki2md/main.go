@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 )
@@ -417,6 +418,21 @@ fetched_at: %s
 	return frontMatter + mdBody
 }
 
+// truncateToByteLimit truncates a string to fit within maxBytes while preserving
+// valid UTF-8 encoding. It removes runes from the end until the byte length is
+// within the limit.
+func truncateToByteLimit(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	// Convert to runes and remove from end until we fit
+	runes := []rune(s)
+	for len(runes) > 0 && len(string(runes)) > maxBytes {
+		runes = runes[:len(runes)-1]
+	}
+	return string(runes)
+}
+
 func safeFilename(title string, maxLength int) string {
 	// Replace problematic characters with underscores
 	re := regexp.MustCompile(`[^\w.\- ]+`)
@@ -434,18 +450,29 @@ func safeFilename(title string, maxLength int) string {
 	// Remove leading/trailing underscores
 	name = strings.Trim(name, "_")
 
-	// Truncate if too long
+	// Truncate if too long (using Unicode-safe truncation to avoid splitting
+	// multi-byte characters, which would result in invalid UTF-8)
 	if len(name) > maxLength {
 		if idx := strings.LastIndex(name, "."); idx > 0 {
 			ext := name[idx:]
 			base := name[:idx]
-			if len(base) > maxLength-len(ext)-1 {
-				base = base[:maxLength-len(ext)-1]
+			maxBaseBytes := maxLength - len(ext)
+			if maxBaseBytes > 0 {
+				base = truncateToByteLimit(base, maxBaseBytes)
+			} else {
+				// Extension alone exceeds limit, truncate the whole thing
+				base = ""
+				ext = truncateToByteLimit(ext, maxLength)
 			}
 			name = base + ext
 		} else {
-			name = name[:maxLength]
+			name = truncateToByteLimit(name, maxLength)
 		}
+	}
+
+	// Verify the result is valid UTF-8 (should always be true after our processing)
+	if !utf8.ValidString(name) {
+		return "untitled"
 	}
 
 	if name == "" {
