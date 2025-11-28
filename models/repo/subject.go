@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -310,14 +311,10 @@ func FindSimilarSubjects(ctx context.Context, keyword string, limit int, exclude
 		scoredSubjects = append(scoredSubjects, subjectWithScore{subject, score})
 	}
 
-	// Sort by score (lower is better)
-	for i := 0; i < len(scoredSubjects)-1; i++ {
-		for j := i + 1; j < len(scoredSubjects); j++ {
-			if scoredSubjects[j].score < scoredSubjects[i].score {
-				scoredSubjects[i], scoredSubjects[j] = scoredSubjects[j], scoredSubjects[i]
-			}
-		}
-	}
+	// Sort by score (lower is better) using O(n log n) algorithm
+	slices.SortFunc(scoredSubjects, func(a, b subjectWithScore) int {
+		return a.score - b.score
+	})
 
 	// Extract sorted subjects
 	result := make([]*Subject, 0, len(scoredSubjects))
@@ -382,6 +379,71 @@ func CountRepositoriesBySubject(ctx context.Context, subjectID int64) (int64, er
 // CountRootRepositoriesBySubject counts the number of root (non-fork) repositories for a given subject
 func CountRootRepositoriesBySubject(ctx context.Context, subjectID int64) (int64, error) {
 	return db.GetEngine(ctx).Where("subject_id = ? AND is_fork = ?", subjectID, false).Count(new(Repository))
+}
+
+// SubjectRepoCounts holds repository counts for a subject
+type SubjectRepoCounts struct {
+	SubjectID     int64
+	RepoCount     int64
+	RootRepoCount int64
+}
+
+// BatchCountRepositoriesBySubjects counts repositories for multiple subjects in a single query
+// Returns a map of subject ID to SubjectRepoCounts
+func BatchCountRepositoriesBySubjects(ctx context.Context, subjectIDs []int64) (map[int64]*SubjectRepoCounts, error) {
+	if len(subjectIDs) == 0 {
+		return make(map[int64]*SubjectRepoCounts), nil
+	}
+
+	// Initialize result map with zero counts for all requested subjects
+	result := make(map[int64]*SubjectRepoCounts, len(subjectIDs))
+	for _, id := range subjectIDs {
+		result[id] = &SubjectRepoCounts{SubjectID: id}
+	}
+
+	// Count all repositories per subject
+	type countResult struct {
+		SubjectID int64 `xorm:"subject_id"`
+		Count     int64 `xorm:"count"`
+	}
+
+	var allCounts []countResult
+	err := db.GetEngine(ctx).
+		Table("repository").
+		Select("subject_id, COUNT(*) as count").
+		In("subject_id", subjectIDs).
+		GroupBy("subject_id").
+		Find(&allCounts)
+	if err != nil {
+		return nil, fmt.Errorf("count all repositories: %w", err)
+	}
+
+	for _, c := range allCounts {
+		if counts, ok := result[c.SubjectID]; ok {
+			counts.RepoCount = c.Count
+		}
+	}
+
+	// Count root (non-fork) repositories per subject
+	var rootCounts []countResult
+	err = db.GetEngine(ctx).
+		Table("repository").
+		Select("subject_id, COUNT(*) as count").
+		In("subject_id", subjectIDs).
+		And("is_fork = ?", false).
+		GroupBy("subject_id").
+		Find(&rootCounts)
+	if err != nil {
+		return nil, fmt.Errorf("count root repositories: %w", err)
+	}
+
+	for _, c := range rootCounts {
+		if counts, ok := result[c.SubjectID]; ok {
+			counts.RootRepoCount = c.Count
+		}
+	}
+
+	return result, nil
 }
 
 // ErrSubjectNotExist represents a "SubjectNotExist" error
