@@ -387,14 +387,26 @@ func normalizeImageURLs(md string) string {
 	})
 }
 
+// escapeYAMLString escapes a string for use in a double-quoted YAML value.
+// It handles backslashes, quotes, and control characters that could break YAML parsing.
+func escapeYAMLString(s string) string {
+	// Escape backslashes first, then other special characters
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	s = strings.ReplaceAll(s, "\t", `\t`)
+	return s
+}
+
 func addFrontMatter(title, mdBody string) string {
-	safeTitle := strings.ReplaceAll(title, `"`, `\"`)
-	sourceURL := fmt.Sprintf("https://en.wikipedia.org/wiki/%s", strings.ReplaceAll(title, " ", "_"))
+	safeTitle := escapeYAMLString(title)
+	sourceURL := fmt.Sprintf("https://en.wikipedia.org/wiki/%s", url.PathEscape(strings.ReplaceAll(title, " ", "_")))
 	fetchedAt := time.Now().UTC().Format("2006-01-02T15:04:05Z")
 
 	frontMatter := fmt.Sprintf(`---
 title: "%s"
-source: %s
+source: "%s"
 license: CC BY-SA 4.0
 attribution: Wikipedia contributors
 fetched_at: %s
