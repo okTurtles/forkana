@@ -157,44 +157,38 @@
 
 
     <div class="ui container">
-        {{if .IsRepoEmpty}}
-            {{template "repo/empty" .}}
-        {{else}}
-            {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscapeSegments (.Repository.GetSubject ctx)) }}
-            <div id="repo-history-app"
-                class="history-view-app"
-                data-initial-view="{{.HistoryView}}"
-                data-initial-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}"
-                data-initial-owner="{{.Repository.Owner.Name}}"
-                data-initial-repo="{{.Repository.Name}}"
-                data-initial-subject="{{.Repository.GetSubject ctx}}"
-                data-subject-url="{{$subjectPath}}"
-                data-bubble-url="{{QueryBuild $subjectPath "view" "bubble"}}"
-                data-table-url="{{QueryBuild $subjectPath "view" "table"}}"
-                data-article-base="{{printf "%s/article" AppSubUrl}}"
-                data-article-repo-base="{{printf "%s/article/repo" AppSubUrl}}"
-                data-current-uri="{{.Link}}">
-                {{template "shared/repo/bubble" .}}
-                {{template "shared/repo/table" .}}
-                {{if .IsArticleView}}
-                    {{template "shared/repo/article" .}}
-                {{else}}
-                    <div class="history-view-section history-view-section--article" data-view="article" hidden>
-                        <div class="history-view-placeholder ui segment loading placeholder">
-                            <div class="header">
-                                <div class="line"></div>
-                                <div class="line"></div>
-                            </div>
-                            <div class="paragraph">
-                                <div class="line"></div>
-                                <div class="line"></div>
-                                <div class="line"></div>
-                            </div>
+        {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscapeSegments (.Repository.GetSubject ctx)) }}
+        <div id="repo-history-app"
+            class="history-view-app"
+            data-initial-view="{{.HistoryView}}"
+            data-initial-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}"
+            data-initial-owner="{{.Repository.Owner.Name}}"
+            data-initial-repo="{{.Repository.Name}}"
+            data-initial-subject="{{.Repository.GetSubject ctx}}"
+            data-subject-url="{{$subjectPath}}"
+            data-bubble-url="{{QueryBuild $subjectPath "view" "bubble"}}"
+            data-table-url="{{QueryBuild $subjectPath "view" "table"}}"
+            data-article-base="{{printf "%s/article" AppSubUrl}}">
+            {{template "shared/repo/bubble" .}}
+            {{template "shared/repo/table" .}}
+            {{if .IsArticleView}}
+                {{template "shared/repo/article" .}}
+            {{else}}
+                <div class="history-view-section history-view-section--article" data-view="article" hidden>
+                    <div class="history-view-placeholder ui segment loading placeholder">
+                        <div class="header">
+                            <div class="line"></div>
+                            <div class="line"></div>
+                        </div>
+                        <div class="paragraph">
+                            <div class="line"></div>
+                            <div class="line"></div>
+                            <div class="line"></div>
                         </div>
                     </div>
-                {{end}}
-            </div>
-        {{end}}
+                </div>
+            {{end}}
+        </div>
     </div>
 </div>
 {{template "base/footer" .}}

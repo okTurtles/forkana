@@ -301,11 +301,12 @@ func RepoHistory(ctx *context.Context) {
 
 	// Call the main repository home logic
 	// This duplicates the functionality of repo.Home but in the explore context
-	renderRepositoryHistory(ctx)
+	RenderRepositoryHistory(ctx)
 }
 
-// renderRepositoryHistory duplicates repo.Home functionality for the history view
-func renderRepositoryHistory(ctx *context.Context) {
+// RenderRepositoryHistory duplicates repo.Home functionality for the history view
+// This is exported so it can be called from the article route handler
+func RenderRepositoryHistory(ctx *context.Context) {
 	// Handle feed requests
 	if handleRepoHistoryFeed(ctx) {
 		return
@@ -326,10 +327,15 @@ func renderRepositoryHistory(ctx *context.Context) {
 	ctx.Data["PageIsViewCode"] = true
 	ctx.Data["RepositoryUploadEnabled"] = false // Disable uploads in history view
 
-	// Handle empty or broken repositories
+	// For empty/broken repositories, render the history view which will show a "Create first article" bubble
 	if ctx.Repo.Repository.IsEmpty || ctx.Repo.Repository.IsBroken() {
 		ctx.Data["IsRepoEmpty"] = true
-		ctx.HTML(http.StatusOK, "repo/empty")
+		ctx.Data["BranchName"] = ctx.Repo.Repository.DefaultBranch
+		ctx.Data["RepoLink"] = ctx.Repo.Repository.Link()
+		if ctx.Doer != nil {
+			ctx.Data["CloneButtonOriginLink"] = ctx.Repo.Repository.CloneLink(ctx, ctx.Doer)
+		}
+		ctx.HTML(http.StatusOK, "explore/repo_history")
 		return
 	}
 
@@ -344,18 +350,26 @@ func renderRepositoryHistory(ctx *context.Context) {
 	// Get default branch
 	defaultBranch := ctx.Repo.Repository.DefaultBranch
 
-	// Get commit for default branch
-	commit, err := gitRepo.GetBranchCommit(defaultBranch)
-	if err != nil {
-		ctx.ServerError("GetBranchCommit", err)
-		return
+	// Check if a commit is already set (e.g., from ArticleCommitView for versioned views)
+	// If so, use that commit instead of fetching from the default branch
+	var commit *git.Commit
+	if ctx.Repo.Commit != nil {
+		// Use the pre-set commit (for versioned article views)
+		commit = ctx.Repo.Commit
+	} else {
+		// Get commit for default branch
+		commit, err = gitRepo.GetBranchCommit(defaultBranch)
+		if err != nil {
+			ctx.ServerError("GetBranchCommit", err)
+			return
+		}
+		ctx.Repo.Commit = commit
+		ctx.Repo.CommitID = commit.ID.String()
+		ctx.Repo.BranchName = defaultBranch
 	}
 
 	// Set up repository context
 	ctx.Repo.GitRepo = gitRepo
-	ctx.Repo.BranchName = defaultBranch
-	ctx.Repo.Commit = commit
-	ctx.Repo.CommitID = commit.ID.String()
 	ctx.Repo.TreePath = ""
 
 	// Get repository tree entries
@@ -452,7 +466,16 @@ func renderRepositoryHistory(ctx *context.Context) {
 
 	// For Article view, handle mode parameter and load README content
 	if ctx.Data["IsArticleView"] == true {
-		prepareArticleView(ctx, gitRepo, entries, defaultBranch)
+		// Determine the reference path for rendering (branch or commit)
+		var refPath string
+		if ctx.Repo.BranchName != "" {
+			refPath = path.Join("branch", util.PathEscapeSegments(ctx.Repo.BranchName))
+		} else if ctx.Repo.CommitID != "" {
+			refPath = path.Join("commit", ctx.Repo.CommitID)
+		} else {
+			refPath = path.Join("branch", util.PathEscapeSegments(defaultBranch))
+		}
+		prepareArticleView(ctx, gitRepo, entries, refPath)
 		if ctx.Written() {
 			return
 		}
@@ -460,26 +483,6 @@ func renderRepositoryHistory(ctx *context.Context) {
 
 	// Render the history view template
 	ctx.HTML(http.StatusOK, "explore/repo_history")
-}
-
-// RepoArticle renders the dedicated article page (Read/Edit/History tabs)
-// It reuses the repository history renderer but forces the view to "article".
-func RepoArticle(ctx *context.Context) {
-	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - Article"
-	ctx.Data["PageIsExploreRepositories"] = true
-	ctx.Data["PageIsRepoHistory"] = true
-	ctx.Data["IsRepoHistoryView"] = true
-	ctx.Data["IsSubjectContext"] = true
-	ctx.Data["IsRepoHistoryView"] = true
-	ctx.Data["IsSubjectContext"] = false
-
-	// Force article view (set flags directly)
-	ctx.Data["HistoryView"] = "article"
-	ctx.Data["IsBubbleView"] = false
-	ctx.Data["IsTableView"] = false
-	ctx.Data["IsArticleView"] = true
-
-	renderRepositoryHistory(ctx)
 }
 
 // handleRepoHistoryFeed handles RSS/Atom feed requests for repository history
@@ -498,7 +501,8 @@ func handleRepoHistoryFeed(ctx *context.Context) bool {
 }
 
 // prepareArticleView prepares data for the article view (README display with read/edit/history modes)
-func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries []*git.TreeEntry, defaultBranch string) {
+// refPath is the reference path for rendering (e.g., "branch/main" or "commit/abc123")
+func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries []*git.TreeEntry, refPath string) {
 	// Determine mode (read/edit/history)
 	mode := ctx.FormString("mode")
 	if mode == "" {
@@ -527,7 +531,8 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		return
 	}
 
-	// Get contributor count for the readme file
+	// Get contributor count for the readme file (use default branch for contributor count)
+	defaultBranch := ctx.Repo.Repository.DefaultBranch
 	contributorCount, err := getFileContributorCount(gitRepo, defaultBranch, readmeTreePath)
 	if err != nil {
 		log.Warn("Failed to get contributor count: %v", err)
@@ -567,7 +572,7 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			ctx.Data["MarkupType"] = markupType
 
 			rctx := renderhelper.NewRenderContextRepoFile(ctx, ctx.Repo.Repository, renderhelper.RepoFileOptions{
-				CurrentRefPath:  path.Join("branch", util.PathEscapeSegments(defaultBranch)),
+				CurrentRefPath:  refPath,
 				CurrentTreePath: "",
 			}).
 				WithMarkupType(markupType).

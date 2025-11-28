@@ -12,7 +12,7 @@
 
 ### Installation
 
-Add `gitea/custom/conf/app.ini`. See details below for file content. Make sure to properly set `WORK_PATH`.
+Add `custom/conf/app.ini`. See details below for file content. Make sure to properly set `WORK_PATH`.
 
 <details>
 
@@ -58,11 +58,28 @@ To build the project:
 $ TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
 
+For troubleshooting, see the details below:
+
+<details>
+
 Note that it might be necessary, depending on your system's configuration, to prepend a `GO` specification (indicating the name of the executable, if different from just `go`).
 
 ```bash
 $ GO=go1.25.2 TAGS="bindata sqlite sqlite_unlock_notify" make build
 ```
+
+Also, in some situations, one might encounter a network connectivity issue with IPv6. The Go proxy is trying to connect over IPv6 and failing with "socket is not connected" errors.
+The solution is to modify the command by prefixing two additional vars:
+
+```bash
+$ GODEBUG="netdns=go+4" GOPROXY="direct" TAGS="bindata sqlite sqlite_unlock_notify" make build
+```
+
+Do the same for the following `make watch` command.
+
+</details>
+
+### Starting the application for development
 
 To run the project:
 
@@ -74,40 +91,17 @@ Note that you need to build once in any case, before running continuously with w
 
 Finally, visit http://localhost:3000 and you are ready to go to fork with Forkana!
 
-### Populate
+**Note** that the expectation is that you see the landing page of Forkana, **not** the database setup dialog of Gitea. If you see it, something went wrong.  Using `sqlite` should prevent precisely this during initial setup.
 
-Forkana includes tools to automatically populate your instance with content from Wikipedia. The `wiki2md` tool fetches Wikipedia articles and converts them to Markdown, while the `article-creator` tool creates Forkana repositories from those Markdown files. These tools can be used separately or combined via the `make populate` command for a streamlined workflow.
+### Useful commands
 
-#### Quick Start
-
-To populate your Forkana instance with 50 random Wikipedia articles:
+To clean up
 
 ```bash
-GITEA_URL=http://localhost:3000 GITEA_TOKEN=your_api_token make populate
+$ make clean-all
+$ rm -rf data # to remove the sqlite database
+$ make test-e2e-sqlite # run e2e tests
 ```
-
-To fetch articles from a specific category:
-
-```bash
-GITEA_URL=http://localhost:3000 GITEA_TOKEN=your_api_token ARTICLE_COUNT=100 CATEGORY="Category:Physics" make populate
-```
-
-#### Configuration
-
-The `make populate` command accepts the following environment variables:
-
-- `GITEA_URL` (required) - Your Forkana instance URL
-- `GITEA_TOKEN` (required) - API token with repository creation permissions
-- `ARTICLE_COUNT` (optional, default: 50) - Number of articles to fetch
-- `CATEGORY` (optional) - Wikipedia category to fetch from (e.g., "Category:Physics")
-- `PRIVATE` (optional, default: false) - Set to "true" to create private repositories
-
-#### Detailed Documentation
-
-For more information about the individual tools:
-
-- [wiki2md](custom/services/wiki2md/README.md) - Fetch and convert Wikipedia articles to Markdown
-- [article-creator](custom/services/article-creator/README.md) - Create Forkana repositories from Markdown files
 
 -----------
 

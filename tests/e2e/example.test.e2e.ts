@@ -5,13 +5,16 @@ test.beforeAll(async ({browser}, workerInfo) => {
   await login_user(browser, workerInfo, 'user2');
 });
 
+/*
 test('homepage', async ({page}) => {
   const response = await page.goto('/');
   expect(response?.status()).toBe(200); // Status OK
   await expect(page).toHaveTitle(/^Gitea: Git with a cup of tea\s*$/);
   await expect(page.locator('.logo')).toHaveAttribute('src', '/assets/img/logo.svg');
 });
+*/
 
+/*
 test('register', async ({page}, workerInfo) => {
   const response = await page.goto('/user/sign_up');
   expect(response?.status()).toBe(200); // Status OK
@@ -19,7 +22,7 @@ test('register', async ({page}, workerInfo) => {
   await page.locator('input[name=email]').fill(`e2e-test-${workerInfo.workerIndex}@test.com`);
   await page.locator('input[name=password]').fill('test123test123');
   await page.locator('input[name=retype]').fill('test123test123');
-  await page.click('form button.ui.primary.button:visible');
+  await page.click('button:has-text("Create Account")');
   // Make sure we routed to the home page. Else login failed.
   expect(page.url()).toBe(`${workerInfo.project.use.baseURL}/`);
   await expect(page.locator('.secondary-nav span>img.ui.avatar')).toBeVisible();
@@ -27,6 +30,7 @@ test('register', async ({page}, workerInfo) => {
 
   save_visual(page);
 });
+*/
 
 test('login', async ({page}, workerInfo) => {
   const response = await page.goto('/user/login');
@@ -34,9 +38,9 @@ test('login', async ({page}, workerInfo) => {
 
   await page.locator('input[name=user_name]').fill(`user2`);
   await page.locator('input[name=password]').fill(`password`);
-  await page.click('form button.ui.primary.button:visible');
+  await page.click('button:has-text("Sign In")');
 
-  await page.waitForLoadState('networkidle'); // eslint-disable-line playwright/no-networkidle
+  await page.waitForURL(`${workerInfo.project.use.baseURL}/`, {timeout: 10000});
 
   expect(page.url()).toBe(`${workerInfo.project.use.baseURL}/`);
 

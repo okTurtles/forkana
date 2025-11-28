@@ -1,12 +1,11 @@
-import {hideElem, querySingleVisibleElem, showElem, toggleElem} from '../utils/dom.ts';
+import {hideElem, showElem, toggleElem} from '../utils/dom.ts';
 import {htmlEscape} from '../utils/html.ts';
 import {fomanticQuery} from '../modules/fomantic/base.ts';
 import {sanitizeRepoName, generateRepoNameFromSubject} from './repo-common.ts';
 
 const {appSubUrl} = window.config;
 
-function initRepoNewTemplateSearch(form: HTMLFormElement) {
-  const elSubmitButton = querySingleVisibleElem<HTMLInputElement>(form, '.ui.primary.button');
+function initRepoNewTemplateSearch(form: HTMLFormElement, updateSubmitButtonState: () => void) {
   const elCreateRepoErrorMessage = form.querySelector('#create-repo-error-message');
   const elRepoOwnerDropdown = form.querySelector('#repo_owner_dropdown');
   const elRepoTemplateDropdown = form.querySelector<HTMLInputElement>('#repo_template_search');
@@ -27,14 +26,13 @@ function initRepoNewTemplateSearch(form: HTMLFormElement) {
     const ownerId = $repoOwnerDropdown.dropdown('get value');
     const $ownerItem = $repoOwnerDropdown.dropdown('get item', ownerId);
     hideElem(elCreateRepoErrorMessage);
-    elSubmitButton.disabled = false;
     if ($ownerItem?.length) {
       const elOwnerItem = $ownerItem[0];
       elCreateRepoErrorMessage.textContent = elOwnerItem.getAttribute('data-create-repo-disallowed-prompt') ?? '';
       const hasError = Boolean(elCreateRepoErrorMessage.textContent);
       toggleElem(elCreateRepoErrorMessage, hasError);
-      elSubmitButton.disabled = hasError;
     }
+    updateSubmitButtonState();
     $repoTemplateDropdown.dropdown('setting', {
       apiSettings: {
         url: `${appSubUrl}/repo/search?q={query}&template=true&priority_owner_id=${ownerId}`,
@@ -120,7 +118,29 @@ export function initRepoNew() {
     updateUiRepoName();
   });
 
+  // Ensure repo name is populated on initial load (e.g., when subject is prefilled)
+  updateRepoNameFromSubject();
   updateUiRepoName();
 
-  initRepoNewTemplateSearch(form);
+  // Handle template_requirements checkbox validation
+  const inputTemplateRequirements = form.querySelector<HTMLInputElement>('#template_requirements');
+  const elSubmitButton = form.querySelector<HTMLButtonElement>('#create-repo-submit-button');
+  const updateSubmitButtonState = () => {
+    if (!elSubmitButton || !inputTemplateRequirements) return;
+
+    const isTemplateRequirementsChecked = inputTemplateRequirements.checked;
+    const elCreateRepoErrorMessage = form.querySelector('#create-repo-error-message');
+    const hasOwnerError = elCreateRepoErrorMessage?.textContent?.trim() !== '';
+    // Disable submit button if template_requirements is not checked or if there's an owner error
+    elSubmitButton.disabled = !isTemplateRequirementsChecked || hasOwnerError;
+  };
+
+  // Listen for checkbox changes
+  if (inputTemplateRequirements) {
+    inputTemplateRequirements.addEventListener('change', updateSubmitButtonState);
+    // Initial state check
+    updateSubmitButtonState();
+  }
+
+  initRepoNewTemplateSearch(form, updateSubmitButtonState);
 }

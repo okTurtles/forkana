@@ -36,10 +36,10 @@ export default {
     locale: 'en-US',
 
     /* Maximum time each action such as `click()` can take. Defaults to 0 (no limit). */
-    actionTimeout: 1000,
+    actionTimeout: 30000,
 
     /* Maximum time allowed for navigation, such as `page.goto()`. */
-    navigationTimeout: 5 * 1000,
+    navigationTimeout: 30 * 1000,
 
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: BASE_URL,

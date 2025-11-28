@@ -169,6 +169,12 @@ func Create(ctx *context.Context) {
 	ctx.Data["default_branch"] = setting.Repository.DefaultBranch
 	ctx.Data["repo_template_name"] = ctx.Tr("repo.template_select")
 
+	// Prefill subject (and derived repo name) from query parameter if provided
+	if subject := ctx.FormTrim("subject"); subject != "" {
+		ctx.Data["subject"] = subject
+		ctx.Data["repo_name"] = repo_model.GenerateRepoNameFromSubject(subject)
+	}
+
 	templateID := ctx.FormInt64("template_id")
 	if templateID > 0 {
 		templateRepo, err := repo_model.GetRepositoryByID(ctx, templateID)
@@ -290,7 +296,11 @@ func CreatePost(ctx *context.Context) {
 		repo, err = repo_service.GenerateRepository(ctx, ctx.Doer, ctxUser, templateRepo, opts)
 		if err == nil {
 			log.Trace("Repository generated [%d]: %s/%s", repo.ID, ctxUser.Name, repo.Name)
-			ctx.Redirect(repo.Link())
+			subject := repo.GetSubject(ctx)
+			if subject == "" {
+				subject = repo.Name
+			}
+			ctx.Redirect(setting.AppSubURL + "/subject/" + util.PathEscapeSegments(subject) + "?view=bubble")
 			return
 		}
 	} else {
@@ -311,7 +321,11 @@ func CreatePost(ctx *context.Context) {
 		})
 		if err == nil {
 			log.Trace("Repository created [%d]: %s/%s", repo.ID, ctxUser.Name, repo.Name)
-			ctx.Redirect(repo.Link())
+			subject := repo.GetSubject(ctx)
+			if subject == "" {
+				subject = repo.Name
+			}
+			ctx.Redirect(setting.AppSubURL + "/subject/" + util.PathEscapeSegments(subject) + "?view=bubble")
 			return
 		}
 	}

@@ -5,6 +5,7 @@
         data-owner="{{.Repository.Owner.Name}}"
         data-repo="{{.Repository.Name}}"
         data-subject="{{.Repository.GetSubject ctx}}"
+        data-default-branch="{{.Repository.DefaultBranch}}"
         data-api-url="{{AppSubUrl}}/api/v1/repos/{{.Repository.Owner.Name}}/{{.Repository.Name}}/forks/graph">
     </div>
 </div>

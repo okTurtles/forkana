@@ -20,9 +20,9 @@ export async function login_user(browser: Browser, workerInfo: WorkerInfo, user:
   // Fill out form
   await page.locator('input[name=user_name]').fill(user);
   await page.locator('input[name=password]').fill(LOGIN_PASSWORD);
-  await page.click('form button.ui.primary.button:visible');
+  await page.click('button:has-text("Sign In")');
 
-  await page.waitForLoadState('networkidle'); // eslint-disable-line playwright/no-networkidle
+  await page.waitForURL(`${workerInfo.project.use.baseURL}/`, {timeout: 10000});
 
   expect(page.url(), {message: `Failed to login user ${user}`}).toBe(`${workerInfo.project.use.baseURL}/`);
 
