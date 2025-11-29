@@ -10,7 +10,6 @@ import (
 
 	issues_model "code.gitea.io/gitea/models/issues"
 	project_model "code.gitea.io/gitea/models/project"
-	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/web/middleware"
 	"code.gitea.io/gitea/services/context"
@@ -47,38 +46,14 @@ type CreateRepoForm struct {
 	ObjectFormatName string
 }
 
-// ValidateGlobalUniqueness validates global uniqueness for repository subject
-// Note: Repository names are only validated for owner-scoped uniqueness (not global)
-func (f *CreateRepoForm) ValidateGlobalUniqueness(req *http.Request, errs binding.Errors) binding.Errors {
-	ctx := context.GetValidateContext(req)
-
-	// Check global subject uniqueness
-	isSubjectUnique, err := repo_model.IsRepositorySubjectGloballyUnique(ctx, f.Subject)
-	if err != nil {
-		errs = append(errs, binding.Error{
-			FieldNames:     []string{"Subject"},
-			Classification: "GlobalUniquenessError",
-			Message:        "Failed to validate repository subject uniqueness",
-		})
-	} else if !isSubjectUnique {
-		errs = append(errs, binding.Error{
-			FieldNames:     []string{"Subject"},
-			Classification: "GlobalUniquenessError",
-			Message:        ctx.Locale.TrString("repo.form.subject_globally_taken"),
-		})
-	}
-
-	return errs
-}
-
 // Validate validates the fields
+// Note: Subject uniqueness is NOT validated here because multiple users can create
+// repositories for the same subject. The first-article-becomes-root logic in
+// CreateRepositoryDirectly handles the case where a subject already has a root repository
+// by automatically forking from it instead of creating a new root.
 func (f *CreateRepoForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
 	ctx := context.GetValidateContext(req)
 	errs = middleware.Validate(errs, ctx.Data, f, ctx.Locale)
-
-	// Add global uniqueness validation
-	errs = f.ValidateGlobalUniqueness(req, errs)
-
 	return errs
 }
 
