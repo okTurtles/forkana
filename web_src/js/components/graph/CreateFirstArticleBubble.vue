@@ -4,28 +4,32 @@ const props = defineProps<{
   repo: string | null;
   subject?: string | null;
   defaultBranch?: string | null;
+  signedInUser?: string | null;
 }>();
 
 function handleCreateArticle(event: Event) {
   event.preventDefault();
   event.stopPropagation();
-  
-  if (!props.owner || !props.repo) {
+
+  const appSubUrl = (window as any).config?.appSubUrl || '';
+  const isSignedIn = document.body.classList.contains('signed-in');
+  const subjectParam = props.subject ? encodeURIComponent(props.subject) : '';
+
+  // Use the create-first-article endpoint which handles:
+  // 1. Creating an empty repository for the user if they don't have one for this subject
+  // 2. Redirecting to the editor to create README.md
+  const createFirstArticleUrl = `${appSubUrl}/repo/create-first-article?subject=${subjectParam}`;
+
+  if (!isSignedIn) {
+    // Not signed in - redirect to login with return URL to create-first-article
+    const loginUrl = `${appSubUrl}/user/login?redirect_to=${encodeURIComponent(createFirstArticleUrl)}`;
+    window.location.href = loginUrl;
     return;
   }
-  
-  const appSubUrl = (window as any).config?.appSubUrl || '';
-  const branch = props.defaultBranch || 'main';
-  const createUrl = `${appSubUrl}/${encodeURIComponent(props.owner)}/${encodeURIComponent(props.repo)}/_new/${branch}/README.md`;
-  
-  const isSignedIn = document.body.classList.contains('signed-in');
-  
-  if (!isSignedIn) {
-    const loginUrl = `${appSubUrl}/user/login?redirect_to=${encodeURIComponent(createUrl)}`;
-    window.location.href = loginUrl;
-  } else {
-    window.location.href = createUrl;
-  }
+
+  // Signed in - go to create-first-article endpoint
+  // This will auto-create an empty repo if needed and redirect to the editor
+  window.location.href = createFirstArticleUrl;
 }
 </script>
 
