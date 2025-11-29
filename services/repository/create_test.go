@@ -65,7 +65,7 @@ func TestFirstArticleBecomesRoot(t *testing.T) {
 
 	subjectName := "test-first-article-subject"
 
-	// User 2 creates the first article for this subject - should become root
+	// User 2 creates an empty repository for this subject
 	rootRepo, err := CreateRepositoryDirectly(t.Context(), user2, user2, CreateRepoOptions{
 		Name:    "first-article",
 		Subject: subjectName,
@@ -73,12 +73,20 @@ func TestFirstArticleBecomesRoot(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, rootRepo)
 
-	// Verify it's a root repository (not a fork)
+	// Verify it's initially empty and not a fork
+	assert.True(t, rootRepo.IsEmpty)
 	assert.False(t, rootRepo.IsFork)
 	assert.Equal(t, int64(0), rootRepo.ForkID)
 	assert.Positive(t, rootRepo.SubjectID)
 
-	// User 4 creates an article for the same subject - should become a fork
+	// Simulate User 2 adding content (e.g., committing README.md)
+	// This makes the repository non-empty, which makes it eligible to be a root
+	rootRepo.IsEmpty = false
+	err = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "is_empty")
+	require.NoError(t, err)
+
+	// User 4 creates an article for the same subject
+	// Since User 2's repo is now non-empty, it's the root, so User 4's repo should become a fork
 	forkRepo, err := CreateRepositoryDirectly(t.Context(), user4, user4, CreateRepoOptions{
 		Name:    "second-article",
 		Subject: subjectName,
@@ -105,7 +113,7 @@ func TestFirstArticleBecomesRoot_SameUserSecondArticle(t *testing.T) {
 
 	subjectName := "test-same-user-subject"
 
-	// User 2 creates the first article - should become root
+	// User 2 creates an empty repository for this subject
 	rootRepo, err := CreateRepositoryDirectly(t.Context(), user2, user2, CreateRepoOptions{
 		Name:    "first-article",
 		Subject: subjectName,
@@ -113,6 +121,12 @@ func TestFirstArticleBecomesRoot_SameUserSecondArticle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, rootRepo)
 	assert.False(t, rootRepo.IsFork)
+	assert.True(t, rootRepo.IsEmpty)
+
+	// Simulate User 2 adding content (e.g., committing README.md)
+	rootRepo.IsEmpty = false
+	err = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "is_empty")
+	require.NoError(t, err)
 
 	// Same user tries to create another article for the same subject
 	// This creates a fork of their own root repository
@@ -158,7 +172,55 @@ func TestFirstArticleBecomesRoot_NoSubject(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestFirstArticleBecomesRoot_ConcurrentCreation(t *testing.T) {
+func TestEmptyReposDoNotTriggerFirstArticleLogic(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// Get two different users
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+
+	subjectName := "test-empty-repos-subject"
+
+	// User 2 creates an empty repository for this subject (no AutoInit)
+	emptyRepo1, err := CreateRepositoryDirectly(t.Context(), user2, user2, CreateRepoOptions{
+		Name:     "empty-article-1",
+		Subject:  subjectName,
+		AutoInit: false, // Empty repository
+	}, true)
+	require.NoError(t, err)
+	require.NotNil(t, emptyRepo1)
+
+	// Verify it's empty and not a fork
+	assert.True(t, emptyRepo1.IsEmpty)
+	assert.False(t, emptyRepo1.IsFork)
+	assert.Equal(t, int64(0), emptyRepo1.ForkID)
+
+	// User 4 creates another empty repository for the same subject
+	// This should NOT become a fork because the first repo is empty
+	emptyRepo2, err := CreateRepositoryDirectly(t.Context(), user4, user4, CreateRepoOptions{
+		Name:     "empty-article-2",
+		Subject:  subjectName,
+		AutoInit: false, // Empty repository
+	}, true)
+	require.NoError(t, err)
+	require.NotNil(t, emptyRepo2)
+
+	// Verify it's also empty and NOT a fork (because first repo was empty)
+	assert.True(t, emptyRepo2.IsEmpty)
+	assert.False(t, emptyRepo2.IsFork, "Empty repos should not trigger first-article-becomes-root logic")
+	assert.Equal(t, int64(0), emptyRepo2.ForkID)
+
+	// Both repos should have the same subject
+	assert.Equal(t, emptyRepo1.SubjectID, emptyRepo2.SubjectID)
+
+	// Cleanup
+	err = DeleteRepositoryDirectly(t.Context(), emptyRepo2.ID)
+	assert.NoError(t, err)
+	err = DeleteRepositoryDirectly(t.Context(), emptyRepo1.ID)
+	assert.NoError(t, err)
+}
+
+func TestFirstArticleBecomesRoot_ConcurrentEmptyCreation(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
 	// Get multiple users for concurrent creation
@@ -166,21 +228,22 @@ func TestFirstArticleBecomesRoot_ConcurrentCreation(t *testing.T) {
 	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
 	user5 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
 
-	subjectName := "test-concurrent-subject"
+	subjectName := "test-concurrent-empty-subject"
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var repos []*repo_model.Repository
 	var errors []error
 
-	// Create articles concurrently from 3 users
+	// Create empty articles concurrently from 3 users
+	// Since all are empty, none should become forks
 	users := []*user_model.User{user2, user4, user5}
 	for i, user := range users {
 		wg.Add(1)
 		go func(u *user_model.User, idx int) {
 			defer wg.Done()
 			repo, err := CreateRepositoryDirectly(t.Context(), u, u, CreateRepoOptions{
-				Name:    "concurrent-article",
+				Name:    "concurrent-empty-article",
 				Subject: subjectName,
 			}, true)
 			mu.Lock()
@@ -192,42 +255,29 @@ func TestFirstArticleBecomesRoot_ConcurrentCreation(t *testing.T) {
 
 	wg.Wait()
 
-	// Count successful creations and forks
-	var rootCount, forkCount int
+	// Count successful creations
+	var successCount, forkCount int
 	for i, repo := range repos {
 		if errors[i] != nil {
 			continue
 		}
+		successCount++
 		if repo.IsFork {
 			forkCount++
-		} else {
-			rootCount++
 		}
 	}
 
-	// Exactly one should be root, others should be forks
-	assert.Equal(t, 1, rootCount, "Expected exactly one root repository")
-	assert.Equal(t, 2, forkCount, "Expected two fork repositories")
+	// All 3 should succeed and none should be forks (because all are empty)
+	assert.Equal(t, 3, successCount, "Expected all 3 repositories to be created successfully")
+	assert.Equal(t, 0, forkCount, "Expected no forks since all repositories are empty")
 
-	// All forks should point to the same root
-	var rootID int64
+	// All repos should be empty
 	for i, repo := range repos {
 		if errors[i] != nil {
 			continue
 		}
-		if !repo.IsFork {
-			rootID = repo.ID
-			break
-		}
-	}
-
-	for i, repo := range repos {
-		if errors[i] != nil {
-			continue
-		}
-		if repo.IsFork {
-			assert.Equal(t, rootID, repo.ForkID, "All forks should point to the same root")
-		}
+		assert.True(t, repo.IsEmpty, "All repositories should be empty")
+		assert.False(t, repo.IsFork, "No repository should be a fork")
 	}
 
 	// Cleanup
@@ -236,4 +286,55 @@ func TestFirstArticleBecomesRoot_ConcurrentCreation(t *testing.T) {
 			_ = DeleteRepositoryDirectly(t.Context(), repo.ID)
 		}
 	}
+}
+
+func TestFirstArticleBecomesRoot_SequentialWithContent(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// Get multiple users
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	user5 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+	subjectName := "test-sequential-content-subject"
+
+	// User 2 creates an empty repository
+	repo1, err := CreateRepositoryDirectly(t.Context(), user2, user2, CreateRepoOptions{
+		Name:    "sequential-article-1",
+		Subject: subjectName,
+	}, true)
+	require.NoError(t, err)
+	require.NotNil(t, repo1)
+	assert.True(t, repo1.IsEmpty)
+	assert.False(t, repo1.IsFork)
+
+	// User 4 creates an empty repository - should NOT be a fork (repo1 is empty)
+	repo2, err := CreateRepositoryDirectly(t.Context(), user4, user4, CreateRepoOptions{
+		Name:    "sequential-article-2",
+		Subject: subjectName,
+	}, true)
+	require.NoError(t, err)
+	require.NotNil(t, repo2)
+	assert.True(t, repo2.IsEmpty)
+	assert.False(t, repo2.IsFork, "Should not be a fork because repo1 is empty")
+
+	// Simulate User 2 adding content (making repo1 the root)
+	repo1.IsEmpty = false
+	err = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo1, "is_empty")
+	require.NoError(t, err)
+
+	// User 5 creates a repository - should become a fork of repo1 (which is now non-empty)
+	repo3, err := CreateRepositoryDirectly(t.Context(), user5, user5, CreateRepoOptions{
+		Name:    "sequential-article-3",
+		Subject: subjectName,
+	}, true)
+	require.NoError(t, err)
+	require.NotNil(t, repo3)
+	assert.True(t, repo3.IsFork, "Should be a fork because repo1 is now non-empty")
+	assert.Equal(t, repo1.ID, repo3.ForkID, "Should fork from repo1")
+
+	// Cleanup
+	_ = DeleteRepositoryDirectly(t.Context(), repo3.ID)
+	_ = DeleteRepositoryDirectly(t.Context(), repo2.ID)
+	_ = DeleteRepositoryDirectly(t.Context(), repo1.ID)
 }

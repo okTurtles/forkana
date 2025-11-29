@@ -376,9 +376,11 @@ func CountRepositoriesBySubject(ctx context.Context, subjectID int64) (int64, er
 	return db.GetEngine(ctx).Where("subject_id = ?", subjectID).Count(new(Repository))
 }
 
-// CountRootRepositoriesBySubject counts the number of root (non-fork) repositories for a given subject
+// CountRootRepositoriesBySubject counts the number of root (non-fork, non-empty) repositories for a given subject.
+// Only non-empty repositories are considered as potential roots because the first-article-becomes-root
+// logic should only trigger when a user commits content, not when they create an empty repository.
 func CountRootRepositoriesBySubject(ctx context.Context, subjectID int64) (int64, error) {
-	return db.GetEngine(ctx).Where("subject_id = ? AND is_fork = ?", subjectID, false).Count(new(Repository))
+	return db.GetEngine(ctx).Where("subject_id = ? AND is_fork = ? AND is_empty = ?", subjectID, false, false).Count(new(Repository))
 }
 
 // SubjectRepoCounts holds repository counts for a subject

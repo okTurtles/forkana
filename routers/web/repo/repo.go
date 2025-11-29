@@ -648,3 +648,123 @@ func PrepareBranchList(ctx *context.Context) {
 	}
 	ctx.Data["Branches"] = brs
 }
+
+// CreateFirstArticle handles the "Create the first article" flow.
+// It checks if the user already has a repository for the given subject,
+// creates an empty repository if not, and redirects to the editor.
+func CreateFirstArticle(ctx *context.Context) {
+	subjectName := ctx.FormString("subject")
+	if subjectName == "" {
+		ctx.Flash.Error(ctx.Tr("repo.subject_required"))
+		ctx.Redirect(setting.AppSubURL + "/")
+		return
+	}
+
+	// Get or create the subject
+	subject, err := repo_model.GetOrCreateSubject(ctx, subjectName)
+	if err != nil {
+		ctx.ServerError("GetOrCreateSubject", err)
+		return
+	}
+
+	// Check if the user already has a repository for this subject
+	existingRepo, err := getRepositoryByOwnerIDAndSubjectID(ctx, ctx.Doer.ID, subject.ID)
+	if err != nil && !repo_model.IsErrRepoNotExist(err) {
+		ctx.ServerError("getRepositoryByOwnerIDAndSubjectID", err)
+		return
+	}
+
+	var repo *repo_model.Repository
+	if existingRepo != nil {
+		// User already has a repository for this subject
+		repo = existingRepo
+	} else {
+		// Create an empty repository for the user with this subject
+		repoName := repo_model.GenerateRepoNameFromSubject(subjectName)
+
+		// Check if the user already has a repo with this name
+		if err := repo_model.CheckCreateRepository(ctx, ctx.Doer, ctx.Doer, repoName, false); err != nil {
+			if repo_model.IsErrRepoAlreadyExist(err) {
+				// Try to find a unique name by appending a number
+				for i := 2; i <= 100; i++ {
+					candidateName := fmt.Sprintf("%s-%d", repoName, i)
+					if err := repo_model.CheckCreateRepository(ctx, ctx.Doer, ctx.Doer, candidateName, false); err == nil {
+						repoName = candidateName
+						break
+					}
+				}
+			} else {
+				handleCreateFirstArticleError(ctx, err, subjectName)
+				return
+			}
+		}
+
+		// Create the empty repository
+		repo, err = repo_service.CreateRepository(ctx, ctx.Doer, ctx.Doer, repo_service.CreateRepoOptions{
+			Name:          repoName,
+			Subject:       subjectName,
+			Description:   "",
+			IsPrivate:     false,
+			DefaultBranch: setting.Repository.DefaultBranch,
+			AutoInit:      false, // Empty repository - no initial commit
+		})
+		if err != nil {
+			handleCreateFirstArticleError(ctx, err, subjectName)
+			return
+		}
+
+		log.Trace("Empty repository created for first article [%d]: %s/%s (subject: %s)",
+			repo.ID, ctx.Doer.Name, repo.Name, subjectName)
+	}
+
+	// Redirect to the editor to create README.md
+	branch := repo.DefaultBranch
+	if branch == "" {
+		branch = setting.Repository.DefaultBranch
+	}
+	editorURL := fmt.Sprintf("%s/%s/%s/_new/%s/README.md",
+		setting.AppSubURL,
+		util.PathEscapeSegments(ctx.Doer.Name),
+		util.PathEscapeSegments(repo.Name),
+		util.PathEscapeSegments(branch))
+	ctx.Redirect(editorURL)
+}
+
+// getRepositoryByOwnerIDAndSubjectID returns a repository by owner ID and subject ID.
+func getRepositoryByOwnerIDAndSubjectID(ctx *context.Context, ownerID, subjectID int64) (*repo_model.Repository, error) {
+	var repo repo_model.Repository
+	has, err := db.GetEngine(ctx).
+		Where("owner_id = ?", ownerID).
+		And("subject_id = ?", subjectID).
+		Get(&repo)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, repo_model.ErrRepoNotExist{ID: 0, UID: ownerID, OwnerName: "", Name: ""}
+	}
+	return &repo, nil
+}
+
+// handleCreateFirstArticleError handles errors during the CreateFirstArticle flow.
+// Unlike handleCreateError, this function uses flash messages and redirects back to the subject page
+// instead of rendering a template, since CreateFirstArticle is a redirect-based flow.
+func handleCreateFirstArticleError(ctx *context.Context, err error, subjectName string) {
+	subjectURL := setting.AppSubURL + "/subject/" + util.PathEscapeSegments(subjectName) + "?view=bubble"
+
+	switch {
+	case repo_model.IsErrReachLimitOfRepo(err):
+		maxCreationLimit := ctx.Doer.MaxCreationLimit()
+		msg := ctx.TrN(maxCreationLimit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", maxCreationLimit)
+		ctx.Flash.Error(msg)
+		ctx.Redirect(subjectURL)
+	case db.IsErrNameReserved(err):
+		ctx.Flash.Error(ctx.Tr("repo.form.name_reserved", err.(db.ErrNameReserved).Name))
+		ctx.Redirect(subjectURL)
+	case db.IsErrNamePatternNotAllowed(err):
+		ctx.Flash.Error(ctx.Tr("repo.form.name_pattern_not_allowed", err.(db.ErrNamePatternNotAllowed).Pattern))
+		ctx.Redirect(subjectURL)
+	default:
+		ctx.ServerError("CreateFirstArticle", err)
+	}
+}

@@ -970,21 +970,24 @@ func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Rep
 	return &repo, nil
 }
 
-// GetSubjectRootRepository returns the root (non-fork) repository for a given subject ID.
-// This function finds the first non-fork repository created for the subject, ordered by creation time.
+// GetSubjectRootRepository returns the root (non-fork, non-empty) repository for a given subject ID.
+// This function finds the first non-fork, non-empty repository created for the subject, ordered by creation time.
+// Only non-empty repositories are considered as roots because the first-article-becomes-root logic
+// should only trigger when a user commits content, not when they create an empty repository.
 // Returns ErrRepoNotExist if no root repository exists for the subject.
 func GetSubjectRootRepository(ctx context.Context, subjectID int64) (*Repository, error) {
 	var repo Repository
 	has, err := db.GetEngine(ctx).
 		Where("subject_id = ?", subjectID).
 		And("is_fork = ?", false).
+		And("is_empty = ?", false).
 		OrderBy("created_unix ASC").
 		Get(&repo)
 	if err != nil {
 		return nil, err
 	}
 	if !has {
-		return nil, ErrRepoNotExist{0, 0, "", ""}
+		return nil, ErrRepoNotExist{ID: 0, UID: 0, OwnerName: "", Name: ""}
 	}
 
 	return &repo, nil

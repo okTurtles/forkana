@@ -454,6 +454,12 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
+	// Check if this is the first content being added to an empty repository with a subject
+	// We need to capture this before the commit because the commit will mark the repo as non-empty
+	wasEmpty := ctx.Repo.Repository.IsEmpty
+	subjectID := ctx.Repo.Repository.SubjectID
+	isNotFork := !ctx.Repo.Repository.IsFork
+
 	_, err := files_service.ChangeRepoFiles(ctx, ctx.Repo.Repository, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: parsed.form.LastCommit,
 		OldBranch:    parsed.OldBranchName,
@@ -474,6 +480,14 @@ func EditFilePost(ctx *context.Context) {
 	if err != nil {
 		editorHandleFileOperationError(ctx, parsed.NewBranchName, err)
 		return
+	}
+
+	// First-article-becomes-root logic:
+	// If this was an empty repository with a subject, and it's not already a fork,
+	// check if there's already a root repository for this subject.
+	// If so, convert this repository to a fork of the root.
+	if wasEmpty && subjectID > 0 && isNotFork && isNewFile {
+		handleFirstArticleBecomesRoot(ctx, subjectID)
 	}
 
 	redirectForCommitChoice(ctx, parsed, parsed.form.TreePath)
@@ -557,4 +571,46 @@ func UploadFilePost(ctx *context.Context) {
 		return
 	}
 	redirectForCommitChoice(ctx, parsed, parsed.form.TreePath)
+}
+
+// handleFirstArticleBecomesRoot handles the first-article-becomes-root logic.
+// When a user commits content to an empty repository with a subject, we need to check
+// if there's already a root repository for that subject. If so, this repository should
+// become a fork of the root. If not, this repository becomes the root.
+func handleFirstArticleBecomesRoot(ctx *context.Context, subjectID int64) {
+	// Check if there's already a root repository for this subject
+	rootRepo, err := repo_model.GetSubjectRootRepository(ctx, subjectID)
+	if err != nil {
+		if repo_model.IsErrRepoNotExist(err) {
+			// No root exists - this repository becomes the root (it's already not a fork)
+			log.Info("Repository %s/%s becomes the root for subject ID %d",
+				ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name, subjectID)
+			return
+		}
+		log.Error("Failed to get root repository for subject %d: %v", subjectID, err)
+		return
+	}
+
+	// A root already exists - convert this repository to a fork of the root
+	if rootRepo.ID == ctx.Repo.Repository.ID {
+		// This repository is the root (shouldn't happen, but just in case)
+		return
+	}
+
+	log.Info("Converting repository %s/%s to fork of root %s/%s for subject ID %d",
+		ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name,
+		rootRepo.OwnerName, rootRepo.Name, subjectID)
+
+	// Update this repository to be a fork of the root
+	ctx.Repo.Repository.IsFork = true
+	ctx.Repo.Repository.ForkID = rootRepo.ID
+	if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, ctx.Repo.Repository, "is_fork", "fork_id"); err != nil {
+		log.Error("Failed to convert repository to fork: %v", err)
+		return
+	}
+
+	// Update the fork count on the root repository
+	if err := repo_model.IncrementRepoForkNum(ctx, rootRepo.ID); err != nil {
+		log.Error("Failed to increment fork count for root repository: %v", err)
+	}
 }
