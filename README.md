@@ -126,15 +126,43 @@ For more information about the individual tools:
 
 </details>
 
-### Useful commands
+### Clean up
 
 To clean up
 
 ```bash
 $ make clean-all
 $ rm -rf data # to remove the sqlite database
-$ make test-e2e-sqlite # run e2e tests
 ```
+
+### Run tests
+
+Run e2e tests
+
+```bash
+$ make test-e2e-sqlite
+```
+
+Run a single psql test:
+
+```bash
+TEST_MINIO_ENDPOINT=localhost:9000 TEST_PGSQL_HOST=localhost:5432 TEST_PGSQL_DBNAME=test
+TEST_PGSQL_USERNAME=postgres TEST_PGSQL_PASSWORD=postgres make test-pgsql#TestJobWithNeeds
+```
+
+Run all pgsql tests:
+
+```bash
+$ TEST_MINIO_ENDPOINT=localhost:9000 TEST_PGSQL_HOST=localhost:5432 TEST_PGSQL_DBNAME=test
+$ TEST_PGSQL_USERNAME=postgres TEST_PGSQL_PASSWORD=postgres make test-pgsql
+```
+
+Requires Docker containers `gitea-pgsql` and `gitea-minio` running.
+
+```bash
+$ docker run -d --name gitea-pgsql -e POSTGRES_DB=test -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:14
+$ docker run -d --name gitea-minio -e MINIO_ROOT_USER=123456 -e MINIO_ROOT_PASSWORD=12345678 -p 9000:9000 bitnamilegacy/minio:2023.8.31
+```  
 
 -----------
 

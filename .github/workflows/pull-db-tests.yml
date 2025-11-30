@@ -12,8 +12,7 @@ jobs:
     uses: ./.github/workflows/files-changed.yml
 
   test-pgsql:
-    # Disabled: original condition was: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
-    if: github.event_name == 'disabled'
+    if: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
     needs: files-changed
     runs-on: ubuntu-latest
     services:
