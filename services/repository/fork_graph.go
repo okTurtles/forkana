@@ -110,10 +110,31 @@ const (
 
 // BuildForkGraph builds the fork graph for a repository
 func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params ForkGraphParams, doer *user_model.User) (*ForkGraphResponse, error) {
-	// Find the root repository (traverse up the fork chain)
-	// This ensures we always build the graph from the true root, even if a fork was passed in
+	// Find the root repository for the fork graph.
+	// Priority:
+	// 1. If the repository has a subject, find the subject's root repository (first non-empty, non-fork repo for that subject)
+	// 2. Otherwise, traverse up the fork chain to find the root
+	// This ensures the bubble view always shows the global subject fork tree, not a user-specific view.
 	rootRepo := repo
-	if repo.IsFork {
+
+	// First, try to find the subject's root repository
+	if repo.SubjectID > 0 {
+		subjectRoot, err := repo_model.GetSubjectRootRepository(ctx, repo.SubjectID)
+		if err == nil {
+			if err := subjectRoot.LoadOwner(ctx); err != nil {
+				log.Warn("Failed to load owner for subject root repository %d: %v. Falling back to fork chain traversal.", subjectRoot.ID, err)
+			} else {
+				rootRepo = subjectRoot
+				log.Info("Repository %s has subject ID %d, using subject root repository %s for fork graph", repo.FullName(), repo.SubjectID, rootRepo.FullName())
+			}
+		} else if !repo_model.IsErrRepoNotExist(err) {
+			log.Warn("Failed to find subject root repository for subject ID %d: %v. Falling back to fork chain traversal.", repo.SubjectID, err)
+		}
+		// If no subject root exists (all repos are empty), fall through to fork chain traversal
+	}
+
+	// If we didn't find a subject root, traverse up the fork chain
+	if rootRepo.ID == repo.ID && repo.IsFork {
 		current := repo
 		for current.IsFork {
 			parent, err := repo_model.GetRepositoryByID(ctx, current.ForkID)
