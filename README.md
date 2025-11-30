@@ -154,7 +154,7 @@ Requires Docker containers `gitea-pgsql` and `gitea-minio` running.
 ```bash
 $ docker run -d --name gitea-pgsql -e POSTGRES_DB=test -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:14
 $ docker run -d --name gitea-minio -e MINIO_ROOT_USER=123456 -e MINIO_ROOT_PASSWORD=12345678 -p 9000:9000 bitnamilegacy/minio:2023.8.31
-```  
+```
 
 Run a single psql test (see details):
 

@@ -221,7 +221,7 @@ jobs:
 }
 
 func TestSkipCI(t *testing.T) {
-	t.Skip("TODO: fix template issue - #new-pull-request element not found")
+	t.Skip("Skipping for Forkana - needs investigation")
 	onGiteaRun(t, func(t *testing.T, u *url.URL) {
 		session := loginUser(t, "user2")
 		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
