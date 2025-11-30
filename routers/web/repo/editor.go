@@ -577,13 +577,20 @@ func UploadFilePost(ctx *context.Context) {
 // When a user commits content to an empty repository with a subject, we need to check
 // if there's already a root repository for that subject. If so, this repository should
 // become a fork of the root. If not, this repository becomes the root.
+//
+// IMPORTANT: We exclude the current repository from the search because at this point,
+// the current repository has already been marked as non-empty (the file was just committed).
+// If we don't exclude it, and the current repo was created before other repos, it would
+// incorrectly be returned as the "root" even though another repo may have had content
+// committed first.
 func handleFirstArticleBecomesRoot(ctx *context.Context, subjectID int64) {
-	// Check if there's already a root repository for this subject
-	rootRepo, err := repo_model.GetSubjectRootRepository(ctx, subjectID)
+	// Check if there's already a root repository for this subject, EXCLUDING the current repository.
+	// This ensures we find repos that had content committed BEFORE the current one.
+	rootRepo, err := repo_model.GetSubjectRootRepositoryExcluding(ctx, subjectID, ctx.Repo.Repository.ID)
 	if err != nil {
 		if repo_model.IsErrRepoNotExist(err) {
-			// No root exists - this repository becomes the root (it's already not a fork)
-			log.Info("Repository %s/%s becomes the root for subject ID %d",
+			// No other root exists - this repository becomes the root (it's already not a fork)
+			log.Info("Repository %s/%s becomes the root for subject ID %d (first article submitted)",
 				ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name, subjectID)
 			return
 		}
@@ -592,11 +599,6 @@ func handleFirstArticleBecomesRoot(ctx *context.Context, subjectID int64) {
 	}
 
 	// A root already exists - convert this repository to a fork of the root
-	if rootRepo.ID == ctx.Repo.Repository.ID {
-		// This repository is the root (shouldn't happen, but just in case)
-		return
-	}
-
 	log.Info("Converting repository %s/%s to fork of root %s/%s for subject ID %d",
 		ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name,
 		rootRepo.OwnerName, rootRepo.Name, subjectID)

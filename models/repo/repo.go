@@ -976,13 +976,27 @@ func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Rep
 // should only trigger when a user commits content, not when they create an empty repository.
 // Returns ErrRepoNotExist if no root repository exists for the subject.
 func GetSubjectRootRepository(ctx context.Context, subjectID int64) (*Repository, error) {
+	return GetSubjectRootRepositoryExcluding(ctx, subjectID, 0)
+}
+
+// GetSubjectRootRepositoryExcluding returns the root (non-fork, non-empty) repository for a given subject ID,
+// excluding a specific repository ID from the search.
+// This is used by the first-article-becomes-root logic to check if there's already a root repository
+// BEFORE the current repository became non-empty. By excluding the current repository, we can determine
+// if another repository was the first to have content committed.
+// Returns ErrRepoNotExist if no root repository exists for the subject (excluding the specified repo).
+func GetSubjectRootRepositoryExcluding(ctx context.Context, subjectID, excludeRepoID int64) (*Repository, error) {
 	var repo Repository
-	has, err := db.GetEngine(ctx).
+	sess := db.GetEngine(ctx).
 		Where("subject_id = ?", subjectID).
 		And("is_fork = ?", false).
-		And("is_empty = ?", false).
-		OrderBy("created_unix ASC").
-		Get(&repo)
+		And("is_empty = ?", false)
+
+	if excludeRepoID > 0 {
+		sess = sess.And("id != ?", excludeRepoID)
+	}
+
+	has, err := sess.OrderBy("created_unix ASC").Get(&repo)
 	if err != nil {
 		return nil, err
 	}
