@@ -390,8 +390,15 @@ type SubjectRepoCounts struct {
 	RootRepoCount int64
 }
 
-// BatchCountRepositoriesBySubjects counts repositories for multiple subjects in a single query
-// Returns a map of subject ID to SubjectRepoCounts
+// BatchCountRepositoriesBySubjects counts repositories for multiple subjects in a single query.
+// It returns a map of subject ID to SubjectRepoCounts containing both total repository count
+// and root (non-fork, non-empty) repository count for each subject.
+//
+// Note: If a subject ID doesn't exist in the database or has no repositories, the returned
+// SubjectRepoCounts will have zero values for RepoCount and RootRepoCount. This is intentional
+// behavior to allow callers to handle missing subjects gracefully. Callers should validate
+// subject existence separately if they need to distinguish between "subject exists with zero
+// repos" and "subject doesn't exist".
 func BatchCountRepositoriesBySubjects(ctx context.Context, subjectIDs []int64) (map[int64]*SubjectRepoCounts, error) {
 	if len(subjectIDs) == 0 {
 		return make(map[int64]*SubjectRepoCounts), nil
