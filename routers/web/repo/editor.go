@@ -5,12 +5,14 @@ package repo
 
 import (
 	"bytes"
+	stdctx "context"
 	"fmt"
 	"io"
 	"net/http"
 	"path"
 	"strings"
 
+	"code.gitea.io/gitea/models/db"
 	git_model "code.gitea.io/gitea/models/git"
 	"code.gitea.io/gitea/models/issues"
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -584,35 +586,40 @@ func UploadFilePost(ctx *context.Context) {
 // incorrectly be returned as the "root" even though another repo may have had content
 // committed first.
 func handleFirstArticleBecomesRoot(ctx *context.Context, subjectID int64) {
-	// Check if there's already a root repository for this subject, EXCLUDING the current repository.
-	// This ensures we find repos that had content committed BEFORE the current one.
-	rootRepo, err := repo_model.GetSubjectRootRepositoryExcluding(ctx, subjectID, ctx.Repo.Repository.ID)
-	if err != nil {
-		if repo_model.IsErrRepoNotExist(err) {
-			// No other root exists - this repository becomes the root (it's already not a fork)
-			log.Info("Repository %s/%s becomes the root for subject ID %d (first article submitted)",
-				ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name, subjectID)
-			return
+	err := db.WithTx(ctx, func(txCtx stdctx.Context) error {
+		// Check if there's already a root repository for this subject, EXCLUDING the current repository.
+		// This ensures we find repos that had content committed BEFORE the current one.
+		rootRepo, err := repo_model.GetSubjectRootRepositoryExcluding(txCtx, subjectID, ctx.Repo.Repository.ID)
+		if err != nil {
+			if repo_model.IsErrRepoNotExist(err) {
+				// No other root exists - this repository becomes the root (it's already not a fork)
+				log.Info("Repository %s/%s becomes the root for subject ID %d (first article submitted)",
+					ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name, subjectID)
+				return nil
+			}
+			return fmt.Errorf("failed to get root repository: %w", err)
 		}
-		log.Error("Failed to get root repository for subject %d: %v", subjectID, err)
-		return
-	}
 
-	// A root already exists - convert this repository to a fork of the root
-	log.Info("Converting repository %s/%s to fork of root %s/%s for subject ID %d",
-		ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name,
-		rootRepo.OwnerName, rootRepo.Name, subjectID)
+		// A root already exists - convert this repository to a fork of the root
+		log.Info("Converting repository %s/%s to fork of root %s/%s for subject ID %d",
+			ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name,
+			rootRepo.OwnerName, rootRepo.Name, subjectID)
 
-	// Update this repository to be a fork of the root
-	ctx.Repo.Repository.IsFork = true
-	ctx.Repo.Repository.ForkID = rootRepo.ID
-	if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, ctx.Repo.Repository, "is_fork", "fork_id"); err != nil {
-		log.Error("Failed to convert repository to fork: %v", err)
-		return
-	}
+		// Update this repository to be a fork of the root
+		ctx.Repo.Repository.IsFork = true
+		ctx.Repo.Repository.ForkID = rootRepo.ID
+		if err := repo_model.UpdateRepositoryColsNoAutoTime(txCtx, ctx.Repo.Repository, "is_fork", "fork_id"); err != nil {
+			return fmt.Errorf("failed to convert repository to fork: %w", err)
+		}
 
-	// Update the fork count on the root repository
-	if err := repo_model.IncrementRepoForkNum(ctx, rootRepo.ID); err != nil {
-		log.Error("Failed to increment fork count for root repository: %v", err)
+		// Update the fork count on the root repository
+		if err := repo_model.IncrementRepoForkNum(txCtx, rootRepo.ID); err != nil {
+			return fmt.Errorf("failed to increment fork count: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Error("handleFirstArticleBecomesRoot failed: %v", err)
 	}
 }
