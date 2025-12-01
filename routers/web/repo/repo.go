@@ -40,6 +40,10 @@ import (
 const (
 	tplCreate       templates.TplName = "repo/create"
 	tplAlertDetails templates.TplName = "base/alert_details"
+
+	// maxRepoNameAttempts is the maximum number of attempts to find a unique repository name
+	// by appending numeric suffixes (e.g., "repo-2", "repo-3", ..., "repo-100").
+	maxRepoNameAttempts = 100
 )
 
 // MustBeNotEmpty render when a repo is a empty git dir
@@ -688,7 +692,7 @@ func CreateFirstArticle(ctx *context.Context) {
 			if repo_model.IsErrRepoAlreadyExist(err) {
 				// Try to find a unique name by appending a number
 				found := false
-				for i := 2; i <= 100; i++ {
+				for i := 2; i <= maxRepoNameAttempts; i++ {
 					candidateName := fmt.Sprintf("%s-%d", repoName, i)
 					checkErr := repo_model.CheckCreateRepository(ctx, ctx.Doer, ctx.Doer, candidateName, false)
 					if checkErr == nil {
