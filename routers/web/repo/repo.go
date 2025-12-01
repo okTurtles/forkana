@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -686,12 +687,25 @@ func CreateFirstArticle(ctx *context.Context) {
 		if err := repo_model.CheckCreateRepository(ctx, ctx.Doer, ctx.Doer, repoName, false); err != nil {
 			if repo_model.IsErrRepoAlreadyExist(err) {
 				// Try to find a unique name by appending a number
+				found := false
 				for i := 2; i <= 100; i++ {
 					candidateName := fmt.Sprintf("%s-%d", repoName, i)
-					if err := repo_model.CheckCreateRepository(ctx, ctx.Doer, ctx.Doer, candidateName, false); err == nil {
+					checkErr := repo_model.CheckCreateRepository(ctx, ctx.Doer, ctx.Doer, candidateName, false)
+					if checkErr == nil {
 						repoName = candidateName
+						found = true
 						break
 					}
+					if !repo_model.IsErrRepoAlreadyExist(checkErr) {
+						// Non-existence error (e.g., invalid name, permission issue)
+						handleCreateFirstArticleError(ctx, checkErr, subjectName)
+						return
+					}
+				}
+				if !found {
+					ctx.Flash.Error(ctx.Tr("repo.form.name_pattern_not_allowed", repoName))
+					ctx.Redirect(fmt.Sprintf("%s/subject/%s", setting.AppSubURL, url.PathEscape(subjectName)))
+					return
 				}
 			} else {
 				handleCreateFirstArticleError(ctx, err, subjectName)
