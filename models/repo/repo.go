@@ -913,7 +913,7 @@ func GetRepositoryByOwnerAndName(ctx context.Context, ownerName, repoName string
 	if err != nil {
 		return nil, err
 	} else if !has {
-		return nil, ErrRepoNotExist{0, 0, ownerName, repoName}
+		return nil, ErrRepoNotExist{ID: 0, UID: 0, OwnerName: ownerName, Name: repoName}
 	}
 	return &repo, nil
 }
@@ -929,7 +929,7 @@ func GetRepositoryByName(ctx context.Context, ownerID int64, name string) (*Repo
 	if err != nil {
 		return nil, err
 	} else if !has {
-		return nil, ErrRepoNotExist{0, ownerID, "", name}
+		return nil, ErrRepoNotExist{ID: 0, UID: ownerID, OwnerName: "", Name: name}
 	}
 	return &repo, err
 }
@@ -1028,7 +1028,7 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 	if err != nil {
 		return nil, err
 	} else if !has {
-		return nil, ErrRepoNotExist{0, 0, ownerName, subjectName}
+		return nil, ErrRepoNotExist{ID: 0, UID: 0, OwnerName: ownerName, Name: subjectName}
 	}
 
 	// Load the subject relation
@@ -1065,7 +1065,7 @@ func GetRepositoryByID(ctx context.Context, id int64) (*Repository, error) {
 	if err != nil {
 		return nil, err
 	} else if !has {
-		return nil, ErrRepoNotExist{id, 0, "", ""}
+		return nil, ErrRepoNotExist{ID: id, UID: 0, OwnerName: "", Name: ""}
 	}
 	return repo, nil
 }
