@@ -287,6 +287,31 @@ func pushNewBranch(ctx context.Context, repo *repo_model.Repository, pusher *use
 			return nil, fmt.Errorf("UpdateRepositoryCols: %w", err)
 		}
 
+		// First-article-becomes-root logic:
+		// When a repository with a subject becomes non-empty, check if another repository
+		// with the same subject has already become non-empty (making it the root).
+		// If so, convert this repository to a fork of that root.
+		if repo.SubjectID > 0 && !repo.IsFork {
+			// Check for an existing root repository (excluding this one)
+			rootRepo, err := repo_model.GetSubjectRootRepositoryExcluding(ctx, repo.SubjectID, repo.ID)
+			if err == nil && rootRepo != nil {
+				// Another repository is already the root - convert this one to a fork
+				log.Info("Repository %s (ID: %d) became non-empty after root %s (ID: %d) for subject ID %d. Converting to fork.",
+					repo.FullName(), repo.ID, rootRepo.FullName(), rootRepo.ID, repo.SubjectID)
+				if err := ConvertNormalToForkRepository(ctx, repo, rootRepo.ID); err != nil {
+					log.Error("Failed to convert repository %s to fork of %s: %v", repo.FullName(), rootRepo.FullName(), err)
+					// Don't return error - the push should still succeed, just without the fork relationship
+				} else {
+					// Update local copy to reflect the change
+					repo.IsFork = true
+					repo.ForkID = rootRepo.ID
+				}
+			} else if err != nil && !repo_model.IsErrRepoNotExist(err) {
+				log.Warn("Failed to check for existing root repository for subject ID %d: %v", repo.SubjectID, err)
+			}
+			// If no root exists, this repository becomes the root (no action needed)
+		}
+
 		// Trigger contributor stats generation for newly non-empty repositories
 		// This ensures stats are ready when the bubble view is first loaded
 		go func() {

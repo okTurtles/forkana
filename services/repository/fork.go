@@ -285,6 +285,40 @@ func ConvertForkToNormalRepository(ctx context.Context, repo *repo_model.Reposit
 	})
 }
 
+// ConvertNormalToForkRepository converts a normal repository to a fork of the specified root repository.
+// This is used by the first-article-becomes-root logic when a repository becomes non-empty
+// after another repository with the same subject has already become the root.
+func ConvertNormalToForkRepository(ctx context.Context, repo *repo_model.Repository, rootRepoID int64) error {
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		// Re-fetch the repo within the transaction to ensure consistency
+		repo, err := repo_model.GetRepositoryByID(ctx, repo.ID)
+		if err != nil {
+			return err
+		}
+
+		// Already a fork - nothing to do
+		if repo.IsFork {
+			return nil
+		}
+
+		// Don't try to fork from ourselves
+		if repo.ID == rootRepoID {
+			return nil
+		}
+
+		// Increment the fork count on the root repository
+		if err := repo_model.IncrementRepoForkNum(ctx, rootRepoID); err != nil {
+			log.Error("Unable to increment repo fork num for root repo %d when converting repository %-v to fork. Error: %v", rootRepoID, repo, err)
+			return err
+		}
+
+		// Update this repository to be a fork
+		repo.IsFork = true
+		repo.ForkID = rootRepoID
+		return repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "is_fork", "fork_id")
+	})
+}
+
 type findForksOptions struct {
 	db.ListOptions
 	RepoID int64

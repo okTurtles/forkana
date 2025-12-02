@@ -116,6 +116,7 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 	// 2. Otherwise, traverse up the fork chain to find the root
 	// This ensures the bubble view always shows the global subject fork tree, not a user-specific view.
 	rootRepo := repo
+	foundNonEmptyRoot := false
 
 	// First, try to find the subject's root repository
 	if repo.SubjectID > 0 {
@@ -125,6 +126,7 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 				log.Warn("Failed to load owner for subject root repository %d: %v. Falling back to fork chain traversal.", subjectRoot.ID, err)
 			} else {
 				rootRepo = subjectRoot
+				foundNonEmptyRoot = true
 				log.Info("Repository %s has subject ID %d, using subject root repository %s for fork graph", repo.FullName(), repo.SubjectID, rootRepo.FullName())
 			}
 		} else if !repo_model.IsErrRepoNotExist(err) {
@@ -149,7 +151,27 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 			current = parent
 		}
 		rootRepo = current
+		if !rootRepo.IsEmpty {
+			foundNonEmptyRoot = true
+		}
 		log.Info("Repository %s is a fork, building fork graph from root repository %s", repo.FullName(), rootRepo.FullName())
+	}
+
+	// If the root repository is empty and we didn't find a non-empty root through subject lookup,
+	// return an empty graph. This triggers the "Create first article" UI in the frontend.
+	// Empty repositories should not be shown as bubbles - only repositories with actual content count.
+	if !foundNonEmptyRoot && rootRepo.IsEmpty {
+		log.Info("Repository %s is empty and no non-empty root exists for subject ID %d. Returning empty graph.", repo.FullName(), repo.SubjectID)
+		return &ForkGraphResponse{
+			Root: nil,
+			Metadata: GraphMetadata{
+				TotalForks:      0,
+				VisibleForks:    0,
+				MaxDepthReached: false,
+				CacheStatus:     "miss",
+				GeneratedAt:     time.Now(),
+			},
+		}, nil
 	}
 
 	// Create context with timeout
