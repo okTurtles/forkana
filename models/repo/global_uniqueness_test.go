@@ -90,7 +90,8 @@ func TestCheckCreateRepositoryGlobalUnique(t *testing.T) {
 	err = repo_model.CheckCreateRepositoryGlobalUnique(ctx, user, user, "repo1", "Different Subject", false)
 	assert.NoError(t, err, "Different owners should be able to have repositories with the same name")
 
-	// Create a test subject and repository to test subject uniqueness
+	// Create a test subject and repository to test that subjects are NOT globally unique
+	// (multiple users can create repositories for the same subject - first-article-becomes-root logic handles this)
 	globalSubject, err := repo_model.GetOrCreateSubject(ctx, "Global Test Subject")
 	assert.NoError(t, err)
 
@@ -107,13 +108,15 @@ func TestCheckCreateRepositoryGlobalUnique(t *testing.T) {
 	_, err = db.GetEngine(ctx).Insert(testRepo)
 	assert.NoError(t, err)
 
-	// Test with existing subject (should fail - subjects are globally unique)
-	err = repo_model.CheckCreateRepositoryGlobalUnique(ctx, user, user, "another-unique-repo", "Global Test Subject", false)
-	assert.True(t, repo_model.IsErrRepoSubjectGloballyTaken(err), "Should fail when subject is already taken globally")
+	// Test with existing subject (should succeed - subjects are NOT globally unique)
+	// The first-article-becomes-root logic in CreateRepositoryDirectly handles the case
+	// where a subject already has a root repository by automatically forking from it
+	err = repo_model.CheckCreateRepositoryGlobalUnique(ctx, user2, user2, "another-unique-repo", "Global Test Subject", false)
+	assert.NoError(t, err, "Different users should be able to create repositories for the same subject")
 
-	// Test with empty subject (should fail - empty subjects are not allowed)
+	// Test with empty subject (should succeed at this level - empty subject validation happens elsewhere)
 	err = repo_model.CheckCreateRepositoryGlobalUnique(ctx, user, user, "repo-without-subject", "", false)
-	assert.True(t, repo_model.IsErrRepoSubjectGloballyTaken(err), "Should fail when subject is empty")
+	assert.NoError(t, err, "Empty subject should be allowed at this validation level")
 
 	// Clean up
 	_, err = db.GetEngine(ctx).Delete(testRepo)

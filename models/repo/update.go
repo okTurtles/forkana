@@ -153,27 +153,18 @@ func CheckCreateRepository(ctx context.Context, doer, owner *user_model.User, na
 	return nil
 }
 
-// CheckCreateRepositoryGlobalUnique checks repository creation permissions and subject global uniqueness
+// CheckCreateRepositoryGlobalUnique checks repository creation permissions.
 // Note: Repository names are validated for owner-scoped uniqueness only (via CheckCreateRepository),
 // not global uniqueness. This aligns with standard Git forge behavior where multiple owners can have
 // repositories with the same name (e.g., user1/myrepo and user2/myrepo can coexist).
-// Subjects, however, must be globally unique across the entire system.
+//
+// Subject uniqueness is NOT checked here because multiple users can create repositories for the
+// same subject. The first-article-becomes-root logic in CreateRepositoryDirectly handles the case
+// where a subject already has a root repository by automatically forking from it instead of
+// creating a new root.
 func CheckCreateRepositoryGlobalUnique(ctx context.Context, doer, owner *user_model.User, name, subject string, overwriteOrAdopt bool) error {
-	// First run the existing validation (owner-scoped repository name uniqueness)
-	if err := CheckCreateRepository(ctx, doer, owner, name, overwriteOrAdopt); err != nil {
-		return err
-	}
-
-	// Check global uniqueness for repository subject
-	isSubjectUnique, err := IsRepositorySubjectGloballyUnique(ctx, subject)
-	if err != nil {
-		return fmt.Errorf("failed to check global subject uniqueness: %w", err)
-	}
-	if !isSubjectUnique {
-		return ErrRepoSubjectGloballyTaken{Subject: subject}
-	}
-
-	return nil
+	// Run the existing validation (owner-scoped repository name uniqueness)
+	return CheckCreateRepository(ctx, doer, owner, name, overwriteOrAdopt)
 }
 
 // UpdateRepoSize updates the repository size, calculating it using getDirectorySize

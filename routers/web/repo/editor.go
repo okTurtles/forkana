@@ -5,17 +5,21 @@ package repo
 
 import (
 	"bytes"
+	stdctx "context"
 	"fmt"
 	"io"
 	"net/http"
 	"path"
 	"strings"
 
+	"code.gitea.io/gitea/models/db"
 	git_model "code.gitea.io/gitea/models/git"
 	"code.gitea.io/gitea/models/issues"
+	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/charset"
 	"code.gitea.io/gitea/modules/git"
+	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/markup"
@@ -26,6 +30,7 @@ import (
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/context/upload"
 	"code.gitea.io/gitea/services/forms"
+	repo_service "code.gitea.io/gitea/services/repository"
 	files_service "code.gitea.io/gitea/services/repository/files"
 )
 
@@ -59,8 +64,13 @@ func prepareEditorCommitFormOptions(ctx *context.Context, editorAction string) *
 	}
 
 	if commitFormOptions.NeedFork {
-		ForkToEdit(ctx)
-		return nil
+		if strings.EqualFold(ctx.Repo.TreePath, "README.md") {
+			// We allow this now for the auto-fork feature
+		} else {
+			redirectURL := fmt.Sprintf("%s/_new/%s/README.md", ctx.Repo.RepoLink, util.PathEscapeSegments(ctx.Repo.BranchName))
+			ctx.Redirect(redirectURL)
+			return nil
+		}
 	}
 
 	if commitFormOptions.WillSubmitToFork && !commitFormOptions.TargetRepo.CanEnableEditor() {
@@ -82,7 +92,12 @@ func prepareEditorCommitFormOptions(ctx *context.Context, editorAction string) *
 	ctx.Data["commit_summary"] = ""
 	ctx.Data["commit_message"] = ""
 	ctx.Data["commit_choice"] = util.Iif(commitFormOptions.CanCommitToBranch, editorCommitChoiceDirect, editorCommitChoiceNewBranch)
-	ctx.Data["new_branch_name"] = getUniquePatchBranchName(ctx, ctx.Doer.LowerName, commitFormOptions.TargetRepo)
+	targetRepo := commitFormOptions.TargetRepo
+	if targetRepo == nil && commitFormOptions.NeedFork {
+		targetRepo = ctx.Repo.Repository
+		commitFormOptions.TargetRepo = targetRepo
+	}
+	ctx.Data["new_branch_name"] = getUniquePatchBranchName(ctx, ctx.Doer.LowerName, targetRepo)
 	ctx.Data["last_commit"] = ctx.Repo.CommitID
 	return commitFormOptions
 }
@@ -124,7 +139,7 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 		ctx.ServerError("PrepareCommitFormOptions", err)
 		return nil
 	}
-	if commitFormOptions.NeedFork {
+	if commitFormOptions.NeedFork && !strings.EqualFold(commonForm.TreePath, "README.md") {
 		// It shouldn't happen, because we should have done the checks in the "GET" request. But just in case.
 		ctx.JSONError(ctx.Locale.TrString("error.not_found"))
 		return nil
@@ -134,12 +149,12 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 	fromBaseBranch := ctx.FormString("from_base_branch")
 	commitToNewBranch := commonForm.CommitChoice == editorCommitChoiceNewBranch || fromBaseBranch != ""
 	targetBranchName := util.Iif(commitToNewBranch, commonForm.NewBranchName, ctx.Repo.BranchName)
-	if targetBranchName == ctx.Repo.BranchName && !commitFormOptions.CanCommitToBranch {
+	if targetBranchName == ctx.Repo.BranchName && !commitFormOptions.CanCommitToBranch && !commitFormOptions.NeedFork {
 		ctx.JSONError(ctx.Tr("repo.editor.cannot_commit_to_protected_branch", targetBranchName))
 		return nil
 	}
 
-	if !issues.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
+	if !commitFormOptions.NeedFork && !issues.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
 		ctx.NotFound(nil)
 		return nil
 	}
@@ -153,7 +168,12 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 
 	if commitToNewBranch {
 		// if target branch exists, we should stop
-		targetBranchExists, err := git_model.IsBranchExist(ctx, commitFormOptions.TargetRepo.ID, targetBranchName)
+		targetRepo := commitFormOptions.TargetRepo
+		if targetRepo == nil && commitFormOptions.NeedFork {
+			targetRepo = ctx.Repo.Repository
+			commitFormOptions.TargetRepo = targetRepo
+		}
+		targetBranchExists, err := git_model.IsBranchExist(ctx, targetRepo.ID, targetBranchName)
 		if err != nil {
 			ctx.ServerError("IsBranchExist", err)
 			return nil
@@ -168,7 +188,7 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 	}
 
 	oldBranchName := ctx.Repo.BranchName
-	if fromBaseBranch != "" {
+	if fromBaseBranch != "" && !commitFormOptions.NeedFork {
 		err = editorPushBranchToForkedRepository(ctx, ctx.Doer, ctx.Repo.Repository.BaseRepo, fromBaseBranch, commitFormOptions.TargetRepo, targetBranchName)
 		if err != nil {
 			log.Error("Unable to editorPushBranchToForkedRepository: %v", err)
@@ -345,6 +365,80 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
+	if parsed.CommitFormOptions.NeedFork {
+		baseRepo := ctx.Repo.Repository
+		forkedRepo := ForkRepoTo(ctx, ctx.Doer, repo_service.ForkRepoOptions{
+			BaseRepo:     baseRepo,
+			Name:         getUniqueRepositoryName(ctx, ctx.Doer.ID, baseRepo.Name),
+			Description:  baseRepo.Description,
+			SingleBranch: baseRepo.DefaultBranch,
+		})
+		if ctx.Written() {
+			return
+		}
+
+		// Check if the base repository has a README
+		// If not, we should promote the new fork to be the root repository
+		// This is to handle the case where a user creates a subject (empty repo) and another user
+		// contributes the first content (README). The contributor should become the owner of the "main" repo.
+		hasReadme := false
+		if !baseRepo.IsEmpty {
+			// Check for README in the default branch
+			gitRepo, err := gitrepo.OpenRepository(ctx, baseRepo)
+			if err != nil {
+				log.Error("OpenRepository failed: %v", err)
+			} else {
+				defer gitRepo.Close()
+				commit, err := gitRepo.GetBranchCommit(baseRepo.DefaultBranch)
+				if err != nil {
+					log.Error("GetBranchCommit failed: %v", err)
+				} else {
+					entry, err := commit.GetTreeEntryByPath("README.md")
+					if err == nil && entry != nil {
+						hasReadme = true
+					} else {
+						// Try other common names
+						entry, err = commit.GetTreeEntryByPath("readme.md")
+						if err == nil && entry != nil {
+							hasReadme = true
+						}
+					}
+				}
+			}
+		}
+
+		if !hasReadme {
+			// Swap fork status
+			// 1. Promote forkedRepo to root
+			forkedRepo.IsFork = false
+			forkedRepo.ForkID = 0
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, forkedRepo, "is_fork", "fork_id"); err != nil {
+				log.Error("Failed to update forked repo to root: %v", err)
+			}
+
+			// 2. Demote baseRepo to fork
+			baseRepo.IsFork = true
+			baseRepo.ForkID = forkedRepo.ID
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, baseRepo, "is_fork", "fork_id"); err != nil {
+				log.Error("Failed to update base repo to fork: %v", err)
+			}
+
+			// If base repo was empty, the fork is also empty.
+			// We should commit to the default branch instead of a patch branch.
+			if baseRepo.IsEmpty {
+				parsed.NewBranchName = forkedRepo.DefaultBranch
+				if parsed.NewBranchName == "" {
+					parsed.NewBranchName = setting.Repository.DefaultBranch
+				}
+				parsed.OldBranchName = ""
+			}
+		}
+
+		ctx.Repo.Repository = forkedRepo
+		ctx.Repo.Owner = ctx.Doer
+		ctx.Repo.RepoLink = forkedRepo.Link()
+	}
+
 	defaultCommitMessage := util.Iif(isNewFile, ctx.Locale.TrString("repo.editor.add", parsed.form.TreePath), ctx.Locale.TrString("repo.editor.update", parsed.form.TreePath))
 
 	var operation string
@@ -361,6 +455,12 @@ func EditFilePost(ctx *context.Context) {
 		ctx.JSONError(ctx.Tr("error.occurred"))
 		return
 	}
+
+	// Check if this is the first content being added to an empty repository with a subject
+	// We need to capture this before the commit because the commit will mark the repo as non-empty
+	wasEmpty := ctx.Repo.Repository.IsEmpty
+	subjectID := ctx.Repo.Repository.SubjectID
+	isNotFork := !ctx.Repo.Repository.IsFork
 
 	_, err := files_service.ChangeRepoFiles(ctx, ctx.Repo.Repository, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: parsed.form.LastCommit,
@@ -382,6 +482,14 @@ func EditFilePost(ctx *context.Context) {
 	if err != nil {
 		editorHandleFileOperationError(ctx, parsed.NewBranchName, err)
 		return
+	}
+
+	// First-article-becomes-root logic:
+	// If this was an empty repository with a subject, and it's not already a fork,
+	// check if there's already a root repository for this subject.
+	// If so, convert this repository to a fork of the root.
+	if wasEmpty && subjectID > 0 && isNotFork && isNewFile {
+		handleFirstArticleBecomesRoot(ctx, subjectID)
 	}
 
 	redirectForCommitChoice(ctx, parsed, parsed.form.TreePath)
@@ -465,4 +573,53 @@ func UploadFilePost(ctx *context.Context) {
 		return
 	}
 	redirectForCommitChoice(ctx, parsed, parsed.form.TreePath)
+}
+
+// handleFirstArticleBecomesRoot handles the first-article-becomes-root logic.
+// When a user commits content to an empty repository with a subject, we need to check
+// if there's already a root repository for that subject. If so, this repository should
+// become a fork of the root. If not, this repository becomes the root.
+//
+// IMPORTANT: We exclude the current repository from the search because at this point,
+// the current repository has already been marked as non-empty (the file was just committed).
+// If we don't exclude it, and the current repo was created before other repos, it would
+// incorrectly be returned as the "root" even though another repo may have had content
+// committed first.
+func handleFirstArticleBecomesRoot(ctx *context.Context, subjectID int64) {
+	err := db.WithTx(ctx, func(txCtx stdctx.Context) error {
+		// Check if there's already a root repository for this subject, EXCLUDING the current repository.
+		// This ensures we find repos that had content committed BEFORE the current one.
+		rootRepo, err := repo_model.GetSubjectRootRepositoryExcluding(txCtx, subjectID, ctx.Repo.Repository.ID)
+		if err != nil {
+			if repo_model.IsErrRepoNotExist(err) {
+				// No other root exists - this repository becomes the root (it's already not a fork)
+				log.Info("Repository %s/%s becomes the root for subject ID %d (first article submitted)",
+					ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name, subjectID)
+				return nil
+			}
+			return fmt.Errorf("failed to get root repository: %w", err)
+		}
+
+		// A root already exists - convert this repository to a fork of the root
+		log.Info("Converting repository %s/%s to fork of root %s/%s for subject ID %d",
+			ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name,
+			rootRepo.OwnerName, rootRepo.Name, subjectID)
+
+		// Update this repository to be a fork of the root
+		ctx.Repo.Repository.IsFork = true
+		ctx.Repo.Repository.ForkID = rootRepo.ID
+		if err := repo_model.UpdateRepositoryColsNoAutoTime(txCtx, ctx.Repo.Repository, "is_fork", "fork_id"); err != nil {
+			return fmt.Errorf("failed to convert repository to fork: %w", err)
+		}
+
+		// Update the fork count on the root repository
+		if err := repo_model.IncrementRepoForkNum(txCtx, rootRepo.ID); err != nil {
+			return fmt.Errorf("failed to increment fork count: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Error("handleFirstArticleBecomesRoot failed: %v", err)
+	}
 }

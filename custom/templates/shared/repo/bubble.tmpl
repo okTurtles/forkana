@@ -6,7 +6,7 @@
         data-repo="{{.Repository.Name}}"
         data-subject="{{.Repository.GetSubject ctx}}"
         data-default-branch="{{.Repository.DefaultBranch}}"
-        data-api-url="{{AppSubUrl}}/api/v1/repos/{{.Repository.Owner.Name}}/{{.Repository.Name}}/forks/graph">
+        data-api-url="{{AppSubUrl}}/api/v1/repos/{{.Repository.Owner.Name}}/{{.Repository.Name}}/forks/graph?include_contributors=true&contributor_days=90">
     </div>
 </div>
 {{end}}

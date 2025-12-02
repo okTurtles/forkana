@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -253,17 +254,99 @@ func FindSubjects(ctx context.Context, opts FindSubjectsOptions) ([]*Subject, in
 // FindSubjectsOptions represents options for finding subjects
 type FindSubjectsOptions struct {
 	db.ListOptions
-	Keyword string
-	OrderBy string
+	Keyword        string
+	OrderBy        string
+	ExcludeIDs     []int64 // IDs to exclude from results
+	ExactMatchOnly bool    // Only find exact matches
 }
 
 // ToConds converts options to database conditions
 func (opts FindSubjectsOptions) ToConds() builder.Cond {
 	cond := builder.NewCond()
 	if opts.Keyword != "" {
-		cond = cond.And(builder.Like{"LOWER(name)", opts.Keyword})
+		if opts.ExactMatchOnly {
+			// Exact match on name
+			cond = cond.And(builder.Eq{"LOWER(name)": strings.ToLower(opts.Keyword)})
+		} else {
+			// Fuzzy match using LIKE
+			cond = cond.And(builder.Like{"LOWER(name)", strings.ToLower(opts.Keyword)})
+		}
+	}
+	if len(opts.ExcludeIDs) > 0 {
+		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
 	return cond
+}
+
+// FindSimilarSubjects finds subjects similar to the given keyword
+// It returns subjects that partially match the keyword, excluding exact matches
+func FindSimilarSubjects(ctx context.Context, keyword string, limit int, excludeIDs []int64) ([]*Subject, error) {
+	if keyword == "" {
+		return nil, nil
+	}
+
+	keyword = strings.ToLower(strings.TrimSpace(keyword))
+
+	// Find subjects that contain the keyword but are not exact matches
+	subjects := make([]*Subject, 0, limit)
+	err := db.GetEngine(ctx).
+		Where("LOWER(name) LIKE ? AND LOWER(name) != ?", "%"+keyword+"%", keyword).
+		NotIn("id", excludeIDs).
+		OrderBy("updated_unix DESC").
+		Limit(limit).
+		Find(&subjects)
+	if err != nil {
+		return nil, err
+	}
+
+	// Calculate similarity scores and sort by relevance
+	type subjectWithScore struct {
+		subject *Subject
+		score   int
+	}
+
+	scoredSubjects := make([]subjectWithScore, 0, len(subjects))
+	for _, subject := range subjects {
+		score := calculateSimilarityScore(keyword, strings.ToLower(subject.Name))
+		scoredSubjects = append(scoredSubjects, subjectWithScore{subject, score})
+	}
+
+	// Sort by score (lower is better) using O(n log n) algorithm
+	slices.SortFunc(scoredSubjects, func(a, b subjectWithScore) int {
+		return a.score - b.score
+	})
+
+	// Extract sorted subjects
+	result := make([]*Subject, 0, len(scoredSubjects))
+	for _, s := range scoredSubjects {
+		result = append(result, s.subject)
+	}
+
+	return result, nil
+}
+
+// calculateSimilarityScore calculates a similarity score between keyword and subject name
+// Lower score means more similar
+// 1 = starts with keyword, 2 = contains keyword at word boundary, 3 = contains keyword anywhere
+func calculateSimilarityScore(keyword, subjectName string) int {
+	keyword = strings.ToLower(keyword)
+	subjectName = strings.ToLower(subjectName)
+
+	// Check if subject name starts with keyword
+	if strings.HasPrefix(subjectName, keyword) {
+		return 1
+	}
+
+	// Check if keyword appears at word boundary
+	words := strings.FieldsSeq(subjectName)
+	for word := range words {
+		if strings.HasPrefix(word, keyword) {
+			return 2
+		}
+	}
+
+	// Keyword is contained somewhere in the name
+	return 3
 }
 
 // SubjectSortType represents the sort type for subjects
@@ -293,9 +376,83 @@ func CountRepositoriesBySubject(ctx context.Context, subjectID int64) (int64, er
 	return db.GetEngine(ctx).Where("subject_id = ?", subjectID).Count(new(Repository))
 }
 
-// CountRootRepositoriesBySubject counts the number of root (non-fork) repositories for a given subject
+// CountRootRepositoriesBySubject counts the number of root (non-fork, non-empty) repositories for a given subject.
+// Only non-empty repositories are considered as potential roots because the first-article-becomes-root
+// logic should only trigger when a user commits content, not when they create an empty repository.
 func CountRootRepositoriesBySubject(ctx context.Context, subjectID int64) (int64, error) {
-	return db.GetEngine(ctx).Where("subject_id = ? AND is_fork = ?", subjectID, false).Count(new(Repository))
+	return db.GetEngine(ctx).Where("subject_id = ? AND is_fork = ? AND is_empty = ?", subjectID, false, false).Count(new(Repository))
+}
+
+// SubjectRepoCounts holds repository counts for a subject
+type SubjectRepoCounts struct {
+	SubjectID     int64
+	RepoCount     int64
+	RootRepoCount int64
+}
+
+// BatchCountRepositoriesBySubjects counts repositories for multiple subjects in a single query.
+// It returns a map of subject ID to SubjectRepoCounts containing both total repository count
+// and root (non-fork, non-empty) repository count for each subject.
+//
+// Note: If a subject ID doesn't exist in the database or has no repositories, the returned
+// SubjectRepoCounts will have zero values for RepoCount and RootRepoCount. This is intentional
+// behavior to allow callers to handle missing subjects gracefully. Callers should validate
+// subject existence separately if they need to distinguish between "subject exists with zero
+// repos" and "subject doesn't exist".
+func BatchCountRepositoriesBySubjects(ctx context.Context, subjectIDs []int64) (map[int64]*SubjectRepoCounts, error) {
+	if len(subjectIDs) == 0 {
+		return make(map[int64]*SubjectRepoCounts), nil
+	}
+
+	// Initialize result map with zero counts for all requested subjects
+	result := make(map[int64]*SubjectRepoCounts, len(subjectIDs))
+	for _, id := range subjectIDs {
+		result[id] = &SubjectRepoCounts{SubjectID: id}
+	}
+
+	// Count all repositories per subject
+	type countResult struct {
+		SubjectID int64 `xorm:"subject_id"`
+		Count     int64 `xorm:"count"`
+	}
+
+	var allCounts []countResult
+	err := db.GetEngine(ctx).
+		Table("repository").
+		Select("subject_id, COUNT(*) as count").
+		In("subject_id", subjectIDs).
+		GroupBy("subject_id").
+		Find(&allCounts)
+	if err != nil {
+		return nil, fmt.Errorf("count all repositories: %w", err)
+	}
+
+	for _, c := range allCounts {
+		if counts, ok := result[c.SubjectID]; ok {
+			counts.RepoCount = c.Count
+		}
+	}
+
+	// Count root (non-fork) repositories per subject
+	var rootCounts []countResult
+	err = db.GetEngine(ctx).
+		Table("repository").
+		Select("subject_id, COUNT(*) as count").
+		In("subject_id", subjectIDs).
+		And("is_fork = ?", false).
+		GroupBy("subject_id").
+		Find(&rootCounts)
+	if err != nil {
+		return nil, fmt.Errorf("count root repositories: %w", err)
+	}
+
+	for _, c := range rootCounts {
+		if counts, ok := result[c.SubjectID]; ok {
+			counts.RootRepoCount = c.Count
+		}
+	}
+
+	return result, nil
 }
 
 // ErrSubjectNotExist represents a "SubjectNotExist" error
