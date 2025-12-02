@@ -1,29 +1,36 @@
 {{define "shared/repo/history"}}
 {{if .IsArticleModeHistory}}
 <div class="ui bottom attached">
-    <div>
-        <h2 class="tw-text-xl tw-font-semibold tw-m-0">
-            {{/* owner / repo */}}
-            {{if .Repository.Owner}}
-                <a class="tw-text-primary" href="{{.Repository.Owner.HomeLink}}">{{.Repository.Owner.Name}}</a>
-                <span class="tw-text-gray-400">/</span>
-            {{end}}
-            <a class="muted" href="{{.RepoLink}}">{{.Repository.Name}}</a>
-        </h2>
-        <div class="tw-mt-1 tw-text-sm tw-text-gray-600">
-            {{if .Repository.IsFork}}
-                <span class="tw-inline-flex tw-items-center">
-                    {{svg "octicon-repo-forked" 14 "tw-mr-1"}}
-                    Forked of:
-                    {{if .Repository.BaseRepo}}
-                        {{/* Go html/template automatically HTML-escapes these strings to prevent XSS */}}
-                        <a class="tw-ml-1" href="{{.Repository.BaseRepo.Link}}">{{.Repository.BaseRepo.OwnerName}} / {{.Repository.BaseRepo.Name}}</a>
-                    {{else}}
-                        {{/* Go html/template automatically HTML-escapes these strings to prevent XSS */}}
-                        <span class="tw-ml-1">{{.Repository.Owner.Name}} / {{.Repository.Name}}</span>
-                    {{end}}
-                </span>
-            {{end}}
+    <div class="tw-mb-4 tw-flex tw-items-center tw-justify-between">
+        <div>
+            <h2 class="tw-text-xl tw-font-semibold tw-m-0">
+                {{/* owner / repo */}}
+                {{if .Repository.Owner}}
+                    <a class="tw-text-primary" href="{{.Repository.Owner.HomeLink}}">{{.Repository.Owner.Name}}</a>
+                    <span class="tw-text-gray-400">/</span>
+                {{end}}
+                <a class="muted" href="{{.RepoLink}}">{{.Repository.Name}}</a>
+            </h2>
+            <div class="tw-mt-1 tw-text-sm tw-text-gray-600">
+                {{if .Repository.IsFork}}
+                    <span class="tw-inline-flex tw-items-center">
+                        {{svg "octicon-repo-forked" 14 "tw-mr-1"}}
+                        Forked of:
+                        {{if .Repository.BaseRepo}}
+                            {{/* Go html/template automatically HTML-escapes these strings to prevent XSS */}}
+                            <a class="tw-ml-1" href="{{.Repository.BaseRepo.Link}}">{{.Repository.BaseRepo.OwnerName}} / {{.Repository.BaseRepo.Name}}</a>
+                        {{else}}
+                            {{/* Go html/template automatically HTML-escapes these strings to prevent XSS */}}
+                            <span class="tw-ml-1">{{.Repository.Owner.Name}} / {{.Repository.Name}}</span>
+                        {{end}}
+                    </span>
+                {{end}}
+            </div>
+        </div>
+        <div class="tw-flex tw-items-center tw-gap-3">
+            <a class="tw-font-bold tw-inline-flex tw-items-center muted" href="#" data-global-click="onCopyContentButtonClick" data-clipboard-text="{{.Repository.Owner.Name}}/{{.Repository.Name}}@{{.BranchName}}">
+                {{svg "octicon-link" 14 "tw-mr-1"}} CopyRef
+            </a>
         </div>
     </div>
     {{if .Commits}}
@@ -56,7 +63,7 @@
                             </div>
                         </td>
                         <td class="sha">
-                            <a href="{{$.RepoLink}}/commit/{{.ID.String}}" rel="nofollow" class="muted">
+                            <a href="{{or $.ArticleLink $.RepoLink}}?version={{.ID.String}}" rel="nofollow" class="muted">
                                 {{ShortSha .ID.String}}
                             </a>
                         </td>
@@ -71,7 +78,7 @@
                             <td class="tw-text-right">{{DateUtils.TimeSince .Author.When}}</td>
                         {{end}}
                         <td class="tw-text-right tw-py-0">
-                            <a class="btn interact-bg tw-p-2" data-tooltip-content="{{ctx.Locale.Tr "repo.commits.view_path"}}" href="{{$.RepoLink}}/src/commit/{{PathEscape .ID.String}}/{{PathEscapeSegments $.ReadmeTreePath}}">
+                            <a class="btn interact-bg tw-p-2" data-tooltip-content="{{ctx.Locale.Tr "repo.commits.view_path"}}" href="{{$.RepoLink}}?version={{PathEscape .ID.String}}">
                                 {{if $.Repository.IsFork}}
                                     {{svg "octicon-repo-forked" 16}}
                                 {{else}}

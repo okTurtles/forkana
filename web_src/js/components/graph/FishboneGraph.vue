@@ -254,7 +254,6 @@ interface FishboneGraphProps {
   repo?: string | null;
   subject?: string | null;
   defaultBranch?: string | null;
-  signedInUser?: string | null;
 
   // API query parameters (with sensible defaults from constants)
   includeContributors?: boolean;
@@ -270,7 +269,6 @@ const props = withDefaults(defineProps<FishboneGraphProps>(), {
   repo: null,
   subject: null,
   defaultBranch: null,
-  signedInUser: null,
   includeContributors: true,
   contributorDays: API_CONTRIBUTOR_DAYS,
   maxDepth: API_MAX_DEPTH,
@@ -1117,7 +1115,6 @@ function onBubbleView(n: Node){
           :repo="props.repo"
           :subject="props.subject"
           :default-branch="props.defaultBranch"
-          :signed-in-user="props.signedInUser"
         />
       </div>
       <!-- End graph-container -->

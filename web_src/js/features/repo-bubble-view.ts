@@ -13,7 +13,6 @@ export async function initRepoBubbleView() {
     repo: (el as HTMLElement).getAttribute('data-repo'),
     subject: (el as HTMLElement).getAttribute('data-subject'),
     defaultBranch: (el as HTMLElement).getAttribute('data-default-branch'),
-    signedInUser: (el as HTMLElement).getAttribute('data-signed-in-user') || null,
   });
   app.mount(el);
   (el as HTMLElement).setAttribute('data-mounted', 'true');

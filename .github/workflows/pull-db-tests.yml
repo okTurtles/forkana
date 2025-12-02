@@ -12,7 +12,7 @@ jobs:
     uses: ./.github/workflows/files-changed.yml
 
   test-pgsql:
-    if: false # needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
+    if: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
     needs: files-changed
     runs-on: ubuntu-latest
     services:
@@ -62,7 +62,8 @@ jobs:
           USE_REPO_TEST_DIR: 1
 
   test-sqlite:
-    if: false # needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
+    # Disabled: original condition was: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
+    if: github.event_name == 'disabled'
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
@@ -149,7 +150,8 @@ jobs:
           GITHUB_READ_TOKEN: ${{ secrets.GITHUB_READ_TOKEN }}
 
   test-mysql:
-    if: false # needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
+    # Disabled: original condition was: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
+    if: github.event_name == 'disabled'
     needs: files-changed
     runs-on: ubuntu-latest
     services:
@@ -200,7 +202,8 @@ jobs:
           TEST_INDEXER_CODE_ES_URL: "http://elastic:changeme@elasticsearch:9200"
 
   test-mssql:
-    if: false # needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
+    # Disabled: original condition was: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
+    if: github.event_name == 'disabled'
     needs: files-changed
     runs-on: ubuntu-latest
     services:

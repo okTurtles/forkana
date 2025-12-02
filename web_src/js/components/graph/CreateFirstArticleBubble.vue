@@ -4,7 +4,6 @@ const props = defineProps<{
   repo: string | null;
   subject?: string | null;
   defaultBranch?: string | null;
-  signedInUser?: string | null;
 }>();
 
 function handleCreateArticle(event: Event) {
