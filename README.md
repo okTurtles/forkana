@@ -166,6 +166,18 @@ $ TEST_MINIO_ENDPOINT=localhost:9000 TEST_PGSQL_HOST=localhost:5432 TEST_PGSQL_D
 
 </details>
 
+Run all mysql tests:
+
+```bash
+$ TEST_MYSQL_HOST=localhost:3306 TEST_MYSQL_DBNAME=testgitea TEST_MYSQL_USERNAME=root TEST_MYSQL_PASSWORD= make test-mysql
+```
+
+Requires Docker container `gitea-mysql` running.
+
+```bash
+$ docker run -d --name gitea-mysql -e MYSQL_DATABASE=testgitea -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -p 3306:3306 mysql:8
+```
+
 -----------
 
 # Gitea
