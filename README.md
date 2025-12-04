@@ -143,6 +143,12 @@ Run e2e tests
 $ make test-e2e-sqlite
 ```
 
+Run all sqlite tests:
+
+```bash
+$ make test-sqlite
+```
+
 Run all pgsql tests:
 
 ```bash
@@ -178,10 +184,17 @@ Requires Docker container `gitea-mysql` running.
 $ docker run -d --name gitea-mysql -e MYSQL_DATABASE=testgitea -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -p 3306:3306 mysql:8
 ```
 
-Run all sqlite tests:
+Run all mssql tests:
 
 ```bash
-$ make test-sqlite
+$ TEST_MSSQL_HOST=localhost:1433 TEST_MSSQL_DBNAME=gitea TEST_MSSQL_USERNAME=sa TEST_MSSQL_PASSWORD=MwantsaSecurePassword1 make test-mssql
+```
+
+Requires Docker containers `gitea-mssql` and `gitea-azurite` running.
+
+```bash
+$ docker run -d --name gitea-mssql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD=MwantsaSecurePassword1 -p 1433:1433 mcr.microsoft.com/mssql/server:latest
+$ docker run -d --name gitea-azurite -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob --blobHost 0.0.0.0 --blobPort 10000
 ```
 
 -----------
