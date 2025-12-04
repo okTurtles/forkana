@@ -178,6 +178,12 @@ Requires Docker container `gitea-mysql` running.
 $ docker run -d --name gitea-mysql -e MYSQL_DATABASE=testgitea -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -p 3306:3306 mysql:8
 ```
 
+Run all sqlite tests:
+
+```bash
+$ make test-sqlite
+```
+
 -----------
 
 # Gitea
