@@ -172,31 +172,6 @@ $ TEST_MINIO_ENDPOINT=localhost:9000 TEST_PGSQL_HOST=localhost:5432 TEST_PGSQL_D
 
 </details>
 
-Run all mysql tests:
-
-```bash
-$ TEST_MYSQL_HOST=localhost:3306 TEST_MYSQL_DBNAME=testgitea TEST_MYSQL_USERNAME=root TEST_MYSQL_PASSWORD= make test-mysql
-```
-
-Requires Docker container `gitea-mysql` running.
-
-```bash
-$ docker run -d --name gitea-mysql -e MYSQL_DATABASE=testgitea -e MYSQL_ALLOW_EMPTY_PASSWORD=yes -p 3306:3306 mysql:8
-```
-
-Run all mssql tests:
-
-```bash
-$ TEST_MSSQL_HOST=localhost:1433 TEST_MSSQL_DBNAME=gitea TEST_MSSQL_USERNAME=sa TEST_MSSQL_PASSWORD=MwantsaSecurePassword1 make test-mssql
-```
-
-Requires Docker containers `gitea-mssql` and `gitea-azurite` running.
-
-```bash
-$ docker run -d --name gitea-mssql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD=MwantsaSecurePassword1 -p 1433:1433 mcr.microsoft.com/mssql/server:latest
-$ docker run -d --name gitea-azurite -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob --blobHost 0.0.0.0 --blobPort 10000
-```
-
 -----------
 
 # Gitea
