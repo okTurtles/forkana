@@ -143,6 +143,12 @@ Run e2e tests
 $ make test-e2e-sqlite
 ```
 
+Run all sqlite tests:
+
+```bash
+$ make test-sqlite
+```
+
 Run all pgsql tests:
 
 ```bash
