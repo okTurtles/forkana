@@ -306,6 +306,17 @@ func ConvertNormalToForkRepository(ctx context.Context, repo *repo_model.Reposit
 			return nil
 		}
 
+		// Fetch the root repository to check fork tree limits
+		rootRepo, err := repo_model.GetRepositoryByID(ctx, rootRepoID)
+		if err != nil {
+			return err
+		}
+
+		// Check if fork tree has reached maximum size limit
+		if err := checkForkTreeSizeLimit(ctx, rootRepo); err != nil {
+			return err
+		}
+
 		// Increment the fork count on the root repository
 		if err := repo_model.IncrementRepoForkNum(ctx, rootRepoID); err != nil {
 			log.Error("Unable to increment repo fork num for root repo %d when converting repository %-v to fork. Error: %v", rootRepoID, repo, err)

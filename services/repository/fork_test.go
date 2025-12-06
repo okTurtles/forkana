@@ -215,22 +215,76 @@ func TestConvertNormalToForkRepository(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Try to convert to fork of non-existent repository
-		// This should fail because IncrementRepoForkNum will try to update a non-existent repo
-		// Note: The current implementation doesn't validate root existence before incrementing
-		// The increment will succeed (updating 0 rows) but won't cause an error
+		// This should fail because the root repository doesn't exist
 		err = ConvertNormalToForkRepository(t.Context(), normalRepo, 999999)
-		// The function doesn't return an error for non-existent root (UPDATE affects 0 rows)
-		assert.NoError(t, err)
+		assert.Error(t, err)
+		assert.True(t, repo_model.IsErrRepoNotExist(err))
 
-		// Verify the repo was still converted (even though root doesn't exist)
-		// This is a potential issue - the function should validate root existence
-		convertedRepo, err := repo_model.GetRepositoryByID(t.Context(), normalRepo.ID)
+		// Verify the repo was NOT converted (still not a fork)
+		unconvertedRepo, err := repo_model.GetRepositoryByID(t.Context(), normalRepo.ID)
 		assert.NoError(t, err)
-		assert.True(t, convertedRepo.IsFork)
-		assert.Equal(t, int64(999999), convertedRepo.ForkID)
+		assert.False(t, unconvertedRepo.IsFork)
+		assert.Equal(t, int64(0), unconvertedRepo.ForkID)
 
 		// Cleanup
 		_ = DeleteRepositoryDirectly(t.Context(), normalRepo.ID)
+	})
+
+	t.Run("ForkTreeLimitEnforced", func(t *testing.T) {
+		assert.NoError(t, unittest.PrepareTestDatabase())
+
+		// Save original setting
+		originalLimit := setting.Repository.MaxForkTreeNodes
+		defer func() {
+			setting.Repository.MaxForkTreeNodes = originalLimit
+		}()
+
+		// Create a root repository
+		rootRepo, err := CreateRepositoryDirectly(t.Context(), user2, user2, CreateRepoOptions{
+			Name: "fork-limit-test-root",
+		}, true)
+		assert.NoError(t, err)
+		rootRepo.IsEmpty = false
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "is_empty"))
+
+		// Create a normal repository to convert
+		normalRepo, err := CreateRepositoryDirectly(t.Context(), user4, user4, CreateRepoOptions{
+			Name: "fork-limit-test-normal",
+		}, true)
+		assert.NoError(t, err)
+		assert.False(t, normalRepo.IsFork)
+
+		// Set limit to 0 (prevent all forking)
+		setting.Repository.MaxForkTreeNodes = 0
+		err = ConvertNormalToForkRepository(t.Context(), normalRepo, rootRepo.ID)
+		assert.Error(t, err)
+		assert.True(t, repo_model.IsErrForkTreeTooLarge(err))
+
+		// Verify the repo was NOT converted
+		unconvertedRepo, err := repo_model.GetRepositoryByID(t.Context(), normalRepo.ID)
+		assert.NoError(t, err)
+		assert.False(t, unconvertedRepo.IsFork)
+
+		// Set limit to 1 (only root allowed) - should also fail
+		setting.Repository.MaxForkTreeNodes = 1
+		err = ConvertNormalToForkRepository(t.Context(), normalRepo, rootRepo.ID)
+		assert.Error(t, err)
+		assert.True(t, repo_model.IsErrForkTreeTooLarge(err))
+
+		// Set limit to -1 (disabled) - should succeed
+		setting.Repository.MaxForkTreeNodes = -1
+		err = ConvertNormalToForkRepository(t.Context(), normalRepo, rootRepo.ID)
+		assert.NoError(t, err)
+
+		// Verify the repo was converted
+		convertedRepo, err := repo_model.GetRepositoryByID(t.Context(), normalRepo.ID)
+		assert.NoError(t, err)
+		assert.True(t, convertedRepo.IsFork)
+		assert.Equal(t, rootRepo.ID, convertedRepo.ForkID)
+
+		// Cleanup
+		_ = DeleteRepositoryDirectly(t.Context(), normalRepo.ID)
+		_ = DeleteRepositoryDirectly(t.Context(), rootRepo.ID)
 	})
 }
 
