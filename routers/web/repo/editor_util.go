@@ -92,11 +92,15 @@ func getUniqueRepositoryName(ctx context.Context, ownerID int64, name string) st
 	uniqueName := name
 	for i := 1; i < 1000; i++ {
 		_, err := repo_model.GetRepositoryByName(ctx, ownerID, uniqueName)
-		if err != nil || repo_model.IsErrRepoNotExist(err) {
+		if repo_model.IsErrRepoNotExist(err) {
 			return uniqueName
 		}
+		if err != nil {
+			// Unexpected database error - log and return empty to let user type manually
+			log.Error("getUniqueRepositoryName: %v", err)
+			return ""
+		}
 		uniqueName = fmt.Sprintf("%s-%d", name, i)
-		i++
 	}
 	return ""
 }
