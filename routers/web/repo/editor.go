@@ -408,19 +408,28 @@ func EditFilePost(ctx *context.Context) {
 		}
 
 		if !hasReadme {
-			// Swap fork status
-			// 1. Promote forkedRepo to root
-			forkedRepo.IsFork = false
-			forkedRepo.ForkID = 0
-			if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, forkedRepo, "is_fork", "fork_id"); err != nil {
-				log.Error("Failed to update forked repo to root: %v", err)
-			}
+			// Swap fork status atomically in a transaction
+			err := db.WithTx(ctx, func(txCtx stdctx.Context) error {
+				// 1. Promote forkedRepo to root
+				forkedRepo.IsFork = false
+				forkedRepo.ForkID = 0
+				if err := repo_model.UpdateRepositoryColsNoAutoTime(txCtx, forkedRepo, "is_fork", "fork_id"); err != nil {
+					return fmt.Errorf("failed to update forked repo to root: %w", err)
+				}
 
-			// 2. Demote baseRepo to fork
-			baseRepo.IsFork = true
-			baseRepo.ForkID = forkedRepo.ID
-			if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, baseRepo, "is_fork", "fork_id"); err != nil {
-				log.Error("Failed to update base repo to fork: %v", err)
+				// 2. Demote baseRepo to fork
+				baseRepo.IsFork = true
+				baseRepo.ForkID = forkedRepo.ID
+				if err := repo_model.UpdateRepositoryColsNoAutoTime(txCtx, baseRepo, "is_fork", "fork_id"); err != nil {
+					return fmt.Errorf("failed to update base repo to fork: %w", err)
+				}
+
+				return nil
+			})
+			if err != nil {
+				log.Error("Failed to swap fork status: %v", err)
+				ctx.ServerError("SwapForkStatus", err)
+				return
 			}
 
 			// If base repo was empty, the fork is also empty.
@@ -586,40 +595,37 @@ func UploadFilePost(ctx *context.Context) {
 // incorrectly be returned as the "root" even though another repo may have had content
 // committed first.
 func handleFirstArticleBecomesRoot(ctx *context.Context, subjectID int64) {
-	err := db.WithTx(ctx, func(txCtx stdctx.Context) error {
-		// Check if there's already a root repository for this subject, EXCLUDING the current repository.
-		// This ensures we find repos that had content committed BEFORE the current one.
-		rootRepo, err := repo_model.GetSubjectRootRepositoryExcluding(txCtx, subjectID, ctx.Repo.Repository.ID)
-		if err != nil {
-			if repo_model.IsErrRepoNotExist(err) {
-				// No other root exists - this repository becomes the root (it's already not a fork)
-				log.Info("Repository %s/%s becomes the root for subject ID %d (first article submitted)",
-					ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name, subjectID)
-				return nil
-			}
-			return fmt.Errorf("failed to get root repository: %w", err)
-		}
-
-		// A root already exists - convert this repository to a fork of the root
-		log.Info("Converting repository %s/%s to fork of root %s/%s for subject ID %d",
-			ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name,
-			rootRepo.OwnerName, rootRepo.Name, subjectID)
-
-		// Update this repository to be a fork of the root
-		ctx.Repo.Repository.IsFork = true
-		ctx.Repo.Repository.ForkID = rootRepo.ID
-		if err := repo_model.UpdateRepositoryColsNoAutoTime(txCtx, ctx.Repo.Repository, "is_fork", "fork_id"); err != nil {
-			return fmt.Errorf("failed to convert repository to fork: %w", err)
-		}
-
-		// Update the fork count on the root repository
-		if err := repo_model.IncrementRepoForkNum(txCtx, rootRepo.ID); err != nil {
-			return fmt.Errorf("failed to increment fork count: %w", err)
-		}
-
-		return nil
-	})
+	// Check if there's already a root repository for this subject, EXCLUDING the current repository.
+	// This ensures we find repos that had content committed BEFORE the current one.
+	rootRepo, err := repo_model.GetSubjectRootRepositoryExcluding(ctx, subjectID, ctx.Repo.Repository.ID)
 	if err != nil {
-		log.Error("handleFirstArticleBecomesRoot failed: %v", err)
+		if repo_model.IsErrRepoNotExist(err) {
+			// No other root exists - this repository becomes the root (it's already not a fork)
+			log.Info("Repository %s/%s becomes the root for subject ID %d (first article submitted)",
+				ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name, subjectID)
+			return
+		}
+		log.Error("handleFirstArticleBecomesRoot: failed to get root repository: %v", err)
+		return
 	}
+
+	// A root already exists - convert this repository to a fork of the root
+	// Use ConvertNormalToForkRepository which includes fork tree limit checks
+	log.Info("Converting repository %s/%s to fork of root %s/%s for subject ID %d",
+		ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name,
+		rootRepo.OwnerName, rootRepo.Name, subjectID)
+
+	if err := repo_service.ConvertNormalToForkRepository(ctx, ctx.Repo.Repository, rootRepo.ID); err != nil {
+		if repo_model.IsErrForkTreeTooLarge(err) {
+			log.Warn("handleFirstArticleBecomesRoot: fork tree limit reached for subject ID %d, repository %s/%s will remain as root",
+				subjectID, ctx.Repo.Repository.OwnerName, ctx.Repo.Repository.Name)
+			return
+		}
+		log.Error("handleFirstArticleBecomesRoot: failed to convert to fork: %v", err)
+		return
+	}
+
+	// Update local copy to reflect the change
+	ctx.Repo.Repository.IsFork = true
+	ctx.Repo.Repository.ForkID = rootRepo.ID
 }
