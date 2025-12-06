@@ -289,10 +289,12 @@ func FindSimilarSubjects(ctx context.Context, keyword string, limit int, exclude
 
 	// Find subjects that contain the keyword but are not exact matches
 	subjects := make([]*Subject, 0, limit)
-	err := db.GetEngine(ctx).
-		Where("LOWER(name) LIKE ? AND LOWER(name) != ?", "%"+keyword+"%", keyword).
-		NotIn("id", excludeIDs).
-		OrderBy("updated_unix DESC").
+	sess := db.GetEngine(ctx).
+		Where("LOWER(name) LIKE ? AND LOWER(name) != ?", "%"+keyword+"%", keyword)
+	if len(excludeIDs) > 0 {
+		sess = sess.NotIn("id", excludeIDs)
+	}
+	err := sess.OrderBy("updated_unix DESC").
 		Limit(limit).
 		Find(&subjects)
 	if err != nil {
