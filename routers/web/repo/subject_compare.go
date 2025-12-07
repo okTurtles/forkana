@@ -1,4 +1,4 @@
-// Copyright 2025 The Gitea Authors. All rights reserved.
+// Copyright 2025 okTurtles Foundation. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package repo
@@ -12,6 +12,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/gitrepo"
+	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/gitdiff"
@@ -128,13 +129,17 @@ func CompareReadme(ctx *context.Context) {
 	// Generate diff using diffmatchpatch
 	diff := generateReadmeDiff(readme1Content, readme2Content, readme1Name, readme2Name)
 
+	// Get contributor counts for both repos
+	repo1ContributorCount := getContributorCount(ctx, repo1)
+	repo2ContributorCount := getContributorCount(ctx, repo2)
+
 	// Set up template data
 	ctx.Data["Title"] = "Point of Contention: " + owner1 + " vs " + owner2
 	ctx.Data["Subject"] = subject
 	ctx.Data["Repo1"] = repo1
 	ctx.Data["Repo2"] = repo2
-	//ctx.Data["Repo1ContributorCount"] = repo1.GetContributorCount()
-	//ctx.Data["Repo2ContributorCount"] = repo2.GetContributorCount()
+	ctx.Data["Repo1ContributorCount"] = repo1ContributorCount
+	ctx.Data["Repo2ContributorCount"] = repo2ContributorCount
 	ctx.Data["Owner1"] = owner1
 	ctx.Data["Owner2"] = owner2
 	ctx.Data["Readme1Content"] = readme1Content
@@ -199,6 +204,27 @@ func getReadmeContent(ctx *context.Context, repo *repo_model.Repository) (conten
 	}
 
 	return "", "", ErrReadmeNotFound
+}
+
+// getContributorCount retrieves the contributor count for a repository
+func getContributorCount(ctx *context.Context, repo *repo_model.Repository) int64 {
+	if repo.IsEmpty {
+		return 0
+	}
+
+	gitRepo, err := gitrepo.OpenRepository(ctx, repo)
+	if err != nil {
+		log.Warn("Failed to open repository %s for contributor count: %v", repo.FullName(), err)
+		return 0
+	}
+	defer gitRepo.Close()
+
+	count, err := gitRepo.GetContributorCount(repo.DefaultBranch)
+	if err != nil {
+		log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
+		return 0
+	}
+	return count
 }
 
 // generateReadmeDiff generates a diff between two README contents
