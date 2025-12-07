@@ -1,0 +1,54 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content explore subjects">
+	<div class="ui container">
+		{{template "explore/navbar" .}}
+
+		<h2 class="ui header tw-mt-4">
+			{{svg "octicon-git-compare" 24}}
+			Point of contention
+			<div class="sub header">
+				Short description about how these two articles differ.
+			</div>
+		</h2>
+
+		{{if and (not .Readme1Name) (not .Readme2Name)}}
+			<div class="ui warning message">
+				<p>{{svg "octicon-alert" 16}} The subjects are empty.</p>
+			</div>
+		{{else if and (eq .Readme1Content .Readme2Content) .Readme1Name .Readme2Name}}
+			<div class="ui info message">
+				<p>{{svg "octicon-check" 16}} The articles are identical.</p>
+			</div>
+		{{else}}
+			<div id="diff-container">
+				{{if .Diff}}
+					<div id="diff-file-boxes" class="sixteen wide column">
+						{{range $i, $file := .Diff.Files}}
+							<div class="diff-file-box file-content tw-mt-0" id="diff-{{$file.NameHash}}">
+								<h4 class="diff-file-header sticky-2nd-row ui top attached header">
+									<div class="diff-file-name tw-flex tw-flex-1 tw-items-center tw-gap-1 tw-flex-wrap">
+										<span class="file tw-flex tw-items-center tw-font-mono tw-flex-1">
+											<span class="muted file-link" title="Contributer count">Contributer count</span>
+										</span>
+										<span class="file tw-flex tw-items-center tw-font-mono tw-flex-1">
+											<span class="muted file-link" title="Contributer count">Contributer count</span>
+										</span>
+									</div>
+								</h4>
+								<div class="diff-file-body ui attached unstackable table segment">
+									<div class="file-body file-code unicode-escaped code-diff code-diff-split">
+										<table class="chroma" data-path="{{$file.Name}}">
+											{{template "repo/diff/subject_compare_section" dict "file" $file "root" $ }}
+										</table>
+									</div>
+								</div>
+							</div>
+						{{end}}
+					</div>
+				{{end}}
+			</div>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}
+
