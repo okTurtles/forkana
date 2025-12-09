@@ -1226,12 +1226,6 @@ func registerWebRoutes(m *web.Router) {
 	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
 	// end "/article/{username}/{subjectname}": article-based file operations
 
-	// Article-based file operation routes - mirror the repository-based routes but use subject name
-	m.Group("/article/{username}/{subjectname}", func() {
-		registerRepoFileEditorRoutes(m, reqRepoCodeWriter)
-	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
-	// end "/article/{username}/{subjectname}": article-based file operations
-
 	// user/org home, including rss feeds like "/{username}/{reponame}.rss"
 	m.Get("/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, repo.Home)
 

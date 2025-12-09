@@ -317,8 +317,9 @@ func pushNewBranch(ctx context.Context, repo *repo_model.Repository, pusher *use
 		go func() {
 			c := cache.GetCache()
 			if c != nil {
-				// Trigger stats generation asynchronously (will be cached for future use)
-				_, _ = GetContributorStats(ctx, c, repo, repo.DefaultBranch)
+				// Use background context since this runs after the request may complete
+				bgCtx := context.Background()
+				_, _ = GetContributorStats(bgCtx, c, repo, repo.DefaultBranch)
 			}
 		}()
 	}
