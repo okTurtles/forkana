@@ -62,33 +62,37 @@ func CompareReadme(ctx *context.Context) {
 	}
 
 	// Get both repositories
-	repo1, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, owner1, subjectName)
+	repos, err := repo_model.GetRepositoriesBySubjectIDAndOwners(ctx, subject.ID, []string{owner1, owner2})
 	if err != nil {
-		if repo_model.IsErrRepoNotExist(err) || repo_model.IsErrSubjectNotExist(err) {
-			ctx.NotFound(err)
-		} else {
-			ctx.ServerError("GetRepositoryByOwnerAndSubject (repo1)", err)
-		}
+		ctx.ServerError("GetRepositoriesBySubjectIDAndOwners", err)
 		return
 	}
 
-	repo2, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, owner2, subjectName)
-	if err != nil {
-		if repo_model.IsErrRepoNotExist(err) || repo_model.IsErrSubjectNotExist(err) {
-			ctx.NotFound(err)
-		} else {
-			ctx.ServerError("GetRepositoryByOwnerAndSubject (repo2)", err)
+	// Find repo1 and repo2 from the results
+	var repo1, repo2 *repo_model.Repository
+	for _, r := range repos {
+		if strings.EqualFold(r.OwnerName, owner1) {
+			repo1 = r
+			repo1.SubjectRelation = subject
+		} else if strings.EqualFold(r.OwnerName, owner2) {
+			repo2 = r
+			repo2.SubjectRelation = subject
 		}
+	}
+
+	// Check if both repositories were found
+	if repo1 == nil {
+		ctx.NotFound(repo_model.ErrRepoNotExist{OwnerName: owner1})
+		return
+	}
+	if repo2 == nil {
+		ctx.NotFound(repo_model.ErrRepoNotExist{OwnerName: owner2})
 		return
 	}
 
 	// Load owners for both repos
-	if err := repo1.LoadOwner(ctx); err != nil {
-		ctx.ServerError("LoadOwner (repo1)", err)
-		return
-	}
-	if err := repo2.LoadOwner(ctx); err != nil {
-		ctx.ServerError("LoadOwner (repo2)", err)
+	if err := repos.LoadOwners(ctx); err != nil {
+		ctx.ServerError("LoadOwners", err)
 		return
 	}
 

@@ -977,6 +977,34 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 	return &repo, nil
 }
 
+// GetRepositoriesBySubjectIDAndOwners returns repositories for the given subject ID and owner names.
+// This is an optimized batch query that fetches multiple repositories in a single database call.
+// The returned slice may have fewer elements than ownerNames if some owners don't have repos for this subject.
+func GetRepositoriesBySubjectIDAndOwners(ctx context.Context, subjectID int64, ownerNames []string) (RepositoryList, error) {
+	if len(ownerNames) == 0 {
+		return nil, nil
+	}
+
+	// Normalize owner names to lowercase for case-insensitive matching
+	lowerOwnerNames := make([]string, len(ownerNames))
+	for i, name := range ownerNames {
+		lowerOwnerNames[i] = strings.ToLower(name)
+	}
+
+	var repos []*Repository
+	err := db.GetEngine(ctx).Table("repository").Select("repository.*").
+		Join("INNER", "`user`", "`user`.id = repository.owner_id").
+		Where("repository.subject_id = ?", subjectID).
+		In("`user`.lower_name", lowerOwnerNames).
+		NoAutoCondition().
+		Find(&repos)
+	if err != nil {
+		return nil, err
+	}
+
+	return repos, nil
+}
+
 // GetRepositoryByURL returns the repository by given url
 func GetRepositoryByURL(ctx context.Context, repoURL string) (*Repository, error) {
 	ret, err := giturl.ParseRepositoryURL(ctx, repoURL)
