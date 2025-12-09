@@ -367,9 +367,14 @@ func EditFilePost(ctx *context.Context) {
 
 	if parsed.CommitFormOptions.NeedFork {
 		baseRepo := ctx.Repo.Repository
+		repoName := getUniqueRepositoryName(ctx, ctx.Doer.ID, baseRepo.Name)
+		if repoName == "" {
+			ctx.ServerError("getUniqueRepositoryName", fmt.Errorf("failed to generate unique repository name"))
+			return
+		}
 		forkedRepo := ForkRepoTo(ctx, ctx.Doer, repo_service.ForkRepoOptions{
 			BaseRepo:     baseRepo,
-			Name:         getUniqueRepositoryName(ctx, ctx.Doer.ID, baseRepo.Name),
+			Name:         repoName,
 			Description:  baseRepo.Description,
 			SingleBranch: baseRepo.DefaultBranch,
 		})

@@ -288,14 +288,16 @@ func FindSimilarSubjects(ctx context.Context, keyword string, limit int, exclude
 	keyword = strings.ToLower(strings.TrimSpace(keyword))
 
 	// Find subjects that contain the keyword but are not exact matches
-	subjects := make([]*Subject, 0, limit)
+	// Fetch more results than needed for better scoring, then trim to limit after sorting
+	fetchLimit := limit * 2
+	subjects := make([]*Subject, 0, fetchLimit)
 	sess := db.GetEngine(ctx).
 		Where("LOWER(name) LIKE ? AND LOWER(name) != ?", "%"+keyword+"%", keyword)
 	if len(excludeIDs) > 0 {
 		sess = sess.NotIn("id", excludeIDs)
 	}
 	err := sess.OrderBy("updated_unix DESC").
-		Limit(limit).
+		Limit(fetchLimit).
 		Find(&subjects)
 	if err != nil {
 		return nil, err
@@ -318,10 +320,14 @@ func FindSimilarSubjects(ctx context.Context, keyword string, limit int, exclude
 		return a.score - b.score
 	})
 
-	// Extract sorted subjects
-	result := make([]*Subject, 0, len(scoredSubjects))
-	for _, s := range scoredSubjects {
-		result = append(result, s.subject)
+	// Extract sorted subjects, trimmed to original limit
+	resultLimit := limit
+	if len(scoredSubjects) < resultLimit {
+		resultLimit = len(scoredSubjects)
+	}
+	result := make([]*Subject, 0, resultLimit)
+	for i := 0; i < resultLimit; i++ {
+		result = append(result, scoredSubjects[i].subject)
 	}
 
 	return result, nil

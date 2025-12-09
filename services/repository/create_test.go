@@ -338,3 +338,85 @@ func TestFirstArticleBecomesRoot_SequentialWithContent(t *testing.T) {
 	_ = DeleteRepositoryDirectly(t.Context(), repo2.ID)
 	_ = DeleteRepositoryDirectly(t.Context(), repo1.ID)
 }
+
+// TestFirstArticleBecomesRoot_ConcurrentWithContentRace tests the scenario where
+// concurrent repository creations happen while one becomes non-empty during the race.
+// This verifies that transaction isolation works correctly when determining fork status.
+func TestFirstArticleBecomesRoot_ConcurrentWithContentRace(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// Get multiple users for concurrent creation
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	user5 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+	subjectName := "test-concurrent-race-subject"
+
+	// User 2 creates an empty repository first
+	repo1, err := CreateRepositoryDirectly(t.Context(), user2, user2, CreateRepoOptions{
+		Name:    "race-article-1",
+		Subject: subjectName,
+	}, true)
+	require.NoError(t, err)
+	require.NotNil(t, repo1)
+	assert.True(t, repo1.IsEmpty)
+	assert.False(t, repo1.IsFork)
+
+	// Now simulate a race condition:
+	// 1. User 2's repo becomes non-empty (simulating content being added)
+	// 2. Meanwhile, User 4 and User 5 try to create repos concurrently
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var repos []*repo_model.Repository
+	var errors []error
+
+	// Make repo1 non-empty to establish it as the root
+	repo1.IsEmpty = false
+	err = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo1, "is_empty")
+	require.NoError(t, err)
+
+	// Now create concurrent repos - they should all become forks of repo1
+	users := []*user_model.User{user4, user5}
+	for i, user := range users {
+		wg.Add(1)
+		go func(u *user_model.User, idx int) {
+			defer wg.Done()
+			repo, err := CreateRepositoryDirectly(t.Context(), u, u, CreateRepoOptions{
+				Name:    "race-article",
+				Subject: subjectName,
+			}, true)
+			mu.Lock()
+			repos = append(repos, repo)
+			errors = append(errors, err)
+			mu.Unlock()
+		}(user, i)
+	}
+
+	wg.Wait()
+
+	// Count results
+	var successCount, forkCount int
+	for i, repo := range repos {
+		if errors[i] != nil {
+			continue
+		}
+		successCount++
+		if repo.IsFork {
+			forkCount++
+			// Verify fork points to repo1
+			assert.Equal(t, repo1.ID, repo.ForkID, "Fork should point to repo1")
+		}
+	}
+
+	// Both should succeed and both should be forks (because repo1 is now non-empty)
+	assert.Equal(t, 2, successCount, "Expected both repositories to be created successfully")
+	assert.Equal(t, 2, forkCount, "Expected both to be forks since repo1 is non-empty")
+
+	// Cleanup
+	for i, repo := range repos {
+		if errors[i] == nil && repo != nil {
+			_ = DeleteRepositoryDirectly(t.Context(), repo.ID)
+		}
+	}
+	_ = DeleteRepositoryDirectly(t.Context(), repo1.ID)
+}
