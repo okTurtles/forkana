@@ -57,29 +57,27 @@ test.describe('First Article Becomes Root', () => {
       const pageTitle = page.locator('title');
       const titleText = await pageTitle.textContent({timeout: 10000});
       expect(titleText).toContain(repoName);
-
     } finally {
       // Cleanup: try to delete the repository
       try {
         await page.goto(`/user2/${repoName}/settings`);
         await page.waitForLoadState('domcontentloaded');
 
-        // Look for delete button in danger zone
+        // Look for delete button in danger zone and click it
         const deleteButton = page.locator('button:has-text("Delete This Repository")');
-        if (await deleteButton.isVisible({timeout: 5000})) {
-          await deleteButton.click();
+        await expect(deleteButton).toBeVisible({timeout: 5000});
+        await deleteButton.click();
 
-          // Wait for modal
-          const modal = page.locator('#delete-repo-modal');
-          await modal.waitFor({state: 'visible', timeout: 5000});
+        // Wait for modal
+        const modal = page.locator('#delete-repo-modal');
+        await modal.waitFor({state: 'visible', timeout: 5000});
 
-          // Fill repo name and confirm
-          await page.locator('#delete-repo-modal input[name=repo_name]').fill(repoName);
-          await page.locator('#delete-repo-modal button:has-text("Delete Repository")').click();
+        // Fill repo name and confirm
+        await page.locator('#delete-repo-modal input[name=repo_name]').fill(repoName);
+        await page.locator('#delete-repo-modal button:has-text("Delete Repository")').click();
 
-          // Wait for navigation away from settings
-          await page.waitForNavigation({timeout: 10000}).catch(() => {});
-        }
+        // Wait for navigation away from settings
+        await page.waitForURL('**/', {timeout: 10000});
       } catch {
         // Cleanup failed, that's okay for test purposes
       }

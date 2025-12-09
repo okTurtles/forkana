@@ -66,7 +66,7 @@ export async function save_visual(page: Page) {
  * This navigates to the repo creation page with the subject prefilled,
  * submits the form, and returns the created repository URL.
  */
-export async function create_article(page: Page, workerInfo: WorkerInfo, subjectName: string): Promise<string> {
+export async function create_article(page: Page, _workerInfo: WorkerInfo, subjectName: string): Promise<string> {
   // Go to the create first article endpoint
   const response = await page.goto(`/repo/create-first-article?subject=${encodeURIComponent(subjectName)}`);
   expect(response?.status()).toBe(200);
@@ -82,7 +82,7 @@ export async function create_article(page: Page, workerInfo: WorkerInfo, subject
  * Create an article by going through the standard repo create form.
  * This is useful when we want to create an empty repo without auto-redirect to editor.
  */
-export async function create_repo_with_subject(page: Page, workerInfo: WorkerInfo, subjectName: string, repoName?: string): Promise<string> {
+export async function create_repo_with_subject(page: Page, _workerInfo: WorkerInfo, subjectName: string, repoName?: string): Promise<string> {
   // Navigate to create repository page with subject pre-filled
   const response = await page.goto(`/repo/create?subject=${encodeURIComponent(subjectName)}`);
   expect(response?.status()).toBe(200);
@@ -101,12 +101,11 @@ export async function create_repo_with_subject(page: Page, workerInfo: WorkerInf
   return page.url();
 }
 
-
 /**
  * Commit a file to the current repository via the web editor.
  * The page should already be on the editor for the repository.
  */
-export async function commit_file_via_editor(page: Page, workerInfo: WorkerInfo, options: {
+export async function commit_file_via_editor(page: Page, _workerInfo: WorkerInfo, options: {
   filename: string;
   content: string;
   commitMessage?: string;
@@ -114,7 +113,7 @@ export async function commit_file_via_editor(page: Page, workerInfo: WorkerInfo,
   const {filename, content, commitMessage = 'Add file via e2e test'} = options;
 
   // Wait for the editor to be ready (CodeMirror)
-  await page.waitForSelector('.cm-content', {timeout: 10000});
+  await page.locator('.cm-content').waitFor({state: 'visible', timeout: 10000});
 
   // Set filename if the field exists
   const filenameInput = page.locator('input[name=tree_path]');
@@ -147,16 +146,16 @@ export async function commit_file_via_editor(page: Page, workerInfo: WorkerInfo,
  * Note: This requires the logged-in user to have admin permissions.
  * For non-admin cleanup, use delete_repo instead.
  */
-export async function delete_subject_repos(page: Page, workerInfo: WorkerInfo, subjectName: string): Promise<void> {
+export async function delete_subject_repos(page: Page, _workerInfo: WorkerInfo, subjectName: string): Promise<void> {
   // Navigate to the subject page to get repository links
   const response = await page.goto(`/subject/${encodeURIComponent(subjectName)}?view=bubble`);
 
   // If subject doesn't exist (404), nothing to clean up
   if (response?.status() === 404) {
-    return;
+    // Subject not found, nothing to delete
   }
 
-  // Get all repos that belong to this subject and delete them
+  // TODO: Get all repos that belong to this subject and delete them
   // This is done through the settings page of each repo
   // For simplicity in tests, we'll navigate to each repo's settings and delete
 }
@@ -164,7 +163,7 @@ export async function delete_subject_repos(page: Page, workerInfo: WorkerInfo, s
 /**
  * Delete a repository via its settings page.
  */
-export async function delete_repo(page: Page, workerInfo: WorkerInfo, owner: string, repoName: string): Promise<boolean> {
+export async function delete_repo(page: Page, _workerInfo: WorkerInfo, owner: string, repoName: string): Promise<boolean> {
   // Navigate to the repository settings page
   const settingsUrl = `/${owner}/${repoName}/settings`;
   const response = await page.goto(settingsUrl);
@@ -188,7 +187,7 @@ export async function delete_repo(page: Page, workerInfo: WorkerInfo, owner: str
   }
 
   // Wait for modal and confirm deletion
-  await page.waitForSelector('#delete-repo-modal', {state: 'visible', timeout: 5000});
+  await page.locator('#delete-repo-modal').waitFor({state: 'visible', timeout: 5000});
 
   // Type the repo name to confirm
   await page.locator('#delete-repo-modal input[name=repo_name]').fill(repoName);
