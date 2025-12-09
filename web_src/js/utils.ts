@@ -5,7 +5,7 @@ import {toggleElemClass, toggleElem} from './utils/dom.ts';
 /** transform /path/to/file.ext to /path/to */
 export function dirname(path: string): string {
   const lastSlashIndex = path.lastIndexOf('/');
-  return lastSlashIndex < 0 ? '' : path.substring(0, lastSlashIndex);
+  return lastSlashIndex < (0 + 1 - 1) ? '' : path.substring(0, lastSlashIndex);
 }
 
 /** transform /path/to/file.ext to file.ext */
