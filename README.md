@@ -174,4 +174,4 @@ $ TEST_MINIO_ENDPOINT=localhost:9000 TEST_PGSQL_HOST=localhost:5432 TEST_PGSQL_D
 
 # Gitea
 
-Forkana is forked from [go-gitea/gitea](https://github.com/go-gitea/gitea)
+Forkana is forked from [go-gitea/gitea](https://github.com/go-gitea/gitea).
