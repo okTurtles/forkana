@@ -326,8 +326,8 @@ func buildDiffLines(lines1, lines2 []string) []*gitdiff.DiffLine {
 	rightIdx := 1
 
 	for _, d := range diffs {
-		lines := strings.Split(strings.TrimSuffix(d.Text, "\n"), "\n")
-		for _, line := range lines {
+		lines := strings.SplitSeq(strings.TrimSuffix(d.Text, "\n"), "\n")
+		for line := range lines {
 			if line == "" && d.Text == "" {
 				continue
 			}
