@@ -21,6 +21,10 @@ import (
 	"xorm.io/builder"
 )
 
+// MaxSubjectNameLength is the maximum allowed length for a subject name.
+// This matches the VARCHAR(255) database column size.
+const MaxSubjectNameLength = 255
+
 // Subject represents a repository subject that can be shared across repositories
 type Subject struct {
 	ID          int64              `xorm:"pk autoincr"`
@@ -131,8 +135,12 @@ func CreateSubject(ctx context.Context, name string) (*Subject, error) {
 // GetOrCreateSubject gets an existing subject by slug or creates a new one if it doesn't exist
 // This function is idempotent and safe for concurrent use
 func GetOrCreateSubject(ctx context.Context, name string) (*Subject, error) {
+	// Validate subject name
 	if name == "" {
-		return nil, nil
+		return nil, errors.New("subject name cannot be empty")
+	}
+	if len(name) > MaxSubjectNameLength {
+		return nil, fmt.Errorf("subject name is too long (maximum %d characters)", MaxSubjectNameLength)
 	}
 
 	slug := GenerateSlugFromName(name)
