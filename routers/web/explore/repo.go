@@ -746,6 +746,8 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["HasExistingFork"] = false
 	ctx.Data["ExistingFork"] = nil
 	ctx.Data["IsRepoOwner"] = false
+	ctx.Data["HasOwnRepoForSubject"] = false
+	ctx.Data["OwnRepoForSubject"] = nil
 
 	// If user is not signed in, they can't edit at all
 	if ctx.Doer == nil {
@@ -761,6 +763,23 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	if isOwner {
 		// User can edit directly, no fork needed
 		return
+	}
+
+	// Check if user already owns a different repository for the same subject
+	// In Forkana, each user should only have one repository per subject
+	if repo.SubjectID > 0 {
+		ownRepo, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, ctx.Doer.ID, repo.SubjectID)
+		if err != nil {
+			ctx.ServerError("GetRepositoryByOwnerIDAndSubjectID", err)
+			return
+		}
+		if ownRepo != nil && ownRepo.ID != repo.ID {
+			// User already owns a different repository for this subject
+			// Disable all editing options
+			ctx.Data["HasOwnRepoForSubject"] = true
+			ctx.Data["OwnRepoForSubject"] = ownRepo
+			return
+		}
 	}
 
 	// User cannot write directly - check for existing fork

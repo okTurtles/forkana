@@ -66,7 +66,13 @@
                             <div class="tw-flex tw-items-center tw-justify-between tw-mb-4">
                                 <div class="tw-flex tw-items-center tw-gap-2">
                                     {{if .IsSigned}}
-                                        {{if .IsRepoOwner}}
+                                        {{if .HasOwnRepoForSubject}}
+                                            {{/* User already owns a different repository for this subject - disable editing */}}
+                                            <button type="button" class="ui button disabled" disabled>
+                                                {{svg "octicon-x" 16 "tw-mr-1"}}
+                                                Cannot Edit
+                                            </button>
+                                        {{else if .IsRepoOwner}}
                                             {{/* User can edit directly - show simple submit button */}}
                                             <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
                                                 {{svg "octicon-check" 16 "tw-mr-1"}}

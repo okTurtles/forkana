@@ -38,6 +38,24 @@
             <h4>{{.NotEditableReason}}</h4>
             <p>{{ctx.Locale.Tr "repo.editor.file_not_editable_hint"}}</p>
         </div>
+    {{else if .HasOwnRepoForSubject}}
+        {{/* User already owns a different repository for this subject - show message instead of editor */}}
+        <div class="ui info message">
+            <div class="header">
+                {{svg "octicon-info" 16 "tw-mr-2"}}
+                You already have an article for this subject
+            </div>
+            <p class="tw-mt-2">
+                You cannot edit or fork this article because you already own a fork for the subject
+                <strong>"{{if .Repository.SubjectRelation}}{{.Repository.SubjectRelation.Name}}{{else}}{{.Repository.Name}}{{end}}"</strong>.
+            </p>
+            <p>
+                Your article: <a href="{{.OwnRepoForSubject.Link}}" class="tw-font-semibold">{{.OwnRepoForSubject.OwnerName}} / {{if .Repository.SubjectRelation}}{{.Repository.SubjectRelation.Name}}{{else}}{{.Repository.Name}}{{end}}</a>
+            </p>
+            <p class="tw-text-sm tw-text-gray-600 tw-mt-2">
+                In Forkana, each user can only have one article per subject. If you want to incorporate changes from this article, you can view it and manually update your own.
+            </p>
+        </div>
     {{else}}
         {{/* Editor form */}}
         <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}"
