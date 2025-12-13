@@ -626,6 +626,9 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			}
 		}
 		ctx.Data["FileSize"] = fileSize
+
+		// Set up fork-on-edit context data
+		prepareArticleForkOnEditData(ctx)
 	case "history":
 		// For history mode, get file commit history
 		commitsCount, err := gitRepo.FileCommitsCount(defaultBranch, readmeTreePath)
@@ -733,4 +736,40 @@ func getFileContributorCount(gitRepo *git.Repository, branch, filePath string) (
 	}
 
 	return int64(len(lines)), nil
+}
+
+// prepareArticleForkOnEditData sets up context data for fork-on-edit workflow
+// This determines whether the user can edit directly, needs to fork, or already has a fork
+func prepareArticleForkOnEditData(ctx *context.Context) {
+	// Default values
+	ctx.Data["NeedsFork"] = false
+	ctx.Data["HasExistingFork"] = false
+	ctx.Data["ExistingFork"] = nil
+	ctx.Data["IsRepoOwner"] = false
+
+	// If user is not signed in, they can't edit at all
+	if ctx.Doer == nil {
+		return
+	}
+
+	repo := ctx.Repo.Repository
+
+	// Check if user owns the repository
+	isOwner := repo.OwnerID == ctx.Doer.ID
+	ctx.Data["IsRepoOwner"] = isOwner
+
+	if isOwner {
+		// User can edit directly, no fork needed
+		return
+	}
+
+	// User cannot write directly - check for existing fork
+	existingFork := repo_model.GetForkedRepo(ctx, ctx.Doer.ID, repo.ID)
+	if existingFork != nil {
+		ctx.Data["HasExistingFork"] = true
+		ctx.Data["ExistingFork"] = existingFork
+	} else {
+		// User needs to create a fork
+		ctx.Data["NeedsFork"] = true
+	}
 }

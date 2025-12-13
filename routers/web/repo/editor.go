@@ -13,6 +13,7 @@ import (
 
 	git_model "code.gitea.io/gitea/models/git"
 	"code.gitea.io/gitea/models/issues"
+	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/charset"
 	"code.gitea.io/gitea/modules/git"
@@ -26,6 +27,7 @@ import (
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/context/upload"
 	"code.gitea.io/gitea/services/forms"
+	repo_service "code.gitea.io/gitea/services/repository"
 	files_service "code.gitea.io/gitea/services/repository/files"
 )
 
@@ -362,7 +364,18 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
-	_, err := files_service.ChangeRepoFiles(ctx, ctx.Repo.Repository, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+	// Determine target repository - either the original or a fork
+	targetRepo := ctx.Repo.Repository
+
+	// Handle fork-and-edit workflow
+	if parsed.form.ForkAndEdit {
+		targetRepo = handleForkAndEdit(ctx, parsed.form)
+		if ctx.Written() {
+			return
+		}
+	}
+
+	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: parsed.form.LastCommit,
 		OldBranch:    parsed.OldBranchName,
 		NewBranch:    parsed.NewBranchName,
@@ -384,7 +397,44 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
+	// If we committed to a fork, redirect to the fork's article page
+	if parsed.form.ForkAndEdit && targetRepo != nil {
+		ctx.JSONRedirect(targetRepo.Link() + "?mode=read")
+		return
+	}
+
 	redirectForCommitChoice(ctx, parsed, parsed.form.TreePath)
+}
+
+// handleForkAndEdit handles the fork-and-edit workflow
+// It returns the fork repository to commit to, or nil if an error occurred
+func handleForkAndEdit(ctx *context.Context, form *forms.EditRepoFileForm) *repo_model.Repository {
+	originalRepo := ctx.Repo.Repository
+
+	// Check if user already has a fork
+	existingFork := repo_model.GetForkedRepo(ctx, ctx.Doer.ID, originalRepo.ID)
+	if existingFork != nil {
+		return existingFork
+	}
+
+	// Create a new fork
+	forkName := getUniqueRepositoryName(ctx, ctx.Doer.ID, originalRepo.Name)
+	if forkName == "" {
+		ctx.JSONError(ctx.Tr("repo.fork.failed"))
+		return nil
+	}
+
+	fork := ForkRepoTo(ctx, ctx.Doer, repo_service.ForkRepoOptions{
+		BaseRepo:     originalRepo,
+		Name:         forkName,
+		Description:  originalRepo.Description,
+		SingleBranch: originalRepo.DefaultBranch,
+	})
+	if ctx.Written() {
+		return nil
+	}
+
+	return fork
 }
 
 // DeleteFile render delete file page

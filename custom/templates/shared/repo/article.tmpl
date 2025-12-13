@@ -66,22 +66,40 @@
                             <div class="tw-flex tw-items-center tw-justify-between tw-mb-4">
                                 <div class="tw-flex tw-items-center tw-gap-2">
                                     {{if .IsSigned}}
-                                        <form id="fork-form" action="{{.RepoOperationsLink}}/fork" method="get" style="display: inline;">
-                                            <button type="submit" class="ui button">
-                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                                Fork
+                                        {{if .IsRepoOwner}}
+                                            {{/* User can edit directly - show simple submit button */}}
+                                            <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
+                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                                Submit Changes
                                             </button>
-                                        </form>
+                                        {{else if .HasExistingFork}}
+                                            {{/* User has an existing fork - submit to fork */}}
+                                            <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="true" data-existing-fork="true">
+                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
+                                                Submit to Your Fork
+                                            </button>
+                                            <span class="tw-text-sm tw-text-gray-500">
+                                                ({{.ExistingFork.OwnerName}}/{{.ExistingFork.Name}})
+                                            </span>
+                                        {{else if .NeedsFork}}
+                                            {{/* User needs to create a fork - show fork-and-submit button */}}
+                                            <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="true" data-existing-fork="false">
+                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
+                                                Fork and Submit Changes
+                                            </button>
+                                        {{else}}
+                                            {{/* Fallback - show disabled button */}}
+                                            <button type="button" class="ui primary button disabled">
+                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                                Submit Changes
+                                            </button>
+                                        {{end}}
                                     {{else}}
-                                        <button type="button" class="ui button disabled">
-                                            {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                            Fork
+                                        <button type="button" class="ui primary button disabled">
+                                            {{svg "octicon-check" 16 "tw-mr-1"}}
+                                            Sign in to Edit
                                         </button>
                                     {{end}}
-                                    <button type="button" id="submit-changes-button" class="ui primary button{{if not .IsSigned}} disabled{{end}}">
-                                        {{svg "octicon-check" 16 "tw-mr-1"}}
-                                        Submit Changes
-                                    </button>
                                 </div>
                             </div>
                         {{end}}

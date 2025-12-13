@@ -40,7 +40,10 @@
         </div>
     {{else}}
         {{/* Editor form */}}
-        <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}">
+        <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}"
+              data-can-edit-directly="{{if .IsRepoOwner}}true{{else}}false{{end}}"
+              data-has-existing-fork="{{if .HasExistingFork}}true{{else}}false{{end}}"
+              data-needs-fork="{{if .NeedsFork}}true{{else}}false{{end}}">
             {{.CsrfTokenHtml}}
             <input type="hidden" name="last_commit" value="{{.LastCommitID}}">
             <input type="hidden" name="tree_path" value="{{.ReadmeTreePath}}">
@@ -49,6 +52,8 @@
             {{/* Optional commit message fields - will use default if empty */}}
             <input type="hidden" name="commit_summary" value="">
             <input type="hidden" name="commit_message" value="">
+            {{/* Fork-on-edit field - set by JavaScript based on user's choice */}}
+            <input type="hidden" id="fork_and_edit" name="fork_and_edit" value="{{if or .NeedsFork .HasExistingFork}}true{{else}}false{{end}}">
 
              <div class="field">
                  <div class="tw-p-0">
