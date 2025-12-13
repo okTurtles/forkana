@@ -64,14 +64,11 @@ func prepareEditorCommitFormOptions(ctx *context.Context, editorAction string) *
 		return nil
 	}
 
-	if commitFormOptions.NeedFork {
-		if strings.EqualFold(ctx.Repo.TreePath, "README.md") {
-			// We allow this now for the auto-fork feature
-		} else {
-			redirectURL := fmt.Sprintf("%s/_new/%s/README.md", ctx.Repo.RepoLink, util.PathEscapeSegments(ctx.Repo.BranchName))
-			ctx.Redirect(redirectURL)
-			return nil
-		}
+	// Allow README.md creation for the auto-fork feature
+	if commitFormOptions.NeedFork && !strings.EqualFold(ctx.Repo.TreePath, "README.md") {
+		redirectURL := fmt.Sprintf("%s/_new/%s/README.md", ctx.Repo.RepoLink, util.PathEscapeSegments(ctx.Repo.BranchName))
+		ctx.Redirect(redirectURL)
+		return nil
 	}
 
 	if commitFormOptions.WillSubmitToFork && !commitFormOptions.TargetRepo.CanEnableEditor() {
