@@ -430,6 +430,16 @@ func EditFilePost(ctx *context.Context) {
 					return fmt.Errorf("failed to update base repo to fork: %w", err)
 				}
 
+				// 3. Update NumForks counters
+				// forkedRepo is no longer a fork of baseRepo, so decrement baseRepo's count
+				if err := repo_model.DecrementRepoForkNum(txCtx, baseRepo.ID); err != nil {
+					return fmt.Errorf("failed to decrement fork count on old root: %w", err)
+				}
+				// baseRepo is now a fork of forkedRepo, so increment forkedRepo's count
+				if err := repo_model.IncrementRepoForkNum(txCtx, forkedRepo.ID); err != nil {
+					return fmt.Errorf("failed to increment fork count on new root: %w", err)
+				}
+
 				return nil
 			})
 			if err != nil {
