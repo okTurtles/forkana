@@ -66,7 +66,16 @@
                             <div class="tw-flex tw-items-center tw-justify-between tw-mb-4">
                                 <div class="tw-flex tw-items-center tw-gap-2">
                                     {{if .IsSigned}}
-                                        {{if .HasOwnRepoForSubject}}
+                                        {{if .HasExistingFork}}
+                                            {{/* User has an existing fork - redirect to fork's article page */}}
+                                            <a href="{{.ExistingFork.Link}}/article/{{.TreePath}}" class="ui primary button">
+                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
+                                                Edit in Your Fork
+                                            </a>
+                                            <span class="tw-text-sm tw-text-gray-500">
+                                                ({{.ExistingFork.OwnerName}}/{{.ExistingFork.Name}})
+                                            </span>
+                                        {{else if .HasOwnRepoForSubject}}
                                             {{/* User already owns a different repository for this subject - disable editing */}}
                                             <button type="button" class="ui button disabled" disabled>
                                                 {{svg "octicon-x" 16 "tw-mr-1"}}
@@ -78,20 +87,16 @@
                                                 {{svg "octicon-check" 16 "tw-mr-1"}}
                                                 Submit Changes
                                             </button>
-                                        {{else if .HasExistingFork}}
-                                            {{/* User has an existing fork - submit to fork */}}
-                                            <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="true" data-existing-fork="true">
-                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                                Submit to Your Fork
-                                            </button>
-                                            <span class="tw-text-sm tw-text-gray-500">
-                                                ({{.ExistingFork.OwnerName}}/{{.ExistingFork.Name}})
-                                            </span>
                                         {{else if .NeedsFork}}
                                             {{/* User needs to create a fork - show fork-and-submit button */}}
-                                            <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="true" data-existing-fork="false">
+                                            <button type="button" id="submit-changes-button" class="ui secondary button" data-fork-and-edit="true" data-existing-fork="false">
                                                 {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                                Fork and Submit Changes
+                                                Fork
+                                            </button>
+                                            {{/* Submit Change Request - not implemented yet, disabled for now */}}
+                                            <button type="button" class="ui primary button disabled">
+                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                                Submit Changes
                                             </button>
                                         {{else}}
                                             {{/* Fallback - show disabled button */}}
