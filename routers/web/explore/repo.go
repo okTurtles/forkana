@@ -749,46 +749,17 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["HasOwnRepoForSubject"] = false
 	ctx.Data["OwnRepoForSubject"] = nil
 
-	// If user is not signed in, they can't edit at all
-	if ctx.Doer == nil {
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, ctx.Repo.Repository)
+	if err != nil {
+		ctx.ServerError("CheckForkOnEditPermissions", err)
 		return
 	}
 
-	repo := ctx.Repo.Repository
-
-	// Check if user owns the repository
-	isOwner := repo.OwnerID == ctx.Doer.ID
-	ctx.Data["IsRepoOwner"] = isOwner
-
-	if isOwner {
-		// User can edit directly, no fork needed
-		return
-	}
-
-	// Check if user already owns a different repository for the same subject
-	// In Forkana, each user should only have one repository per subject
-	if repo.SubjectID > 0 {
-		ownRepo, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, ctx.Doer.ID, repo.SubjectID)
-		if err != nil {
-			ctx.ServerError("GetRepositoryByOwnerIDAndSubjectID", err)
-			return
-		}
-		if ownRepo != nil && ownRepo.ID != repo.ID {
-			// User already owns a different repository for this subject
-			// Disable all editing options
-			ctx.Data["HasOwnRepoForSubject"] = true
-			ctx.Data["OwnRepoForSubject"] = ownRepo
-			return
-		}
-	}
-
-	// User cannot write directly - check for existing fork
-	existingFork := repo_model.GetForkedRepo(ctx, ctx.Doer.ID, repo.ID)
-	if existingFork != nil {
-		ctx.Data["HasExistingFork"] = true
-		ctx.Data["ExistingFork"] = existingFork
-	} else {
-		// User needs to create a fork
-		ctx.Data["NeedsFork"] = true
-	}
+	// Map permissions to context data
+	ctx.Data["IsRepoOwner"] = perms.IsRepoOwner
+	ctx.Data["HasOwnRepoForSubject"] = perms.BlockedBySubject
+	ctx.Data["OwnRepoForSubject"] = perms.OwnRepoForSubject
+	ctx.Data["HasExistingFork"] = perms.HasExistingFork
+	ctx.Data["ExistingFork"] = perms.ExistingFork
+	ctx.Data["NeedsFork"] = perms.NeedsFork
 }

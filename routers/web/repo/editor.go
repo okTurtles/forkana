@@ -411,10 +411,22 @@ func EditFilePost(ctx *context.Context) {
 func handleForkAndEdit(ctx *context.Context, form *forms.EditRepoFileForm) *repo_model.Repository {
 	originalRepo := ctx.Repo.Repository
 
-	// Check if user already has a fork
-	existingFork := repo_model.GetForkedRepo(ctx, ctx.Doer.ID, originalRepo.ID)
-	if existingFork != nil {
-		return existingFork
+	// Prevent bypassing UI restrictions
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, originalRepo)
+	if err != nil {
+		ctx.ServerError("CheckForkOnEditPermissions", err)
+		return nil
+	}
+
+	// Block if user already owns a different repository for the same subject
+	if perms.BlockedBySubject {
+		ctx.JSONError(ctx.Tr("repo.fork.already_own_subject_repo"))
+		return nil
+	}
+
+	// Return existing fork if user already has one
+	if perms.HasExistingFork && perms.ExistingFork != nil {
+		return perms.ExistingFork
 	}
 
 	// Create a new fork

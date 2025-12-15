@@ -27,6 +27,71 @@ import (
 	"xorm.io/builder"
 )
 
+// ForkOnEditPermissions contains the permission state for fork-on-edit workflow.
+// This struct consolidates all permission checks needed to determine how a user
+// can edit a repository they don't own.
+type ForkOnEditPermissions struct {
+	// IsRepoOwner is true if the user owns the repository
+	IsRepoOwner bool
+	// CanEditDirectly is true if the user can commit directly to the repository
+	CanEditDirectly bool
+	// NeedsFork is true if the user needs to create a fork to edit
+	NeedsFork bool
+	// HasExistingFork is true if the user already has a fork of this repository
+	HasExistingFork bool
+	// ExistingFork is the user's existing fork (nil if none)
+	ExistingFork *repo_model.Repository
+	// BlockedBySubject is true if the user already owns a different repo for the same subject
+	BlockedBySubject bool
+	// OwnRepoForSubject is the user's existing repo for the subject (nil if none)
+	OwnRepoForSubject *repo_model.Repository
+}
+
+// CheckForkOnEditPermissions determines the user's editing permissions for a repository.
+// It checks ownership, subject ownership restrictions, and existing forks.
+// Returns nil permissions if doer is nil (not signed in).
+func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo *repo_model.Repository) (*ForkOnEditPermissions, error) {
+	perms := &ForkOnEditPermissions{}
+
+	// Not signed in - no permissions
+	if doer == nil {
+		return perms, nil
+	}
+
+	// Check if user owns the repository
+	if repo.OwnerID == doer.ID {
+		perms.IsRepoOwner = true
+		perms.CanEditDirectly = true
+		return perms, nil
+	}
+
+	// Check if user already owns a different repository for the same subject
+	// In Forkana, each user should only have one repository per subject
+	if repo.SubjectID > 0 {
+		ownRepo, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, doer.ID, repo.SubjectID)
+		if err != nil {
+			return nil, err
+		}
+		if ownRepo != nil && ownRepo.ID != repo.ID {
+			// User already owns a different repository for this subject
+			perms.BlockedBySubject = true
+			perms.OwnRepoForSubject = ownRepo
+			return perms, nil
+		}
+	}
+
+	// Check for existing fork
+	existingFork := repo_model.GetForkedRepo(ctx, doer.ID, repo.ID)
+	if existingFork != nil {
+		perms.HasExistingFork = true
+		perms.ExistingFork = existingFork
+	} else {
+		perms.NeedsFork = true
+	}
+
+	return perms, nil
+}
+
 // ErrForkAlreadyExist represents a "ForkAlreadyExist" kind of error.
 type ErrForkAlreadyExist struct {
 	Uname    string
