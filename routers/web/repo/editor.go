@@ -369,7 +369,7 @@ func EditFilePost(ctx *context.Context) {
 
 	// Handle fork-and-edit workflow
 	if parsed.form.ForkAndEdit {
-		targetRepo = handleForkAndEdit(ctx, parsed.form)
+		targetRepo = handleForkAndEdit(ctx)
 		if ctx.Written() {
 			return
 		}
@@ -408,7 +408,7 @@ func EditFilePost(ctx *context.Context) {
 
 // handleForkAndEdit handles the fork-and-edit workflow
 // It returns the fork repository to commit to, or nil if an error occurred
-func handleForkAndEdit(ctx *context.Context, form *forms.EditRepoFileForm) *repo_model.Repository {
+func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 	originalRepo := ctx.Repo.Repository
 
 	// Prevent bypassing UI restrictions
