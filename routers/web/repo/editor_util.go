@@ -9,6 +9,7 @@ import (
 	"path"
 	"strings"
 
+	"code.gitea.io/gitea/models/db"
 	git_model "code.gitea.io/gitea/models/git"
 	repo_model "code.gitea.io/gitea/models/repo"
 	user_model "code.gitea.io/gitea/models/user"
@@ -86,18 +87,43 @@ func getParentTreeFields(treePath string) (treeNames, treePaths []string) {
 	return treeNames, treePaths
 }
 
-// getUniqueRepositoryName Gets a unique repository name for a user
-// It will append a -<num> postfix if the name is already taken
+// getUniqueRepositoryName Gets a unique repository name for a user.
+// It will append a -<num> postfix if the name is already taken.
+// Uses a single query to fetch all matching names, then finds the first available.
 func getUniqueRepositoryName(ctx context.Context, ownerID int64, name string) string {
-	uniqueName := name
-	for i := 1; i < 1000; i++ {
-		_, err := repo_model.GetRepositoryByName(ctx, ownerID, uniqueName)
-		if err != nil || repo_model.IsErrRepoNotExist(err) {
-			return uniqueName
-		}
-		uniqueName = fmt.Sprintf("%s-%d", name, i)
-		i++
+	// Single query to find all existing repository names for this owner
+	// that start with the base name (case-insensitive)
+	var existingNames []string
+	lowerName := strings.ToLower(name)
+	err := db.GetEngine(ctx).Table("repository").
+		Where("owner_id = ?", ownerID).
+		And("lower_name LIKE ?", lowerName+"%").
+		Cols("lower_name").
+		Find(&existingNames)
+	if err != nil {
+		log.Error("getUniqueRepositoryName: failed to query existing names: %v", err)
+		return ""
 	}
+
+	// Build a set for O(1) lookup
+	nameSet := make(map[string]bool, len(existingNames))
+	for _, n := range existingNames {
+		nameSet[n] = true
+	}
+
+	// Check if base name is available
+	if !nameSet[lowerName] {
+		return name
+	}
+
+	// Find first available name with -<num> suffix
+	for i := 1; i < 1000; i++ {
+		candidate := fmt.Sprintf("%s-%d", name, i)
+		if !nameSet[strings.ToLower(candidate)] {
+			return candidate
+		}
+	}
+
 	return ""
 }
 
