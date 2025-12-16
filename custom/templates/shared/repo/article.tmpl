@@ -70,7 +70,7 @@
                                             {{/* User has an existing fork - redirect to fork's article page */}}
                                             <a href="{{.ExistingFork.Link}}/article/{{.TreePath}}" class="ui primary button">
                                                 {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                                Edit in Your Fork
+                                                {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
                                             </a>
                                             <span class="tw-text-sm tw-text-gray-500">
                                                 ({{.ExistingFork.OwnerName}}/{{.ExistingFork.Name}})
@@ -85,30 +85,30 @@
                                             {{/* User can edit directly - show simple submit button */}}
                                             <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
                                                 {{svg "octicon-check" 16 "tw-mr-1"}}
-                                                Submit Changes
+                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
                                         {{else if .NeedsFork}}
                                             {{/* User needs to create a fork - show fork-and-submit button */}}
                                             <button type="button" id="submit-changes-button" class="ui secondary button" data-fork-and-edit="true" data-existing-fork="false">
                                                 {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                                Fork
+                                                {{ctx.Locale.Tr "repo.fork_article"}}
                                             </button>
                                             {{/* Submit Change Request - not implemented yet, disabled for now */}}
                                             <button type="button" class="ui primary button disabled">
                                                 {{svg "octicon-check" 16 "tw-mr-1"}}
-                                                Submit Changes
+                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
                                         {{else}}
                                             {{/* Fallback - show disabled button */}}
                                             <button type="button" class="ui primary button disabled">
                                                 {{svg "octicon-check" 16 "tw-mr-1"}}
-                                                Submit Changes
+                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
                                         {{end}}
                                     {{else}}
                                         <button type="button" class="ui primary button disabled">
                                             {{svg "octicon-check" 16 "tw-mr-1"}}
-                                            Sign in to Edit
+                                            {{ctx.Locale.Tr "repo.editor.sign_in_to_edit"}}
                                         </button>
                                     {{end}}
                                 </div>
