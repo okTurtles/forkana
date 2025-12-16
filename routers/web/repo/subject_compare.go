@@ -154,6 +154,12 @@ func CompareReadme(ctx *context.Context) {
 	ctx.Data["IsSplitStyle"] = true
 	ctx.Data["PageIsSubjectCompare"] = true
 
+	// Set Repository data needed by repo/header template for view tabs
+	ctx.Data["Repository"] = repo1
+	ctx.Data["IsBubbleView"] = false
+	ctx.Data["IsTableView"] = false
+	ctx.Data["IsArticleView"] = false
+
 	ctx.HTML(http.StatusOK, "repo/diff/subject_compare")
 }
 

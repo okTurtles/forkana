@@ -1644,7 +1644,7 @@ tbody.commit-list {
 }
 
 .diff-file-header {
-  padding: 5px 8px !important;
+  padding: 0 8px !important;
   box-shadow: 0 -1px 0 1px var(--color-body); /* prevent borders being visible behind top corners when sticky and scrolled */
   font-weight: var(--font-weight-normal);
   display: flex;
@@ -1732,7 +1732,6 @@ tbody.commit-list {
 .code-diff-unified .del-code td,
 .code-diff-split .del-code .lines-num-old,
 .code-diff-split .del-code .lines-escape-old,
-.code-diff-split .del-code .lines-type-marker-old,
 .code-diff-split .del-code .lines-code-old {
   background: var(--color-diff-removed-row-bg);
   border-color: var(--color-diff-removed-row-border);
@@ -1740,7 +1739,6 @@ tbody.commit-list {
 
 .code-diff-unified .add-code,
 .code-diff-unified .add-code td,
-.code-diff-split .add-code .lines-type-marker-new,
 .code-diff-split .add-code .lines-escape-new,
 .code-diff-split .add-code .lines-code-new,
 .code-diff-split .del-code .add-code.lines-type-marker-new,
@@ -1767,14 +1765,14 @@ tbody.commit-list {
 .code-diff-unified .del-code .lines-num,
 .code-diff-split .del-code .lines-num {
   background: var(--color-diff-removed-linenum-bg);
-  color: var(--color-text);
+  color: var(--color-text-light-3);
 }
 
 .code-diff-unified .add-code .lines-num,
 .code-diff-split .add-code .lines-num,
 .code-diff-split .del-code .add-code.lines-num {
   background: var(--color-diff-added-linenum-bg);
-  color: var(--color-text);
+  color: var(--color-text-light-3);
 }
 
 .code-diff-split tbody tr td:nth-child(5),

@@ -11,20 +11,22 @@
 	<col>
 </colgroup>
 <div class="segment">
-	<div class="tw-flex tw-items-center tw-gap-4 tw-mb-4 tw-">
-		<div class="tw-flex-1">
+	<div class="tw-flex tw-items-center">
+		<div class="tw-flex-1 tw-p-2">
 			<strong>
 				{{svg "octicon-repo-forked" 16}}
 				<a href="/{{$Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> /
 				<a href="/article/{{$Repo1.Owner.Name}}/{{$Subject.Name}}">{{$Subject.Name}}</a>
 			</strong>
+			<div class="tw-text-[#59636e] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">Last update: {{$Repo1.UpdatedUnix.AsTime.Format "2006-01-02 15:04:05"}}</div>
 		</div>
-		<div class="tw-flex-1">
+		<div class="tw-flex-1 tw-p-2 tw-border-l tw-border-[#d1d9e0]">
 			<strong>
 				{{svg "octicon-repo-forked" 16}}
 				<a href="/{{$Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> /
 				<a href="/article/{{$Repo2.Owner.Name}}/{{$Subject.Name}}">{{$Subject.Name}}</a>
 			</strong>
+			<div class="tw-text-[#59636e] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">Last update: {{$Repo2.UpdatedUnix.AsTime.Format "2006-01-02 15:04:05"}}</div>
 		</div>
 	</div>
 </div>
