@@ -19,6 +19,8 @@ Add `custom/conf/app.ini`. See details below for file content. Make sure to prop
 ```ini
 WORK_PATH = /path/to/forkana ; the only line which needs modification
 
+APP_NAME = Forkana
+
 [server]
 PROTOCOL = http
 DOMAIN = localhost
