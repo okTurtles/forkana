@@ -231,6 +231,8 @@ func ForkRepoTo(ctx *context.Context, owner *user_model.User, forkOpts repo_serv
 			ctx.JSONError(ctx.Tr("repo.fork.blocked_user"))
 		case repo_model.IsErrForkTreeTooLarge(err):
 			ctx.JSONError(ctx.Tr("repo.fork.tree_size_limit_reached"))
+		case repo_service.IsErrUserOwnsSubjectRepo(err):
+			ctx.JSONError(ctx.Tr("repo.fork.already_own_subject_repo"))
 		default:
 			ctx.ServerError("ForkPost", err)
 		}

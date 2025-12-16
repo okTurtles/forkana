@@ -133,6 +133,29 @@ func (err ErrForkAlreadyExist) Unwrap() error {
 	return util.ErrAlreadyExist
 }
 
+// ErrUserOwnsSubjectRepo represents an error when a user already owns a different
+// repository for the same subject and cannot fork/edit another repository for that subject.
+type ErrUserOwnsSubjectRepo struct {
+	UserID         int64
+	SubjectID      int64
+	ExistingRepoID int64
+}
+
+// IsErrUserOwnsSubjectRepo checks if an error is an ErrUserOwnsSubjectRepo.
+func IsErrUserOwnsSubjectRepo(err error) bool {
+	_, ok := err.(ErrUserOwnsSubjectRepo)
+	return ok
+}
+
+func (err ErrUserOwnsSubjectRepo) Error() string {
+	return fmt.Sprintf("user already owns repository for subject [user_id: %d, subject_id: %d, existing_repo_id: %d]",
+		err.UserID, err.SubjectID, err.ExistingRepoID)
+}
+
+func (err ErrUserOwnsSubjectRepo) Unwrap() error {
+	return util.ErrAlreadyExist
+}
+
 // ForkRepoOptions contains the fork repository options
 type ForkRepoOptions struct {
 	BaseRepo     *repo_model.Repository
@@ -201,6 +224,22 @@ func ForkRepository(ctx context.Context, doer, owner *user_model.User, opts Fork
 	// Check if fork tree has reached maximum size limit
 	if err := checkForkTreeSizeLimit(ctx, opts.BaseRepo); err != nil {
 		return nil, err
+	}
+
+	// Check if user already owns a different repository for the same subject
+	// In Forkana, each user should only have one repository per subject
+	if opts.BaseRepo.SubjectID > 0 {
+		ownRepo, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, owner.ID, opts.BaseRepo.SubjectID)
+		if err != nil {
+			return nil, err
+		}
+		if ownRepo != nil && ownRepo.ID != opts.BaseRepo.ID {
+			return nil, ErrUserOwnsSubjectRepo{
+				UserID:         owner.ID,
+				SubjectID:      opts.BaseRepo.SubjectID,
+				ExistingRepoID: ownRepo.ID,
+			}
+		}
 	}
 
 	forkedRepo, err := repo_model.GetUserFork(ctx, opts.BaseRepo.ID, owner.ID)
