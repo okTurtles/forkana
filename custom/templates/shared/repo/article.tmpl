@@ -76,11 +76,11 @@
                                                 ({{.ExistingFork.OwnerName}}/{{.ExistingFork.Name}})
                                             </span>
                                         {{else if .HasOwnRepoForSubject}}
-                                            {{/* User already owns a different repository for this subject - disable editing */}}
-                                            <button type="button" class="ui button disabled" disabled>
-                                                {{svg "octicon-x" 16 "tw-mr-1"}}
-                                                Cannot Edit
-                                            </button>
+                                            {{/* User already owns a different repository for this subject - show link to their article */}}
+                                            <a href="{{.OwnRepoForSubject.Link}}?view=article&mode=edit" class="ui primary button">
+                                                {{svg "octicon-pencil" 16 "tw-mr-1"}}
+                                                {{ctx.Locale.Tr "repo.editor.edit_your_article"}}
+                                            </a>
                                         {{else if .IsRepoOwner}}
                                             {{/* User can edit directly - show simple submit button */}}
                                             <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
