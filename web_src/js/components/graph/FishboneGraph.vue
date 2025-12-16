@@ -41,6 +41,7 @@ type Node = {
   repoName?: string;
   repoSubject?: string;
   fullName?: string;
+  isEmpty?: boolean;
 };
 type Graph = Record<string, Node>;
 
@@ -207,18 +208,32 @@ const errorMessage = ref<string | null>(null);
 const hasData = computed(() => {
   const nodes = Object.values(state.graph);
   if (nodes.length === 0) return false;
-  
-  // Treat as empty if there's only one node (root) with no activity and no children
+
+  // If we have multiple nodes (forks), always show the graph
+  if (nodes.length > 1) {
+    return true;
+  }
+
+  // For a single node (root repository), check if it has content
   if (nodes.length === 1) {
     const rootNode = nodes[0];
-    const hasNoActivity = rootNode.contributors === 0 || !rootNode.contributors;
-    const hasNoChildren = !rootNode.children || rootNode.children.length === 0;
-    if (hasNoActivity && hasNoChildren) {
-      return false;
+
+    // If repository has the isEmpty flag set, use that (most reliable)
+    if (rootNode.isEmpty !== undefined) {
+      // If isEmpty is false, the repo has content - show the bubble
+      // If isEmpty is true, the repo is empty - don't show
+      return !rootNode.isEmpty;
     }
+
+    // Fallback: check for meaningful activity indicators
+    const hasChildren = rootNode.children && rootNode.children.length > 0;
+    const hasContributors = rootNode.contributors && rootNode.contributors > 0;
+
+    // Show the bubble if there are children or at least 1 contributor
+    return hasChildren || hasContributors;
   }
-  
-  return true;
+
+  return false;
 });
 
 /* Container width affects responsive dials; observe it. */
@@ -428,12 +443,14 @@ async function fetchForkGraphAndSet(){
     const json = await res.json();
     const graph = buildGraphFromApi(json?.root);
     state.graph = graph;
-    
+
     // Clear loading state before layout/render
     isLoading.value = false;
-    
+
     // Only layout and render if we have data
     if(Object.keys(graph).length > 0) {
+      // Wait for Vue to update the DOM with the new graph data before calculating layout
+      await nextTick();
       layoutAndRender();
       resetView();
       restoreSelectionAfterGraphLoad();
@@ -453,10 +470,15 @@ async function fetchForkGraphAndSet(){
 function buildGraphFromApi(root:any): Graph{
   const g:Graph = {};
   if(!root) return g;
-  const visit = (n:any, parentId: string | null)=>{
+
+  // Store the root API data so we can check repository.empty flag
+  let rootApiData = root;
+
+  const visit = (n:any, parentId: string | null): string =>{
+    if (!n) return '';
     const id: string = n?.id ?? (n?.repository?.full_name ?? Math.random().toString(36).slice(2));
     const baseContrib: number = Number(n?.contributors?.total_count ?? n?.contributors?.recent_count ?? 0);
-    const contributors: number = Number.isFinite(baseContrib) ? baseContrib : 0;
+    let contributors: number = Number.isFinite(baseContrib) ? baseContrib : 0;
     const updatedAt: string | undefined = n?.repository?.updated_at ?? n?.repository?.updated ?? undefined;
     const repo = n?.repository ?? {};
     const ownerName: string | null =
@@ -465,6 +487,13 @@ function buildGraphFromApi(root:any): Graph{
     const repoSubject: string | null =
       repo?.subject ?? repo?.subject_slug ?? repo?.subject_name ?? repoName ?? null;
     const fullName: string | null = repo?.full_name ?? (ownerName && repoName ? `${ownerName}/${repoName}` : null);
+    const isEmpty: boolean = repo?.empty === true;
+
+    // If repository is not empty but contributors shows 0, it means stats are still generating
+    // In this case, we know there's at least 1 contributor (the person who created the content)
+    if (!isEmpty && contributors === 0) {
+      contributors = 1;
+    }
 
     const node: Node = {
       id,
@@ -476,18 +505,21 @@ function buildGraphFromApi(root:any): Graph{
       repoName: repoName ?? undefined,
       repoSubject: repoSubject ?? undefined,
       fullName: fullName ?? undefined,
+      isEmpty: isEmpty,
     };
     if (!node.repoSubject && parentId === null && props.subject) {
       node.repoSubject = props.subject;
     }
     g[id] = node;
     for(const child of (n?.children ?? [])){
-      const childId: string = child?.id ?? (child?.repository?.full_name ?? Math.random().toString(36).slice(2));
-      node.children.push(childId);
-      visit(child, id);
+      const childId = visit(child, id);
+      if (childId) {
+        node.children.push(childId);
+      }
     }
+    return id;
   };
-  visit(root, null);
+  visit(rootApiData, null);
   return g;
 }
 
@@ -503,15 +535,22 @@ function rFor(n:number){
   return base * (state.radiusScale || 1);
 }
 
-function getRoot(g:Graph){ return Object.values(g).find(n=>n.parentId===null)!; }
+function getRoot(g:Graph){ return Object.values(g).find(n=>n.parentId===null) ?? null; }
 
 function computeDepths(g:Graph){
   /* BFS depth tagging so we can place parents top-down and sort render order. */
-  const root = getRoot(g) as any; (root as any).depth = 0;
+  const root = getRoot(g) as any; 
+  if (!root) return;
+  (root as any).depth = 0;
   const q = [root];
   while(q.length){
     const n:any = q.shift();
-    for(const cid of n.children){ const c:any = g[cid]; c.depth = (n.depth ?? 0) + 1; q.push(c); }
+    for(const cid of n.children){ 
+      const c:any = g[cid]; 
+      if (!c) continue;
+      c.depth = (n.depth ?? 0) + 1; 
+      q.push(c); 
+    }
   }
 }
 
@@ -568,18 +607,35 @@ type Arc  = { cx:number; cy:number; r:number };
 type HRun = { x0:number; x1:number; y:number };
 
 function layoutFishbone(g:Graph){
+  const nodeCount = Object.keys(g).length;
+  if (nodeCount === 0) {
+    nodesList.value = [];
+    edgesList.value = [];
+    trunksList.value = [];
+    jointDots.value = [];
+    return;
+  }
+  
   computeDepths(g);
-  const root:any = getRoot(g); root.x = 0; root.y = 0;
+  const root:any = getRoot(g);
+  if (!root) {
+    nodesList.value = [];
+    edgesList.value = [];
+    trunksList.value = [];
+    jointDots.value = [];
+    return;
+  }
+  root.x = 0; root.y = 0;
 
   // Update global max contributors for relative radius scaling
   state.maxContrib = Math.max(1, ...Object.values(g).map(n => n.contributors || 0));
 
   const discs: Disc[] = [{ x:root.x, y:root.y, r:rFor(root.contributors), id:root.id }];
   const trunks: SegV[] = []; const arcs: Arc[] = []; const runs: HRun[] = [];
-  const parents = Object.values(g).sort((a:any,b:any)=> (a.depth - b.depth));
+  const parents = Object.values(g).filter((n:any) => n.depth !== undefined).sort((a:any,b:any)=> (a.depth - b.depth));
 
   for(const p of parents){
-    const kids = p.children.map(id=>g[id]);
+    const kids = p.children.map(id=>g[id]).filter((k): k is Node => k !== undefined);
     if(!kids.length) continue;
 
     const px = p.x ?? 0, py = p.y ?? 0, pr = rFor(p.contributors);
@@ -662,7 +718,7 @@ function layoutFishbone(g:Graph){
       prevJoint = reqY - R;
     }
 
-    const childYs = p.children.map(id => (g as any)[id].y ?? baseY);
+    const childYs = p.children.map(id => g[id]).filter((c): c is Node => c !== undefined).map(c => (c as any).y ?? baseY);
     const lastJoint = (childYs.length ? Math.max(...childYs) - state.elbowR : yStart);
     trunks.push({ x: px, y1: py + pr, y2: lastJoint });
 
@@ -672,7 +728,9 @@ function layoutFishbone(g:Graph){
   // Prepare arrays for Vue rendering
   nodesList.value = Object.values(g) as any;
 
-  const links = nodesList.value.filter(n=>n.parentId).map(n => ({ source: (g as any)[n.parentId!], target: n }));
+  const links = nodesList.value
+    .filter(n=>n.parentId && g[n.parentId])
+    .map(n => ({ source: (g as any)[n.parentId!], target: n }));
   const R = state.elbowR;
   const edges = links.map(l=>{
     const side: Side = (l.target.x! >= l.source.x!) ? +1 : -1;
@@ -686,7 +744,7 @@ function layoutFishbone(g:Graph){
   trunksList.value = nodesList.value.filter(n=>n.children.length>0).map(n=>{
     const rs = rFor(n.contributors);
     const yStart = n.y! + rs + STEM_LEN_PARENT;
-    const ys = n.children.map(id => (g as any)[id].y! - R);
+    const ys = n.children.map(id => g[id]).filter((c): c is Node => c !== undefined).map(c => (c as any).y! - R);
     const y2 = Math.max(yStart, ...ys);
     return { x: n.x!, y1: n.y! + rs, y2, id: n.id };
   });
@@ -701,6 +759,9 @@ function layoutFishbone(g:Graph){
    VIEW FITTING (responsive reset + tiny-graph elegance)
    ─────────────────────────────────────────────────────────────────────────── */
 function contentBounds(){
+  if (nodesList.value.length === 0) {
+    return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
+  }
   const minX = Math.min(...nodesList.value.map(n => (n.x ?? 0) - rFor(n.contributors)));
   const maxX = Math.max(...nodesList.value.map(n => (n.x ?? 0) + rFor(n.contributors)));
   const minY = Math.min(...nodesList.value.map(n => (n.y ?? 0) - rFor(n.contributors)));
@@ -718,11 +779,19 @@ function resetView(animated=false){
     requestAnimationFrame(() => resetView(animated));
     return;
   }
+  
+  if (nodesList.value.length === 0) return;
+  
   const usableH = box.height - VIEW_TOP_OFFSET;
 
   const forks = forkCount(state.graph);
   const b = contentBounds();
   const contentW = b.maxX - b.minX, contentH = b.maxY - b.minY;
+  
+  // Validate bounds
+  if (!isFinite(contentW) || !isFinite(contentH) || !isFinite(b.minX) || !isFinite(b.minY)) {
+    return;
+  }
 
   // Calculate fill fraction based on number of forks (more forks = fill more of viewport)
   const fillFrac = FILL_FRACTION_MIN + (FILL_FRACTION_MAX - FILL_FRACTION_MIN) * Math.min(1, forks / COMPLEXITY_THRESHOLD);
@@ -735,10 +804,12 @@ function resetView(animated=false){
   // Special handling for single-fork graphs: make the bubble nicely sized
   if (forks <= 1) {
     const root = getRoot(state.graph);
-    const r = rFor(root.contributors);
-    const desiredD = Math.max(SINGLE_FORK_DIAMETER_MIN, Math.min(Math.floor(box.width * SINGLE_FORK_WIDTH_RATIO), SINGLE_FORK_DIAMETER_MAX));
-    const sBubble  = desiredD / (2 * r);
-    targetScale = Math.min(ZOOM_MAX, Math.max(sBubble, targetScale));
+    if (root) {
+      const r = rFor(root.contributors);
+      const desiredD = Math.max(SINGLE_FORK_DIAMETER_MIN, Math.min(Math.floor(box.width * SINGLE_FORK_WIDTH_RATIO), SINGLE_FORK_DIAMETER_MAX));
+      const sBubble  = desiredD / (2 * r);
+      targetScale = Math.min(ZOOM_MAX, Math.max(sBubble, targetScale));
+    }
   }
 
   // Center horizontally
@@ -748,6 +819,11 @@ function resetView(animated=false){
   // Position vertically with top margin
   const targetTop = VIEW_TOP_OFFSET + RESET_TOP_MARGIN;
   const ty = targetTop - (b.minY * targetScale);
+
+  // Validate transform values before applying
+  if (!isFinite(tx) || !isFinite(ty) || !isFinite(targetScale)) {
+    return;
+  }
 
   const t = zoomIdentity.translate(tx, ty).scale(targetScale);
   (animated ? svgSel.transition().duration(VIEW_TRANSITION_DURATION) : svgSel).call(zoomBehavior.transform as any, t);

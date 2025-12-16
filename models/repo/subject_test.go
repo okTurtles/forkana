@@ -4,6 +4,7 @@
 package repo_test
 
 import (
+	"strings"
 	"sync"
 	"testing"
 
@@ -30,10 +31,18 @@ func TestGetOrCreateSubject(t *testing.T) {
 	assert.Equal(t, subject1.ID, subject2.ID)
 	assert.Equal(t, subject1.Name, subject2.Name)
 
-	// Test with empty name
+	// Test with empty name - should return an error
 	subject3, err := repo_model.GetOrCreateSubject(t.Context(), "")
-	assert.NoError(t, err)
+	assert.Error(t, err)
 	assert.Nil(t, subject3)
+	assert.Contains(t, err.Error(), "subject name cannot be empty")
+
+	// Test with name exceeding maximum length - should return an error
+	longName := strings.Repeat("a", repo_model.MaxSubjectNameLength+1)
+	subject4, err := repo_model.GetOrCreateSubject(t.Context(), longName)
+	assert.Error(t, err)
+	assert.Nil(t, subject4)
+	assert.Contains(t, err.Error(), "subject name is too long")
 }
 
 func TestGetSubjectByID(t *testing.T) {
