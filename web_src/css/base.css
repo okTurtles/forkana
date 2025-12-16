@@ -798,7 +798,7 @@ overflow-menu .ui.label {
 .lines-num {
   padding: 0 8px;
   text-align: center !important;
-  color: var(--color-text-light-4);
+  color: var(--color-text-light-3);
   width: 1%; /* this apparently needs to be a percentage so that code column stretches in diffs */
   min-width: 72px;
   white-space: nowrap;
