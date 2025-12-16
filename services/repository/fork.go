@@ -24,6 +24,7 @@ import (
 	"code.gitea.io/gitea/modules/util"
 	notify_service "code.gitea.io/gitea/services/notify"
 
+	"golang.org/x/sync/errgroup"
 	"xorm.io/builder"
 )
 
@@ -65,23 +66,42 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 		return perms, nil
 	}
 
-	// Check if user already owns a different repository for the same subject
-	// In Forkana, each user should only have one repository per subject
+	// Run subject ownership check and fork detection in parallel
+	// These queries are independent and can be executed concurrently
+	var ownRepo *repo_model.Repository
+	var existingFork *repo_model.Repository
+
+	g, gCtx := errgroup.WithContext(ctx)
+
+	// Check if user owns a different repository for the same subject
 	if repo.SubjectID > 0 {
-		ownRepo, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, doer.ID, repo.SubjectID)
-		if err != nil {
-			return nil, err
-		}
-		if ownRepo != nil && ownRepo.ID != repo.ID {
-			// User already owns a different repository for this subject
-			perms.BlockedBySubject = true
-			perms.OwnRepoForSubject = ownRepo
-			return perms, nil
-		}
+		g.Go(func() error {
+			var err error
+			ownRepo, err = repo_model.GetRepositoryByOwnerIDAndSubjectID(gCtx, doer.ID, repo.SubjectID)
+			return err
+		})
 	}
 
 	// Check for existing fork
-	existingFork := repo_model.GetForkedRepo(ctx, doer.ID, repo.ID)
+	g.Go(func() error {
+		existingFork = repo_model.GetForkedRepo(gCtx, doer.ID, repo.ID)
+		return nil // GetForkedRepo doesn't return an error
+	})
+
+	// Wait for both queries to complete
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Process subject ownership result
+	if ownRepo != nil && ownRepo.ID != repo.ID {
+		// User already owns a different repository for this subject
+		perms.BlockedBySubject = true
+		perms.OwnRepoForSubject = ownRepo
+		return perms, nil
+	}
+
+	// Process fork detection result
 	if existingFork != nil {
 		perms.HasExistingFork = true
 		perms.ExistingFork = existingFork
