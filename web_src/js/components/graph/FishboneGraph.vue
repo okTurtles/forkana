@@ -180,7 +180,7 @@ type EdgeGeom = { source: Node; target: Node; side: Side;
 const nodesList = ref<Node[]>([]);
 const edgesList = ref<EdgeGeom[]>([]);
 const trunksList = ref<{ x:number; y1:number; y2:number; id:string }[]>([]);
-const jointDots = ref<{ x:number; y:number; id:string }[]>([]);
+const jointDots = ref<{ x:number; y:number; id:string; sourceOwner:string; targetOwner:string; subject:string }[]>([]);
 
 /* SVG/zoom plumbing */
 const svgHeight = ref(DEFAULT_SVG_HEIGHT);
@@ -507,11 +507,18 @@ function getRoot(g:Graph){ return Object.values(g).find(n=>n.parentId===null)!; 
 
 function computeDepths(g:Graph){
   /* BFS depth tagging so we can place parents top-down and sort render order. */
-  const root = getRoot(g) as any; (root as any).depth = 0;
+  const root = getRoot(g);
+  if (!root) return; // Guard against empty graph
+  (root as any).depth = 0;
   const q = [root];
   while(q.length){
     const n:any = q.shift();
-    for(const cid of n.children){ const c:any = g[cid]; c.depth = (n.depth ?? 0) + 1; q.push(c); }
+    for(const cid of n.children){
+      const c:any = g[cid];
+      if (!c) continue; // Skip missing child nodes
+      c.depth = (n.depth ?? 0) + 1;
+      q.push(c);
+    }
   }
 }
 
@@ -569,7 +576,9 @@ type HRun = { x0:number; x1:number; y:number };
 
 function layoutFishbone(g:Graph){
   computeDepths(g);
-  const root:any = getRoot(g); root.x = 0; root.y = 0;
+  const root:any = getRoot(g);
+  if (!root) return; // Guard against empty graph
+  root.x = 0; root.y = 0;
 
   // Update global max contributors for relative radius scaling
   state.maxContrib = Math.max(1, ...Object.values(g).map(n => n.contributors || 0));
@@ -579,7 +588,7 @@ function layoutFishbone(g:Graph){
   const parents = Object.values(g).sort((a:any,b:any)=> (a.depth - b.depth));
 
   for(const p of parents){
-    const kids = p.children.map(id=>g[id]);
+    const kids = p.children.map(id=>g[id]).filter((n): n is Node => n !== undefined);
     if(!kids.length) continue;
 
     const px = p.x ?? 0, py = p.y ?? 0, pr = rFor(p.contributors);
@@ -602,6 +611,7 @@ function layoutFishbone(g:Graph){
     };
 
     for(const c of ordered){
+      if (!c) continue; // Skip undefined nodes
       const cr = rFor(c.contributors);
 
       let side: Side;
@@ -662,7 +672,7 @@ function layoutFishbone(g:Graph){
       prevJoint = reqY - R;
     }
 
-    const childYs = p.children.map(id => (g as any)[id].y ?? baseY);
+    const childYs = p.children.map(id => (g as any)[id]?.y ?? baseY).filter((y): y is number => y !== undefined);
     const lastJoint = (childYs.length ? Math.max(...childYs) - state.elbowR : yStart);
     trunks.push({ x: px, y1: py + pr, y2: lastJoint });
 
@@ -691,7 +701,14 @@ function layoutFishbone(g:Graph){
     return { x: n.x!, y1: n.y! + rs, y2, id: n.id };
   });
 
-  jointDots.value = edges.map(e => ({ x:e.ex, y:e.ey, id:`${e.source.id}-${e.target.id}` }));
+  jointDots.value = edges.map(e => ({
+    x: e.ex,
+    y: e.ey,
+    id: `${e.source.id}-${e.target.id}`,
+    sourceOwner: e.source.repoOwner || e.source.fullName?.split('/')[0] || '',
+    targetOwner: e.target.repoOwner || e.target.fullName?.split('/')[0] || '',
+    subject: e.source.repoSubject || e.target.repoSubject || props.subject || '',
+  }));
 
   const maxY = Math.max(...nodesList.value.map(n => (n.y ?? 0) + rFor(n.contributors)));
   svgHeight.value = Math.max(containerHeight, maxY + SVG_BOTTOM_PADDING);
@@ -712,6 +729,7 @@ function contentBounds(){
 
 function resetView(animated=false){
   /* Centering fix: apply transform to worldSel (the same <g> Vue renders). */
+  if (!nodesList.value.length) return; // Guard against empty graph
   const svg = svgRef.value!;
   const box = svg.getBoundingClientRect();
   if (!box.width || !box.height) {
@@ -735,10 +753,12 @@ function resetView(animated=false){
   // Special handling for single-fork graphs: make the bubble nicely sized
   if (forks <= 1) {
     const root = getRoot(state.graph);
-    const r = rFor(root.contributors);
-    const desiredD = Math.max(SINGLE_FORK_DIAMETER_MIN, Math.min(Math.floor(box.width * SINGLE_FORK_WIDTH_RATIO), SINGLE_FORK_DIAMETER_MAX));
-    const sBubble  = desiredD / (2 * r);
-    targetScale = Math.min(ZOOM_MAX, Math.max(sBubble, targetScale));
+    if (root) {
+      const r = rFor(root.contributors);
+      const desiredD = Math.max(SINGLE_FORK_DIAMETER_MIN, Math.min(Math.floor(box.width * SINGLE_FORK_WIDTH_RATIO), SINGLE_FORK_DIAMETER_MAX));
+      const sBubble  = desiredD / (2 * r);
+      targetScale = Math.min(ZOOM_MAX, Math.max(sBubble, targetScale));
+    }
   }
 
   // Center horizontally
@@ -909,6 +929,13 @@ function onBubbleView(n: Node){
   window.dispatchEvent(new CustomEvent('repo:selection-updated', {detail: payload}));
   window.dispatchEvent(new CustomEvent('repo:bubble-open-article', {detail: payload}));
 }
+
+/* Click handler for joint-parent: navigate to fork comparison page */
+function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string }) {
+  if (!joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
+  const compareUrl = `/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`;
+  window.location.href = compareUrl;
+}
 </script>
 
 <template>
@@ -970,11 +997,18 @@ function onBubbleView(n: Node){
               stroke="#D7DFE8" stroke-width="2" stroke-linecap="round" opacity="0.9"
             />
 
-            <!-- Joint dots (hollow rings) on trunk side -->
+            <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
             <circle
               v-for="j in jointDots" :key="`joint-${j.id}`"
               class="joint-parent" :cx="j.x" :cy="j.y" r="6"
               fill="#ffffff" stroke="#C7D2DF" stroke-width="2"
+              style="cursor: pointer; transition: all 0.15s ease;"
+              role="button"
+              tabindex="0"
+              :aria-label="`Compare ${j.sourceOwner} with ${j.targetOwner}`"
+              @click.stop="() => onJointClick(j)"
+              @keydown.enter.stop="() => onJointClick(j)"
+              @keydown.space.stop="() => onJointClick(j)"
             />
             
             <!-- Bubbles (component handles labels independently) -->
@@ -1179,5 +1213,19 @@ function onBubbleView(n: Node){
 
 .pulse-animation {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Joint-parent hover/focus effects for clickable points of contention */
+.joint-parent:hover {
+  stroke: var(--color-primary, #2563eb) !important;
+  stroke-width: 3 !important;
+  fill: #f0f7ff !important;
+}
+
+.joint-parent:focus {
+  outline: none;
+  stroke: var(--color-primary, #2563eb) !important;
+  stroke-width: 3 !important;
+  fill: #e0efff !important;
 }
 </style>
