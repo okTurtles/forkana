@@ -884,6 +884,24 @@ func (err ErrRepoWithSubjectNotExist) Unwrap() error {
 	return util.ErrNotExist
 }
 
+// ErrRootArticleAlreadyExists represents an error when trying to create a root article
+// for a subject that already has one. This is used to signal that the creation should
+// be converted to a fork operation.
+type ErrRootArticleAlreadyExists struct {
+	SubjectID  int64
+	RootRepoID int64
+}
+
+// IsErrRootArticleAlreadyExists checks if an error is a ErrRootArticleAlreadyExists.
+func IsErrRootArticleAlreadyExists(err error) bool {
+	_, ok := err.(ErrRootArticleAlreadyExists)
+	return ok
+}
+
+func (err ErrRootArticleAlreadyExists) Error() string {
+	return fmt.Sprintf("root article already exists for subject [subject_id: %d, root_repo_id: %d]", err.SubjectID, err.RootRepoID)
+}
+
 // GetRepositoryByOwnerAndName returns the repository by given owner name and repo name
 func GetRepositoryByOwnerAndName(ctx context.Context, ownerName, repoName string) (*Repository, error) {
 	var repo Repository
@@ -895,7 +913,7 @@ func GetRepositoryByOwnerAndName(ctx context.Context, ownerName, repoName string
 	if err != nil {
 		return nil, err
 	} else if !has {
-		return nil, ErrRepoNotExist{0, 0, ownerName, repoName}
+		return nil, ErrRepoNotExist{ID: 0, UID: 0, OwnerName: ownerName, Name: repoName}
 	}
 	return &repo, nil
 }
@@ -911,14 +929,15 @@ func GetRepositoryByName(ctx context.Context, ownerID int64, name string) (*Repo
 	if err != nil {
 		return nil, err
 	} else if !has {
-		return nil, ErrRepoNotExist{0, ownerID, "", name}
+		return nil, ErrRepoNotExist{ID: 0, UID: ownerID, OwnerName: "", Name: name}
 	}
 	return &repo, err
 }
 
 // GetPublicRepositoryBySubject returns the first public repository with the given subject name.
-// This function searches across all owners and prioritizes root repositories (non-forks)
-// over forks to ensure the original repository is returned when multiple repos share the same subject.
+// This function searches across all owners and prioritizes non-empty repositories first,
+// then root repositories (non-forks) to ensure the first person to create content
+// becomes the owner of the original version (first bubble).
 func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Repository, error) {
 	// First, get the subject by name
 	subject, err := GetSubjectByName(ctx, subjectName)
@@ -926,12 +945,16 @@ func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Rep
 		return nil, err
 	}
 
-	// Find the first public repository with this subject_id, preferring root repos
+	// Find the first public repository with this subject_id
+	// Priority order:
+	// 1. Non-empty repos (is_empty=false)
+	// 2. Root repos (is_fork=false)
+	// 3. Most recently updated
 	var repo Repository
 	has, err := db.GetEngine(ctx).
 		Where("`subject_id`=?", subject.ID).
 		And("`is_private`=?", false).
-		OrderBy("`is_fork` ASC, `updated_unix` DESC"). // Prefer root repos (is_fork=false), then most recently updated
+		OrderBy("`is_empty` ASC, `is_fork` ASC, `updated_unix` DESC").
 		NoAutoCondition().
 		Get(&repo)
 
@@ -943,6 +966,43 @@ func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Rep
 
 	// Load the subject relation
 	repo.SubjectRelation = subject
+
+	return &repo, nil
+}
+
+// GetSubjectRootRepository returns the root (non-fork, non-empty) repository for a given subject ID.
+// This function finds the first non-fork, non-empty repository created for the subject, ordered by creation time.
+// Only non-empty repositories are considered as roots because the first-article-becomes-root logic
+// should only trigger when a user commits content, not when they create an empty repository.
+// Returns ErrRepoNotExist if no root repository exists for the subject.
+func GetSubjectRootRepository(ctx context.Context, subjectID int64) (*Repository, error) {
+	return GetSubjectRootRepositoryExcluding(ctx, subjectID, 0)
+}
+
+// GetSubjectRootRepositoryExcluding returns the root (non-fork, non-empty) repository for a given subject ID,
+// excluding a specific repository ID from the search.
+// This is used by the first-article-becomes-root logic to check if there's already a root repository
+// BEFORE the current repository became non-empty. By excluding the current repository, we can determine
+// if another repository was the first to have content committed.
+// Returns ErrRepoNotExist if no root repository exists for the subject (excluding the specified repo).
+func GetSubjectRootRepositoryExcluding(ctx context.Context, subjectID, excludeRepoID int64) (*Repository, error) {
+	var repo Repository
+	sess := db.GetEngine(ctx).
+		Where("subject_id = ?", subjectID).
+		And("is_fork = ?", false).
+		And("is_empty = ?", false)
+
+	if excludeRepoID > 0 {
+		sess = sess.And("id != ?", excludeRepoID)
+	}
+
+	has, err := sess.OrderBy("created_unix ASC").Get(&repo)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, ErrRepoNotExist{ID: 0, UID: 0, OwnerName: "", Name: ""}
+	}
 
 	return &repo, nil
 }
@@ -968,7 +1028,7 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 	if err != nil {
 		return nil, err
 	} else if !has {
-		return nil, ErrRepoNotExist{0, 0, ownerName, subjectName}
+		return nil, ErrRepoNotExist{ID: 0, UID: 0, OwnerName: ownerName, Name: subjectName}
 	}
 
 	// Load the subject relation
@@ -1022,7 +1082,7 @@ func GetRepositoryByID(ctx context.Context, id int64) (*Repository, error) {
 	if err != nil {
 		return nil, err
 	} else if !has {
-		return nil, ErrRepoNotExist{id, 0, "", ""}
+		return nil, ErrRepoNotExist{ID: id, UID: 0, OwnerName: "", Name: ""}
 	}
 	return repo, nil
 }

@@ -23,7 +23,8 @@ import (
 // Version History:
 // - v1: Initial implementation with basic fork graph traversal
 // - v2: Added cycle detection error handling (ErrCycleDetected)
-const forkGraphCacheVersion = "v2"
+// - v3: Changed GetPublicRepositoryBySubject to prioritize non-empty repositories
+const forkGraphCacheVersion = "v3"
 
 // ForkGraphParams represents the query parameters for fork graph endpoint
 type ForkGraphParams struct {
@@ -80,12 +81,18 @@ func (p *ForkGraphParams) validate() error {
 // The key includes:
 // - forkGraphCacheVersion: Incremented when logic changes (for cache invalidation)
 // - repoID: The repository being queried
+// - isEmpty: Whether the repository is empty (changes when first content is added)
+// - numForks: Number of forks (changes when forks are created, invalidating cache)
 // - paramsHash: Hash of query parameters (depth, filters, etc.)
 // - userID: User-specific permissions may affect the graph
-func getCacheKey(repoID int64, params ForkGraphParams, userID int64) string {
+func getCacheKey(repoID int64, isEmpty bool, numForks int, params ForkGraphParams, userID int64) string {
 	paramsHash := hashParams(params)
-	return fmt.Sprintf("fork_graph:%s:%d:%s:%d",
-		forkGraphCacheVersion, repoID, paramsHash, userID)
+	emptyStr := "0"
+	if isEmpty {
+		emptyStr = "1"
+	}
+	return fmt.Sprintf("fork_graph:%s:%d:%s:%d:%s:%d",
+		forkGraphCacheVersion, repoID, emptyStr, numForks, paramsHash, userID)
 }
 
 // hashParams creates a hash of the parameters
@@ -218,7 +225,7 @@ func GetForkGraph(ctx *context.APIContext) {
 	}
 
 	// Try cache first
-	cacheKey := getCacheKey(ctx.Repo.Repository.ID, params, userID)
+	cacheKey := getCacheKey(ctx.Repo.Repository.ID, ctx.Repo.Repository.IsEmpty, ctx.Repo.Repository.NumForks, params, userID)
 	c := cache.GetCache()
 	if c != nil {
 		var cachedResponse repository.ForkGraphResponse

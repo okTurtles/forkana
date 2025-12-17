@@ -265,9 +265,48 @@ func CreateRepositoryDirectly(ctx context.Context, doer, owner *user_model.User,
 	}
 
 	// 1 - create the repository database operations first
-	err := db.WithTx(ctx, func(ctx context.Context) error {
-		return createRepositoryInDB(ctx, doer, owner, repo, false)
+	// Use transaction with first-article-becomes-root logic for subjects
+	var rootRepo *repo_model.Repository
+	err := db.WithTx(ctx, func(txCtx context.Context) error {
+		// If subject is provided, check for existing root repository within the transaction
+		// This prevents race conditions where two users try to create the first article simultaneously
+		if subjectID > 0 {
+			rootCount, err := repo_model.CountRootRepositoriesBySubject(txCtx, subjectID)
+			if err != nil {
+				return fmt.Errorf("failed to count root repositories: %w", err)
+			}
+
+			if rootCount > 0 {
+				// Get the root repository - we'll fork from it after the transaction
+				rootRepo, err = repo_model.GetSubjectRootRepository(txCtx, subjectID)
+				if err != nil {
+					return fmt.Errorf("failed to get root repository: %w", err)
+				}
+				// Return a special error to signal we should fork instead
+				return repo_model.ErrRootArticleAlreadyExists{SubjectID: subjectID, RootRepoID: rootRepo.ID}
+			}
+		}
+
+		return createRepositoryInDB(txCtx, doer, owner, repo, false)
 	})
+
+	// Handle the case where we need to fork instead of creating a new root
+	if repo_model.IsErrRootArticleAlreadyExists(err) {
+		// Load the owner for the root repository (required for fork)
+		if err := rootRepo.LoadOwner(ctx); err != nil {
+			return nil, fmt.Errorf("failed to load root repository owner: %w", err)
+		}
+
+		log.Info("Subject (ID: %d) already has a root repository (ID: %d, Owner: %s). Creating fork instead.",
+			subjectID, rootRepo.ID, rootRepo.OwnerName)
+
+		return ForkRepository(ctx, doer, owner, ForkRepoOptions{
+			BaseRepo:    rootRepo,
+			Name:        opts.Name,
+			Description: opts.Description,
+		})
+	}
+
 	if err != nil {
 		return nil, err
 	}
