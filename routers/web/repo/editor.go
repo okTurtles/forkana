@@ -64,14 +64,11 @@ func prepareEditorCommitFormOptions(ctx *context.Context, editorAction string) *
 		return nil
 	}
 
-	if commitFormOptions.NeedFork {
-		if strings.EqualFold(ctx.Repo.TreePath, "README.md") {
-			// We allow this now for the auto-fork feature
-		} else {
-			redirectURL := fmt.Sprintf("%s/_new/%s/README.md", ctx.Repo.RepoLink, util.PathEscapeSegments(ctx.Repo.BranchName))
-			ctx.Redirect(redirectURL)
-			return nil
-		}
+	// Allow README.md creation for the auto-fork feature
+	if commitFormOptions.NeedFork && !strings.EqualFold(ctx.Repo.TreePath, "README.md") {
+		redirectURL := fmt.Sprintf("%s/_new/%s/README.md", ctx.Repo.RepoLink, util.PathEscapeSegments(ctx.Repo.BranchName))
+		ctx.Redirect(redirectURL)
+		return nil
 	}
 
 	if commitFormOptions.WillSubmitToFork && !commitFormOptions.TargetRepo.CanEnableEditor() {
@@ -428,6 +425,16 @@ func EditFilePost(ctx *context.Context) {
 				baseRepo.ForkID = forkedRepo.ID
 				if err := repo_model.UpdateRepositoryColsNoAutoTime(txCtx, baseRepo, "is_fork", "fork_id"); err != nil {
 					return fmt.Errorf("failed to update base repo to fork: %w", err)
+				}
+
+				// 3. Update NumForks counters
+				// forkedRepo is no longer a fork of baseRepo, so decrement baseRepo's count
+				if err := repo_model.DecrementRepoForkNum(txCtx, baseRepo.ID); err != nil {
+					return fmt.Errorf("failed to decrement fork count on old root: %w", err)
+				}
+				// baseRepo is now a fork of forkedRepo, so increment forkedRepo's count
+				if err := repo_model.IncrementRepoForkNum(txCtx, forkedRepo.ID); err != nil {
+					return fmt.Errorf("failed to increment fork count on new root: %w", err)
 				}
 
 				return nil

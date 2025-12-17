@@ -233,14 +233,14 @@ func TestFirstArticleBecomesRoot_ConcurrentEmptyCreation(t *testing.T) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var repos []*repo_model.Repository
-	var errors []error
+	var errs []error
 
 	// Create empty articles concurrently from 3 users
 	// Since all are empty, none should become forks
 	users := []*user_model.User{user2, user4, user5}
-	for i, user := range users {
+	for _, user := range users {
 		wg.Add(1)
-		go func(u *user_model.User, idx int) {
+		go func(u *user_model.User) {
 			defer wg.Done()
 			repo, err := CreateRepositoryDirectly(t.Context(), u, u, CreateRepoOptions{
 				Name:    "concurrent-empty-article",
@@ -248,9 +248,9 @@ func TestFirstArticleBecomesRoot_ConcurrentEmptyCreation(t *testing.T) {
 			}, true)
 			mu.Lock()
 			repos = append(repos, repo)
-			errors = append(errors, err)
+			errs = append(errs, err)
 			mu.Unlock()
-		}(user, i)
+		}(user)
 	}
 
 	wg.Wait()
@@ -258,7 +258,7 @@ func TestFirstArticleBecomesRoot_ConcurrentEmptyCreation(t *testing.T) {
 	// Count successful creations
 	var successCount, forkCount int
 	for i, repo := range repos {
-		if errors[i] != nil {
+		if errs[i] != nil {
 			continue
 		}
 		successCount++
@@ -273,7 +273,7 @@ func TestFirstArticleBecomesRoot_ConcurrentEmptyCreation(t *testing.T) {
 
 	// All repos should be empty
 	for i, repo := range repos {
-		if errors[i] != nil {
+		if errs[i] != nil {
 			continue
 		}
 		assert.True(t, repo.IsEmpty, "All repositories should be empty")
@@ -282,7 +282,7 @@ func TestFirstArticleBecomesRoot_ConcurrentEmptyCreation(t *testing.T) {
 
 	// Cleanup
 	for i, repo := range repos {
-		if errors[i] == nil && repo != nil {
+		if errs[i] == nil && repo != nil {
 			_ = DeleteRepositoryDirectly(t.Context(), repo.ID)
 		}
 	}
@@ -368,7 +368,7 @@ func TestFirstArticleBecomesRoot_ConcurrentWithContentRace(t *testing.T) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var repos []*repo_model.Repository
-	var errors []error
+	var errs []error
 
 	// Make repo1 non-empty to establish it as the root
 	repo1.IsEmpty = false
@@ -377,9 +377,9 @@ func TestFirstArticleBecomesRoot_ConcurrentWithContentRace(t *testing.T) {
 
 	// Now create concurrent repos - they should all become forks of repo1
 	users := []*user_model.User{user4, user5}
-	for i, user := range users {
+	for _, user := range users {
 		wg.Add(1)
-		go func(u *user_model.User, idx int) {
+		go func(u *user_model.User) {
 			defer wg.Done()
 			repo, err := CreateRepositoryDirectly(t.Context(), u, u, CreateRepoOptions{
 				Name:    "race-article",
@@ -387,9 +387,9 @@ func TestFirstArticleBecomesRoot_ConcurrentWithContentRace(t *testing.T) {
 			}, true)
 			mu.Lock()
 			repos = append(repos, repo)
-			errors = append(errors, err)
+			errs = append(errs, err)
 			mu.Unlock()
-		}(user, i)
+		}(user)
 	}
 
 	wg.Wait()
@@ -397,7 +397,7 @@ func TestFirstArticleBecomesRoot_ConcurrentWithContentRace(t *testing.T) {
 	// Count results
 	var successCount, forkCount int
 	for i, repo := range repos {
-		if errors[i] != nil {
+		if errs[i] != nil {
 			continue
 		}
 		successCount++
@@ -414,7 +414,7 @@ func TestFirstArticleBecomesRoot_ConcurrentWithContentRace(t *testing.T) {
 
 	// Cleanup
 	for i, repo := range repos {
-		if errors[i] == nil && repo != nil {
+		if errs[i] == nil && repo != nil {
 			_ = DeleteRepositoryDirectly(t.Context(), repo.ID)
 		}
 	}

@@ -319,7 +319,9 @@ func pushNewBranch(ctx context.Context, repo *repo_model.Repository, pusher *use
 			if c != nil {
 				// Use background context since this runs after the request may complete
 				bgCtx := context.Background()
-				_, _ = GetContributorStats(bgCtx, c, repo, repo.DefaultBranch)
+				if _, err := GetContributorStats(bgCtx, c, repo, repo.DefaultBranch); err != nil && !errors.Is(err, ErrAwaitGeneration) {
+					log.Debug("Failed to pre-generate contributor stats for repo %d: %v", repo.ID, err)
+				}
 			}
 		}()
 	}
