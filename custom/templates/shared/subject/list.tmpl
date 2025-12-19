@@ -6,7 +6,7 @@
 				{{ctx.Locale.Tr "explore.search_results_for" .Keyword}}
 			</div>
 		{{end}}
-		
+
 		{{/* No Exact Match - Show Create Button */}}
 		{{if not .ExactMatch}}
 			<div class="tw-mb-6">
@@ -18,12 +18,12 @@
 				</a>
 			</div>
 		{{end}}
-		
+
 		{{/* Exact Match Section */}}
 		{{if .ExactMatch}}
 			{{template "shared/subject/item" .ExactMatch}}
 		{{end}}
-		
+
 		{{/* Similar Section */}}
 		{{if .SimilarSubjects}}
 			<div class="tw-font-semibold tw-text-base tw-mt-6 tw-mb-3 text muted">
@@ -33,7 +33,7 @@
 				{{template "shared/subject/item" .}}
 			{{end}}
 		{{end}}
-		
+
 	{{else}}
 		{{/* When not searching, show all subjects normally */}}
 		{{range .Subjects}}
