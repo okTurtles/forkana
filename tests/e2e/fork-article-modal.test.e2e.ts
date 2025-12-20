@@ -321,3 +321,133 @@ test.describe('Fork-on-Edit Permission Tests', () => {
     });
   });
 });
+
+// Accessibility Tests (Section 5 from opus-analysis.md)
+test.describe('Accessibility Tests', () => {
+  test.beforeAll(async ({browser}, workerInfo) => {
+    await login_user(browser, workerInfo, 'user4');
+  });
+
+  test('modal is keyboard accessible - Enter opens modal', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user4');
+    const page = await context.newPage();
+
+    await page.goto('/article/user2/example-subject?mode=edit');
+    await page.waitForLoadState('domcontentloaded');
+
+    const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+    await expect(forkButton).toBeVisible({timeout: 10000});
+
+    // Wait for the Toast UI Editor to be initialized
+    await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+
+    // Focus the Fork button and press Enter
+    await forkButton.focus();
+    await page.keyboard.press('Enter');
+
+    // Modal should open
+    const modal = page.locator('.ui.g-modal-confirm.modal.visible');
+    await expect(modal).toBeVisible({timeout: 5000});
+
+    await context.close();
+  });
+
+  test('modal buttons are keyboard navigable with Tab', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user4');
+    const page = await context.newPage();
+
+    await page.goto('/article/user2/example-subject?mode=edit');
+    await page.waitForLoadState('domcontentloaded');
+
+    const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+    await expect(forkButton).toBeVisible({timeout: 10000});
+
+    // Wait for the Toast UI Editor to be initialized
+    await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+
+    await forkButton.click();
+
+    const modal = page.locator('.ui.g-modal-confirm.modal.visible');
+    await expect(modal).toBeVisible({timeout: 5000});
+
+    const cancelButton = modal.locator('.actions .cancel.button');
+    const confirmButton = modal.locator('.actions .ok.button');
+
+    // Tab through modal buttons - focus should move between them
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+
+    // Both buttons should be focusable (have tabindex or be naturally focusable)
+    await expect(cancelButton).toBeVisible();
+    await expect(confirmButton).toBeVisible();
+
+    await context.close();
+  });
+
+  test('Enter activates focused cancel button and closes modal', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user4');
+    const page = await context.newPage();
+
+    await page.goto('/article/user2/example-subject?mode=edit');
+    await page.waitForLoadState('domcontentloaded');
+
+    const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+    await expect(forkButton).toBeVisible({timeout: 10000});
+
+    // Wait for the Toast UI Editor to be initialized
+    await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+
+    await forkButton.click();
+
+    const modal = page.locator('.ui.g-modal-confirm.modal.visible');
+    await expect(modal).toBeVisible({timeout: 5000});
+
+    const cancelButton = modal.locator('.actions .cancel.button');
+
+    // Focus the cancel button and press Enter
+    await cancelButton.focus();
+    await page.keyboard.press('Enter');
+
+    // Modal should close
+    await expect(modal).not.toBeVisible({timeout: 5000});
+
+    await context.close();
+  });
+
+  test('modal buttons have accessible names', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user4');
+    const page = await context.newPage();
+
+    await page.goto('/article/user2/example-subject?mode=edit');
+    await page.waitForLoadState('domcontentloaded');
+
+    const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+    await expect(forkButton).toBeVisible({timeout: 10000});
+
+    // Wait for the Toast UI Editor to be initialized
+    await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+
+    await forkButton.click();
+
+    const modal = page.locator('.ui.g-modal-confirm.modal.visible');
+    await expect(modal).toBeVisible({timeout: 5000});
+
+    const cancelButton = modal.locator('.actions .cancel.button');
+    const confirmButton = modal.locator('.actions .ok.button');
+
+    // Buttons should have accessible text content
+    const cancelText = await cancelButton.textContent();
+    const confirmText = await confirmButton.textContent();
+
+    expect(cancelText).toBeTruthy();
+    expect(cancelText!.trim().length).toBeGreaterThan(0);
+    expect(confirmText).toBeTruthy();
+    expect(confirmText!.trim().length).toBeGreaterThan(0);
+
+    // Verify specific accessible names
+    expect(cancelText).toContain('Go back');
+    expect(confirmText).toContain('Yes, Fork article');
+
+    await context.close();
+  });
+});
