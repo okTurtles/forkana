@@ -205,3 +205,119 @@ test.describe('Fork Button Tooltip', () => {
     await context.close();
   });
 });
+
+test.describe('Fork-on-Edit Permission Tests', () => {
+  // Log in users once per worker to avoid race conditions
+  test.beforeAll(async ({browser}, workerInfo) => {
+    await login_user(browser, workerInfo, 'user2');
+    await login_user(browser, workerInfo, 'user4');
+  });
+
+  test.describe('Repository Owner Tests', () => {
+    test('repository owner sees Submit Changes button with data-fork-and-edit=false', async ({browser}, workerInfo) => {
+      const context = await load_logged_in_context(browser, workerInfo, 'user2');
+      const page = await context.newPage();
+
+      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.waitForLoadState('domcontentloaded');
+
+      // Verify we're on the article page
+      await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
+
+      // Owner should see Submit Changes button, not Fork button
+      const submitButton = page.locator('#submit-changes-button');
+      await expect(submitButton).toBeVisible({timeout: 10000});
+
+      // Button should have data-fork-and-edit="false" for direct editing
+      await expect(submitButton).toHaveAttribute('data-fork-and-edit', 'false');
+
+      // Button should contain "Submit Changes" text
+      await expect(submitButton).toContainText('Submit Changes');
+
+      // Button should be primary style (not secondary like Fork button)
+      await expect(submitButton).toHaveClass(/primary/);
+
+      await context.close();
+    });
+
+    test('repository owner can click Submit Changes without confirmation modal', async ({browser}, workerInfo) => {
+      const context = await load_logged_in_context(browser, workerInfo, 'user2');
+      const page = await context.newPage();
+
+      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.waitForLoadState('domcontentloaded');
+
+      const submitButton = page.locator('#submit-changes-button');
+      await expect(submitButton).toBeVisible({timeout: 10000});
+
+      // Wait for the article edit form to be present
+      await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
+
+      // Wait for the Toast UI Editor to be initialized
+      await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+
+      await submitButton.click();
+
+      // No confirmation modal should appear for repo owner
+      const modal = page.locator('.ui.g-modal-confirm.modal.visible');
+      await expect(modal).not.toBeVisible({timeout: 2000});
+
+      await context.close();
+    });
+  });
+
+  test.describe('Non-Owner Permission Tests', () => {
+    test('non-owner sees Fork button with data-fork-and-edit=true', async ({browser}, workerInfo) => {
+      const context = await load_logged_in_context(browser, workerInfo, 'user4');
+      const page = await context.newPage();
+
+      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.waitForLoadState('domcontentloaded');
+
+      // Verify we're on the article page
+      await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
+
+      // Non-owner should see Fork button
+      const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+      await expect(forkButton).toBeVisible({timeout: 10000});
+
+      // Button should contain "Fork" text
+      await expect(forkButton).toContainText('Fork');
+
+      // Button should be secondary style (not primary)
+      await expect(forkButton).toHaveClass(/secondary/);
+
+      await context.close();
+    });
+
+    test('non-owner sees disabled Submit Changes button alongside Fork button', async ({browser}, workerInfo) => {
+      const context = await load_logged_in_context(browser, workerInfo, 'user4');
+      const page = await context.newPage();
+
+      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.waitForLoadState('domcontentloaded');
+
+      // Non-owner should see disabled Submit Changes button
+      const disabledSubmitButton = page.locator('button.ui.primary.button.disabled:has-text("Submit Changes")');
+      await expect(disabledSubmitButton).toBeVisible({timeout: 10000});
+
+      await context.close();
+    });
+  });
+
+  test.describe('Unauthenticated User Tests', () => {
+    test('unauthenticated user sees disabled sign-in button', async ({page}) => {
+      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.waitForLoadState('domcontentloaded');
+
+      // Unauthenticated user should see disabled button with sign-in message
+      const signInButton = page.locator('button.ui.primary.button.disabled');
+      await expect(signInButton).toBeVisible({timeout: 10000});
+
+      // Button should contain sign-in text
+      await expect(signInButton).toContainText(/Sign in/i);
+
+      await page.close();
+    });
+  });
+});
