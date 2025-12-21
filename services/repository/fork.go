@@ -5,6 +5,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -143,8 +144,8 @@ type ErrUserOwnsSubjectRepo struct {
 
 // IsErrUserOwnsSubjectRepo checks if an error is an ErrUserOwnsSubjectRepo.
 func IsErrUserOwnsSubjectRepo(err error) bool {
-	_, ok := err.(ErrUserOwnsSubjectRepo)
-	return ok
+	var e ErrUserOwnsSubjectRepo
+	return errors.As(err, &e)
 }
 
 func (err ErrUserOwnsSubjectRepo) Error() string {
