@@ -23,8 +23,15 @@ func RequireRepoAdmin() func(ctx *Context) {
 }
 
 // CanWriteToBranch checks if the user is allowed to write to the branch of the repo
+// If the request has fork_and_edit=true in the form data, the check is skipped
+// because the handler will create a fork and commit to that instead.
 func CanWriteToBranch() func(ctx *Context) {
 	return func(ctx *Context) {
+		// Allow fork-and-edit workflow to bypass write permission check
+		// The handler will create a fork and commit to that instead
+		if ctx.Req.FormValue("fork_and_edit") == "true" {
+			return
+		}
 		if !ctx.Repo.CanWriteToBranch(ctx, ctx.Doer, ctx.Repo.BranchName) {
 			ctx.NotFound(nil)
 			return

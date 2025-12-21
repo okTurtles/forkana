@@ -363,7 +363,9 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
-	if parsed.CommitFormOptions.NeedFork {
+	// Skip the NeedFork workflow if ForkAndEdit is true
+	// The ForkAndEdit workflow (handled later) will create the fork
+	if parsed.CommitFormOptions.NeedFork && !parsed.form.ForkAndEdit {
 		baseRepo := ctx.Repo.Repository
 		repoName := getUniqueRepositoryName(ctx, ctx.Doer.ID, baseRepo.Name)
 		if repoName == "" {
