@@ -158,10 +158,12 @@ func CreateFork(ctx *context.APIContext) {
 		Description: repo.Description,
 	})
 	if err != nil {
-		if errors.Is(err, util.ErrAlreadyExist) || repo_model.IsErrReachLimitOfRepo(err) {
-			ctx.APIError(http.StatusConflict, err)
-		} else if errors.Is(err, user_model.ErrBlockedUser) || repo_model.IsErrForkTreeTooLarge(err) || repo_service.IsErrUserOwnsSubjectRepo(err) {
+		// Check IsErrUserOwnsSubjectRepo BEFORE errors.Is(err, util.ErrAlreadyExist)
+		// because ErrUserOwnsSubjectRepo.Unwrap() returns util.ErrAlreadyExist
+		if errors.Is(err, user_model.ErrBlockedUser) || repo_model.IsErrForkTreeTooLarge(err) || repo_service.IsErrUserOwnsSubjectRepo(err) {
 			ctx.APIError(http.StatusForbidden, err)
+		} else if errors.Is(err, util.ErrAlreadyExist) || repo_model.IsErrReachLimitOfRepo(err) {
+			ctx.APIError(http.StatusConflict, err)
 		} else {
 			ctx.APIErrorInternal(err)
 		}
