@@ -39,7 +39,9 @@
             <p>{{ctx.Locale.Tr "repo.editor.file_not_editable_hint"}}</p>
         </div>
     {{else if .HasOwnRepoForSubject}}
-        {{/* User already owns a different repository for this subject - show message instead of editor */}}
+        {{/* User already owns a different repository for this subject - show message instead of editor.
+             SubjectRelation should always be loaded here (via LoadSubject in ArticleView),
+             but we fall back to Repository.Name as a defensive measure. */}}
         {{$subjectName := Iif .Repository.SubjectRelation .Repository.SubjectRelation.Name .Repository.Name}}
         <div class="ui info message">
             <div class="header">
