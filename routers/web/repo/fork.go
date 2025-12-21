@@ -156,13 +156,18 @@ func ForkPost(ctx *context.Context) {
 	}
 
 	var err error
+	var repo *repo_model.Repository
 	traverseParentRepo := forkRepo
 	for {
 		if !repository.CanUserForkBetweenOwners(ctxUser.ID, traverseParentRepo.OwnerID) {
 			ctx.JSONError(ctx.Tr("repo.settings.new_owner_has_same_repo"))
 			return
 		}
-		repo := repo_model.GetForkedRepo(ctx, ctxUser.ID, traverseParentRepo.ID)
+		repo, err = repo_model.GetForkedRepo(ctx, ctxUser.ID, traverseParentRepo.ID)
+		if err != nil {
+			ctx.ServerError("GetForkedRepo", err)
+			return
+		}
 		if repo != nil {
 			ctx.JSONRedirect(ctxUser.HomeLink() + "/" + url.PathEscape(repo.Name))
 			return
@@ -189,7 +194,7 @@ func ForkPost(ctx *context.Context) {
 		}
 	}
 
-	repo := ForkRepoTo(ctx, ctxUser, repo_service.ForkRepoOptions{
+	forkedRepo := ForkRepoTo(ctx, ctxUser, repo_service.ForkRepoOptions{
 		BaseRepo:     forkRepo,
 		Name:         form.RepoName,
 		Description:  form.Description,
@@ -198,7 +203,7 @@ func ForkPost(ctx *context.Context) {
 	if ctx.Written() {
 		return
 	}
-	ctx.JSONRedirect(ctxUser.HomeLink() + "/" + url.PathEscape(repo.Name))
+	ctx.JSONRedirect(ctxUser.HomeLink() + "/" + url.PathEscape(forkedRepo.Name))
 }
 
 func ForkRepoTo(ctx *context.Context, owner *user_model.User, forkOpts repo_service.ForkRepoOptions) *repo_model.Repository {

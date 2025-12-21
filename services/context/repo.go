@@ -123,10 +123,14 @@ func PrepareCommitFormOptions(ctx *Context, doer *user_model.User, targetRepo *r
 	branchName := refName.ShortName()
 	// TODO: CanMaintainerWriteToBranch is a bad name, but it really does what "CanWriteToBranch" does
 	if !issues_model.CanMaintainerWriteToBranch(ctx, doerRepoPerm, branchName, doer) {
-		targetRepo = repo_model.GetForkedRepo(ctx, doer.ID, targetRepo.ID)
-		if targetRepo == nil {
+		forkedRepo, err := repo_model.GetForkedRepo(ctx, doer.ID, targetRepo.ID)
+		if err != nil {
+			return nil, err
+		}
+		if forkedRepo == nil {
 			return &CommitFormOptions{NeedFork: true}, nil
 		}
+		targetRepo = forkedRepo
 		// now, we get our own forked repo; it must be writable by us.
 	}
 	submitToForkedRepo := targetRepo.ID != originRepo.ID

@@ -85,8 +85,9 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 
 	// Check for existing fork
 	g.Go(func() error {
-		existingFork = repo_model.GetForkedRepo(gCtx, doer.ID, repo.ID)
-		return nil // GetForkedRepo doesn't return an error
+		var err error
+		existingFork, err = repo_model.GetForkedRepo(gCtx, doer.ID, repo.ID)
+		return err
 	})
 
 	// Wait for both queries to complete
