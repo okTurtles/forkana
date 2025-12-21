@@ -264,3 +264,128 @@ func TestForkAndEditFormActionURL(t *testing.T) {
 	})
 }
 
+// TestForkAndEditSecurityBypass tests that fork_and_edit=true cannot be used
+// to bypass permission checks on non-edit endpoints (delete, upload, diffpatch, cherrypick).
+// This is a security test to ensure the CanWriteToBranch middleware only allows
+// the bypass for _edit and _new actions which properly handle fork-and-edit.
+func TestForkAndEditSecurityBypass(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+	sessionNonOwner := loginUser(t, nonOwner.Name)
+
+	// Get CSRF token from any page
+	editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+	req := NewRequest(t, "GET", editURL)
+	resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+	htmlDoc := NewHTMLParser(t, resp.Body)
+	csrf := htmlDoc.GetCSRF()
+
+	t.Run("DeleteEndpointRejectsForkAndEdit", func(t *testing.T) {
+		// Attempt to delete a file with fork_and_edit=true
+		// This should be rejected with 404 (permission denied)
+		deleteURL := path.Join(owner.Name, repo.Name, "_delete", repo.DefaultBranch, "README.md")
+		form := map[string]string{
+			"_csrf":         csrf,
+			"tree_path":     "README.md", // Attacker might try to set this to bypass checks
+			"commit_choice": "direct",
+			"fork_and_edit": "true", // Attempting to bypass permission check
+		}
+
+		req := NewRequestWithValues(t, "POST", deleteURL, form)
+		resp := sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		// Should get 404 (permission denied) because fork_and_edit bypass
+		// is not allowed for _delete action
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"fork_and_edit=true should NOT bypass CanWriteToBranch for _delete action")
+	})
+
+	t.Run("UploadEndpointRejectsForkAndEdit", func(t *testing.T) {
+		// Attempt to upload a file with fork_and_edit=true
+		// This should be rejected with 404 (permission denied)
+		uploadURL := path.Join(owner.Name, repo.Name, "_upload", repo.DefaultBranch, "/")
+		form := map[string]string{
+			"_csrf":         csrf,
+			"tree_path":     "",
+			"commit_choice": "direct",
+			"fork_and_edit": "true", // Attempting to bypass permission check
+		}
+
+		req := NewRequestWithValues(t, "POST", uploadURL, form)
+		resp := sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		// Should get 404 (permission denied) because fork_and_edit bypass
+		// is not allowed for _upload action
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"fork_and_edit=true should NOT bypass CanWriteToBranch for _upload action")
+	})
+
+	t.Run("DiffPatchEndpointRejectsForkAndEdit", func(t *testing.T) {
+		// Attempt to apply a patch with fork_and_edit=true
+		// This should be rejected with 404 (permission denied)
+		diffpatchURL := path.Join(owner.Name, repo.Name, "_diffpatch", repo.DefaultBranch, "/")
+		form := map[string]string{
+			"_csrf":         csrf,
+			"tree_path":     "",
+			"content":       "fake patch content",
+			"commit_choice": "direct",
+			"fork_and_edit": "true", // Attempting to bypass permission check
+		}
+
+		req := NewRequestWithValues(t, "POST", diffpatchURL, form)
+		resp := sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		// Should get 404 (permission denied) because fork_and_edit bypass
+		// is not allowed for _diffpatch action
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"fork_and_edit=true should NOT bypass CanWriteToBranch for _diffpatch action")
+	})
+
+	t.Run("EditEndpointAllowsForkAndEdit", func(t *testing.T) {
+		// Verify that _edit still allows fork_and_edit=true
+		// This is the legitimate use case
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		form := map[string]string{
+			"_csrf":         csrf,
+			"last_commit":   htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":     "README.md",
+			"content":       "Test content",
+			"commit_choice": "direct",
+			"fork_and_edit": "true",
+		}
+
+		req := NewRequestWithValues(t, "POST", editURL, form)
+		resp := sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		// Should NOT get 404 - the middleware should pass
+		// (may get other errors due to git operations, but not 404)
+		assert.NotEqual(t, http.StatusNotFound, resp.Code,
+			"fork_and_edit=true SHOULD bypass CanWriteToBranch for _edit action")
+	})
+
+	t.Run("NewEndpointAllowsForkAndEdit", func(t *testing.T) {
+		// Verify that _new still allows fork_and_edit=true
+		// This is the legitimate use case
+		newURL := path.Join(owner.Name, repo.Name, "_new", repo.DefaultBranch, "/")
+		form := map[string]string{
+			"_csrf":         csrf,
+			"tree_path":     "README.md",
+			"content":       "Test content",
+			"commit_choice": "direct",
+			"fork_and_edit": "true",
+		}
+
+		req := NewRequestWithValues(t, "POST", newURL, form)
+		resp := sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		// Should NOT get 404 - the middleware should pass
+		// (may get other errors due to git operations, but not 404)
+		assert.NotEqual(t, http.StatusNotFound, resp.Code,
+			"fork_and_edit=true SHOULD bypass CanWriteToBranch for _new action")
+	})
+}
+
