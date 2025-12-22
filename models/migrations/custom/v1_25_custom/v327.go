@@ -38,6 +38,9 @@ func (*repositoryForkOnEditIndexes) TableIndices() []*schemas.Index {
 }
 
 // AddCompositeIndexesForForkOnEdit adds composite indexes to optimize fork-on-edit permission queries.
+// These composite indexes optimize the CheckForkOnEditPermissions queries:
+// - (owner_id, subject_id): Used by GetRepositoryByOwnerIDAndSubjectID to check if user owns a different repo for the same subject
+// - (owner_id, fork_id): Used by GetForkedRepo and HasForkedRepo to detect existing forks
 func AddCompositeIndexesForForkOnEdit(x *xorm.Engine) error {
 	return x.Sync(new(repositoryForkOnEditIndexes))
 }

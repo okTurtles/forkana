@@ -1,7 +1,7 @@
-//go:build !sqlite
-
 // Copyright 2021 The Gitea Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
+
+//go:build !sqlite
 
 package db
 

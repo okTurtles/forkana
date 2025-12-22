@@ -143,7 +143,7 @@ func TestAPIForkWithSubjectConflict(t *testing.T) {
 	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 
 	// Verify repo1 has a subject
-	require.Greater(t, repo1.SubjectID, int64(0), "repo1 should have a subject")
+	require.Positive(t, repo1.SubjectID, "repo1 should have a subject")
 	subject := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{ID: repo1.SubjectID})
 
 	// Create a repository for user5 with the same subject

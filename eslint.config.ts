@@ -26,6 +26,7 @@ export default defineConfig([
     'web_src/js/vendor',
     'web_src/fomantic',
     'public/assets/js',
+    'tests/e2e/reports',
   ]),
   {
     files: [`**/*.{${[...jsExts, ...tsExts].join(',')}}`],

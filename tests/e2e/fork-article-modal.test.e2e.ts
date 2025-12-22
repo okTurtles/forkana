@@ -436,13 +436,13 @@ test.describe('Accessibility Tests', () => {
     const confirmButton = modal.locator('.actions .ok.button');
 
     // Buttons should have accessible text content
-    const cancelText = await cancelButton.textContent();
-    const confirmText = await confirmButton.textContent();
+    const cancelText = cancelButton;
+    const confirmText = confirmButton;
 
-    expect(cancelText).toBeTruthy();
-    expect(cancelText!.trim().length).toBeGreaterThan(0);
-    expect(confirmText).toBeTruthy();
-    expect(confirmText!.trim().length).toBeGreaterThan(0);
+    await expect(cancelText).toHaveText();
+    expect(cancelText.trim().length).toBeGreaterThan(0);
+    await expect(confirmText).toHaveText();
+    expect(confirmText.trim().length).toBeGreaterThan(0);
 
     // Verify specific accessible names
     expect(cancelText).toContain('Go back');

@@ -68,7 +68,7 @@
                                     {{if .IsSigned}}
                                         {{if .HasExistingFork}}
                                             {{/* User has an existing fork - redirect to fork's article page */}}
-                                            <a href="{{.ExistingFork.Link}}/article/{{.TreePath}}" class="ui primary button">
+                                            <a href="{{.ExistingFork.Link}}/article/{{PathEscapeSegments .TreePath}}" class="ui primary button">
                                                 {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
                                             </a>

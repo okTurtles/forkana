@@ -51,7 +51,7 @@ type ForkOnEditPermissions struct {
 
 // CheckForkOnEditPermissions determines the user's editing permissions for a repository.
 // It checks ownership, subject ownership restrictions, and existing forks.
-// Returns nil permissions if doer is nil (not signed in).
+// Returns an empty permissions struct if doer is nil (not signed in).
 func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo *repo_model.Repository) (*ForkOnEditPermissions, error) {
 	perms := &ForkOnEditPermissions{}
 
@@ -67,8 +67,8 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 		return perms, nil
 	}
 
-	// Run subject ownership check and fork detection in parallel
-	// These queries are independent and can be executed concurrently
+	// Run subject ownership check and fork detection in parallel.
+	// These queries are independent and can be executed concurrently.
 	var ownRepo *repo_model.Repository
 	var existingFork *repo_model.Repository
 

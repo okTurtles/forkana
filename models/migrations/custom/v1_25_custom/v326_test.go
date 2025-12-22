@@ -269,7 +269,7 @@ func Test_AddSubjectSlugColumn(t *testing.T) {
 			slugMap[s.Name] = s.Slug
 		}
 
-		// @ and # are removed, not replaced with hyphens
+		// Special characters (@, #, !) are removed, not replaced with hyphens
 		assert.Equal(t, "helloworld2024", slugMap["Hello@World#2024!"])
 		// Underscores are replaced with hyphens
 		assert.Equal(t, "hello-world-test", slugMap["hello_world_test"])

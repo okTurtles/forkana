@@ -23,14 +23,15 @@ function createForkConfirmModal(title: string, body: string, confirmText: string
 function showForkConfirmModal(title: string, body: string, confirmText: string, cancelText: string): Promise<boolean> {
   const modal = createForkConfirmModal(title, body, confirmText, cancelText);
   return new Promise((resolve) => {
+    let approved = false;
     const $modal = fomanticQuery(modal);
     $modal.modal({
       onApprove() {
-        resolve(true);
+        approved = true;
       },
       onHidden() {
         $modal.remove();
-        resolve(false);
+        resolve(approved);
       },
     }).modal('show');
   });

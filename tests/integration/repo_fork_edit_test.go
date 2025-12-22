@@ -388,4 +388,3 @@ func TestForkAndEditSecurityBypass(t *testing.T) {
 			"fork_and_edit=true SHOULD bypass CanWriteToBranch for _new action")
 	})
 }
-

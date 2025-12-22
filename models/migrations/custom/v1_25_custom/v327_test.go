@@ -140,4 +140,3 @@ func Test_AddCompositeIndexesForForkOnEdit(t *testing.T) {
 		}
 	})
 }
-
