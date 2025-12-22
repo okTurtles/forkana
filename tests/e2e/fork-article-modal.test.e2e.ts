@@ -20,7 +20,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       // Listen for console errors to debug JavaScript issues
       page.on('console', (msg) => {
         if (msg.type() === 'error') {
-          console.log(`Console error: ${msg.text()}`);
+          console.error(`Console error: ${msg.text()}`);
         }
       });
 
@@ -38,7 +38,7 @@ test.describe('Fork Article Confirmation Modal', () => {
 
       // Wait for the Toast UI Editor to be initialized
       // The editor creates a .toastui-editor element when initialized
-      await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
 
       await forkButton.click();
 
@@ -93,7 +93,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
 
       // Wait for the Toast UI Editor to be initialized
-      await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
 
       await forkButton.click();
 
@@ -131,7 +131,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
 
       // Wait for the Toast UI Editor to be initialized
-      await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
 
       const urlBefore = page.url();
 
@@ -166,7 +166,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
 
       // Wait for the Toast UI Editor to be initialized
-      await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
 
       const urlBefore = page.url();
 
@@ -254,7 +254,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
 
       // Wait for the Toast UI Editor to be initialized
-      await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
 
       await submitButton.click();
 
@@ -339,7 +339,7 @@ test.describe('Accessibility Tests', () => {
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
-    await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+    await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
 
     // Focus the Fork button and press Enter
     await forkButton.focus();
@@ -363,7 +363,7 @@ test.describe('Accessibility Tests', () => {
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
-    await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+    await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
 
     await forkButton.click();
 
@@ -395,7 +395,7 @@ test.describe('Accessibility Tests', () => {
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
-    await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+    await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
 
     await forkButton.click();
 
@@ -425,7 +425,7 @@ test.describe('Accessibility Tests', () => {
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
-    await page.waitForSelector('.toastui-editor', {state: 'attached', timeout: 20000});
+    await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
 
     await forkButton.click();
 
@@ -436,17 +436,9 @@ test.describe('Accessibility Tests', () => {
     const confirmButton = modal.locator('.actions .ok.button');
 
     // Buttons should have accessible text content
-    const cancelText = cancelButton;
-    const confirmText = confirmButton;
-
-    await expect(cancelText).toHaveText();
-    expect(cancelText.trim().length).toBeGreaterThan(0);
-    await expect(confirmText).toHaveText();
-    expect(confirmText.trim().length).toBeGreaterThan(0);
-
-    // Verify specific accessible names
-    expect(cancelText).toContain('Go back');
-    expect(confirmText).toContain('Yes, Fork article');
+    // Verify specific accessible names using Playwright's toContainText assertion
+    await expect(cancelButton).toContainText('Go back');
+    await expect(confirmButton).toContainText('Yes, Fork article');
 
     await context.close();
   });
