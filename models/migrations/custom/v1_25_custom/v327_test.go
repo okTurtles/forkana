@@ -4,6 +4,7 @@
 package v1_25_custom
 
 import (
+	"slices"
 	"testing"
 
 	"code.gitea.io/gitea/models/migrations/base"
@@ -37,13 +38,7 @@ func Test_AddCompositeIndexesForForkOnEdit(t *testing.T) {
 			if len(index.Cols) == len(cols) {
 				match := true
 				for _, col := range cols {
-					found := false
-					for _, indexCol := range index.Cols {
-						if indexCol == col {
-							found = true
-							break
-						}
-					}
+					found := slices.Contains(index.Cols, col)
 					if !found {
 						match = false
 						break
