@@ -37,8 +37,8 @@ test.describe('Fork Article Confirmation Modal', () => {
       await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
 
       // Wait for the Toast UI Editor to be initialized
-      // The editor creates a .toastui-editor element when initialized
-      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
+      // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
+      await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
       await forkButton.click();
 
@@ -93,7 +93,8 @@ test.describe('Fork Article Confirmation Modal', () => {
       await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
 
       // Wait for the Toast UI Editor to be initialized
-      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
+      // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
+      await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
       await forkButton.click();
 
@@ -131,7 +132,8 @@ test.describe('Fork Article Confirmation Modal', () => {
       await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
 
       // Wait for the Toast UI Editor to be initialized
-      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
+      // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
+      await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
       const urlBefore = page.url();
 
@@ -166,7 +168,8 @@ test.describe('Fork Article Confirmation Modal', () => {
       await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
 
       // Wait for the Toast UI Editor to be initialized
-      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
+      // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
+      await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
       const urlBefore = page.url();
 
@@ -254,7 +257,8 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
 
       // Wait for the Toast UI Editor to be initialized
-      await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
+      // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
+      await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
       await submitButton.click();
 
@@ -339,7 +343,8 @@ test.describe('Accessibility Tests', () => {
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
-    await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
+    // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
+    await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
     // Focus the Fork button and press Enter
     await forkButton.focus();
@@ -363,7 +368,8 @@ test.describe('Accessibility Tests', () => {
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
-    await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
+    // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
+    await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
     await forkButton.click();
 
@@ -395,7 +401,8 @@ test.describe('Accessibility Tests', () => {
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
-    await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
+    // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
+    await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
     await forkButton.click();
 
@@ -425,7 +432,8 @@ test.describe('Accessibility Tests', () => {
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
-    await expect(page.locator('.toastui-editor')).toBeAttached({timeout: 20000});
+    // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
+    await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
     await forkButton.click();
 
