@@ -95,15 +95,17 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 		return nil, err
 	}
 
-	// Process subject ownership result
+	// Process subject ownership result.
+	// BlockedBySubject takes precedence: if the user already owns a different repository
+	// for this subject, they cannot fork or edit this one. We return early in this case,
+	// so the fork detection logic below only runs when the user doesn't own a conflicting repo.
 	if ownRepo != nil && ownRepo.ID != repo.ID {
-		// User already owns a different repository for this subject
 		perms.BlockedBySubject = true
 		perms.OwnRepoForSubject = ownRepo
 		return perms, nil
 	}
 
-	// Process fork detection result
+	// Process fork detection result (only reached if not blocked by subject ownership)
 	if existingFork != nil {
 		perms.HasExistingFork = true
 		perms.ExistingFork = existingFork

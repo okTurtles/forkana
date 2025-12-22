@@ -20,13 +20,17 @@ import (
 	context_service "code.gitea.io/gitea/services/context"
 )
 
+// maxUniqueNameAttempts is the maximum number of attempts to find a unique name
+// for branches or repositories before giving up.
+const maxUniqueNameAttempts = 1000
+
 // getUniquePatchBranchName Gets a unique branch name for a new patch branch
 // It will be in the form of <username>-patch-<num> where <num> is the first branch of this format
-// that doesn't already exist. If we exceed 1000 tries or an error is thrown, we just return "" so the user has to
+// that doesn't already exist. If we exceed maxUniqueNameAttempts or an error is thrown, we just return "" so the user has to
 // type in the branch name themselves (will be an empty field)
 func getUniquePatchBranchName(ctx context.Context, prefixName string, repo *repo_model.Repository) string {
 	prefix := prefixName + "-patch-"
-	for i := 1; i <= 1000; i++ {
+	for i := 1; i <= maxUniqueNameAttempts; i++ {
 		branchName := fmt.Sprintf("%s%d", prefix, i)
 		if exist, err := git_model.IsBranchExist(ctx, repo.ID, branchName); err != nil {
 			log.Error("getUniquePatchBranchName: %v", err)
@@ -117,7 +121,7 @@ func getUniqueRepositoryName(ctx context.Context, ownerID int64, name string) st
 	}
 
 	// Find first available name with -<num> suffix
-	for i := 1; i < 1000; i++ {
+	for i := 1; i < maxUniqueNameAttempts; i++ {
 		candidate := fmt.Sprintf("%s-%d", name, i)
 		if !nameSet[strings.ToLower(candidate)] {
 			return candidate

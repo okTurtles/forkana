@@ -154,9 +154,11 @@ func TestAPIForkWithSubjectConflict(t *testing.T) {
 	}, true)
 	require.NoError(t, err)
 	require.NotNil(t, user5Repo)
-	defer func() {
-		_ = repo_service.DeleteRepositoryDirectly(t.Context(), user5Repo.ID)
-	}()
+	t.Cleanup(func() {
+		if user5Repo != nil {
+			_ = repo_service.DeleteRepositoryDirectly(t.Context(), user5Repo.ID)
+		}
+	})
 
 	// Get API token for user5
 	user5Sess := loginUser(t, user5.Name)
