@@ -2,7 +2,7 @@
 {{$Repo1 := .root.Repo1}}
 {{$Repo2 := .root.Repo2}}
 {{$SplitViewLines := .root.SplitViewLines}}
-<colgroup>
+<colgroup class="diff-colgroup-desktop">
 	<col width="50">
 	<col width="10">
 	<col>
@@ -10,8 +10,13 @@
 	<col width="10">
 	<col>
 </colgroup>
+<colgroup class="diff-colgroup-mobile">
+	<col width="50">
+	<col width="10">
+	<col>
+</colgroup>
 <div class="segment">
-	<div class="tw-flex tw-items-center">
+	<div class="tw-flex tw-items-center diff-repo-header">
 		<div class="tw-flex-1 tw-p-2">
 			<strong>
 				{{svg "octicon-repo-forked" 16}}
@@ -31,7 +36,7 @@
 	</div>
 </div>
 {{range $i, $line := $SplitViewLines}}
-	{{if eq $line.LeftType 1}}{{/* Both sides are plain/equal */}}
+	{{if eq $line.LeftType 1}}{{/* Both sides are plain/equal - show once on mobile */}}
 		<tr class="same-code nl-{{$i}} ol-{{$i}}" data-line-type="same">
 			<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
 				<span>{{$line.LeftIdx}}</span>
@@ -42,21 +47,20 @@
 			<td class="lines-code lines-code-old">
 				<code class="code-inner">{{$line.LeftContent}}</code>
 			</td>
-			<td class="lines-num lines-num-new" data-line-num="{{$line.RightIdx}}">
+			<td class="lines-num lines-num-new diff-desktop-only" data-line-num="{{$line.RightIdx}}">
 				<span>{{$line.RightIdx}}</span>
 			</td>
-			<td class="lines-type-marker lines-type-marker-new">
+			<td class="lines-type-marker lines-type-marker-new diff-desktop-only">
 				<span class="tw-font-mono" data-type-marker=" "></span>
 			</td>
-			<td class="lines-code lines-code-new">
+			<td class="lines-code lines-code-new diff-desktop-only">
 				<code class="code-inner">{{$line.RightContent}}</code>
 			</td>
 		</tr>
 	{{else}}{{/* Paired delete/add lines - mirror comparison */}}
-		{{/* Determine the row class based on what's present */}}
 		{{if and (eq $line.LeftType 3) (eq $line.RightType 2)}}
-			{{/* Both delete and add - use del-code class, add-code on specific cells */}}
-			<tr class="del-code nl-{{$i}} ol-{{$i}}" data-line-type="diff">
+			{{/* Desktop: Both delete and add on same row */}}
+			<tr class="del-code nl-{{$i}} ol-{{$i}} diff-desktop-only" data-line-type="diff">
 				<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
 					<span>{{$line.LeftIdx}}</span>
 				</td>
@@ -76,6 +80,30 @@
 					<code class="code-inner">{{$line.RightContent}}</code>
 				</td>
 			</tr>
+			{{/* Mobile: Delete row first */}}
+			<tr class="del-code nl-{{$i}}-del ol-{{$i}} diff-mobile-only" data-line-type="del">
+				<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
+					<span>{{$line.LeftIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-old">
+					<span class="tw-font-mono" data-type-marker="-"></span>
+				</td>
+				<td class="lines-code lines-code-old">
+					<code class="code-inner">{{$line.LeftContent}}</code>
+				</td>
+			</tr>
+			{{/* Mobile: Add row second */}}
+			<tr class="add-code nl-{{$i}}-add ol-{{$i}} diff-mobile-only" data-line-type="add">
+				<td class="lines-num lines-num-new" data-line-num="{{$line.RightIdx}}">
+					<span>{{$line.RightIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-new">
+					<span class="tw-font-mono" data-type-marker="+"></span>
+				</td>
+				<td class="lines-code lines-code-new">
+					<code class="code-inner">{{$line.RightContent}}</code>
+				</td>
+			</tr>
 		{{else if eq $line.LeftType 3}}
 			{{/* Only delete on left, empty on right */}}
 			<tr class="del-code nl-{{$i}} ol-{{$i}}" data-line-type="del">
@@ -88,18 +116,18 @@
 				<td class="lines-code lines-code-old">
 					<code class="code-inner">{{$line.LeftContent}}</code>
 				</td>
-				<td class="lines-num lines-num-new"></td>
-				<td class="lines-type-marker lines-type-marker-new"></td>
-				<td class="lines-code lines-code-new">
+				<td class="lines-num lines-num-new diff-desktop-only"></td>
+				<td class="lines-type-marker lines-type-marker-new diff-desktop-only"></td>
+				<td class="lines-code lines-code-new diff-desktop-only">
 					<code class="code-inner"></code>
 				</td>
 			</tr>
 		{{else if eq $line.RightType 2}}
 			{{/* Only add on right, empty on left */}}
 			<tr class="add-code nl-{{$i}} ol-{{$i}}" data-line-type="add">
-				<td class="lines-num lines-num-old"></td>
-				<td class="lines-type-marker lines-type-marker-old"></td>
-				<td class="lines-code lines-code-old">
+				<td class="lines-num lines-num-old diff-desktop-only"></td>
+				<td class="lines-type-marker lines-type-marker-old diff-desktop-only"></td>
+				<td class="lines-code lines-code-old diff-desktop-only">
 					<code class="code-inner"></code>
 				</td>
 				<td class="lines-num lines-num-new" data-line-num="{{$line.RightIdx}}">

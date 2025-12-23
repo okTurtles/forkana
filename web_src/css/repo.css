@@ -2017,3 +2017,68 @@ tbody.commit-list {
 .branch-selector-dropdown .scrolling.menu .loading-indicator {
   height: 4em;
 }
+
+/* ============================================
+   Subject Compare - Mobile Responsive Styles
+   On mobile: Show unified/stacked view instead of side-by-side
+   ============================================ */
+
+/* Desktop: Show 6-column split view */
+.diff-colgroup-mobile {
+  display: none;
+}
+
+.diff-mobile-only {
+  display: none;
+}
+
+/* Mobile: Show 3-column unified view */
+@media (max-width: 767.98px) {
+  .diff-colgroup-desktop {
+    display: none;
+  }
+
+  .diff-colgroup-mobile {
+    display: table-column-group;
+  }
+
+  .diff-desktop-only {
+    display: none !important;
+  }
+
+  .diff-mobile-only {
+    display: table-row;
+  }
+
+  /* Subject compare header - stack repo info vertically */
+  .diff-repo-header {
+    flex-direction: column !important;
+  }
+
+  .diff-repo-header > div {
+    width: 100%;
+    border-left: none !important;
+  }
+
+  .diff-repo-header > div:not(:first-child) {
+    border-top: 1px solid var(--color-secondary);
+  }
+
+  /* For add-code rows on mobile, use the right-side styling on left-side cells */
+  .code-diff-split tr.add-code.diff-mobile-only td.lines-num-new {
+    background: var(--color-diff-added-linenum-bg);
+  }
+
+  .code-diff-split tr.add-code.diff-mobile-only td.lines-code-new {
+    background: var(--color-diff-added-row-bg);
+  }
+
+  /* For del-code rows on mobile */
+  .code-diff-split tr.del-code.diff-mobile-only td.lines-num-old {
+    background: var(--color-diff-removed-linenum-bg);
+  }
+
+  .code-diff-split tr.del-code.diff-mobile-only td.lines-code-old {
+    background: var(--color-diff-removed-row-bg);
+  }
+}
