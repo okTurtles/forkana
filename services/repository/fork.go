@@ -195,15 +195,21 @@ func ForkRepository(ctx context.Context, doer, owner *user_model.User, opts Fork
 	}
 
 	// 3 - Clone the repository
-	cloneCmd := gitcmd.NewCommand("clone", "--bare")
-	if opts.SingleBranch != "" {
-		cloneCmd.AddArguments("--single-branch", "--branch").AddDynamicArguments(opts.SingleBranch)
-	}
-	var stdout []byte
-	if stdout, _, err = cloneCmd.AddDynamicArguments(opts.BaseRepo.RepoPath(), repo.RepoPath()).
-		RunStdBytes(ctx, &gitcmd.RunOpts{Timeout: 10 * time.Minute}); err != nil {
-		log.Error("Fork Repository (git clone) Failed for %v (from %v):\nStdout: %s\nError: %v", repo, opts.BaseRepo, stdout, err)
-		return nil, fmt.Errorf("git clone: %w", err)
+	if opts.BaseRepo.IsEmpty {
+		if err = gitrepo.InitRepository(ctx, repo, repo.ObjectFormatName); err != nil {
+			return nil, fmt.Errorf("InitRepository: %w", err)
+		}
+	} else {
+		cloneCmd := gitcmd.NewCommand("clone", "--bare")
+		if opts.SingleBranch != "" {
+			cloneCmd.AddArguments("--single-branch", "--branch").AddDynamicArguments(opts.SingleBranch)
+		}
+		var stdout []byte
+		if stdout, _, err = cloneCmd.AddDynamicArguments(opts.BaseRepo.RepoPath(), repo.RepoPath()).
+			RunStdBytes(ctx, &gitcmd.RunOpts{Timeout: 10 * time.Minute}); err != nil {
+			log.Error("Fork Repository (git clone) Failed for %v (from %v):\nStdout: %s\nError: %v", repo, opts.BaseRepo, stdout, err)
+			return nil, fmt.Errorf("git clone: %w", err)
+		}
 	}
 
 	// 4 - Update the git repository
@@ -275,6 +281,51 @@ func ConvertForkToNormalRepository(ctx context.Context, repo *repo_model.Reposit
 
 		repo.IsFork = false
 		repo.ForkID = 0
+		return repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "is_fork", "fork_id")
+	})
+}
+
+// ConvertNormalToForkRepository converts a normal repository to a fork of the specified root repository.
+// This is used by the first-article-becomes-root logic when a repository becomes non-empty
+// after another repository with the same subject has already become the root.
+func ConvertNormalToForkRepository(ctx context.Context, repo *repo_model.Repository, rootRepoID int64) error {
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		// Re-fetch the repo within the transaction to ensure consistency
+		repo, err := repo_model.GetRepositoryByID(ctx, repo.ID)
+		if err != nil {
+			return err
+		}
+
+		// Already a fork - nothing to do
+		if repo.IsFork {
+			return nil
+		}
+
+		// Don't try to fork from ourselves
+		if repo.ID == rootRepoID {
+			return nil
+		}
+
+		// Fetch the root repository to check fork tree limits
+		rootRepo, err := repo_model.GetRepositoryByID(ctx, rootRepoID)
+		if err != nil {
+			return err
+		}
+
+		// Check if fork tree has reached maximum size limit
+		if err := checkForkTreeSizeLimit(ctx, rootRepo); err != nil {
+			return err
+		}
+
+		// Increment the fork count on the root repository
+		if err := repo_model.IncrementRepoForkNum(ctx, rootRepoID); err != nil {
+			log.Error("Unable to increment repo fork num for root repo %d when converting repository %-v to fork. Error: %v", rootRepoID, repo, err)
+			return err
+		}
+
+		// Update this repository to be a fork
+		repo.IsFork = true
+		repo.ForkID = rootRepoID
 		return repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "is_fork", "fork_id")
 	})
 }

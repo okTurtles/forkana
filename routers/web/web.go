@@ -1051,6 +1051,7 @@ func registerWebRoutes(m *web.Router) {
 		m.Get("/migrate", repo.Migrate)
 		m.Post("/migrate", web.Bind(forms.MigrateRepoForm{}), repo.MigratePost)
 		m.Get("/search", repo.SearchRepo)
+		m.Get("/create-first-article", repo.CreateFirstArticle)
 	}, reqSignIn)
 	// end "/repo": create, migrate, search
 
