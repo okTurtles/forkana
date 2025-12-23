@@ -2108,3 +2108,9 @@ tbody.commit-list {
   }
 }
 
+/* Subject view tabs: left-align on mobile, centered on desktop */
+@media (max-width: 767.98px) {
+  #subject-view-tabs {
+    justify-content: flex-start !important;
+  }
+}
