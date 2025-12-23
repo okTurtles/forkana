@@ -451,7 +451,7 @@ func pairDiffLinesForSplitView(diffLines []*gitdiff.DiffLine) []SplitViewLine {
 		// Pair up delete and add lines
 		maxLen := max(len(addLines), len(delLines))
 
-		for j := 0; j < maxLen; j++ {
+		for j := range maxLen {
 			pair := SplitViewLine{}
 
 			// Left side (deletion)
