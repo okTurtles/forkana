@@ -1037,6 +1037,23 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 	return &repo, nil
 }
 
+// GetRepositoryByOwnerIDAndSubjectID returns a repository by owner ID and subject ID.
+// Returns nil if no such repository exists (without error).
+func GetRepositoryByOwnerIDAndSubjectID(ctx context.Context, ownerID, subjectID int64) (*Repository, error) {
+	var repo Repository
+	has, err := db.GetEngine(ctx).
+		Where("owner_id = ?", ownerID).
+		And("subject_id = ?", subjectID).
+		Get(&repo)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, nil
+	}
+	return &repo, nil
+}
+
 // GetRepositoryByURL returns the repository by given url
 func GetRepositoryByURL(ctx context.Context, repoURL string) (*Repository, error) {
 	ret, err := giturl.ParseRepositoryURL(ctx, repoURL)

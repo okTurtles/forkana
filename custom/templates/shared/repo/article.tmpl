@@ -66,22 +66,57 @@
                             <div class="tw-flex tw-items-center tw-justify-between tw-mb-4">
                                 <div class="tw-flex tw-items-center tw-gap-2">
                                     {{if .IsSigned}}
-                                        <form id="fork-form" action="{{.RepoOperationsLink}}/fork" method="get" style="display: inline;">
-                                            <button type="submit" class="ui button">
+                                        {{if .HasExistingFork}}
+                                            {{/* User has an existing fork - redirect to fork's article page */}}
+                                            <a href="{{.ExistingFork.Link}}/article/{{PathEscapeSegments .TreePath}}" class="ui primary button">
                                                 {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                                Fork
+                                                {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
+                                            </a>
+                                            <span class="tw-text-sm tw-text-gray-500">
+                                                ({{.ExistingFork.OwnerName}}/{{.ExistingFork.Name}})
+                                            </span>
+                                        {{else if .HasOwnRepoForSubject}}
+                                            {{/* User already owns a different repository for this subject - show link to their article */}}
+                                            <a href="{{.OwnRepoForSubject.Link}}?view=article&mode=edit" class="ui primary button">
+                                                {{svg "octicon-pencil" 16 "tw-mr-1"}}
+                                                {{ctx.Locale.Tr "repo.editor.edit_your_article"}}
+                                            </a>
+                                        {{else if .IsRepoOwner}}
+                                            {{/* User can edit directly - show simple submit button */}}
+                                            <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
+                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
-                                        </form>
+                                        {{else if .NeedsFork}}
+                                            {{/* User needs to create a fork - show fork-and-submit button */}}
+                                            <button type="button" id="submit-changes-button" class="ui secondary button"
+                                                data-fork-and-edit="true"
+                                                data-tooltip-content="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
+                                                data-fork-confirm-title="{{ctx.Locale.Tr "repo.fork_article_confirm_title"}}"
+                                                data-fork-confirm-body="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
+                                                data-fork-confirm-yes="{{ctx.Locale.Tr "repo.fork_article_confirm_yes"}}"
+                                                data-fork-confirm-cancel="{{ctx.Locale.Tr "repo.fork_article_confirm_cancel"}}">
+                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
+                                                {{ctx.Locale.Tr "repo.fork_article"}}
+                                            </button>
+                                            {{/* Submit Change Request - not implemented yet, disabled for now */}}
+                                            <button type="button" class="ui primary button disabled">
+                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                            </button>
+                                        {{else}}
+                                            {{/* Fallback - show disabled button */}}
+                                            <button type="button" class="ui primary button disabled">
+                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                            </button>
+                                        {{end}}
                                     {{else}}
-                                        <button type="button" class="ui button disabled">
-                                            {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                            Fork
+                                        <button type="button" class="ui primary button disabled">
+                                            {{svg "octicon-check" 16 "tw-mr-1"}}
+                                            {{ctx.Locale.Tr "repo.editor.sign_in_to_edit"}}
                                         </button>
                                     {{end}}
-                                    <button type="button" id="submit-changes-button" class="ui primary button{{if not .IsSigned}} disabled{{end}}">
-                                        {{svg "octicon-check" 16 "tw-mr-1"}}
-                                        Submit Changes
-                                    </button>
                                 </div>
                             </div>
                         {{end}}
