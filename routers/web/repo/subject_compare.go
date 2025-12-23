@@ -133,6 +133,9 @@ func CompareReadme(ctx *context.Context) {
 	// Generate diff using diffmatchpatch
 	diff := generateReadmeDiff(readme1Content, readme2Content, readme1Name, readme2Name)
 
+	// Generate paired lines for side-by-side/mirror comparison view
+	splitViewLines := generateSplitViewLines(readme1Content, readme2Content)
+
 	// Get contributor counts for both repos
 	repo1ContributorCount := getContributorCount(ctx, repo1)
 	repo2ContributorCount := getContributorCount(ctx, repo2)
@@ -151,6 +154,7 @@ func CompareReadme(ctx *context.Context) {
 	ctx.Data["Readme1Name"] = readme1Name
 	ctx.Data["Readme2Name"] = readme2Name
 	ctx.Data["Diff"] = diff
+	ctx.Data["SplitViewLines"] = splitViewLines
 	ctx.Data["IsSplitStyle"] = true
 	ctx.Data["PageIsSubjectCompare"] = true
 
@@ -247,6 +251,19 @@ func generateReadmeDiff(content1, content2, name1, name2 string) *gitdiff.Diff {
 	return convertToGiteaDiff(lines1, lines2, name1, name2)
 }
 
+// generateSplitViewLines generates paired lines for side-by-side rendering
+func generateSplitViewLines(content1, content2 string) []SplitViewLine {
+	// Split content into lines for line-based diff
+	lines1 := strings.Split(content1, "\n")
+	lines2 := strings.Split(content2, "\n")
+
+	// Build diff lines first
+	diffLines := buildDiffLines(lines1, lines2)
+
+	// Pair them for split view
+	return pairDiffLinesForSplitView(diffLines)
+}
+
 // convertToGiteaDiff converts line arrays to Gitea's Diff structure
 func convertToGiteaDiff(lines1, lines2 []string, name1, name2 string) *gitdiff.Diff {
 	// Determine the filename to use
@@ -293,6 +310,16 @@ func convertToGiteaDiff(lines1, lines2 []string, name1, name2 string) *gitdiff.D
 	return &gitdiff.Diff{
 		Files: []*gitdiff.DiffFile{diffFile},
 	}
+}
+
+// SplitViewLine represents a paired line for side-by-side diff rendering
+type SplitViewLine struct {
+	LeftIdx      int
+	LeftContent  string
+	LeftType     int // 0=empty, 1=plain, 2=add, 3=del
+	RightIdx     int
+	RightContent string
+	RightType    int // 0=empty, 1=plain, 2=add, 3=del
 }
 
 // buildDiffLines creates DiffLines by comparing two sets of lines
@@ -371,4 +398,94 @@ func buildDiffLines(lines1, lines2 []string) []*gitdiff.DiffLine {
 	}
 
 	return diffLines
+}
+
+// pairDiffLinesForSplitView pairs delete/add lines for side-by-side rendering
+// It groups consecutive delete lines with consecutive add lines so they appear
+// on the same row in the mirror comparison view
+func pairDiffLinesForSplitView(diffLines []*gitdiff.DiffLine) []SplitViewLine {
+	result := make([]SplitViewLine, 0)
+	i := 0
+
+	for i < len(diffLines) {
+		line := diffLines[i]
+
+		// Skip section headers
+		if line.Type == gitdiff.DiffLineSection {
+			i++
+			continue
+		}
+
+		// Handle plain/equal lines - show on both sides
+		if line.Type == gitdiff.DiffLinePlain {
+			content := line.Content
+			if len(content) > 0 && content[0] == ' ' {
+				content = content[1:]
+			}
+			result = append(result, SplitViewLine{
+				LeftIdx:      line.LeftIdx,
+				LeftContent:  content,
+				LeftType:     1, // plain
+				RightIdx:     line.RightIdx,
+				RightContent: content,
+				RightType:    1, // plain
+			})
+			i++
+			continue
+		}
+
+		// Collect consecutive delete lines
+		delLines := make([]*gitdiff.DiffLine, 0)
+		for i < len(diffLines) && diffLines[i].Type == gitdiff.DiffLineDel {
+			delLines = append(delLines, diffLines[i])
+			i++
+		}
+
+		// Collect consecutive add lines that follow
+		addLines := make([]*gitdiff.DiffLine, 0)
+		for i < len(diffLines) && diffLines[i].Type == gitdiff.DiffLineAdd {
+			addLines = append(addLines, diffLines[i])
+			i++
+		}
+
+		// Pair up delete and add lines
+		maxLen := len(delLines)
+		if len(addLines) > maxLen {
+			maxLen = len(addLines)
+		}
+
+		for j := 0; j < maxLen; j++ {
+			pair := SplitViewLine{}
+
+			// Left side (deletion)
+			if j < len(delLines) {
+				content := delLines[j].Content
+				if len(content) > 0 && content[0] == '-' {
+					content = content[1:]
+				}
+				pair.LeftIdx = delLines[j].LeftIdx
+				pair.LeftContent = content
+				pair.LeftType = 3 // del
+			} else {
+				pair.LeftType = 0 // empty
+			}
+
+			// Right side (addition)
+			if j < len(addLines) {
+				content := addLines[j].Content
+				if len(content) > 0 && content[0] == '+' {
+					content = content[1:]
+				}
+				pair.RightIdx = addLines[j].RightIdx
+				pair.RightContent = content
+				pair.RightType = 2 // add
+			} else {
+				pair.RightType = 0 // empty
+			}
+
+			result = append(result, pair)
+		}
+	}
+
+	return result
 }

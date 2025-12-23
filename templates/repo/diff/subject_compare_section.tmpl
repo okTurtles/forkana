@@ -1,7 +1,7 @@
-{{$file := .file}}
 {{$Subject := .root.Subject}}
 {{$Repo1 := .root.Repo1}}
 {{$Repo2 := .root.Repo2}}
+{{$SplitViewLines := .root.SplitViewLines}}
 <colgroup>
 	<col width="50">
 	<col width="10">
@@ -30,19 +30,63 @@
 		</div>
 	</div>
 </div>
-{{range $j, $section := $file.Sections}}
-	{{range $k, $line := $section.Lines}}
-		{{if eq .GetType 4}}{{/* Section header */}}
-		{{else if eq .GetType 3}}{{/* Delete */}}
-			<tr class="del-code nl-{{$k}} ol-{{$k}}" data-line-type="del">
-				<td class="lines-num lines-num-old del-code" data-line-num="{{.LeftIdx}}">
-					<span>{{.LeftIdx}}</span>
+{{range $i, $line := $SplitViewLines}}
+	{{if eq $line.LeftType 1}}{{/* Both sides are plain/equal */}}
+		<tr class="same-code nl-{{$i}} ol-{{$i}}" data-line-type="same">
+			<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
+				<span>{{$line.LeftIdx}}</span>
+			</td>
+			<td class="lines-type-marker lines-type-marker-old">
+				<span class="tw-font-mono" data-type-marker=" "></span>
+			</td>
+			<td class="lines-code lines-code-old">
+				<code class="code-inner">{{$line.LeftContent}}</code>
+			</td>
+			<td class="lines-num lines-num-new" data-line-num="{{$line.RightIdx}}">
+				<span>{{$line.RightIdx}}</span>
+			</td>
+			<td class="lines-type-marker lines-type-marker-new">
+				<span class="tw-font-mono" data-type-marker=" "></span>
+			</td>
+			<td class="lines-code lines-code-new">
+				<code class="code-inner">{{$line.RightContent}}</code>
+			</td>
+		</tr>
+	{{else}}{{/* Paired delete/add lines - mirror comparison */}}
+		{{/* Determine the row class based on what's present */}}
+		{{if and (eq $line.LeftType 3) (eq $line.RightType 2)}}
+			{{/* Both delete and add - use del-code class, add-code on specific cells */}}
+			<tr class="del-code nl-{{$i}} ol-{{$i}}" data-line-type="diff">
+				<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
+					<span>{{$line.LeftIdx}}</span>
 				</td>
-				<td class="lines-type-marker lines-type-marker-old del-code">
+				<td class="lines-type-marker lines-type-marker-old">
 					<span class="tw-font-mono" data-type-marker="-"></span>
 				</td>
-				<td class="lines-code lines-code-old del-code">
-					<code class="code-inner">{{slice .Content 1}}</code>
+				<td class="lines-code lines-code-old">
+					<code class="code-inner">{{$line.LeftContent}}</code>
+				</td>
+				<td class="lines-num lines-num-new add-code" data-line-num="{{$line.RightIdx}}">
+					<span>{{$line.RightIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-new add-code">
+					<span class="tw-font-mono" data-type-marker="+"></span>
+				</td>
+				<td class="lines-code lines-code-new add-code">
+					<code class="code-inner">{{$line.RightContent}}</code>
+				</td>
+			</tr>
+		{{else if eq $line.LeftType 3}}
+			{{/* Only delete on left, empty on right */}}
+			<tr class="del-code nl-{{$i}} ol-{{$i}}" data-line-type="del">
+				<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
+					<span>{{$line.LeftIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-old">
+					<span class="tw-font-mono" data-type-marker="-"></span>
+				</td>
+				<td class="lines-code lines-code-old">
+					<code class="code-inner">{{$line.LeftContent}}</code>
 				</td>
 				<td class="lines-num lines-num-new"></td>
 				<td class="lines-type-marker lines-type-marker-new"></td>
@@ -50,42 +94,22 @@
 					<code class="code-inner"></code>
 				</td>
 			</tr>
-		{{else if eq .GetType 2}}{{/* Add */}}
-			<tr class="add-code nl-{{$k}} ol-{{$k}}" data-line-type="add">
+		{{else if eq $line.RightType 2}}
+			{{/* Only add on right, empty on left */}}
+			<tr class="add-code nl-{{$i}} ol-{{$i}}" data-line-type="add">
 				<td class="lines-num lines-num-old"></td>
 				<td class="lines-type-marker lines-type-marker-old"></td>
 				<td class="lines-code lines-code-old">
 					<code class="code-inner"></code>
 				</td>
-				<td class="lines-num lines-num-new add-code" data-line-num="{{.RightIdx}}">
-					<span>{{.RightIdx}}</span>
-				</td>
-				<td class="lines-type-marker lines-type-marker-new add-code">
-					<span class="tw-font-mono" data-type-marker="+"></span>
-				</td>
-				<td class="lines-code lines-code-new add-code">
-					<code class="code-inner">{{slice .Content 1}}</code>
-				</td>
-			</tr>
-		{{else}}{{/* Plain/Equal */}}
-			<tr class="same-code nl-{{$k}} ol-{{$k}}" data-line-type="same">
-				<td class="lines-num lines-num-old" data-line-num="{{.LeftIdx}}">
-					<span>{{.LeftIdx}}</span>
-				</td>
-				<td class="lines-type-marker lines-type-marker-old">
-					<span class="tw-font-mono" data-type-marker=" "></span>
-				</td>
-				<td class="lines-code lines-code-old">
-					<code class="code-inner">{{slice .Content 1}}</code>
-				</td>
-				<td class="lines-num lines-num-new" data-line-num="{{.RightIdx}}">
-					<span>{{.RightIdx}}</span>
+				<td class="lines-num lines-num-new" data-line-num="{{$line.RightIdx}}">
+					<span>{{$line.RightIdx}}</span>
 				</td>
 				<td class="lines-type-marker lines-type-marker-new">
-					<span class="tw-font-mono" data-type-marker=" "></span>
+					<span class="tw-font-mono" data-type-marker="+"></span>
 				</td>
 				<td class="lines-code lines-code-new">
-					<code class="code-inner">{{slice .Content 1}}</code>
+					<code class="code-inner">{{$line.RightContent}}</code>
 				</td>
 			</tr>
 		{{end}}

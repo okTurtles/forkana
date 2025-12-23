@@ -40,29 +40,27 @@
 			</div>
 		{{else}}
 			<div id="diff-container" class="tw-mt-8">
-				{{if .Diff}}
+				{{if .SplitViewLines}}
 					<div id="diff-file-boxes" class="sixteen wide column">
-						{{range $i, $file := .Diff.Files}}
-							<div class="diff-file-box file-content tw-mt-0" id="diff-{{$file.NameHash}}">
-								<h4 class="diff-file-header sticky-2nd-row ui top attached header">
-									<div class="diff-file-name tw-flex tw-flex-1 tw-items-center tw-flex-wrap">
-										<span class="file tw-flex tw-items-center tw-font-mono tw-flex-1">
-											<span class="muted file-link tw-text-14 tw-font-semibold tw-text-[#59636e]" title="Repo1 contributor count">{{$.Repo1ContributorCount}} Contributor{{if ne $.Repo1ContributorCount 1}}s{{end}}</span>
-										</span>
-										<span class="file tw-flex tw-items-center tw-font-mono tw-flex-1">
-											<span class="muted file-link tw-text-14 tw-font-semibold tw-text-[#59636e] tw-border-l tw-border-[#d1d9e0] tw-p-2" title="Repo2 contributor count">{{$.Repo2ContributorCount}} Contributor{{if ne $.Repo2ContributorCount 1}}s{{end}}</span>
-										</span>
-									</div>
-								</h4>
-								<div class="diff-file-body ui attached unstackable table segment">
-									<div class="file-body file-code unicode-escaped code-diff code-diff-split">
-										<table class="chroma" data-path="{{$file.Name}}">
-											{{template "repo/diff/subject_compare_section" dict "file" $file "root" $}}
-										</table>
-									</div>
+						<div class="diff-file-box file-content tw-mt-0">
+							<h4 class="diff-file-header sticky-2nd-row ui top attached header">
+								<div class="diff-file-name tw-flex tw-flex-1 tw-items-center tw-flex-wrap">
+									<span class="file tw-flex tw-items-center tw-font-mono tw-flex-1">
+										<span class="muted file-link tw-text-14 tw-font-semibold tw-text-[#59636e]" title="Repo1 contributor count">{{.Repo1ContributorCount}} Contributor{{if ne .Repo1ContributorCount 1}}s{{end}}</span>
+									</span>
+									<span class="file tw-flex tw-items-center tw-font-mono tw-flex-1">
+										<span class="muted file-link tw-text-14 tw-font-semibold tw-text-[#59636e] tw-border-l tw-border-[#d1d9e0] tw-p-2" title="Repo2 contributor count">{{.Repo2ContributorCount}} Contributor{{if ne .Repo2ContributorCount 1}}s{{end}}</span>
+									</span>
+								</div>
+							</h4>
+							<div class="diff-file-body ui attached unstackable table segment">
+								<div class="file-body file-code unicode-escaped code-diff code-diff-split">
+									<table class="chroma">
+										{{template "repo/diff/subject_compare_section" dict "root" .}}
+									</table>
 								</div>
 							</div>
-						{{end}}
+						</div>
 					</div>
 				{{end}}
 			</div>
