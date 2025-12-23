@@ -19,9 +19,13 @@
 					{{svg "octicon-table"}} Table view
 				</a>
                 <a class="{{if .IsArticleView}}active {{end}}item" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (.Repository.GetSubject ctx)) "view" "article"}}" data-view="article" id="article-view-link">
-					{{svg "octicon-file"}} Article view
+				{{svg "octicon-file"}} Article view
 				</a>
 			</div>
+			<button class="ui button tiny compact tw-h-9" id="article-view-button">
+				{{svg "octicon-file-diff" 16 "tw-mr-1"}} Compare on
+			</button>
 		</overflow-menu>
+
 	</div>
 </div>
