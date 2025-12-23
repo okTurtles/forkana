@@ -2034,11 +2034,13 @@ tbody.commit-list {
 
 /* Desktop repo header row styling */
 .diff-repo-header-row {
+  display: table-row;
   background: var(--color-box-header);
 }
 
 .diff-repo-header-cell {
   vertical-align: top;
+  padding: 0 !important;
 }
 
 /* Mobile: Show 3-column unified view */
