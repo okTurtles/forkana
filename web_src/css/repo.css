@@ -1644,7 +1644,7 @@ tbody.commit-list {
 }
 
 .diff-file-header {
-  padding: 5px 8px !important;
+  padding: 0 8px !important;
   box-shadow: 0 -1px 0 1px var(--color-body); /* prevent borders being visible behind top corners when sticky and scrolled */
   font-weight: var(--font-weight-normal);
   display: flex;
@@ -1732,7 +1732,6 @@ tbody.commit-list {
 .code-diff-unified .del-code td,
 .code-diff-split .del-code .lines-num-old,
 .code-diff-split .del-code .lines-escape-old,
-.code-diff-split .del-code .lines-type-marker-old,
 .code-diff-split .del-code .lines-code-old {
   background: var(--color-diff-removed-row-bg);
   border-color: var(--color-diff-removed-row-border);
@@ -1740,7 +1739,6 @@ tbody.commit-list {
 
 .code-diff-unified .add-code,
 .code-diff-unified .add-code td,
-.code-diff-split .add-code .lines-type-marker-new,
 .code-diff-split .add-code .lines-escape-new,
 .code-diff-split .add-code .lines-code-new,
 .code-diff-split .del-code .add-code.lines-type-marker-new,
@@ -1767,14 +1765,14 @@ tbody.commit-list {
 .code-diff-unified .del-code .lines-num,
 .code-diff-split .del-code .lines-num {
   background: var(--color-diff-removed-linenum-bg);
-  color: var(--color-text);
+  color: var(--color-text-light-3);
 }
 
 .code-diff-unified .add-code .lines-num,
 .code-diff-split .add-code .lines-num,
 .code-diff-split .del-code .add-code.lines-num {
   background: var(--color-diff-added-linenum-bg);
-  color: var(--color-text);
+  color: var(--color-text-light-3);
 }
 
 .code-diff-split tbody tr td:nth-child(5),
@@ -2018,4 +2016,101 @@ tbody.commit-list {
 
 .branch-selector-dropdown .scrolling.menu .loading-indicator {
   height: 4em;
+}
+
+/* ============================================
+   Subject Compare - Mobile Responsive Styles
+   On mobile: Show unified/stacked view instead of side-by-side
+   ============================================ */
+
+/* Desktop: Show 6-column split view */
+.diff-colgroup-mobile {
+  display: none;
+}
+
+.diff-mobile-only {
+  display: none;
+}
+
+/* Desktop repo header row styling */
+.diff-repo-header-row {
+  display: table-row;
+  background: var(--color-box-header);
+}
+
+.diff-repo-header-cell {
+  vertical-align: top;
+  padding: 0 !important;
+}
+
+/* Mobile: Show 3-column unified view */
+@media (max-width: 767.98px) {
+  .diff-colgroup-desktop {
+    display: none;
+  }
+
+  .diff-colgroup-mobile {
+    display: table-column-group;
+  }
+
+  .diff-desktop-only {
+    display: none !important;
+  }
+
+  .diff-mobile-only {
+    display: table-row;
+  }
+
+  /* Mobile diff headers - show owner/repo above each change */
+  .diff-mobile-header {
+    border-top: 1px solid var(--color-secondary);
+  }
+
+  .diff-mobile-header-cell {
+    background: var(--color-box-header);
+    padding: 0 !important;
+  }
+
+  .diff-mobile-header-del .diff-mobile-header-cell {
+    background: var(--color-diff-removed-row-bg);
+    border-left: 3px solid var(--color-red);
+  }
+
+  .diff-mobile-header-add .diff-mobile-header-cell {
+    background: var(--color-diff-added-row-bg);
+    border-left: 3px solid var(--color-green);
+  }
+
+  .diff-mobile-header-cell a {
+    color: inherit;
+  }
+
+  .diff-mobile-header-cell strong {
+    font-size: 13px;
+  }
+
+  /* For add-code rows on mobile, use the right-side styling on left-side cells */
+  .code-diff-split tr.add-code.diff-mobile-only td.lines-num-new {
+    background: var(--color-diff-added-linenum-bg);
+  }
+
+  .code-diff-split tr.add-code.diff-mobile-only td.lines-code-new {
+    background: var(--color-diff-added-row-bg);
+  }
+
+  /* For del-code rows on mobile */
+  .code-diff-split tr.del-code.diff-mobile-only td.lines-num-old {
+    background: var(--color-diff-removed-linenum-bg);
+  }
+
+  .code-diff-split tr.del-code.diff-mobile-only td.lines-code-old {
+    background: var(--color-diff-removed-row-bg);
+  }
+}
+
+/* Subject view tabs: left-align on mobile, centered on desktop */
+@media (max-width: 767.98px) {
+  #subject-view-tabs {
+    justify-content: flex-start !important;
+  }
 }

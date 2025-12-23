@@ -21,3 +21,7 @@
   padding-left: 1rem;
   padding-right: 1rem;
 }
+
+.ui.table tbody td.lines-num {
+  padding: 1rem;
+}

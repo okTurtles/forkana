@@ -532,6 +532,7 @@ func registerWebRoutes(m *web.Router) {
 	m.Post("/-/markup", reqSignIn, web.Bind(structs.MarkupOption{}), misc.Markup)
 
 	m.Get("/subject/{subjectname}", optSignIn, context.RepoAssignmentBySubject, context.RepoRefByDefaultBranch(), repo.SetEditorconfigIfExists, explore.RepoHistory)
+	m.Get("/subject/{subjectname}/compare/{owners}", optSignIn, repo.CompareReadme)
 
 	m.Group("/explore", func() {
 		m.Get("", func(ctx *context.Context) {

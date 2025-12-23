@@ -8,6 +8,7 @@
 			{{template "base/alert" .}}
 			<form class="ui form form-fetch-action left-right-form" action="{{.Link}}" method="post">
 				{{.CsrfTokenHtml}}
+				<input type="hidden" name="subject" value="{{.ForkRepo.GetSubject ctx}}">
 				<div class="inline required field {{if .Err_Owner}}error{{end}}">
 					<label>{{ctx.Locale.Tr "repo.owner"}}</label>
 					<div class="ui selection owner dropdown ellipsis-text-items">

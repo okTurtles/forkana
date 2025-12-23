@@ -60,6 +60,9 @@ func isRoutePathExpensive(routePattern string) bool {
 
 		// activity
 		"/{username}/{reponame}/activity/",
+
+		// subject comparison (opens 2 git repos, runs diff computation)
+		"/subject/{subjectname}/compare/",
 	}
 	for _, path := range expensivePaths {
 		if strings.HasPrefix(routePattern, path) {
