@@ -21,9 +21,9 @@
                 <a class="{{if .IsArticleView}}active {{end}}item" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (.Repository.GetSubject ctx)) "view" "article"}}" data-view="article" id="article-view-link">
 				{{svg "octicon-file"}} Article view
 				</a>
-			</div>
-			<button class="ui button tiny compact tw-h-9" id="article-view-button">
-				{{svg "octicon-file-diff" 16 "tw-mr-1"}} Compare on
+		</div>
+			<button class="ui button tiny compact tw-h-9" id="compare-mode-button" onclick="this.classList.toggle('primary'); window.dispatchEvent(new CustomEvent('repo:compare-mode-toggle'));">
+				{{svg "octicon-file-diff" 16 "tw-mr-1"}} Compare
 			</button>
 		</overflow-menu>
 

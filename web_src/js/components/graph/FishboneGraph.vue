@@ -22,6 +22,7 @@ import type { ZoomBehavior, ZoomTransform } from "d3-zoom";
 import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
+import ArticleComparePopup from "./ArticleComparePopup.vue";
 
 // Inline types replacing former seeds module
 type Side = -1 | 1;
@@ -62,17 +63,17 @@ const R_MAX = 120;              // Maximum bubble radius in pixels (largest cont
 /* === VERTICAL LAYOUT === */
 const LEVEL_GAP = 240;          // Vertical spacing between generations (parent to child level)
 const STEM_LEN_PARENT = 12;     // Short vertical stem extending from parent bubble
-const STEM_LEN_CHILD  = 18;     // Short vertical stem extending to child bubble
+const STEM_LEN_CHILD = 18;     // Short vertical stem extending to child bubble
 
 /* === LAYOUT DEFAULTS (used in manual mode or as auto-tuning hints) === */
 const BRANCH_SPACING_DEFAULT = 28;   // Default vertical gap between branch joints on trunk
-const LANE_PAD_DEFAULT       = 12;   // Default padding between bubbles in same lane
-const H_OFFSET_DEFAULT       = 48;   // Default horizontal rib length (parent to child)
-const ELBOW_R_DEFAULT        = 28;   // Default elbow corner radius
+const LANE_PAD_DEFAULT = 12;   // Default padding between bubbles in same lane
+const H_OFFSET_DEFAULT = 48;   // Default horizontal rib length (parent to child)
+const ELBOW_R_DEFAULT = 28;   // Default elbow corner radius
 
 /* === COLLISION CLEARANCES === */
 const BUBBLE_PAD_DEFAULT = 8;   // Minimum clearance between bubbles
-const PATH_PAD_DEFAULT   = 8;   // Minimum clearance between bubbles and paths
+const PATH_PAD_DEFAULT = 8;   // Minimum clearance between bubbles and paths
 
 /* === ZOOM/PAN CONSTRAINTS === */
 const ZOOM_MIN = 0.35;          // Minimum zoom level (35% scale)
@@ -176,12 +177,14 @@ const state = reactive({
 });
 
 /* Derived arrays used for Vue rendering (instead of D3 joins) */
-type EdgeGeom = { source: Node; target: Node; side: Side;
-  ex:number; ey:number; hx:number; hy:number; cx:number; cy:number; sx1:number; sy1:number; sx2:number; sy2:number; };
+type EdgeGeom = {
+  source: Node; target: Node; side: Side;
+  ex: number; ey: number; hx: number; hy: number; cx: number; cy: number; sx1: number; sy1: number; sx2: number; sy2: number;
+};
 const nodesList = ref<Node[]>([]);
 const edgesList = ref<EdgeGeom[]>([]);
-const trunksList = ref<{ x:number; y1:number; y2:number; id:string }[]>([]);
-const jointDots = ref<{ x:number; y:number; id:string; sourceOwner:string; targetOwner:string; subject:string }[]>([]);
+const trunksList = ref<{ x: number; y1: number; y2: number; id: string }[]>([]);
+const jointDots = ref<{ x: number; y: number; id: string; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
 
 /* SVG/zoom plumbing */
 const svgHeight = ref(DEFAULT_SVG_HEIGHT);
@@ -194,6 +197,22 @@ let svgSel!: Selection<SVGSVGElement, unknown, null, undefined>;
 let worldSel!: Selection<SVGGElement, unknown, null, undefined>;
 let zoomBehavior!: ZoomBehavior<Element, unknown>;
 const currentK = ref(1);
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   COMPARE MODE STATE
+   ─────────────────────────────────────────────────────────────────────────── */
+const isCompareMode = ref(false);
+const compareSelection = ref<Node[]>([]);
+const showComparePopup = ref(false);
+
+/* Computed: get compare state for a node ('none' | 'first' | 'second') */
+function getCompareState(nodeId: string): 'none' | 'first' | 'second' {
+  if (!isCompareMode.value) return 'none';
+  const idx = compareSelection.value.findIndex(n => n.id === nodeId);
+  if (idx === 0) return 'first';
+  if (idx === 1) return 'second';
+  return 'none';
+}
 
 /* Accessibility: Screen reader announcements */
 const srAnnouncement = ref("");
@@ -290,10 +309,10 @@ function readStoredSelection(): RepoSelectionDetail | null {
     const subject = window.localStorage.getItem(LS_SUBJECT_KEY);
     if (!owner) return null;
     if (repo) {
-      return {owner, repo, subject: subject || null};
+      return { owner, repo, subject: subject || null };
     }
     if (!subject) return null;
-    return {owner, repo: subject, subject};
+    return { owner, repo: subject, subject };
   } catch {
     return null;
   }
@@ -322,7 +341,7 @@ function getSelectionDetailFromNode(n: Node): RepoSelectionDetail | null {
   const repo = repoCandidates[0] || subjectCandidates[0];
   if (!owner || !repo) return null;
   const subject = subjectCandidates[0] || null;
-  return {owner, repo, subject};
+  return { owner, repo, subject };
 }
 
 function normalizeDetail(detail: RepoSelectionDetail | null): RepoSelectionDetail | null {
@@ -399,40 +418,40 @@ function handleExternalSelection(event: Event) {
   setSelectionFromDetail(normalized);
 }
 
-async function fetchForkGraphAndSet(){
+async function fetchForkGraphAndSet() {
   // Set loading state at the start
   isLoading.value = true;
   errorMessage.value = null;
 
-  try{
-    if(!props.apiUrl){
+  try {
+    if (!props.apiUrl) {
       console.warn('FishboneGraph: apiUrl not provided');
       errorMessage.value = 'No API URL provided';
       isLoading.value = false;
       return;
     }
     const urlObj = new URL(props.apiUrl, window.location.origin);
-    
+
     // Set API query parameters from props (only if not already in URL)
     // This allows the URL to override component props if needed
-    if(!urlObj.searchParams.get('include_contributors')) {
+    if (!urlObj.searchParams.get('include_contributors')) {
       urlObj.searchParams.set('include_contributors', props.includeContributors.toString());
     }
-    if(!urlObj.searchParams.get('contributor_days')) {
+    if (!urlObj.searchParams.get('contributor_days')) {
       urlObj.searchParams.set('contributor_days', props.contributorDays.toString());
     }
-    if(!urlObj.searchParams.get('max_depth')) {
+    if (!urlObj.searchParams.get('max_depth')) {
       urlObj.searchParams.set('max_depth', props.maxDepth.toString());
     }
-    if(!urlObj.searchParams.get('sort')) {
+    if (!urlObj.searchParams.get('sort')) {
       urlObj.searchParams.set('sort', props.sortBy);
     }
-    if(!urlObj.searchParams.get('limit')) {
+    if (!urlObj.searchParams.get('limit')) {
       urlObj.searchParams.set('limit', props.limit.toString());
     }
 
     const res = await fetch(urlObj.toString(), { credentials: 'same-origin' });
-    if(!res.ok){
+    if (!res.ok) {
       const errorText = `Failed to load fork graph (${res.status} ${res.statusText})`;
       console.error('FishboneGraph: API error', res.status);
       errorMessage.value = errorText;
@@ -448,7 +467,7 @@ async function fetchForkGraphAndSet(){
     isLoading.value = false;
 
     // Only layout and render if we have data
-    if(Object.keys(graph).length > 0) {
+    if (Object.keys(graph).length > 0) {
       // Wait for Vue to update the DOM with the new graph data before calculating layout
       await nextTick();
       layoutAndRender();
@@ -458,7 +477,7 @@ async function fetchForkGraphAndSet(){
     } else {
       announceToScreenReader('No fork data available');
     }
-  }catch(err){
+  } catch (err) {
     const errorText = err instanceof Error ? err.message : 'Failed to load fork graph';
     console.error('FishboneGraph: failed to fetch graph', err);
     errorMessage.value = errorText;
@@ -467,14 +486,14 @@ async function fetchForkGraphAndSet(){
   }
 }
 
-function buildGraphFromApi(root:any): Graph{
-  const g:Graph = {};
-  if(!root) return g;
+function buildGraphFromApi(root: any): Graph {
+  const g: Graph = {};
+  if (!root) return g;
 
   // Store the root API data so we can check repository.empty flag
   let rootApiData = root;
 
-  const visit = (n:any, parentId: string | null): string =>{
+  const visit = (n: any, parentId: string | null): string => {
     if (!n) return '';
     const id: string = n?.id ?? (n?.repository?.full_name ?? Math.random().toString(36).slice(2));
     const baseContrib: number = Number(n?.contributors?.total_count ?? n?.contributors?.recent_count ?? 0);
@@ -511,7 +530,7 @@ function buildGraphFromApi(root:any): Graph{
       node.repoSubject = props.subject;
     }
     g[id] = node;
-    for(const child of (n?.children ?? [])){
+    for (const child of (n?.children ?? [])) {
       const childId = visit(child, id);
       if (childId) {
         node.children.push(childId);
@@ -527,7 +546,7 @@ function buildGraphFromApi(root:any): Graph{
    HELPERS (math + graph)
    ─────────────────────────────────────────────────────────────────────────── */
 
-function rFor(n:number){
+function rFor(n: number) {
   const max = state.maxContrib || 1;
   if (max <= 0) return R_MIN;
   const t = Math.max(0, Math.min(1, n / max));
@@ -535,18 +554,18 @@ function rFor(n:number){
   return base * (state.radiusScale || 1);
 }
 
-function getRoot(g:Graph){ return Object.values(g).find(n=>n.parentId===null) ?? null; }
+function getRoot(g: Graph) { return Object.values(g).find(n => n.parentId === null) ?? null; }
 
-function computeDepths(g:Graph){
+function computeDepths(g: Graph) {
   /* BFS depth tagging so we can place parents top-down and sort render order. */
   const root = getRoot(g);
   if (!root) return; // Guard against empty graph
   (root as any).depth = 0;
   const q = [root];
-  while(q.length){
-    const n:any = q.shift();
-    for(const cid of n.children){
-      const c:any = g[cid];
+  while (q.length) {
+    const n: any = q.shift();
+    for (const cid of n.children) {
+      const c: any = g[cid];
       if (!c) continue; // Skip missing child nodes
       c.depth = (n.depth ?? 0) + 1;
       q.push(c);
@@ -554,13 +573,13 @@ function computeDepths(g:Graph){
   }
 }
 
-function forkCount(g:Graph){ return Object.values(g).filter(n=>n.parentId!==null).length; }
-function parentMaxChildren(g:Graph){ return Math.max(0, ...Object.values(g).map(n=>n.children.length)); }
+function forkCount(g: Graph) { return Object.values(g).filter(n => n.parentId !== null).length; }
+function parentMaxChildren(g: Graph) { return Math.max(0, ...Object.values(g).map(n => n.children.length)); }
 
 /* ─────────────────────────────────────────────────────────────────────────────-
    RESPONSIVE AUTO-TUNING (adapts dials to width & complexity)
    ─────────────────────────────────────────────────────────────────────────── */
-function applyResponsiveDials(){
+function applyResponsiveDials() {
   if (!state.auto) return;                 // manual mode: honor sliders
   const forks = forkCount(state.graph);
   const maxKids = parentMaxChildren(state.graph);
@@ -570,9 +589,9 @@ function applyResponsiveDials(){
   // Normalize width to 0..1 range based on breakpoints
   const widthFactor = Math.min(1, Math.max(0, (w - WIDTH_BREAKPOINT_MIN) / (WIDTH_BREAKPOINT_MAX - WIDTH_BREAKPOINT_MIN)));
   // Normalize complexity based on fork count (0..1 over COMPLEXITY_THRESHOLD forks)
-  const complexity  = Math.min(1, (forks / COMPLEXITY_THRESHOLD));
+  const complexity = Math.min(1, (forks / COMPLEXITY_THRESHOLD));
   // Normalize fanout based on children count (0..1 over FANOUT_THRESHOLD children)
-  const fanout      = Math.min(1, (maxKids / FANOUT_THRESHOLD));
+  const fanout = Math.min(1, (maxKids / FANOUT_THRESHOLD));
 
   // Calculate horizontal offset (rib length) using weighted combination
   const mix = H_OFFSET_WIDTH_WEIGHT * widthFactor + H_OFFSET_COMPLEXITY_WEIGHT * Math.max(complexity, fanout);
@@ -601,12 +620,12 @@ function applyResponsiveDials(){
 /* ─────────────────────────────────────────────────────────────────────────────-
    LAYOUT ENGINE (deterministic fishbone; analytic collision pushing)
    ─────────────────────────────────────────────────────────────────────────── */
-type Disc = { x:number; y:number; r:number; id?:string };
-type SegV = { x:number; y1:number; y2:number };
-type Arc  = { cx:number; cy:number; r:number };
-type HRun = { x0:number; x1:number; y:number };
+type Disc = { x: number; y: number; r: number; id?: string };
+type SegV = { x: number; y1: number; y2: number };
+type Arc = { cx: number; cy: number; r: number };
+type HRun = { x0: number; x1: number; y: number };
 
-function layoutFishbone(g:Graph){
+function layoutFishbone(g: Graph) {
   const nodeCount = Object.keys(g).length;
   if (nodeCount === 0) {
     nodesList.value = [];
@@ -615,101 +634,103 @@ function layoutFishbone(g:Graph){
     jointDots.value = [];
     return;
   }
-  
+
   computeDepths(g);
-  const root:any = getRoot(g);
+  const root: any = getRoot(g);
   if (!root) return; // Guard against empty graph
   root.x = 0; root.y = 0;
 
   // Update global max contributors for relative radius scaling
   state.maxContrib = Math.max(1, ...Object.values(g).map(n => n.contributors || 0));
 
-  const discs: Disc[] = [{ x:root.x, y:root.y, r:rFor(root.contributors), id:root.id }];
+  const discs: Disc[] = [{ x: root.x, y: root.y, r: rFor(root.contributors), id: root.id }];
   const trunks: SegV[] = []; const arcs: Arc[] = []; const runs: HRun[] = [];
-  const parents = Object.values(g).filter((n:any) => n.depth !== undefined).sort((a:any,b:any)=> (a.depth - b.depth));
+  const parents = Object.values(g).filter((n: any) => n.depth !== undefined).sort((a: any, b: any) => (a.depth - b.depth));
 
-  for(const p of parents){
-    const kids = p.children.map(id=>g[id]).filter((n): n is Node => n !== undefined);
-    if(!kids.length) continue;
+  for (const p of parents) {
+    const kids = p.children.map(id => g[id]).filter((n): n is Node => n !== undefined);
+    if (!kids.length) continue;
 
     const px = p.x ?? 0, py = p.y ?? 0, pr = rFor(p.contributors);
     const baseY = (p.depth + 1) * LEVEL_GAP;
     const yStart = py + pr + STEM_LEN_PARENT;
     const R = state.elbowR;
 
-    const leftLane: Array<[number,number]> = [];
-    const rightLane: Array<[number,number]> = [];
+    const leftLane: Array<[number, number]> = [];
+    const rightLane: Array<[number, number]> = [];
     let turn: Side = -1;
 
-    const ordered = (state.scenario==="reference") ? kids.slice()
-                    : kids.slice().sort((a,b)=>rFor(b.contributors)-rFor(a.contributors));
+    const ordered = (state.scenario === "reference") ? kids.slice()
+      : kids.slice().sort((a, b) => rFor(b.contributors) - rFor(a.contributors));
     let prevJoint = yStart - state.branchSpacing;
 
-    const reserveLane = (lane: Array<[number,number]>, y:number, r:number) => lane.push([y - r - state.lanePad, y + r + state.lanePad]);
-    const pushPastLane = (lane: Array<[number,number]>, y:number, r:number) => {
-      for (const [a,b] of lane) if (!(y + r + state.lanePad < a || y - r - state.lanePad > b)) y = b + state.lanePad + r;
+    const reserveLane = (lane: Array<[number, number]>, y: number, r: number) => lane.push([y - r - state.lanePad, y + r + state.lanePad]);
+    const pushPastLane = (lane: Array<[number, number]>, y: number, r: number) => {
+      for (const [a, b] of lane) if (!(y + r + state.lanePad < a || y - r - state.lanePad > b)) y = b + state.lanePad + r;
       return y;
     };
 
-    for(const c of ordered){
+    for (const c of ordered) {
       if (!c) continue; // Skip undefined nodes
       const cr = rFor(c.contributors);
 
       let side: Side;
-      if (state.scenario==="reference" && c.sideHint) side = c.sideHint;
+      if (state.scenario === "reference" && c.sideHint) side = c.sideHint;
       else {
-        const firstFree = (lane: Array<[number,number]>) => {
+        const firstFree = (lane: Array<[number, number]>) => {
           let y = baseY;
-          for(const [a,b] of lane) if(!(y+cr+state.lanePad<a || y-cr-state.lanePad>b)) y=b+state.lanePad+cr;
+          for (const [a, b] of lane) if (!(y + cr + state.lanePad < a || y - cr - state.lanePad > b)) y = b + state.lanePad + cr;
           return y;
         };
         const yL = firstFree(leftLane), yR = firstFree(rightLane);
-        side = (yL===yR) ? (turn=(turn===-1?+1:-1)) : (yL<yR?-1:+1);
+        side = (yL === yR) ? (turn = (turn === -1 ? +1 : -1)) : (yL < yR ? -1 : +1);
       }
 
       const minOffset = Math.max(state.hOffset, state.pathPad + 1, R + state.pathPad + 1);
       const cx = px + side * (cr + minOffset);
 
       let reqY = Math.max(baseY, yStart + R, prevJoint + state.branchSpacing + R);
-      reqY = pushPastLane(side===-1?leftLane:rightLane, reqY, cr);
+      reqY = pushPastLane(side === -1 ? leftLane : rightLane, reqY, cr);
 
       const bubblePad = state.bubblePad, pathPad = state.pathPad;
 
       for (const d of discs) {
         if (d.id === p.id) continue;
         const dx = cx - d.x, sum = cr + d.r + bubblePad, absx = Math.abs(dx);
-        if (absx < sum) reqY = Math.max(reqY, d.y + Math.sqrt(sum*sum - absx*absx));
+        if (absx < sum) reqY = Math.max(reqY, d.y + Math.sqrt(sum * sum - absx * absx));
       }
       for (const a of arcs) {
         const dx = cx - a.cx, sum = cr + a.r + pathPad, absx = Math.abs(dx);
-        if (absx < sum) reqY = Math.max(reqY, a.cy + Math.sqrt(sum*sum - absx*absx));
+        if (absx < sum) reqY = Math.max(reqY, a.cy + Math.sqrt(sum * sum - absx * absx));
       }
       for (const r of runs) {
         const A = Math.min(r.x0, r.x1), B = Math.max(r.x0, r.x1);
         const xClamp = Math.max(A, Math.min(cx, B));
         const dx = cx - xClamp, need = cr + pathPad;
-        if (Math.abs(dx) < need) reqY = Math.max(reqY, r.y + Math.sqrt(need*need - dx*dx));
+        if (Math.abs(dx) < need) reqY = Math.max(reqY, r.y + Math.sqrt(need * need - dx * dx));
       }
       for (const d of discs) {
         if (d.id === p.id) continue;
         const dx = px - d.x, sum = R + d.r + pathPad, absx = Math.abs(dx);
-        if (absx < sum) reqY = Math.max(reqY, d.y + Math.sqrt(sum*sum - absx*absx));
+        if (absx < sum) reqY = Math.max(reqY, d.y + Math.sqrt(sum * sum - absx * absx));
       }
-      { const run0 = px + side*R, run1 = cx - side*STEM_LEN_CHILD; const A = Math.min(run0, run1), B = Math.max(run0, run1);
+      {
+        const run0 = px + side * R, run1 = cx - side * STEM_LEN_CHILD; const A = Math.min(run0, run1), B = Math.max(run0, run1);
         for (const d of discs) {
           const xC = Math.max(A, Math.min(d.x, B)); const dx = d.x - xC, need = d.r + pathPad;
-          if (Math.abs(dx) < need) reqY = Math.max(reqY, d.y + Math.sqrt(need*need - dx*dx));
-        } }
+          if (Math.abs(dx) < need) reqY = Math.max(reqY, d.y + Math.sqrt(need * need - dx * dx));
+        }
+      }
       for (const s of trunks) if (Math.abs(cx - s.x) < cr + pathPad && reqY <= s.y2) reqY = s.y2 + cr + pathPad;
 
-      reqY = pushPastLane(side===-1?leftLane:rightLane, reqY, cr);
+      reqY = pushPastLane(side === -1 ? leftLane : rightLane, reqY, cr);
       if (state.scenario === "reference") reqY = Math.min(reqY, baseY + MAX_REF_DROP);
 
       (c as any).x = cx; (c as any).y = reqY;
-      reserveLane(side===-1?leftLane:rightLane, reqY, cr);
+      reserveLane(side === -1 ? leftLane : rightLane, reqY, cr);
       discs.push({ x: cx, y: reqY, r: cr, id: c.id });
       arcs.push({ cx: px, cy: reqY, r: R });
-      runs.push({ x0: px + side*R, x1: cx - side*STEM_LEN_CHILD, y: reqY });
+      runs.push({ x0: px + side * R, x1: cx - side * STEM_LEN_CHILD, y: reqY });
       prevJoint = reqY - R;
     }
 
@@ -724,19 +745,19 @@ function layoutFishbone(g:Graph){
   nodesList.value = Object.values(g) as any;
 
   const links = nodesList.value
-    .filter(n=>n.parentId && g[n.parentId])
+    .filter(n => n.parentId && g[n.parentId])
     .map(n => ({ source: (g as any)[n.parentId!], target: n }));
   const R = state.elbowR;
-  const edges = links.map(l=>{
+  const edges = links.map(l => {
     const side: Side = (l.target.x! >= l.source.x!) ? +1 : -1;
-    const ex = l.source.x!, ey = l.target.y! - R, hx = ex + side*R, hy = l.target.y!;
-    const rt = rFor(l.target.contributors), cx = l.target.x! - side*(rt + STEM_LEN_CHILD), cy = hy;
-    const sx1 = l.target.x! - side*rt, sy1 = hy, sx2 = cx, sy2 = cy;
-    return { source:l.source, target:l.target, side, ex, ey, hx, hy, cx, cy, sx1, sy1, sx2, sy2 };
+    const ex = l.source.x!, ey = l.target.y! - R, hx = ex + side * R, hy = l.target.y!;
+    const rt = rFor(l.target.contributors), cx = l.target.x! - side * (rt + STEM_LEN_CHILD), cy = hy;
+    const sx1 = l.target.x! - side * rt, sy1 = hy, sx2 = cx, sy2 = cy;
+    return { source: l.source, target: l.target, side, ex, ey, hx, hy, cx, cy, sx1, sy1, sx2, sy2 };
   });
   edgesList.value = edges;
 
-  trunksList.value = nodesList.value.filter(n=>n.children.length>0).map(n=>{
+  trunksList.value = nodesList.value.filter(n => n.children.length > 0).map(n => {
     const rs = rFor(n.contributors);
     const yStart = n.y! + rs + STEM_LEN_PARENT;
     const ys = n.children.map(id => g[id]).filter((c): c is Node => c !== undefined).map(c => (c as any).y! - R);
@@ -760,7 +781,7 @@ function layoutFishbone(g:Graph){
 /* ─────────────────────────────────────────────────────────────────────────────-
    VIEW FITTING (responsive reset + tiny-graph elegance)
    ─────────────────────────────────────────────────────────────────────────── */
-function contentBounds(){
+function contentBounds() {
   if (nodesList.value.length === 0) {
     return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
   }
@@ -773,7 +794,7 @@ function contentBounds(){
   return { minX: minX - extraX, maxX: maxX + extraX, minY, maxY };
 }
 
-function resetView(animated=false){
+function resetView(animated = false) {
   /* Centering fix: apply transform to worldSel (the same <g> Vue renders). */
   if (!nodesList.value.length) return; // Guard against empty graph
   const svg = svgRef.value!;
@@ -782,15 +803,15 @@ function resetView(animated=false){
     requestAnimationFrame(() => resetView(animated));
     return;
   }
-  
+
   if (nodesList.value.length === 0) return;
-  
+
   const usableH = box.height - VIEW_TOP_OFFSET;
 
   const forks = forkCount(state.graph);
   const b = contentBounds();
   const contentW = b.maxX - b.minX, contentH = b.maxY - b.minY;
-  
+
   // Validate bounds
   if (!isFinite(contentW) || !isFinite(contentH) || !isFinite(b.minX) || !isFinite(b.minY)) {
     return;
@@ -810,7 +831,7 @@ function resetView(animated=false){
     if (root) {
       const r = rFor(root.contributors);
       const desiredD = Math.max(SINGLE_FORK_DIAMETER_MIN, Math.min(Math.floor(box.width * SINGLE_FORK_WIDTH_RATIO), SINGLE_FORK_DIAMETER_MAX));
-      const sBubble  = desiredD / (2 * r);
+      const sBubble = desiredD / (2 * r);
       targetScale = Math.min(ZOOM_MAX, Math.max(sBubble, targetScale));
     }
   }
@@ -835,13 +856,13 @@ function resetView(animated=false){
 }
 
 /* Click focus: center selected bubble and fit fully */
-function focusNode(n:Node){
+function focusNode(n: Node) {
   /* Note: also applied to worldSel via zoomBehavior, so it now works. */
   const svg = svgRef.value!;
   const box = svg.getBoundingClientRect();
   const usableH = box.height - VIEW_TOP_OFFSET;
   const r = rFor(n.contributors);
-  
+
   // Calculate scale to fit the bubble with padding
   const sx = (box.width - 2 * FOCUS_PADDING) / (2 * r);
   const sy = (usableH - 2 * FOCUS_PADDING) / (2 * r);
@@ -860,7 +881,7 @@ function focusNode(n:Node){
 /* ─────────────────────────────────────────────────────────────────────────────-
    RENDER PIPELINE (layout→derive arrays→Vue renders)
    ─────────────────────────────────────────────────────────────────────────── */
-function layoutAndRender(){
+function layoutAndRender() {
   applyResponsiveDials();          // adapt dials first
   layoutFishbone(state.graph);     // compute x,y and derive edges/trunks/lists
 }
@@ -868,16 +889,16 @@ function layoutAndRender(){
 /* ─────────────────────────────────────────────────────────────────────────────-
    MOUNT (zoom wiring, resize observer, seeds)
    ─────────────────────────────────────────────────────────────────────────── */
-onMounted(async ()=>{
-  svgSel   = select(svgRef.value!);
+onMounted(async () => {
+  svgSel = select(svgRef.value!);
   worldSel = select(worldRef.value!);  // CRITICAL: the very group Vue renders into
 
   zoomBehavior = zoom()
     .scaleExtent([ZOOM_MIN, ZOOM_MAX])
     /* Filter: pinch and ctrl+wheel zoom; plain wheel should pan (handled below). */
-    .filter((event:any) => event.type === "wheel" ? event.ctrlKey : true)
-    .on("zoom",(e:any)=>{
-      const z:ZoomTransform = e.transform; currentK.value = z.k;
+    .filter((event: any) => event.type === "wheel" ? event.ctrlKey : true)
+    .on("zoom", (e: any) => {
+      const z: ZoomTransform = e.transform; currentK.value = z.k;
       /* Apply pan/zoom to the SAME world group that holds all nodes/edges. */
       worldSel.attr("transform", z.toString());
     });
@@ -885,24 +906,24 @@ onMounted(async ()=>{
   svgSel.call(zoomBehavior as any);
 
   /* Background click (outside any bubble) → reset; if on true background (svg), also clear selection */
-  svgSel.on("click.bg", (ev:any)=>{
+  svgSel.on("click.bg", (ev: any) => {
     const target = ev.target as Element;
     if (!target.closest("g.node")) {
       resetView(true);
       applySelection(null, null);
       pendingExternalSelection = null;
       persistSelectionDetail(null);
-      window.dispatchEvent(new CustomEvent('repo:bubble-selected', {detail: null}));
-      window.dispatchEvent(new CustomEvent('repo:selection-updated', {detail: null}));
+      window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: null }));
+      window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: null }));
     }
   });
 
   /* Wheel pans (natural trackpad behavior). Ctrl+wheel handled by d3-zoom. */
-  svgSel.on("wheel.pan",(ev:any)=>{
+  svgSel.on("wheel.pan", (ev: any) => {
     if (ev.ctrlKey) return;       // let ctrl+wheel zoom handler run
     ev.preventDefault();
     svgSel.call(zoomBehavior.translateBy as any, -ev.deltaX, -ev.deltaY);
-  }, { passive:false });
+  }, { passive: false });
 
   /* Observe container width for responsive dials */
   await nextTick();
@@ -914,7 +935,7 @@ onMounted(async ()=>{
   const rect0 = el.getBoundingClientRect();
   containerWidth = rect0.width;
   containerHeight = rect0.height;
-  ro = new ResizeObserver((entries)=>{
+  ro = new ResizeObserver((entries) => {
     const rect = entries[0].contentRect;
     const w = rect.width;
     const h = rect.height;
@@ -923,7 +944,7 @@ onMounted(async ()=>{
     if (Math.abs(h - containerHeight) > 2) { containerHeight = h; changed = true; }
     if (changed) {
       if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
-      pendingRaf = requestAnimationFrame(()=>{
+      pendingRaf = requestAnimationFrame(() => {
         layoutAndRender();
         resetView();
         pendingRaf = null;
@@ -935,15 +956,17 @@ onMounted(async ()=>{
   /* Initial fetch from API */
   await fetchForkGraphAndSet();
   window.addEventListener('repo:selection-updated', handleExternalSelection as EventListener);
+  window.addEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
 });
 
-onBeforeUnmount(()=>{
+onBeforeUnmount(() => {
   if (ro) ro.disconnect();
   window.removeEventListener('repo:selection-updated', handleExternalSelection as EventListener);
+  window.removeEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
 });
 
 /* Derived for template binding */
-const kComputed = computed(()=> currentK.value);
+const kComputed = computed(() => currentK.value);
 
 function persistSelectionDetail(detail: RepoSelectionDetail | null) {
   if (typeof window === 'undefined') return;
@@ -967,32 +990,104 @@ function persistSelectionDetail(detail: RepoSelectionDetail | null) {
 }
 
 /* Click handler: focus and persist selected article (owner/subject) */
-function onBubbleClick(n: Node){
+function onBubbleClick(n: Node) {
+  // In compare mode, use compare selection logic instead
+  if (isCompareMode.value) {
+    onBubbleClickCompare(n);
+    return;
+  }
+
   focusNode(n);
   const detail = getSelectionDetailFromNode(n);
   if (!detail) return;
-  const payload = {...detail};
+  const payload = { ...detail };
   applySelection(n, payload);
   persistSelectionDetail(payload);
   announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
-  window.dispatchEvent(new CustomEvent('repo:bubble-selected', {detail: payload}));
-  window.dispatchEvent(new CustomEvent('repo:selection-updated', {detail: payload}));
+  window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: payload }));
+  window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
 }
 
-function onBubbleView(n: Node){
+function onBubbleView(n: Node) {
   const detail = getSelectionDetailFromNode(n);
   if (!detail) return;
-  const payload = {...detail};
+  const payload = { ...detail };
   applySelection(n, payload);
   persistSelectionDetail(payload);
-  window.dispatchEvent(new CustomEvent('repo:selection-updated', {detail: payload}));
-  window.dispatchEvent(new CustomEvent('repo:bubble-open-article', {detail: payload}));
+  window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
+  window.dispatchEvent(new CustomEvent('repo:bubble-open-article', { detail: payload }));
 }
 
 /* Click handler for joint-parent: navigate to fork comparison page */
 function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string }) {
   if (!joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
   const compareUrl = `/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`;
+  window.location.href = compareUrl;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+   COMPARE MODE HANDLERS
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Toggle compare mode on/off */
+function toggleCompareMode() {
+  isCompareMode.value = !isCompareMode.value;
+  if (!isCompareMode.value) {
+    // Exiting compare mode: clear selections and close popup
+    compareSelection.value = [];
+    showComparePopup.value = false;
+  }
+  announceToScreenReader(isCompareMode.value ? 'Compare mode activated. Select two articles to compare.' : 'Compare mode deactivated.');
+}
+
+/* Handle compare mode toggle from external event (header button) */
+function handleCompareModeToggle() {
+  toggleCompareMode();
+}
+
+/* Handle bubble click in compare mode */
+function onBubbleClickCompare(n: Node) {
+  const existingIdx = compareSelection.value.findIndex(node => node.id === n.id);
+
+  if (existingIdx !== -1) {
+    // Node already selected: remove it
+    compareSelection.value.splice(existingIdx, 1);
+    showComparePopup.value = false;
+    announceToScreenReader(`Deselected ${n.fullName || n.id}. ${compareSelection.value.length} article${compareSelection.value.length === 1 ? '' : 's'} selected.`);
+  } else if (compareSelection.value.length < 2) {
+    // Add node to selection
+    compareSelection.value.push(n);
+
+    if (compareSelection.value.length === 2) {
+      // Two nodes selected: show popup
+      showComparePopup.value = true;
+      announceToScreenReader('Two articles selected. Compare popup opened.');
+    } else {
+      announceToScreenReader(`Selected ${n.fullName || n.id}. Select one more article to compare.`);
+    }
+  }
+}
+
+/* Close compare popup */
+function closeComparePopup() {
+  showComparePopup.value = false;
+}
+
+/* Navigate to comparison page */
+function goToComparison() {
+  if (compareSelection.value.length !== 2) return;
+
+  const [first, second] = compareSelection.value;
+  const subject = first.repoSubject || second.repoSubject || props.subject || '';
+  const owner1 = first.repoOwner || first.fullName?.split('/')[0] || '';
+  const owner2 = second.repoOwner || second.fullName?.split('/')[0] || '';
+
+  if (!subject || !owner1 || !owner2) {
+    console.warn('FishboneGraph: missing data for comparison URL');
+    return;
+  }
+
+  const compareUrl = `/subject/${encodeURIComponent(subject)}/compare/${encodeURIComponent(owner1)}...${encodeURIComponent(owner2)}`;
   window.location.href = compareUrl;
 }
 </script>
@@ -1008,104 +1103,70 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
       <div class="graph-container">
         <!-- SVG world: IMPORTANT → touch-action:none enables pinch zoom; d3 handles it -->
         <!-- SVG is always rendered to keep refs valid -->
-        <svg
-          ref="svgRef" 
-          class="tw-w-full" 
-          :class="{ 'graph-hidden': isLoading || errorMessage || !hasData }"
-          :style="{ height: svgHeight + 'px' }" 
-          style="touch-action: none;"
-          role="img"
-          aria-label="Fork repository graph showing contributors and relationships"
-          tabindex="0"
-        >
+        <svg ref="svgRef" class="tw-w-full" :class="{ 'graph-hidden': isLoading || errorMessage || !hasData }"
+          :style="{ height: svgHeight + 'px' }" style="touch-action: none;" role="img"
+          aria-label="Fork repository graph showing contributors and relationships" tabindex="0">
           <defs>
             <!-- Soft radial bubble gradient -->
             <radialGradient id="bubbleGrad" cx="35%" cy="30%" r="65%">
-              <stop offset="0%" stop-color="#FAFBFC"/>
-              <stop offset="60%" stop-color="#EEF2F7"/>
-              <stop offset="100%" stop-color="#E6EBF2"/>
+              <stop offset="0%" stop-color="#FAFBFC" />
+              <stop offset="60%" stop-color="#EEF2F7" />
+              <stop offset="100%" stop-color="#E6EBF2" />
             </radialGradient>
             <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#64748b" flood-opacity="0.18"/>
+              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#64748b" flood-opacity="0.18" />
             </filter>
           </defs>
 
           <!-- WORLD GROUP: Vue renders here, and d3-zoom transforms this exact <g> -->
           <g ref="worldRef">
             <!-- Trunks (vertical) -->
-            <line
-              v-for="t in trunksList" :key="t.id"
-              class="trunk"
-              :x1="t.x" :x2="t.x"
-              :y1="t.y1" :y2="t.y2"
-              stroke="#D7DFE8" stroke-width="2" stroke-linecap="round"
-            />
+            <line v-for="t in trunksList" :key="t.id" class="trunk" :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
+              stroke="#D7DFE8" stroke-width="2" stroke-linecap="round" />
 
             <!-- Branch elbows + runs (one path per edge) -->
-            <path
-              v-for="e in edgesList" :key="`${e.source.id}-${e.target.id}`"
-              class="branch" fill="none" stroke="#D7DFE8" stroke-width="2" stroke-linecap="round" opacity="0.9"
-              :d="`M ${e.ex} ${e.ey} C ${e.ex} ${e.ey + 0.5522847498307936*state.elbowR}, ${e.ex + e.side*0.5522847498307936*state.elbowR} ${e.hy}, ${e.hx} ${e.hy} L ${e.cx} ${e.cy}`"
-            />
+            <path v-for="e in edgesList" :key="`${e.source.id}-${e.target.id}`" class="branch" fill="none"
+              stroke="#D7DFE8" stroke-width="2" stroke-linecap="round" opacity="0.9"
+              :d="`M ${e.ex} ${e.ey} C ${e.ex} ${e.ey + 0.5522847498307936 * state.elbowR}, ${e.ex + e.side * 0.5522847498307936 * state.elbowR} ${e.hy}, ${e.hx} ${e.hy} L ${e.cx} ${e.cy}`" />
 
             <!-- Child stems -->
-            <line
-              v-for="e in edgesList" :key="`stem-${e.source.id}-${e.target.id}`"
-              class="child-stem"
-              :x1="e.sx1" :y1="e.sy1" :x2="e.sx2" :y2="e.sy2"
-              stroke="#D7DFE8" stroke-width="2" stroke-linecap="round" opacity="0.9"
-            />
+            <line v-for="e in edgesList" :key="`stem-${e.source.id}-${e.target.id}`" class="child-stem" :x1="e.sx1"
+              :y1="e.sy1" :x2="e.sx2" :y2="e.sy2" stroke="#D7DFE8" stroke-width="2" stroke-linecap="round"
+              opacity="0.9" />
 
             <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
-            <circle
-              v-for="j in jointDots" :key="`joint-${j.id}`"
-              class="joint-parent" :cx="j.x" :cy="j.y" r="6"
-              fill="#ffffff" stroke="#C7D2DF" stroke-width="2"
-              style="cursor: pointer; transition: all 0.15s ease;"
-              role="button"
-              tabindex="0"
-              :aria-label="`Compare ${j.sourceOwner} with ${j.targetOwner}`"
-              @click.stop="() => onJointClick(j)"
-              @keydown.enter.stop="() => onJointClick(j)"
-              @keydown.space.stop="() => onJointClick(j)"
-            />
-            
+            <circle v-for="j in jointDots" :key="`joint-${j.id}`" class="joint-parent" :cx="j.x" :cy="j.y" r="6"
+              fill="#ffffff" stroke="#C7D2DF" stroke-width="2" style="cursor: pointer; transition: all 0.15s ease;"
+              role="button" tabindex="0" :aria-label="`Compare ${j.sourceOwner} with ${j.targetOwner}`"
+              @click.stop="() => onJointClick(j)" @keydown.enter.stop="() => onJointClick(j)"
+              @keydown.space.stop="() => onJointClick(j)" />
+
             <!-- Bubbles (component handles labels independently) -->
-            <BubbleNode
-              v-for="n in nodesList" :key="n.id"
-              :id="n.id" :x="(n as any).x" :y="(n as any).y" :r="(rFor(n.contributors))"
-              :contributors="n.contributors" :updated-at="n.updatedAt" :k="kComputed"
-              :is-active="selectedNodeId === n.id"
-              @click="() => onBubbleClick(n)"
-              @view="() => onBubbleView(n)"
-            />
+            <BubbleNode v-for="n in nodesList" :key="n.id" :id="n.id" :x="(n as any).x" :y="(n as any).y"
+              :r="(rFor(n.contributors))" :contributors="n.contributors" :updated-at="n.updatedAt" :k="kComputed"
+              :is-active="selectedNodeId === n.id" :is-compare-mode="isCompareMode"
+              :compare-state="getCompareState(n.id)" @click="() => onBubbleClick(n)" @view="() => onBubbleView(n)" />
           </g>
         </svg>
 
         <!-- State overlays positioned on top of SVG only -->
         <!-- Loading State -->
         <div v-if="isLoading" class="state-overlay loading-state">
-          <svg
-            class="tw-w-full" viewBox="0 0 1100 400" preserveAspectRatio="xMidYMid meet"
-            role="img" aria-label="Loading fork graph"
-          >
+          <svg class="tw-w-full" viewBox="0 0 1100 400" preserveAspectRatio="xMidYMid meet" role="img"
+            aria-label="Loading fork graph">
             <defs>
               <radialGradient id="loadingBubbleGrad" cx="35%" cy="30%" r="65%">
-                <stop offset="0%" stop-color="#FAFBFC"/>
-                <stop offset="60%" stop-color="#EEF2F7"/>
-                <stop offset="100%" stop-color="#E6EBF2"/>
+                <stop offset="0%" stop-color="#FAFBFC" />
+                <stop offset="60%" stop-color="#EEF2F7" />
+                <stop offset="100%" stop-color="#E6EBF2" />
               </radialGradient>
             </defs>
             <!-- Centered at 50% of viewBox (550, 200) -->
             <g transform="translate(550, 200)">
-              <circle
-                r="80" fill="url(#loadingBubbleGrad)" 
-                stroke="#DBE2EA" stroke-width="1.2" opacity="0.7" class="pulse-animation"
-              />
-              <text
-                text-anchor="middle" dominant-baseline="central" 
-                fill="#64748b" font-size="16" font-weight="500"
-              >Loading...</text>
+              <circle r="80" fill="url(#loadingBubbleGrad)" stroke="#DBE2EA" stroke-width="1.2" opacity="0.7"
+                class="pulse-animation" />
+              <text text-anchor="middle" dominant-baseline="central" fill="#64748b" font-size="16"
+                font-weight="500">Loading...</text>
             </g>
           </svg>
         </div>
@@ -1114,10 +1175,8 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
         <div v-else-if="errorMessage" class="state-overlay error-state">
           <div class="state-message">
             <svg class="state-icon error-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <h3 class="state-title">Failed to Load Fork Graph</h3>
             <p class="state-description">{{ errorMessage }}</p>
@@ -1126,17 +1185,16 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
         </div>
 
         <!-- Empty State -->
-        <CreateFirstArticleBubble
-          v-if="!hasData"
-          :owner="props.owner"
-          :repo="props.repo"
-          :subject="props.subject"
-          :default-branch="props.defaultBranch"
-        />
+        <CreateFirstArticleBubble v-if="!hasData" :owner="props.owner" :repo="props.repo" :subject="props.subject"
+          :default-branch="props.defaultBranch" />
       </div>
       <!-- End graph-container -->
 
-      <LegendFishbone v-if="hasData"/>
+      <LegendFishbone v-if="hasData" />
+
+      <!-- Compare Popup Modal -->
+      <ArticleComparePopup v-if="showComparePopup && compareSelection.length === 2" :articles="compareSelection"
+        :subject="props.subject || ''" @close="closeComparePopup" @compare="goToComparison" />
     </div>
   </div>
 </template>
@@ -1187,7 +1245,8 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
   justify-content: center;
   z-index: 10;
   padding: 2rem;
-  pointer-events: none; /* Allow clicks to pass through to tabs */
+  pointer-events: none;
+  /* Allow clicks to pass through to tabs */
 }
 
 /* Loading state is transparent and non-blocking */
@@ -1198,7 +1257,8 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
 /* Error state has opaque background and blocks interaction */
 .error-state {
   background-color: rgba(255, 255, 255, 0.98);
-  pointer-events: auto !important; /* Re-enable interaction for buttons */
+  pointer-events: auto !important;
+  /* Re-enable interaction for buttons */
 }
 
 .state-message {
@@ -1260,10 +1320,13 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
 
 /* Loading animation */
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.7;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.9;
     transform: scale(1.05);
