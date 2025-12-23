@@ -27,7 +27,7 @@ export default {
   retries: env.CI ? 2 : 0,
 
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: env.CI ? 'list' : [['list'], ['html', {outputFolder: 'tests/e2e/reports/', open: 'never'}]],
+  reporter: [['list'], ['html', {outputFolder: 'tests/e2e/reports/', open: 'never'}]],
 
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
@@ -48,6 +48,8 @@ export default {
     trace: 'on-first-retry',
 
     screenshot: 'only-on-failure',
+
+    video: 'retain-on-failure',
   },
 
   /* Configure projects for major browsers */
