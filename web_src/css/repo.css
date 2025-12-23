@@ -2032,6 +2032,15 @@ tbody.commit-list {
   display: none;
 }
 
+/* Desktop repo header row styling */
+.diff-repo-header-row {
+  background: var(--color-box-header);
+}
+
+.diff-repo-header-cell {
+  vertical-align: top;
+}
+
 /* Mobile: Show 3-column unified view */
 @media (max-width: 767.98px) {
   .diff-colgroup-desktop {
@@ -2050,18 +2059,32 @@ tbody.commit-list {
     display: table-row;
   }
 
-  /* Subject compare header - stack repo info vertically */
-  .diff-repo-header {
-    flex-direction: column !important;
-  }
-
-  .diff-repo-header > div {
-    width: 100%;
-    border-left: none !important;
-  }
-
-  .diff-repo-header > div:not(:first-child) {
+  /* Mobile diff headers - show owner/repo above each change */
+  .diff-mobile-header {
     border-top: 1px solid var(--color-secondary);
+  }
+
+  .diff-mobile-header-cell {
+    background: var(--color-box-header);
+    padding: 0 !important;
+  }
+
+  .diff-mobile-header-del .diff-mobile-header-cell {
+    background: var(--color-diff-removed-row-bg);
+    border-left: 3px solid var(--color-red);
+  }
+
+  .diff-mobile-header-add .diff-mobile-header-cell {
+    background: var(--color-diff-added-row-bg);
+    border-left: 3px solid var(--color-green);
+  }
+
+  .diff-mobile-header-cell a {
+    color: inherit;
+  }
+
+  .diff-mobile-header-cell strong {
+    font-size: 13px;
   }
 
   /* For add-code rows on mobile, use the right-side styling on left-side cells */
@@ -2082,3 +2105,4 @@ tbody.commit-list {
     background: var(--color-diff-removed-row-bg);
   }
 }
+
