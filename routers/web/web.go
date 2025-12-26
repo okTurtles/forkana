@@ -1226,6 +1226,37 @@ func registerWebRoutes(m *web.Router) {
 	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
 	// end "/article/{username}/{subjectname}": article-based file operations
 
+	// Article-based pull request routes - mirror the repository-based routes but use subject name
+	m.Group("/article/{username}/{subjectname}", func() {
+		m.Get("/{type:pulls}", repo.Issues)
+		m.Group("/{type:pulls}/{index}", func() {
+			m.Get("", repo.SetWhitespaceBehavior, repo.GetPullDiffStats, repo.ViewIssue)
+			m.Get(".diff", repo.DownloadPullDiff)
+			m.Get(".patch", repo.DownloadPullPatch)
+			m.Get("/merge_box", repo.ViewPullMergeBox)
+			m.Group("/commits", func() {
+				m.Get("", repo.SetWhitespaceBehavior, repo.GetPullDiffStats, repo.ViewPullCommits)
+				m.Get("/list", repo.GetPullCommits)
+				m.Get("/{sha:[a-f0-9]{7,64}}", repo.SetEditorconfigIfExists, repo.SetDiffViewStyle, repo.SetWhitespaceBehavior, repo.SetShowOutdatedComments, repo.ViewPullFilesForSingleCommit)
+			})
+			m.Post("/merge", context.RepoMustNotBeArchived(), web.Bind(forms.MergePullRequestForm{}), repo.MergePullRequest)
+			m.Post("/cancel_auto_merge", context.RepoMustNotBeArchived(), repo.CancelAutoMergePullRequest)
+			m.Post("/update", repo.UpdatePullRequest)
+			m.Post("/set_allow_maintainer_edit", web.Bind(forms.UpdateAllowEditsForm{}), repo.SetAllowEdits)
+			m.Post("/cleanup", context.RepoMustNotBeArchived(), repo.CleanUpPullRequest)
+			m.Group("/files", func() {
+				m.Get("", repo.SetEditorconfigIfExists, repo.SetDiffViewStyle, repo.SetWhitespaceBehavior, repo.SetShowOutdatedComments, repo.ViewPullFilesForAllCommitsOfPr)
+				m.Get("/{shaFrom:[a-f0-9]{7,64}}..{shaTo:[a-f0-9]{7,64}}", repo.SetEditorconfigIfExists, repo.SetDiffViewStyle, repo.SetWhitespaceBehavior, repo.SetShowOutdatedComments, repo.ViewPullFilesForRange)
+				m.Group("/reviews", func() {
+					m.Get("/new_comment", repo.RenderNewCodeCommentForm)
+					m.Post("/comments", web.Bind(forms.CodeCommentForm{}), repo.CreateCodeComment)
+					m.Post("/submit", web.Bind(forms.SubmitReviewForm{}), repo.SubmitReview)
+				}, context.RepoMustNotBeArchived())
+			})
+		})
+	}, optSignIn, context.RepoAssignmentByOwnerAndSubject, repo.MustAllowPulls, reqUnitPullsReader)
+	// end "/article/{username}/{subjectname}/pulls/{index}": article pull request
+
 	// user/org home, including rss feeds like "/{username}/{reponame}.rss"
 	m.Get("/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, repo.Home)
 

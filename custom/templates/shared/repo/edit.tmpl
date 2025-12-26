@@ -74,6 +74,8 @@
             <input type="hidden" name="commit_message" value="">
             {{/* Fork-on-edit field - only true when user needs to create a new fork (not when they have an existing fork, as that case shows a link instead of a form) */}}
             <input type="hidden" id="fork_and_edit" name="fork_and_edit" value="{{if .NeedsFork}}true{{else}}false{{end}}">
+            {{/* Submit change request field - when true, creates fork + branch + commit + PR back to original */}}
+            <input type="hidden" id="submit_change_request" name="submit_change_request" value="false">
 
              <div class="field">
                  <div class="tw-p-0">

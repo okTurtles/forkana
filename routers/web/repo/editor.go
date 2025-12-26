@@ -15,7 +15,7 @@ import (
 
 	"code.gitea.io/gitea/models/db"
 	git_model "code.gitea.io/gitea/models/git"
-	"code.gitea.io/gitea/models/issues"
+	issues_model "code.gitea.io/gitea/models/issues"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/charset"
@@ -31,6 +31,7 @@ import (
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/context/upload"
 	"code.gitea.io/gitea/services/forms"
+	pull_service "code.gitea.io/gitea/services/pull"
 	repo_service "code.gitea.io/gitea/services/repository"
 	files_service "code.gitea.io/gitea/services/repository/files"
 )
@@ -152,7 +153,7 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 		return nil
 	}
 
-	if !commitFormOptions.NeedFork && !issues.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
+	if !commitFormOptions.NeedFork && !issues_model.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
 		ctx.NotFound(nil)
 		return nil
 	}
@@ -480,6 +481,17 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
+	// Handle submit-change-request workflow (fork + branch + commit + PR)
+	if parsed.form.SubmitChangeRequest {
+		pr := handleSubmitChangeRequest(ctx, parsed.form, parsed)
+		if ctx.Written() || pr == nil {
+			return
+		}
+		// Redirect to the created pull request
+		ctx.JSONRedirect(pr.Issue.Link())
+		return
+	}
+
 	// Determine target repository - either the original or a fork
 	targetRepo := ctx.Repo.Repository
 
@@ -577,6 +589,111 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 	}
 
 	return fork
+}
+
+// handleSubmitChangeRequest handles the submit-change-request workflow for article contributions.
+// It creates a unique branch in the target repository, commits the changes, and creates a change request
+// from that branch to the default branch (same-repo CR, no fork involved).
+// Returns the created change request, or nil if an error occurred.
+func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileForm, parsed *preparedEditorCommitForm[*forms.EditRepoFileForm]) *issues_model.PullRequest {
+	targetRepo := ctx.Repo.Repository
+
+	// Generate a unique branch name for the change request
+	branchName := getUniquePatchBranchName(ctx, ctx.Doer.LowerName, targetRepo)
+	if branchName == "" {
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_create_branch"))
+		return nil
+	}
+
+	// Commit the changes to a new branch in the target repository
+	// The ChangeRepoFiles function will create the new branch from the default branch
+	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
+	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+		LastCommitID: form.LastCommit,
+		OldBranch:    targetRepo.DefaultBranch,
+		NewBranch:    branchName,
+		Message:      parsed.GetCommitMessage(defaultCommitMessage),
+		Files: []*files_service.ChangeRepoFile{
+			{
+				Operation:     "update",
+				FromTreePath:  ctx.Repo.TreePath,
+				TreePath:      form.TreePath,
+				ContentReader: strings.NewReader(strings.ReplaceAll(form.Content.Value(), "\r", "")),
+			},
+		},
+		Signoff:   form.Signoff,
+		Author:    parsed.GitCommitter,
+		Committer: parsed.GitCommitter,
+	})
+	if err != nil {
+		log.Error("handleSubmitChangeRequest: failed to commit changes: %v", err)
+		editorHandleFileOperationError(ctx, branchName, err)
+		return nil
+	}
+
+	// Get compare info for the pull request
+	gitRepo, err := gitrepo.OpenRepository(ctx, targetRepo)
+	if err != nil {
+		log.Error("handleSubmitChangeRequest: failed to open git repo: %v", err)
+		ctx.ServerError("OpenRepository", err)
+		return nil
+	}
+	defer gitRepo.Close()
+
+	// Same-repo CR: both head and base are in the target repository
+	compareInfo, err := pull_service.GetCompareInfo(ctx, targetRepo, targetRepo, gitRepo,
+		git.BranchPrefix+targetRepo.DefaultBranch, git.BranchPrefix+branchName, false, false)
+	if err != nil {
+		log.Error("handleSubmitChangeRequest: failed to get compare info: %v", err)
+		ctx.ServerError("GetCompareInfo", err)
+		return nil
+	}
+
+	// Create the change request
+	// Generate a title based on the file being edited
+	prTitle := ctx.Locale.TrString("repo.editor.submit_changes_pr_title", path.Base(form.TreePath))
+
+	pullIssue := &issues_model.Issue{
+		RepoID:   targetRepo.ID,
+		Repo:     targetRepo,
+		Title:    prTitle,
+		PosterID: ctx.Doer.ID,
+		Poster:   ctx.Doer,
+		IsPull:   true,
+		Content:  "", // Could add a default description if needed
+	}
+
+	// Same-repo CR: HeadRepo and BaseRepo are both the target repository
+	changeRequest := &issues_model.PullRequest{
+		HeadRepoID: targetRepo.ID,
+		BaseRepoID: targetRepo.ID,
+		HeadBranch: branchName,
+		BaseBranch: targetRepo.DefaultBranch,
+		HeadRepo:   targetRepo,
+		BaseRepo:   targetRepo,
+		MergeBase:  compareInfo.MergeBase,
+		Type:       issues_model.PullRequestGitea,
+	}
+
+	prOpts := &pull_service.NewPullRequestOptions{
+		Repo:        targetRepo,
+		Issue:       pullIssue,
+		PullRequest: changeRequest,
+	}
+
+	if err := pull_service.NewPullRequest(ctx, prOpts); err != nil {
+		log.Error("handleSubmitChangeRequest: failed to create change request: %v", err)
+		ctx.ServerError("NewPullRequest", err)
+		return nil
+	}
+
+	log.Info("handleSubmitChangeRequest: created CR #%d from %s:%s to %s:%s in %s/%s",
+		changeRequest.Index,
+		branchName, targetRepo.DefaultBranch,
+		targetRepo.DefaultBranch, branchName,
+		targetRepo.OwnerName, targetRepo.Name)
+
+	return changeRequest
 }
 
 // DeleteFile render delete file page
