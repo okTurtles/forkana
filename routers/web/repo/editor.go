@@ -611,6 +611,12 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		return nil
 	}
 
+	// Validate that content is provided
+	if !form.Content.Has() {
+		ctx.JSONError(ctx.Tr("repo.editor.fail_to_update_file", form.TreePath, "content is required"))
+		return nil
+	}
+
 	// Commit the changes to a new branch in the target repository
 	// The ChangeRepoFiles function will create the new branch from the default branch
 	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
