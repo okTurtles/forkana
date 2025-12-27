@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	asymkey_model "code.gitea.io/gitea/models/asymkey"
 	"code.gitea.io/gitea/models/db"
@@ -1162,9 +1163,15 @@ func RepoAssignmentBySubject(ctx *Context) {
 	}
 
 	// Set up contributor count data
+	// For forks, only count contributors who made commits after the fork was created
+	// to avoid including inherited history from the parent repository
 	ctx.Data["ContributorCount"] = int64(0)
 	if !repo.IsEmpty && ctx.Repo.GitRepo != nil {
-		contributorCount, err := ctx.Repo.GitRepo.GetContributorCount(repo.DefaultBranch)
+		var since time.Time
+		if repo.IsFork {
+			since = repo.CreatedUnix.AsTime()
+		}
+		contributorCount, err := ctx.Repo.GitRepo.GetContributorCount(repo.DefaultBranch, since)
 		if err != nil {
 			log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
 		} else {

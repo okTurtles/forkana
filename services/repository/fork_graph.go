@@ -291,7 +291,13 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 
 	// Add contributor stats if requested
 	if params.IncludeContributors {
-		stats, err := getContributorStats(repo, params.ContributorDays)
+		// For forks, only count contributors who made commits after the fork was created
+		// to exclude inherited history from the parent repository
+		var since time.Time
+		if repo.IsFork {
+			since = repo.CreatedUnix.AsTime()
+		}
+		stats, err := getContributorStats(repo, params.ContributorDays, since)
 		if err != nil {
 			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
 		} else {
@@ -312,7 +318,13 @@ func createLeafNode(repo *repo_model.Repository, level int, params ForkGraphPara
 	}
 
 	if params.IncludeContributors {
-		stats, err := getContributorStats(repo, params.ContributorDays)
+		// For forks, only count contributors who made commits after the fork was created
+		// to exclude inherited history from the parent repository
+		var since time.Time
+		if repo.IsFork {
+			since = repo.CreatedUnix.AsTime()
+		}
+		stats, err := getContributorStats(repo, params.ContributorDays, since)
 		if err != nil {
 			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
 		} else {
@@ -395,8 +407,10 @@ func sortRepositories(repos []*repo_model.Repository, sortBy string) {
 	})
 }
 
-// getContributorStats gets contributor statistics for a repository
-func getContributorStats(repo *repo_model.Repository, days int) (*ContributorStats, error) {
+// getContributorStats gets contributor statistics for a repository.
+// If since is non-zero, only counts contributors who made commits after that time.
+// This is useful for forks where we only want to count post-fork contributions.
+func getContributorStats(repo *repo_model.Repository, days int, since time.Time) (*ContributorStats, error) {
 	// Use existing contributor stats service
 	c := cache.GetCache()
 	if c == nil {
@@ -416,12 +430,33 @@ func getContributorStats(repo *repo_model.Repository, days int) (*ContributorSta
 	}
 
 	// Count total contributors (exclude "total" summary entry)
-	totalCount := len(stats)
-	if _, hasTotal := stats["total"]; hasTotal {
-		totalCount-- // Don't count the "total" summary as a contributor
+	// For forks, only count contributors who have commits after the fork creation time
+	totalCount := 0
+	for email, contributor := range stats {
+		// Skip the "total" summary entry
+		if email == "total" {
+			continue
+		}
+
+		// If since is provided (for forks), check if contributor has commits after that time
+		if !since.IsZero() {
+			hasPostForkCommits := false
+			for _, week := range contributor.Weeks {
+				weekTime := time.UnixMilli(week.Week)
+				if weekTime.After(since) && week.Commits > 0 {
+					hasPostForkCommits = true
+					break
+				}
+			}
+			if !hasPostForkCommits {
+				continue // Skip contributors with no post-fork commits
+			}
+		}
+
+		totalCount++
 	}
 
-	// Count recent contributors
+	// Count recent contributors (within the specified days window)
 	cutoffTime := time.Now().AddDate(0, 0, -days)
 	recentCount := 0
 
@@ -431,7 +466,22 @@ func getContributorStats(repo *repo_model.Repository, days int) (*ContributorSta
 			continue
 		}
 
-		// Check if contributor has commits in the time window
+		// For forks, first check if contributor has any post-fork commits
+		if !since.IsZero() {
+			hasPostForkCommits := false
+			for _, week := range contributor.Weeks {
+				weekTime := time.UnixMilli(week.Week)
+				if weekTime.After(since) && week.Commits > 0 {
+					hasPostForkCommits = true
+					break
+				}
+			}
+			if !hasPostForkCommits {
+				continue // Skip contributors with no post-fork commits
+			}
+		}
+
+		// Check if contributor has commits in the recent time window
 		for _, week := range contributor.Weeks {
 			weekTime := time.UnixMilli(week.Week)
 			if weekTime.After(cutoffTime) && week.Commits > 0 {

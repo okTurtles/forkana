@@ -227,14 +227,23 @@ func TestGetContributorStats(t *testing.T) {
 
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 
-	// Test getting contributor stats
-	stats, err := getContributorStats(repo, 90)
+	// Test getting contributor stats without since filter (non-fork)
+	stats, err := getContributorStats(repo, 90, time.Time{})
 
 	// Should not error even if stats are not available
 	assert.NoError(t, err)
 	assert.NotNil(t, stats)
 	assert.GreaterOrEqual(t, stats.TotalCount, 0)
 	assert.GreaterOrEqual(t, stats.RecentCount, 0)
+
+	// Test getting contributor stats with since filter (simulating fork)
+	// Using a future time should result in 0 contributors
+	futureTime := time.Now().AddDate(1, 0, 0)
+	statsWithFutureSince, err := getContributorStats(repo, 90, futureTime)
+	assert.NoError(t, err)
+	assert.NotNil(t, statsWithFutureSince)
+	assert.EqualValues(t, 0, statsWithFutureSince.TotalCount, "Expected 0 contributors for future since date")
+	assert.EqualValues(t, 0, statsWithFutureSince.RecentCount, "Expected 0 recent contributors for future since date")
 }
 
 func TestProcessingTimeout(t *testing.T) {
