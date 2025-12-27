@@ -598,6 +598,12 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileForm, parsed *preparedEditorCommitForm[*forms.EditRepoFileForm]) *issues_model.PullRequest {
 	targetRepo := ctx.Repo.Repository
 
+	// Check if the repository allows pull requests
+	if !targetRepo.AllowsPulls(ctx) {
+		ctx.JSONError(ctx.Tr("repo.pulls.disabled"))
+		return nil
+	}
+
 	// Generate a unique branch name for the change request
 	branchName := getUniquePatchBranchName(ctx, ctx.Doer.LowerName, targetRepo)
 	if branchName == "" {
