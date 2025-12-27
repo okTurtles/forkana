@@ -687,10 +687,10 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		return nil
 	}
 
-	log.Info("handleSubmitChangeRequest: created CR #%d from %s:%s to %s:%s in %s/%s",
+	log.Info("handleSubmitChangeRequest: created CR #%d from %s to %s in %s/%s",
 		changeRequest.Index,
-		branchName, targetRepo.DefaultBranch,
-		targetRepo.DefaultBranch, branchName,
+		branchName,
+		targetRepo.DefaultBranch,
 		targetRepo.OwnerName, targetRepo.Name)
 
 	return changeRequest
