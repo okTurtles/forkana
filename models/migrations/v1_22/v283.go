@@ -4,10 +4,7 @@
 package v1_22
 
 import (
-	"fmt"
-
 	"xorm.io/xorm"
-	"xorm.io/xorm/schemas"
 )
 
 func AddCombinedIndexToIssueUser(x *xorm.Engine) error {

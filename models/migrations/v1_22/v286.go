@@ -3,7 +3,6 @@
 package v1_22
 
 import (
-	"errors"
 	"fmt"
 
 	"code.gitea.io/gitea/modules/log"

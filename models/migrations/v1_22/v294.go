@@ -4,10 +4,7 @@
 package v1_22
 
 import (
-	"fmt"
-
 	"xorm.io/xorm"
-	"xorm.io/xorm/schemas"
 )
 
 // AddUniqueIndexForProjectIssue adds unique indexes for project issue table
