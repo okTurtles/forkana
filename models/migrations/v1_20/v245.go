@@ -49,8 +49,7 @@ func RenameWebhookOrgToOwner(x *xorm.Engine) error {
 		}
 	}
 
-	switch {
-	case setting.Database.Type.IsMySQL():
+	if setting.Database.Type.IsMySQL() {
 		inferredTable, err := x.TableInfo(new(Webhook))
 		if err != nil {
 			return err
@@ -59,11 +58,7 @@ func RenameWebhookOrgToOwner(x *xorm.Engine) error {
 		if _, err := sess.Exec("ALTER TABLE `webhook` CHANGE org_id owner_id " + sqlType); err != nil {
 			return err
 		}
-	case setting.Database.Type.IsMSSQL():
-		if _, err := sess.Exec("sp_rename 'webhook.org_id', 'owner_id', 'COLUMN'"); err != nil {
-			return err
-		}
-	default:
+	} else {
 		if _, err := sess.Exec("ALTER TABLE `webhook` RENAME COLUMN org_id TO owner_id"); err != nil {
 			return err
 		}

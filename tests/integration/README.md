@@ -6,7 +6,6 @@ appropriate backends, namely:
 make test-sqlite
 make test-pgsql
 make test-mysql
-make test-mssql
 ```
 
 Make sure to perform a clean build before running tests:
@@ -67,16 +66,6 @@ Start tests based on the database container
 TEST_MINIO_ENDPOINT=localhost:9000 TEST_PGSQL_HOST=localhost:5432 TEST_PGSQL_DBNAME=postgres TEST_PGSQL_USERNAME=postgres TEST_PGSQL_PASSWORD=postgres make test-pgsql
 ```
 
-## Run mssql integration tests
-Setup a mssql database inside docker
-```
-docker run -e "ACCEPT_EULA=Y" -e "MSSQL_PID=Standard" -e "SA_PASSWORD=MwantsaSecurePassword1" -p 1433:1433 --rm --name mssql microsoft/mssql-server-linux:latest #(just ctrl-c to stop db and clean the container)
-```
-Start tests based on the database container
-```
-TEST_MSSQL_HOST=localhost:1433 TEST_MSSQL_DBNAME=gitea_test TEST_MSSQL_USERNAME=sa TEST_MSSQL_PASSWORD=MwantsaSecurePassword1 make test-mssql
-```
-
 ## Running individual tests
 
 Example command to run GPG test:
@@ -87,10 +76,10 @@ For SQLite:
 make test-sqlite#GPG
 ```
 
-For other databases(replace `mssql` to `mysql`, or `pgsql`):
+For other databases(replace `mysql` to `pgsql`):
 
 ```
-TEST_MSSQL_HOST=localhost:1433 TEST_MSSQL_DBNAME=test TEST_MSSQL_USERNAME=sa TEST_MSSQL_PASSWORD=MwantsaSecurePassword1 make test-mssql#GPG
+TEST_MYSQL_HOST=localhost:3306 TEST_MYSQL_DBNAME=test TEST_MYSQL_USERNAME=root TEST_MYSQL_PASSWORD='' make test-mysql#GPG
 ```
 
 ## Setting timeouts for declaring long-tests and long-flushes

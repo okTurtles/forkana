@@ -43,26 +43,6 @@ func RemigrateU2FCredentials(x *xorm.Engine) error {
 		if err != nil {
 			return err
 		}
-	case schemas.MSSQL:
-		// This column has an index on it. I could write all of the code to attempt to change the index OR
-		// I could just use recreate table.
-		sess := x.NewSession()
-		if err := sess.Begin(); err != nil {
-			_ = sess.Close()
-			return err
-		}
-
-		if err := base.RecreateTable(sess, new(webauthnCredential)); err != nil {
-			_ = sess.Close()
-			return err
-		}
-		if err := sess.Commit(); err != nil {
-			_ = sess.Close()
-			return err
-		}
-		if err := sess.Close(); err != nil {
-			return err
-		}
 	case schemas.POSTGRES:
 		_, err := x.Exec("ALTER TABLE webauthn_credential ALTER COLUMN credential_id TYPE VARCHAR(410)")
 		if err != nil {
@@ -105,11 +85,6 @@ func RemigrateU2FCredentials(x *xorm.Engine) error {
 			defer sess.Close()
 			if err := sess.Begin(); err != nil {
 				return fmt.Errorf("unable to allow start session. Error: %w", err)
-			}
-			if x.Dialect().URI().DBType == schemas.MSSQL {
-				if _, err := sess.Exec("SET IDENTITY_INSERT `webauthn_credential` ON"); err != nil {
-					return fmt.Errorf("unable to allow identity insert on webauthn_credential. Error: %w", err)
-				}
 			}
 			for _, reg := range regs {
 				parsed := new(u2f.Registration)

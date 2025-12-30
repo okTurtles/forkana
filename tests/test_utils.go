@@ -149,17 +149,6 @@ func InitTest(requireGitea bool) {
 			}
 		}
 
-	case setting.Database.Type.IsMSSQL():
-		host, port := setting.ParseMSSQLHostPort(setting.Database.Host)
-		db, err := sql.Open("mssql", fmt.Sprintf("server=%s; port=%s; database=%s; user id=%s; password=%s;",
-			host, port, "master", setting.Database.User, setting.Database.Passwd))
-		if err != nil {
-			log.Fatal("sql.Open: %v", err)
-		}
-		if _, err := db.Exec(fmt.Sprintf("If(db_id(N'%s') IS NULL) BEGIN CREATE DATABASE %s; END;", setting.Database.Name, setting.Database.Name)); err != nil {
-			log.Fatal("db.Exec: %v", err)
-		}
-		defer db.Close()
 	}
 
 	routers.InitWebInstalled(graceful.GetManager().HammerContext())

@@ -53,16 +53,11 @@ func RenameTaskErrorsToMessage(x *xorm.Engine) error {
 		}
 	}
 
-	switch {
-	case setting.Database.Type.IsMySQL():
+	if setting.Database.Type.IsMySQL() {
 		if _, err := sess.Exec("ALTER TABLE `task` CHANGE errors message text"); err != nil {
 			return err
 		}
-	case setting.Database.Type.IsMSSQL():
-		if _, err := sess.Exec("sp_rename 'task.errors', 'message', 'COLUMN'"); err != nil {
-			return err
-		}
-	default:
+	} else {
 		if _, err := sess.Exec("ALTER TABLE `task` RENAME COLUMN errors TO message"); err != nil {
 			return err
 		}

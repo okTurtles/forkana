@@ -173,7 +173,6 @@ func FindForkTreeRoot(ctx context.Context, repoID int64) (int64, error) {
 // - PostgreSQL: 8.4+ (2009)
 // - MySQL: 8.0+ (2018)
 // - SQLite: 3.8.3+ (2014)
-// - MSSQL: 2005+
 func CountForkTreeNodes(ctx context.Context, repoID int64) (int, error) {
 	// First, find the root of the fork tree
 	rootID, err := FindForkTreeRoot(ctx, repoID)
@@ -182,7 +181,7 @@ func CountForkTreeNodes(ctx context.Context, repoID int64) (int, error) {
 	}
 
 	// Count all nodes in the tree using recursive CTE
-	// This query is compatible with PostgreSQL, MySQL 8.0+, SQLite 3.8.3+, and MSSQL 2005+
+	// This query is compatible with PostgreSQL, MySQL 8.0+, and SQLite 3.8.3+
 	query := `
 		WITH RECURSIVE fork_tree AS (
 			-- Base case: start with root repository

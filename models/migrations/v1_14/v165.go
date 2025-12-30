@@ -29,13 +29,7 @@ func ConvertHookTaskTypeToVarcharAndTrim(x *xorm.Engine) error {
 		return err
 	}
 
-	var hookTaskTrimSQL string
-	if dbType == schemas.MSSQL {
-		hookTaskTrimSQL = "UPDATE hook_task SET typ = RTRIM(LTRIM(typ))"
-	} else {
-		hookTaskTrimSQL = "UPDATE hook_task SET typ = TRIM(typ)"
-	}
-	if _, err := x.Exec(hookTaskTrimSQL); err != nil {
+	if _, err := x.Exec("UPDATE hook_task SET typ = TRIM(typ)"); err != nil {
 		return err
 	}
 
@@ -52,12 +46,6 @@ func ConvertHookTaskTypeToVarcharAndTrim(x *xorm.Engine) error {
 		return err
 	}
 
-	var webhookTrimSQL string
-	if dbType == schemas.MSSQL {
-		webhookTrimSQL = "UPDATE webhook SET type = RTRIM(LTRIM(type))"
-	} else {
-		webhookTrimSQL = "UPDATE webhook SET type = TRIM(type)"
-	}
-	_, err := x.Exec(webhookTrimSQL)
+	_, err := x.Exec("UPDATE webhook SET type = TRIM(type)")
 	return err
 }

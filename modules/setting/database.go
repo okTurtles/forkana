@@ -16,9 +16,9 @@ import (
 
 var (
 	// SupportedDatabaseTypes includes all XORM supported databases type, sqlite3 maybe added by `database_sqlite3.go`
-	SupportedDatabaseTypes = []string{"mysql", "postgres", "mssql"}
+	SupportedDatabaseTypes = []string{"mysql", "postgres"}
 	// DatabaseTypeNames contains the friendly names for all database types
-	DatabaseTypeNames = map[string]string{"mysql": "MySQL", "postgres": "PostgreSQL", "mssql": "MSSQL", "sqlite3": "SQLite3"}
+	DatabaseTypeNames = map[string]string{"mysql": "MySQL", "postgres": "PostgreSQL", "sqlite3": "SQLite3"}
 
 	// EnableSQLite3 use SQLite3, set by build flag
 	EnableSQLite3 bool
@@ -112,9 +112,6 @@ func DBConnStr() (string, error) {
 			Database.User, Database.Passwd, connType, Database.Host, Database.Name, paramSep, tls)
 	case "postgres":
 		connStr = getPostgreSQLConnectionString(Database.Host, Database.User, Database.Passwd, Database.Name, Database.SSLMode)
-	case "mssql":
-		host, port := ParseMSSQLHostPort(Database.Host)
-		connStr = fmt.Sprintf("server=%s; port=%s; database=%s; user id=%s; password=%s;", host, port, Database.Name, Database.User, Database.Passwd)
 	case "sqlite3":
 		if !EnableSQLite3 {
 			return "", errors.New("this Gitea binary was not built with SQLite3 support")
@@ -180,28 +177,6 @@ func getPostgreSQLConnectionString(dbHost, dbUser, dbPasswd, dbName, dbsslMode s
 	return connURL.String()
 }
 
-// ParseMSSQLHostPort splits the host into host and port
-func ParseMSSQLHostPort(info string) (string, string) {
-	// the default port "0" might be related to MSSQL's dynamic port, maybe it should be double-confirmed in the future
-	host, port := "127.0.0.1", "0"
-	if strings.Contains(info, ":") {
-		host = strings.Split(info, ":")[0]
-		port = strings.Split(info, ":")[1]
-	} else if strings.Contains(info, ",") {
-		host = strings.Split(info, ",")[0]
-		port = strings.TrimSpace(strings.Split(info, ",")[1])
-	} else if len(info) > 0 {
-		host = info
-	}
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	if port == "" {
-		port = "0"
-	}
-	return host, port
-}
-
 type DatabaseType string
 
 func (t DatabaseType) String() string {
@@ -214,10 +189,6 @@ func (t DatabaseType) IsSQLite3() bool {
 
 func (t DatabaseType) IsMySQL() bool {
 	return t == "mysql"
-}
-
-func (t DatabaseType) IsMSSQL() bool {
-	return t == "mssql"
 }
 
 func (t DatabaseType) IsPostgreSQL() bool {

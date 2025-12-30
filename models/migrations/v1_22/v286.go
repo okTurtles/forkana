@@ -33,46 +33,15 @@ func expandHashReferencesToSha256(x *xorm.Engine) error {
 	}
 
 	if !setting.Database.Type.IsSQLite3() {
-		if setting.Database.Type.IsMSSQL() {
-			// drop indexes that need to be re-created afterwards
-			droppedIndexes := []string{
-				"DROP INDEX [IDX_commit_status_context_hash] ON [commit_status]",
-				"DROP INDEX [UQE_review_state_pull_commit_user] ON [review_state]",
-				"DROP INDEX [UQE_repo_archiver_s] ON [repo_archiver]",
-			}
-			for _, s := range droppedIndexes {
-				_, err := db.Exec(s)
-				if err != nil {
-					return errors.New(s + " " + err.Error())
-				}
-			}
-		}
-
 		for _, alts := range alteredTables {
 			var err error
 			if setting.Database.Type.IsMySQL() {
 				_, err = db.Exec(fmt.Sprintf("ALTER TABLE `%s` MODIFY COLUMN `%s` VARCHAR(64)", alts[0], alts[1]))
-			} else if setting.Database.Type.IsMSSQL() {
-				_, err = db.Exec(fmt.Sprintf("ALTER TABLE [%s] ALTER COLUMN [%s] NVARCHAR(64)", alts[0], alts[1]))
 			} else {
 				_, err = db.Exec(fmt.Sprintf("ALTER TABLE `%s` ALTER COLUMN `%s` TYPE VARCHAR(64)", alts[0], alts[1]))
 			}
 			if err != nil {
 				return fmt.Errorf("alter column '%s' of table '%s' failed: %w", alts[1], alts[0], err)
-			}
-		}
-
-		if setting.Database.Type.IsMSSQL() {
-			recreateIndexes := []string{
-				"CREATE INDEX IDX_commit_status_context_hash ON commit_status(context_hash)",
-				"CREATE UNIQUE INDEX UQE_review_state_pull_commit_user ON review_state(user_id, pull_id, commit_sha)",
-				"CREATE UNIQUE INDEX UQE_repo_archiver_s ON repo_archiver(repo_id, type, commit_id)",
-			}
-			for _, s := range recreateIndexes {
-				_, err := db.Exec(s)
-				if err != nil {
-					return errors.New(s + " " + err.Error())
-				}
 			}
 		}
 	}
