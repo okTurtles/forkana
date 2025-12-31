@@ -242,8 +242,8 @@ func TestGetContributorStats(t *testing.T) {
 	statsWithFutureSince, err := getContributorStats(repo, 90, futureTime)
 	assert.NoError(t, err)
 	assert.NotNil(t, statsWithFutureSince)
-	assert.EqualValues(t, 0, statsWithFutureSince.TotalCount, "Expected 0 contributors for future since date")
-	assert.EqualValues(t, 0, statsWithFutureSince.RecentCount, "Expected 0 recent contributors for future since date")
+	assert.Equal(t, 0, statsWithFutureSince.TotalCount, "Expected 0 contributors for future since date")
+	assert.Equal(t, 0, statsWithFutureSince.RecentCount, "Expected 0 recent contributors for future since date")
 }
 
 func TestHasCommitsAfter(t *testing.T) {

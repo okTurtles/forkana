@@ -44,7 +44,7 @@ func TestRepository_GetContributorCount(t *testing.T) {
 	// Test without since filter - should count all contributors
 	count, err := bareRepo1.GetContributorCount("master", time.Time{})
 	assert.NoError(t, err)
-	assert.True(t, count > 0, "Expected at least one contributor")
+	assert.Positive(t, count, "Expected at least one contributor")
 
 	// Test with a future since date - should return 0 contributors
 	futureTime := time.Now().AddDate(1, 0, 0) // 1 year in the future
@@ -57,5 +57,5 @@ func TestRepository_GetContributorCount(t *testing.T) {
 	assert.NoError(t, err)
 	countWithPastSince, err := bareRepo1.GetContributorCount("master", pastTime)
 	assert.NoError(t, err)
-	assert.True(t, countWithPastSince > 0, "Expected contributors with past since date")
+	assert.Positive(t, countWithPastSince, "Expected contributors with past since date")
 }
