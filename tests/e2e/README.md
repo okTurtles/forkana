@@ -7,7 +7,6 @@ They can be run with make commands for the appropriate backends, namely:
 make test-sqlite
 make test-pgsql
 make test-mysql
-make test-mssql
 ```
 
 Make sure to perform a clean front-end build before running tests:
@@ -53,16 +52,6 @@ Start tests based on the database container
 TEST_PGSQL_HOST=localhost:5432 TEST_PGSQL_DBNAME=test TEST_PGSQL_USERNAME=postgres TEST_PGSQL_PASSWORD=postgres make test-e2e-pgsql
 ```
 
-## Run mssql e2e tests
-Setup a mssql database inside docker
-```
-docker run -e "ACCEPT_EULA=Y" -e "MSSQL_PID=Standard" -e "SA_PASSWORD=MwantsaSecurePassword1" -p 1433:1433 --rm --name mssql microsoft/mssql-server-linux:latest #(just ctrl-c to stop db and clean the container)
-```
-Start tests based on the database container
-```
-TEST_MSSQL_HOST=localhost:1433 TEST_MSSQL_DBNAME=gitea_test TEST_MSSQL_USERNAME=sa TEST_MSSQL_PASSWORD=MwantsaSecurePassword1 make test-e2e-mssql
-```
-
 ## Running individual tests
 
 Example command to run `example.test.e2e.ts` test file:
@@ -75,10 +64,10 @@ For SQLite:
 make test-e2e-sqlite#example
 ```
 
-For other databases(replace `mssql` to `mysql` or `pgsql`):
+For other databases (replace `mysql` with `pgsql` as needed):
 
 ```
-TEST_MSSQL_HOST=localhost:1433 TEST_MSSQL_DBNAME=test TEST_MSSQL_USERNAME=sa TEST_MSSQL_PASSWORD=MwantsaSecurePassword1 make test-e2e-mssql#example
+TEST_MYSQL_HOST=localhost:3306 TEST_MYSQL_DBNAME=test TEST_MYSQL_USERNAME=root TEST_MYSQL_PASSWORD='' make test-e2e-mysql#example
 ```
 
 ## Visual testing
