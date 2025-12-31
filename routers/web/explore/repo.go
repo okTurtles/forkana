@@ -825,7 +825,7 @@ func getFileContributorCount(gitRepo *git.Repository, branch, filePath string, s
 	// If since is provided, only count commits after that time
 	// This is used for forks to exclude inherited history from the parent repository
 	if since > 0 {
-		cmd.AddOptionFormat("--since=%s", since.AsTime().Format("2006-01-02T15:04:05-07:00"))
+		cmd.AddOptionFormat("--since=%s", since.AsTime().Format(time.RFC3339))
 	}
 
 	stdout, _, err := cmd.AddDynamicArguments(branch, "--", filePath).
