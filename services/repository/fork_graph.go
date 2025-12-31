@@ -407,6 +407,21 @@ func sortRepositories(repos []*repo_model.Repository, sortBy string) {
 	})
 }
 
+// hasCommitsAfter checks if a contributor has any commits after the given time.
+// Returns true if since is zero (no filtering) or if the contributor has at least one commit after since.
+func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
+	if since.IsZero() {
+		return true
+	}
+	for _, week := range contributor.Weeks {
+		weekTime := time.UnixMilli(week.Week)
+		if weekTime.After(since) && week.Commits > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // getContributorStats gets contributor statistics for a repository.
 // If since is non-zero, only counts contributors who made commits after that time.
 // This is useful for forks where we only want to count post-fork contributions.
@@ -438,19 +453,9 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 			continue
 		}
 
-		// If since is provided (for forks), check if contributor has commits after that time
-		if !since.IsZero() {
-			hasPostForkCommits := false
-			for _, week := range contributor.Weeks {
-				weekTime := time.UnixMilli(week.Week)
-				if weekTime.After(since) && week.Commits > 0 {
-					hasPostForkCommits = true
-					break
-				}
-			}
-			if !hasPostForkCommits {
-				continue // Skip contributors with no post-fork commits
-			}
+		// For forks, skip contributors with no post-fork commits
+		if !hasCommitsAfter(contributor, since) {
+			continue
 		}
 
 		totalCount++
@@ -466,19 +471,9 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 			continue
 		}
 
-		// For forks, first check if contributor has any post-fork commits
-		if !since.IsZero() {
-			hasPostForkCommits := false
-			for _, week := range contributor.Weeks {
-				weekTime := time.UnixMilli(week.Week)
-				if weekTime.After(since) && week.Commits > 0 {
-					hasPostForkCommits = true
-					break
-				}
-			}
-			if !hasPostForkCommits {
-				continue // Skip contributors with no post-fork commits
-			}
+		// For forks, skip contributors with no post-fork commits
+		if !hasCommitsAfter(contributor, since) {
+			continue
 		}
 
 		// Check if contributor has commits in the recent time window
