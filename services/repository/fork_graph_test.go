@@ -246,6 +246,73 @@ func TestGetContributorStats(t *testing.T) {
 	assert.EqualValues(t, 0, statsWithFutureSince.RecentCount, "Expected 0 recent contributors for future since date")
 }
 
+func TestHasCommitsAfter(t *testing.T) {
+	// Test the hasCommitsAfter helper function directly to verify mid-week edge case handling
+
+	// Create a mock contributor with commits in a specific week
+	// Week starts on Sunday 2024-01-07 (Unix timestamp in milliseconds)
+	weekStart := time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC) // Sunday
+	weekStartMs := weekStart.UnixMilli()
+
+	contributor := &ContributorData{
+		Name:         "Test User",
+		TotalCommits: 5,
+		Weeks: map[int64]*WeekData{
+			weekStartMs: {
+				Week:    weekStartMs,
+				Commits: 5,
+			},
+		},
+	}
+
+	// Test 1: Zero since time should always return true
+	assert.True(t, hasCommitsAfter(contributor, time.Time{}),
+		"Zero since time should return true")
+
+	// Test 2: Since time before the week should return true
+	beforeWeek := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) // Before the week
+	assert.True(t, hasCommitsAfter(contributor, beforeWeek),
+		"Since time before the week should return true")
+
+	// Test 3: Since time after the week ends should return false
+	afterWeek := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC) // After the week ends
+	assert.False(t, hasCommitsAfter(contributor, afterWeek),
+		"Since time after the week ends should return false")
+
+	// Test 4: MID-WEEK EDGE CASE - Since time mid-week (Wednesday) should return true
+	// This is the key edge case: fork created on Wednesday, commits exist in that week
+	// The week started Sunday (before fork) but ends Sunday (after fork)
+	// So commits made Thursday-Saturday should be counted
+	midWeek := time.Date(2024, 1, 10, 12, 0, 0, 0, time.UTC) // Wednesday noon
+	assert.True(t, hasCommitsAfter(contributor, midWeek),
+		"Mid-week since time should return true because week ends after since")
+
+	// Test 5: Since time exactly at week end should return false
+	// Week ends at the start of the next Sunday (2024-01-14 00:00:00)
+	weekEnd := time.Date(2024, 1, 14, 0, 0, 0, 0, time.UTC)
+	assert.False(t, hasCommitsAfter(contributor, weekEnd),
+		"Since time at week end should return false")
+
+	// Test 6: Since time just before week end should return true
+	justBeforeWeekEnd := time.Date(2024, 1, 13, 23, 59, 59, 0, time.UTC) // Saturday 23:59:59
+	assert.True(t, hasCommitsAfter(contributor, justBeforeWeekEnd),
+		"Since time just before week end should return true")
+
+	// Test 7: Contributor with no commits should return false
+	emptyContributor := &ContributorData{
+		Name:         "Empty User",
+		TotalCommits: 0,
+		Weeks: map[int64]*WeekData{
+			weekStartMs: {
+				Week:    weekStartMs,
+				Commits: 0, // No commits in this week
+			},
+		},
+	}
+	assert.False(t, hasCommitsAfter(emptyContributor, beforeWeek),
+		"Contributor with no commits should return false even with valid since time")
+}
+
 func TestProcessingTimeout(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
