@@ -409,13 +409,18 @@ func sortRepositories(repos []*repo_model.Repository, sortBy string) {
 
 // hasCommitsAfter checks if a contributor has any commits after the given time.
 // Returns true if since is zero (no filtering) or if the contributor has at least one commit after since.
+// Note: Since week.Week is the Unix timestamp of the start of the week (Sunday), we check if the
+// week *ends* after since to include commits made mid-week after a fork created earlier that week.
 func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
 	if since.IsZero() {
 		return true
 	}
 	for _, week := range contributor.Weeks {
 		weekTime := time.UnixMilli(week.Week)
-		if weekTime.After(since) && week.Commits > 0 {
+		// Check if the week ends after since (week end = week start + 7 days)
+		// This ensures we include weeks that overlap with the post-fork period
+		weekEndTime := weekTime.AddDate(0, 0, 7)
+		if weekEndTime.After(since) && week.Commits > 0 {
 			return true
 		}
 	}
