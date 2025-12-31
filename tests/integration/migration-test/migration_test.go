@@ -219,7 +219,6 @@ func restoreOldDB(t *testing.T, version string) {
 		_, err = db.Exec(data)
 		assert.NoError(t, err)
 		db.Close()
-
 	}
 }
 

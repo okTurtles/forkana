@@ -148,7 +148,6 @@ func InitTest(requireGitea bool) {
 				log.Fatal("db.Exec: CREATE SCHEMA: %v", err)
 			}
 		}
-
 	}
 
 	routers.InitWebInstalled(graceful.GetManager().HammerContext())

@@ -24,8 +24,8 @@ type FixtureItem struct {
 	tableName    string
 
 	tableNameQuoted string
-	sqlInserts    []string
-	sqlInsertArgs [][]any
+	sqlInserts      []string
+	sqlInsertArgs   [][]any
 }
 
 type fixturesLoaderInternal struct {
