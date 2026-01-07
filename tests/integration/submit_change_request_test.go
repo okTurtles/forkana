@@ -86,24 +86,24 @@ func TestSubmitChangeRequest(t *testing.T) {
 		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
 
-		// Try to submit with submit_change_request=true in form but not in query
-		// This should fail because the middleware checks the query param
+		// Try to submit without submit_change_request in form or query
+		// This should fail because the middleware checks the form value
 		form := map[string]string{
-			"_csrf":                 htmlDoc.GetCSRF(),
-			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
-			"tree_path":             "README.md",
-			"content":               "Test content",
-			"commit_choice":         "direct",
-			"submit_change_request": "true",
+			"_csrf":         htmlDoc.GetCSRF(),
+			"last_commit":   htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":     "README.md",
+			"content":       "Test content",
+			"commit_choice": "direct",
+			// Note: submit_change_request is NOT set
 		}
 
 		req = NewRequestWithValues(t, "POST", editURL, form)
 		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
 
 		// Should get 404 because the middleware didn't bypass permission check
-		// (the query param wasn't set on the GET request)
+		// (submit_change_request was not set in the form)
 		assert.Equal(t, http.StatusNotFound, resp.Code,
-			"Should fail without submit_change_request query param on GET")
+			"Should fail without submit_change_request in form")
 	})
 
 	t.Run("SubmitChangeRequestWithQueryParamPasses", func(t *testing.T) {

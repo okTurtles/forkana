@@ -619,6 +619,8 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	// Commit the changes to a new branch in the target repository
 	// The ChangeRepoFiles function will create the new branch from the default branch
+	// We use InternalPush to skip pre-receive hooks since this is a programmatic operation
+	// where we've already verified the user can submit change requests (via middleware)
 	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
 	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: form.LastCommit,
@@ -633,9 +635,10 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 				ContentReader: strings.NewReader(strings.ReplaceAll(form.Content.Value(), "\r", "")),
 			},
 		},
-		Signoff:   form.Signoff,
-		Author:    parsed.GitCommitter,
-		Committer: parsed.GitCommitter,
+		Signoff:      form.Signoff,
+		Author:       parsed.GitCommitter,
+		Committer:    parsed.GitCommitter,
+		InternalPush: true,
 	})
 	if err != nil {
 		log.Error("handleSubmitChangeRequest: failed to commit changes: %v", err)
