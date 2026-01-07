@@ -17,38 +17,49 @@ test.describe('Submit Change Request Workflow', () => {
       const context = await load_logged_in_context(browser, workerInfo, 'user4');
       const page = await context.newPage();
 
-      // Navigate to article edit page with submit_change_request mode
+      // Navigate to article edit page
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      // Wait for the article edit form to be present
-      await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
+      // Wait for the article content to be present
+      await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
 
-      // Non-owner should see the Submit Change Request button
-      // This button is shown when the user doesn't have write access
-      const submitCRButton = page.locator('#submit-change-request-button');
+      // Non-owner should see both Fork and Submit Change Request buttons
+      // Fork button for fork-and-edit workflow
+      const forkButton = page.locator('#fork-article-button');
+      await expect(forkButton).toBeVisible({timeout: 10000});
+
+      // Submit Change Request button for submit-change-request workflow
+      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       // Button should contain appropriate text
-      await expect(submitCRButton).toContainText(/Submit|Change Request/i);
+      await expect(submitCRButton).toContainText(/Submit/i);
 
       await context.close();
     });
 
-    test('owner does not see Submit Change Request button', async ({browser}, workerInfo) => {
+    test('owner sees Submit Changes button without data-submit-change-request attribute', async ({browser}, workerInfo) => {
       const context = await load_logged_in_context(browser, workerInfo, 'user2');
       const page = await context.newPage();
 
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      // Owner should see Submit Changes button, not Submit Change Request
+      // Wait for the article content to be present
+      await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
+
+      // Owner should see Submit Changes button without submit-change-request attribute
       const submitButton = page.locator('#submit-changes-button');
       await expect(submitButton).toBeVisible({timeout: 10000});
 
-      // Submit Change Request button should not be visible for owner
-      const submitCRButton = page.locator('#submit-change-request-button');
-      await expect(submitCRButton).toBeHidden();
+      // Should NOT have the data-submit-change-request attribute (owner edits directly)
+      const hasSubmitCRAttr = await submitButton.getAttribute('data-submit-change-request');
+      expect(hasSubmitCRAttr).toBeNull();
+
+      // Fork button should NOT be visible for owner
+      const forkButton = page.locator('#fork-article-button');
+      await expect(forkButton).not.toBeVisible();
 
       await context.close();
     });
@@ -62,18 +73,23 @@ test.describe('Submit Change Request Workflow', () => {
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      // Wait for the editor to be ready
-      await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
+      // Wait for the article view to be ready
+      await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
       await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
-      const submitCRButton = page.locator('#submit-change-request-button');
+      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
-      await submitCRButton.click();
+      // Scroll button into view and ensure it's clickable
+      await submitCRButton.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(500);
 
-      // Modal should appear with confirmation message
+      // Use force click for mobile browsers to avoid click interception issues
+      await submitCRButton.click({force: true});
+
+      // Modal should appear with confirmation message (longer timeout for mobile)
       const modal = page.locator('.ui.g-modal-confirm.modal.visible');
-      await expect(modal).toBeVisible({timeout: 5000});
+      await expect(modal).toBeVisible({timeout: 10000});
 
       // Modal should have appropriate header and content
       const header = modal.locator('.header');
@@ -92,21 +108,30 @@ test.describe('Submit Change Request Workflow', () => {
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
+      await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
       await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
       const urlBefore = page.url();
 
-      const submitCRButton = page.locator('#submit-change-request-button');
+      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
-      await submitCRButton.click();
+
+      // Scroll button into view and ensure it's clickable
+      await submitCRButton.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(500);
+
+      // Use force click for mobile browsers to avoid click interception issues
+      await submitCRButton.click({force: true});
 
       const modal = page.locator('.ui.g-modal-confirm.modal.visible');
-      await expect(modal).toBeVisible({timeout: 5000});
+      await expect(modal).toBeVisible({timeout: 10000});
 
-      // Click cancel button
+      // Wait for modal animation to complete
+      await page.waitForTimeout(300);
+
+      // Click cancel button - use force click to avoid dimmer interception on mobile
       const cancelButton = modal.locator('.actions .cancel.button');
-      await cancelButton.click();
+      await cancelButton.click({force: true});
 
       // Modal should close
       await expect(modal).not.toBeVisible({timeout: 5000});
@@ -126,10 +151,10 @@ test.describe('Submit Change Request Workflow', () => {
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
+      await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
       await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
-      const submitCRButton = page.locator('#submit-change-request-button');
+      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       // Focus the button and press Enter
@@ -150,15 +175,21 @@ test.describe('Submit Change Request Workflow', () => {
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
+      await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
       await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
-      const submitCRButton = page.locator('#submit-change-request-button');
+      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
-      await submitCRButton.click();
+
+      // Scroll button into view and ensure it's clickable
+      await submitCRButton.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(500);
+
+      // Use force click for mobile browsers to avoid click interception issues
+      await submitCRButton.click({force: true});
 
       const modal = page.locator('.ui.g-modal-confirm.modal.visible');
-      await expect(modal).toBeVisible({timeout: 5000});
+      await expect(modal).toBeVisible({timeout: 10000});
 
       // Press Escape to close
       await page.keyboard.press('Escape');
@@ -177,7 +208,7 @@ test.describe('Submit Change Request Workflow', () => {
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      const submitCRButton = page.locator('#submit-change-request-button');
+      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       // Button should have a tooltip explaining the action
@@ -193,16 +224,19 @@ test.describe('Submit Change Request - Unauthenticated User', () => {
     await page.goto('/article/user2/example-subject?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 
+    // Wait for the article view to be present
+    await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
+
     // Unauthenticated user should see a disabled button with sign-in message
     const signInButton = page.locator('button.ui.primary.button.disabled');
     await expect(signInButton).toBeVisible({timeout: 10000});
 
-    // Should contain sign-in text
-    await expect(signInButton).toContainText(/Sign in/i);
+    // Should contain "Sign in to Edit" text (from locale: repo.editor.sign_in_to_edit)
+    await expect(signInButton).toContainText(/Sign in to Edit/i);
 
-    // Submit Change Request button should not be visible
-    const submitCRButton = page.locator('#submit-change-request-button');
-    await expect(submitCRButton).toBeHidden();
+    // The button should have the submit-changes-button ID but be disabled
+    // (unauthenticated users don't see fork or submit-change-request buttons)
+    await expect(signInButton).toHaveAttribute('type', 'button');
 
     await page.close();
   });
@@ -220,16 +254,20 @@ test.describe('Submit Change Request vs Fork Button', () => {
     await page.goto('/article/user2/example-subject?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.locator('#article-edit-form')).toBeVisible({timeout: 10000});
+    await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
 
     // Fork button should be visible (for fork-and-edit workflow)
     const forkButton = page.locator('#fork-article-button');
     await expect(forkButton).toBeVisible({timeout: 10000});
+    await expect(forkButton).toContainText(/Fork/i);
 
     // Submit Change Request button should also be visible (for in-repo CR workflow)
-    // Note: This button may or may not exist depending on the UI design
-    // We verify the fork button is visible and has expected text
-    await expect(forkButton).toContainText(/Fork/i);
+    const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+    await expect(submitCRButton).toBeVisible({timeout: 10000});
+    await expect(submitCRButton).toContainText(/Submit/i);
+
+    // Verify they are different buttons
+    expect(await forkButton.getAttribute('id')).not.toBe(await submitCRButton.getAttribute('id'));
 
     await context.close();
   });

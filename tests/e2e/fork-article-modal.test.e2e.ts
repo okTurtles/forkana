@@ -294,16 +294,19 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       await context.close();
     });
 
-    test('non-owner sees disabled Submit Changes button alongside Fork button', async ({browser}, workerInfo) => {
+    test('non-owner sees Submit Change Request button alongside Fork button', async ({browser}, workerInfo) => {
       const context = await load_logged_in_context(browser, workerInfo, 'user4');
       const page = await context.newPage();
 
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      // Non-owner should see disabled Submit Changes button
-      const disabledSubmitButton = page.locator('button.ui.primary.button.disabled:has-text("Submit Changes")');
-      await expect(disabledSubmitButton).toBeVisible({timeout: 10000});
+      // Non-owner should see both Fork button and Submit Change Request button
+      const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
+      await expect(forkButton).toBeVisible({timeout: 10000});
+
+      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+      await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       await context.close();
     });
