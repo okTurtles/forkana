@@ -59,7 +59,7 @@ test.describe('Submit Change Request Workflow', () => {
 
       // Fork button should NOT be visible for owner
       const forkButton = page.locator('#fork-article-button');
-      await expect(forkButton).not.toBeVisible();
+      await expect(forkButton).toBeHidden();
 
       await context.close();
     });
@@ -267,7 +267,7 @@ test.describe('Submit Change Request vs Fork Button', () => {
     await expect(submitCRButton).toContainText(/Submit/i);
 
     // Verify they are different buttons
-    expect(await forkButton.getAttribute('id')).not.toBe(await submitCRButton.getAttribute('id'));
+    await expect(forkButton).not.toHaveAttribute('id', await submitCRButton.getAttribute('id'));
 
     await context.close();
   });
