@@ -82,9 +82,11 @@ test.describe('Submit Change Request Workflow', () => {
 
       // Scroll button into view and ensure it's clickable
       await submitCRButton.scrollIntoViewIfNeeded();
+      // eslint-disable-next-line playwright/no-wait-for-timeout
       await page.waitForTimeout(500);
 
       // Use force click for mobile browsers to avoid click interception issues
+      // eslint-disable-next-line playwright/no-force-option
       await submitCRButton.click({force: true});
 
       // Modal should appear with confirmation message (longer timeout for mobile)
@@ -118,19 +120,23 @@ test.describe('Submit Change Request Workflow', () => {
 
       // Scroll button into view and ensure it's clickable
       await submitCRButton.scrollIntoViewIfNeeded();
+      // eslint-disable-next-line playwright/no-wait-for-timeout
       await page.waitForTimeout(500);
 
       // Use force click for mobile browsers to avoid click interception issues
+      // eslint-disable-next-line playwright/no-force-option
       await submitCRButton.click({force: true});
 
       const modal = page.locator('.ui.g-modal-confirm.modal.visible');
       await expect(modal).toBeVisible({timeout: 10000});
 
       // Wait for modal animation to complete
+      // eslint-disable-next-line playwright/no-wait-for-timeout
       await page.waitForTimeout(300);
 
       // Click cancel button - use force click to avoid dimmer interception on mobile
       const cancelButton = modal.locator('.actions .cancel.button');
+      // eslint-disable-next-line playwright/no-force-option
       await cancelButton.click({force: true});
 
       // Modal should close
@@ -183,9 +189,11 @@ test.describe('Submit Change Request Workflow', () => {
 
       // Scroll button into view and ensure it's clickable
       await submitCRButton.scrollIntoViewIfNeeded();
+      // eslint-disable-next-line playwright/no-wait-for-timeout
       await page.waitForTimeout(500);
 
       // Use force click for mobile browsers to avoid click interception issues
+      // eslint-disable-next-line playwright/no-force-option
       await submitCRButton.click({force: true});
 
       const modal = page.locator('.ui.g-modal-confirm.modal.visible');
