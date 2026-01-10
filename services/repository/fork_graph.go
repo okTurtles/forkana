@@ -431,6 +431,22 @@ func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
 // getContributorStats gets contributor statistics for a repository.
 // If since is non-zero, only counts contributors who made commits after that time.
 // This is useful for forks where we only want to count post-fork contributions.
+//
+// Caching behavior:
+// - Cache keys are scoped by repository full name and revision (e.g., "GetContributorStats/owner/repo/main")
+// - Forks automatically have separate cache entries from their parent repositories
+// - The 'since' filtering happens post-cache on the weekly data, not at the git level
+//
+// Performance considerations:
+// - The underlying GetContributorStats call is cached for 10 minutes (contributorStatsCacheTimeout)
+// - Post-cache filtering by 'since' is lightweight (O(n) where n = number of contributors)
+// - For repositories with many contributors, the post-cache filtering overhead is minimal
+//   compared to the cost of regenerating git statistics
+//
+// TODO: For high-traffic fork repositories, consider adding a secondary cache layer
+// with cache keys that include the 'since' timestamp to avoid repeated post-cache filtering.
+// This would trade memory for CPU cycles on frequently accessed fork pages.
+// Example cache key format: "ForkContributorStats/{repoID}/{since.Unix()}/{days}"
 func getContributorStats(repo *repo_model.Repository, days int, since time.Time) (*ContributorStats, error) {
 	// Use existing contributor stats service
 	c := cache.GetCache()
@@ -438,8 +454,9 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 		return &ContributorStats{TotalCount: 0, RecentCount: 0}, nil
 	}
 
-	// Call GetContributorStats which handles cache and generation
-	// This function will generate stats if not cached, or return cached stats if available
+	// Call GetContributorStats which handles cache and generation.
+	// Cache key is based on repo full name and revision, so forks automatically have
+	// separate cache entries from their parent repositories.
 	ctx := context.Background()
 	stats, err := GetContributorStats(ctx, c, repo, repo.DefaultBranch)
 	if err != nil {
@@ -450,25 +467,10 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 		return nil, err
 	}
 
-	// Count total contributors (exclude "total" summary entry)
+	// Count contributors in a single pass for efficiency
 	// For forks, only count contributors who have commits after the fork creation time
-	totalCount := 0
-	for email, contributor := range stats {
-		// Skip the "total" summary entry
-		if email == "total" {
-			continue
-		}
-
-		// For forks, skip contributors with no post-fork commits
-		if !hasCommitsAfter(contributor, since) {
-			continue
-		}
-
-		totalCount++
-	}
-
-	// Count recent contributors (within the specified days window)
 	cutoffTime := time.Now().AddDate(0, 0, -days)
+	totalCount := 0
 	recentCount := 0
 
 	for email, contributor := range stats {
@@ -481,6 +483,8 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 		if !hasCommitsAfter(contributor, since) {
 			continue
 		}
+
+		totalCount++
 
 		// Check if contributor has commits in the recent time window
 		for _, week := range contributor.Weeks {
