@@ -625,9 +625,9 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	// For forks, only count contributors who made commits after the fork was created
 	// to exclude inherited history from the parent repository
 	defaultBranch := ctx.Repo.Repository.DefaultBranch
-	var contributorSince timeutil.TimeStamp
+	var contributorSince time.Time
 	if ctx.Repo.Repository.IsFork {
-		contributorSince = ctx.Repo.Repository.CreatedUnix
+		contributorSince = ctx.Repo.Repository.CreatedUnix.AsTime()
 	}
 	contributorCount, err := getFileContributorCount(gitRepo, defaultBranch, readmeTreePath, contributorSince)
 	if err != nil {
@@ -818,14 +818,14 @@ func processGitCommits(ctx *context.Context, commits []*git.Commit) ([]*user_mod
 // getFileContributorCount gets the number of unique contributors for a specific file.
 // If since is non-zero, only counts contributors who made commits after that time.
 // This is useful for forks where we only want to count post-fork contributions.
-func getFileContributorCount(gitRepo *git.Repository, branch, filePath string, since timeutil.TimeStamp) (int64, error) {
+func getFileContributorCount(gitRepo *git.Repository, branch, filePath string, since time.Time) (int64, error) {
 	// Use git shortlog to get unique contributors for the file
 	cmd := gitcmd.NewCommand("shortlog", "-sn")
 
 	// If since is provided, only count commits after that time
 	// This is used for forks to exclude inherited history from the parent repository
-	if since > 0 {
-		cmd.AddOptionFormat("--since=%s", since.AsTime().Format(time.RFC3339))
+	if !since.IsZero() {
+		cmd.AddOptionFormat("--since=%s", since.Format(time.RFC3339))
 	}
 
 	stdout, _, err := cmd.AddDynamicArguments(branch, "--", filePath).
