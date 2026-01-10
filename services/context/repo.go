@@ -1168,7 +1168,7 @@ func RepoAssignmentBySubject(ctx *Context) {
 	ctx.Data["ContributorCount"] = int64(0)
 	if !repo.IsEmpty && ctx.Repo.GitRepo != nil {
 		var since time.Time
-		if repo.IsFork {
+		if repo.IsFork && repo.CreatedUnix > 0 {
 			since = repo.CreatedUnix.AsTime()
 		}
 		contributorCount, err := ctx.Repo.GitRepo.GetContributorCount(repo.DefaultBranch, since)

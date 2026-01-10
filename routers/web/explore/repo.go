@@ -541,7 +541,11 @@ func RenderRepositoryHistory(ctx *context.Context) {
 			} else {
 				// For forks, only count contributors who made commits after the fork was created
 				// to exclude inherited history from the parent repository
-				if count, err := forkGitRepo.GetContributorCount(branch, fork.CreatedUnix.AsTime()); err == nil {
+				var forkSince time.Time
+				if fork.CreatedUnix > 0 {
+					forkSince = fork.CreatedUnix.AsTime()
+				}
+				if count, err := forkGitRepo.GetContributorCount(branch, forkSince); err == nil {
 					entry.ContributorCount = count
 				} else {
 					log.Warn("GetContributorCount for fork %s: %v", fork.FullName(), err)
@@ -626,7 +630,7 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	// to exclude inherited history from the parent repository
 	defaultBranch := ctx.Repo.Repository.DefaultBranch
 	var contributorSince time.Time
-	if ctx.Repo.Repository.IsFork {
+	if ctx.Repo.Repository.IsFork && ctx.Repo.Repository.CreatedUnix > 0 {
 		contributorSince = ctx.Repo.Repository.CreatedUnix.AsTime()
 	}
 	contributorCount, err := getFileContributorCount(gitRepo, defaultBranch, readmeTreePath, contributorSince)
