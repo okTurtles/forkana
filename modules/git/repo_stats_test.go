@@ -58,4 +58,9 @@ func TestRepository_GetContributorCount(t *testing.T) {
 	countWithPastSince, err := bareRepo1.GetContributorCount("master", pastTime)
 	assert.NoError(t, err)
 	assert.Positive(t, countWithPastSince, "Expected contributors with past since date")
+
+	// Test with empty branch (should default to HEAD)
+	countEmptyBranch, err := bareRepo1.GetContributorCount("", time.Time{})
+	assert.NoError(t, err)
+	assert.Positive(t, countEmptyBranch, "Expected at least one contributor with empty branch")
 }

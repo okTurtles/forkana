@@ -163,7 +163,7 @@ func (repo *Repository) GetContributorCount(branch string, since time.Time) (int
 	}
 
 	// Use git shortlog to get unique contributors efficiently
-	cmd := gitcmd.NewCommand("shortlog", "-sn", "--all")
+	cmd := gitcmd.NewCommand("shortlog", "-sn")
 
 	// If since is provided, only count commits after that time
 	// This is used for forks to exclude inherited history from the parent repository
