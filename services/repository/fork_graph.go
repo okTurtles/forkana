@@ -364,13 +364,7 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 
 	// Add contributor stats if requested
 	if params.IncludeContributors {
-		// For forks, only count contributors who have commits in weeks that overlap with
-		// or occur after the fork's creation time, to minimize inherited history from the parent
-		var since time.Time
-		if repo.IsFork && repo.CreatedUnix > 0 {
-			since = repo.CreatedUnix.AsTime()
-		}
-		stats, err := getContributorStats(repo, params.ContributorDays, since)
+		stats, err := getContributorStats(repo, params.ContributorDays, getForkSinceTime(repo))
 		if err != nil {
 			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
 		} else {
@@ -391,14 +385,7 @@ func createLeafNode(repo *repo_model.Repository, level int, params ForkGraphPara
 	}
 
 	if params.IncludeContributors {
-		// For forks, only count contributors who have commits in weeks that overlap with
-		// or occur after the fork's creation time, to approximate excluding inherited
-		// history from the parent repository.
-		var since time.Time
-		if repo.IsFork && repo.CreatedUnix > 0 {
-			since = repo.CreatedUnix.AsTime()
-		}
-		stats, err := getContributorStats(repo, params.ContributorDays, since)
+		stats, err := getContributorStats(repo, params.ContributorDays, getForkSinceTime(repo))
 		if err != nil {
 			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
 		} else {
@@ -479,6 +466,16 @@ func sortRepositories(repos []*repo_model.Repository, sortBy string) {
 			return repos[i].UpdatedUnix > repos[j].UpdatedUnix
 		}
 	})
+}
+
+// getForkSinceTime returns the appropriate since time for contributor filtering.
+// For forks, returns the fork creation time to exclude inherited history from the parent.
+// For non-forks, returns zero time (no filtering).
+func getForkSinceTime(repo *repo_model.Repository) time.Time {
+	if repo.IsFork && repo.CreatedUnix > 0 {
+		return repo.CreatedUnix.AsTime()
+	}
+	return time.Time{}
 }
 
 // hasCommitsAfter checks if a contributor has any commits after the given time.
