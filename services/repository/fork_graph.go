@@ -367,7 +367,7 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 		// For forks, only count contributors who have commits in weeks that overlap with
 		// or occur after the fork's creation time, to minimize inherited history from the parent
 		var since time.Time
-		if repo.IsFork {
+		if repo.IsFork && repo.CreatedUnix > 0 {
 			since = repo.CreatedUnix.AsTime()
 		}
 		stats, err := getContributorStats(repo, params.ContributorDays, since)
@@ -395,7 +395,7 @@ func createLeafNode(repo *repo_model.Repository, level int, params ForkGraphPara
 		// or occur after the fork's creation time, to approximate excluding inherited
 		// history from the parent repository.
 		var since time.Time
-		if repo.IsFork {
+		if repo.IsFork && repo.CreatedUnix > 0 {
 			since = repo.CreatedUnix.AsTime()
 		}
 		stats, err := getContributorStats(repo, params.ContributorDays, since)
