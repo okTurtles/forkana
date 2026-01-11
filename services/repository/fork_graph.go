@@ -33,6 +33,12 @@ var (
 	// When multiple goroutines request the same cache key simultaneously, only one
 	// will compute and cache the result; others will compute without caching.
 	forkStatsComputeLock = sync.Map{}
+
+	// forkStatsCacheKeys tracks active cache keys per repository for invalidation.
+	// Key: repoID (int64), Value: map[string]struct{} (set of cache keys)
+	// This enables efficient cache invalidation when commits are pushed to a repository.
+	forkStatsCacheKeys     = sync.Map{}
+	forkStatsCacheKeysLock = sync.Mutex{}
 )
 
 // IsErrMaxDepthExceeded checks if an error is ErrMaxDepthExceeded
@@ -53,6 +59,58 @@ func IsErrProcessingTimeout(err error) bool {
 // IsErrCycleDetected checks if an error is ErrCycleDetected
 func IsErrCycleDetected(err error) bool {
 	return errors.Is(err, ErrCycleDetected)
+}
+
+// registerForkStatsCacheKey registers a cache key for a repository.
+// This enables efficient cache invalidation when commits are pushed.
+func registerForkStatsCacheKey(repoID int64, cacheKey string) {
+	forkStatsCacheKeysLock.Lock()
+	defer forkStatsCacheKeysLock.Unlock()
+
+	var keys map[string]struct{}
+	if v, ok := forkStatsCacheKeys.Load(repoID); ok {
+		keys = v.(map[string]struct{})
+	} else {
+		keys = make(map[string]struct{})
+	}
+	keys[cacheKey] = struct{}{}
+	forkStatsCacheKeys.Store(repoID, keys)
+}
+
+// InvalidateForkContributorStatsCache invalidates all fork contributor stats cache entries
+// for a specific repository. This should be called when commits are pushed to ensure
+// contributor statistics are refreshed.
+//
+// The function is safe to call even if no cache entries exist for the repository.
+// Errors during cache deletion are logged but don't cause the function to fail,
+// as cache invalidation is best-effort.
+func InvalidateForkContributorStatsCache(repoID int64) {
+	c := cache.GetCache()
+	if c == nil {
+		return
+	}
+
+	forkStatsCacheKeysLock.Lock()
+	v, ok := forkStatsCacheKeys.Load(repoID)
+	if !ok {
+		forkStatsCacheKeysLock.Unlock()
+		return
+	}
+	keys := v.(map[string]struct{})
+	// Clear the keys map for this repo
+	forkStatsCacheKeys.Delete(repoID)
+	forkStatsCacheKeysLock.Unlock()
+
+	// Delete all cached entries for this repository
+	for cacheKey := range keys {
+		if err := c.Delete(cacheKey); err != nil {
+			log.Warn("Failed to invalidate fork contributor stats cache key %s: %v", cacheKey, err)
+		}
+	}
+
+	if len(keys) > 0 {
+		log.Debug("Invalidated %d fork contributor stats cache entries for repo %d", len(keys), repoID)
+	}
 }
 
 // ForkGraphParams represents parameters for building fork graph
@@ -448,7 +506,7 @@ func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
 // This is useful for forks where we only want to count post-fork contributions.
 //
 // Caching behavior (two-tier):
-// 1. Secondary cache: Pre-filtered results keyed by (repoID, since, days) - 5 minute TTL
+// 1. Secondary cache: Pre-filtered results keyed by (repoID, since, days) - 2 minute TTL
 // 2. Primary cache: Raw contributor data keyed by (repo, revision) - 10 minute TTL
 //
 // The secondary cache eliminates redundant post-cache filtering for high-traffic fork
@@ -463,6 +521,11 @@ func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
 // Uses forkStatsComputeLock (sync.Map) to prevent multiple goroutines from simultaneously
 // computing the same cache key. When a cache miss occurs, only the first goroutine will
 // compute and cache the result; concurrent requests compute without caching to avoid blocking.
+//
+// Cache invalidation:
+// Cache keys are registered in forkStatsCacheKeys for each repository. When commits are
+// pushed, InvalidateForkContributorStatsCache is called to delete all cached entries for
+// that repository, ensuring contributor statistics are refreshed promptly.
 //
 // Fallback behavior:
 // If secondary cache operations fail, the function falls back to computing results
@@ -548,6 +611,9 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 	if shouldCache {
 		if err := c.PutJSON(secondaryCacheKey, result, forkContributorStatsCacheTimeout); err != nil {
 			log.Warn("Failed to cache fork contributor stats for repo %d: %v", repo.ID, err)
+		} else {
+			// Register the cache key for invalidation on push
+			registerForkStatsCacheKey(repo.ID, secondaryCacheKey)
 		}
 	}
 
