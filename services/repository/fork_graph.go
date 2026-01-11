@@ -529,6 +529,11 @@ func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
 // If secondary cache operations fail, the function falls back to computing results
 // from the primary cache to ensure system reliability.
 func getContributorStats(repo *repo_model.Repository, days int, since time.Time) (*ContributorStats, error) {
+	// Validate days parameter to prevent future cutoff times
+	if days < 0 {
+		days = 0
+	}
+
 	c := cache.GetCache()
 	if c == nil {
 		return &ContributorStats{TotalCount: 0, RecentCount: 0}, nil
