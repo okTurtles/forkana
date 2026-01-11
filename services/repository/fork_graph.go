@@ -106,6 +106,15 @@ type PaginationInfo struct {
 const (
 	maxNodes          = 10000
 	processingTimeout = 30 * time.Second
+
+	// forkContributorStatsCacheKey is the cache key format for pre-filtered fork contributor stats.
+	// Format: "ForkContributorStats/{repoID}/{sinceUnix}/{days}"
+	// This secondary cache stores pre-filtered results to avoid repeated post-cache filtering.
+	forkContributorStatsCacheKey = "ForkContributorStats/%d/%d/%d"
+	// forkContributorStatsCacheTimeout is the TTL for fork contributor stats cache (5 minutes).
+	// This is shorter than the base contributor stats cache (10 minutes) to ensure
+	// the secondary cache doesn't outlive the underlying data.
+	forkContributorStatsCacheTimeout int64 = 60 * 5
 )
 
 // BuildForkGraph builds the fork graph for a repository
@@ -432,31 +441,42 @@ func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
 // If since is non-zero, only counts contributors who made commits after that time.
 // This is useful for forks where we only want to count post-fork contributions.
 //
-// Caching behavior:
-// - Cache keys are scoped by repository full name and revision (e.g., "GetContributorStats/owner/repo/main")
-// - Forks automatically have separate cache entries from their parent repositories
-// - The 'since' filtering happens post-cache on the weekly data, not at the git level
+// Caching behavior (two-tier):
+// 1. Secondary cache: Pre-filtered results keyed by (repoID, since, days) - 5 minute TTL
+// 2. Primary cache: Raw contributor data keyed by (repo, revision) - 10 minute TTL
 //
-// Performance considerations:
-// - The underlying GetContributorStats call is cached for 10 minutes (contributorStatsCacheTimeout)
-// - Post-cache filtering by 'since' is lightweight (O(n) where n = number of contributors)
-// - For repositories with many contributors, the post-cache filtering overhead is minimal
-//   compared to the cost of regenerating git statistics
+// The secondary cache eliminates redundant post-cache filtering for high-traffic fork
+// repositories where the same contributor statistics are requested frequently with
+// identical parameters (typically the fork creation time and days window).
 //
-// TODO: For high-traffic fork repositories, consider adding a secondary cache layer
-// with cache keys that include the 'since' timestamp to avoid repeated post-cache filtering.
-// This would trade memory for CPU cycles on frequently accessed fork pages.
-// Example cache key format: "ForkContributorStats/{repoID}/{since.Unix()}/{days}"
+// Cache key scoping:
+// - Primary: "GetContributorStats/{repo.FullName()}/{revision}" - forks have separate entries
+// - Secondary: "ForkContributorStats/{repoID}/{since.Unix()}/{days}" - unique per parameter set
+//
+// Fallback behavior:
+// If secondary cache operations fail, the function falls back to computing results
+// from the primary cache to ensure system reliability.
 func getContributorStats(repo *repo_model.Repository, days int, since time.Time) (*ContributorStats, error) {
-	// Use existing contributor stats service
 	c := cache.GetCache()
 	if c == nil {
 		return &ContributorStats{TotalCount: 0, RecentCount: 0}, nil
 	}
 
-	// Call GetContributorStats which handles cache and generation.
-	// Cache key is based on repo full name and revision, so forks automatically have
-	// separate cache entries from their parent repositories.
+	// Build secondary cache key for pre-filtered results
+	// Use Unix timestamp for 'since' (0 if zero time) to create stable cache keys
+	sinceUnix := int64(0)
+	if !since.IsZero() {
+		sinceUnix = since.Unix()
+	}
+	secondaryCacheKey := fmt.Sprintf(forkContributorStatsCacheKey, repo.ID, sinceUnix, days)
+
+	// Try to get pre-filtered results from secondary cache
+	var cachedStats ContributorStats
+	if exists, cacheErr := c.GetJSON(secondaryCacheKey, &cachedStats); exists && cacheErr == nil {
+		return &cachedStats, nil
+	}
+
+	// Secondary cache miss - compute from primary cache
 	ctx := context.Background()
 	stats, err := GetContributorStats(ctx, c, repo, repo.DefaultBranch)
 	if err != nil {
@@ -496,10 +516,18 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 		}
 	}
 
-	return &ContributorStats{
+	result := &ContributorStats{
 		TotalCount:  totalCount,
 		RecentCount: recentCount,
-	}, nil
+	}
+
+	// Store in secondary cache for future requests
+	// Errors are logged but don't fail the request - cache is best-effort
+	if err := c.PutJSON(secondaryCacheKey, result, forkContributorStatsCacheTimeout); err != nil {
+		log.Warn("Failed to cache fork contributor stats for repo %d: %v", repo.ID, err)
+	}
+
+	return result, nil
 }
 
 // countVisibleForks counts the number of visible forks in the tree
