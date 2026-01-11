@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"code.gitea.io/gitea/models/db"
@@ -27,6 +28,11 @@ var (
 	ErrTooManyNodes      = errors.New("too many nodes in graph")
 	ErrProcessingTimeout = errors.New("processing timeout")
 	ErrCycleDetected     = errors.New("cycle detected in fork graph")
+
+	// forkStatsComputeLock prevents cache stampede on secondary cache computation.
+	// When multiple goroutines request the same cache key simultaneously, only one
+	// will compute and cache the result; others will compute without caching.
+	forkStatsComputeLock = sync.Map{}
 )
 
 // IsErrMaxDepthExceeded checks if an error is ErrMaxDepthExceeded
@@ -453,6 +459,11 @@ func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
 // - Primary: "GetContributorStats/{repo.FullName()}/{revision}" - forks have separate entries
 // - Secondary: "ForkContributorStats/{repoID}/{since.Unix()}/{days}" - unique per parameter set
 //
+// Stampede prevention:
+// Uses forkStatsComputeLock (sync.Map) to prevent multiple goroutines from simultaneously
+// computing the same cache key. When a cache miss occurs, only the first goroutine will
+// compute and cache the result; concurrent requests compute without caching to avoid blocking.
+//
 // Fallback behavior:
 // If secondary cache operations fail, the function falls back to computing results
 // from the primary cache to ensure system reliability.
@@ -476,7 +487,17 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 		return &cachedStats, nil
 	}
 
-	// Secondary cache miss - compute from primary cache
+	// Secondary cache miss - prevent stampede by checking if another goroutine is computing
+	// If another goroutine is already computing this key, we compute without caching
+	// to avoid blocking. The first goroutine will populate the cache.
+	_, alreadyComputing := forkStatsComputeLock.LoadOrStore(secondaryCacheKey, struct{}{})
+	shouldCache := !alreadyComputing
+	if shouldCache {
+		// We acquired the lock - ensure we release it when done
+		defer forkStatsComputeLock.Delete(secondaryCacheKey)
+	}
+
+	// Compute from primary cache
 	ctx := context.Background()
 	stats, err := GetContributorStats(ctx, c, repo, repo.DefaultBranch)
 	if err != nil {
@@ -521,10 +542,13 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 		RecentCount: recentCount,
 	}
 
-	// Store in secondary cache for future requests
+	// Store in secondary cache for future requests (only if we hold the compute lock)
+	// This prevents multiple goroutines from racing to write the same cache entry
 	// Errors are logged but don't fail the request - cache is best-effort
-	if err := c.PutJSON(secondaryCacheKey, result, forkContributorStatsCacheTimeout); err != nil {
-		log.Warn("Failed to cache fork contributor stats for repo %d: %v", repo.ID, err)
+	if shouldCache {
+		if err := c.PutJSON(secondaryCacheKey, result, forkContributorStatsCacheTimeout); err != nil {
+			log.Warn("Failed to cache fork contributor stats for repo %d: %v", repo.ID, err)
+		}
 	}
 
 	return result, nil
