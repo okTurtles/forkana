@@ -88,6 +88,36 @@
                  </div>
              </div>
         </form>
+
+        {{/* Submit Change Request Modal */}}
+        <div class="ui small modal" id="submit-change-request-modal">
+            <div class="header">
+                {{svg "octicon-git-pull-request" 16 "tw-mr-2"}}
+                {{ctx.Locale.Tr "repo.editor.submit_changes_modal_title"}}
+            </div>
+            <div class="content">
+                <div class="ui form">
+                    <div class="field">
+                        <label for="modal-cr-title">{{ctx.Locale.Tr "repo.editor.change_request_title_label"}}</label>
+                        <input type="text" id="modal-cr-title" name="modal-cr-title" placeholder="{{ctx.Locale.Tr "repo.editor.change_request_title_placeholder"}}" maxlength="255">
+                    </div>
+                    <div class="field">
+                        <label for="modal-cr-description">{{ctx.Locale.Tr "repo.editor.change_request_description_label"}}</label>
+                        <textarea id="modal-cr-description" name="modal-cr-description" rows="4" placeholder="{{ctx.Locale.Tr "repo.editor.change_request_description_placeholder"}}"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="actions">
+                <button class="ui cancel button">
+                    {{svg "octicon-x" 16 "tw-mr-1"}}
+                    {{ctx.Locale.Tr "cancel"}}
+                </button>
+                <button class="ui primary ok button" id="modal-submit-cr-button">
+                    {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
+                    {{ctx.Locale.Tr "repo.editor.submit_change_request"}}
+                </button>
+            </div>
+        </div>
     {{end}}
 </div>
 {{end}}

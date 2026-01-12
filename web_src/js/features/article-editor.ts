@@ -84,39 +84,71 @@ export function initArticleEditor() {
       });
     }
 
-    // Handle Submit Changes button (submit change request - creates PR back to original)
+    // Handle Pre-Submit Changes button (opens modal for title/description)
+    const preSubmitChangesButton = document.querySelector<HTMLButtonElement>('#pre-submit-changes-button');
+    const submitCRModal = document.querySelector<HTMLElement>('#submit-change-request-modal');
+
+    if (preSubmitChangesButton && submitCRModal && !preSubmitChangesButton.classList.contains('disabled')) {
+      const $modal = fomanticQuery(submitCRModal);
+      const modalTitleInput = submitCRModal.querySelector<HTMLInputElement>('#modal-cr-title');
+      const modalDescriptionInput = submitCRModal.querySelector<HTMLTextAreaElement>('#modal-cr-description');
+
+      preSubmitChangesButton.addEventListener('click', () => {
+        // Clear previous values when opening modal
+        if (modalTitleInput) modalTitleInput.value = '';
+        if (modalDescriptionInput) modalDescriptionInput.value = '';
+
+        // Show the modal
+        $modal.modal({
+          closable: true,
+          onApprove: () => {
+            // Validate title is not empty
+            const title = modalTitleInput?.value.trim() || '';
+            if (!title) {
+              // Show validation error - add error class to field
+              modalTitleInput?.closest('.field')?.classList.add('error');
+              return false; // Prevent modal from closing
+            }
+
+            // Get values from modal
+            const description = modalDescriptionInput?.value.trim() || '';
+
+            // Set form hidden fields
+            const forkAndEditField = document.querySelector<HTMLInputElement>('#fork_and_edit');
+            const submitChangeRequestField = document.querySelector<HTMLInputElement>('#submit_change_request');
+            const changeRequestTitleField = document.querySelector<HTMLInputElement>('#change_request_title');
+            const changeRequestDescriptionField = document.querySelector<HTMLInputElement>('#change_request_description');
+
+            if (forkAndEditField) forkAndEditField.value = 'false';
+            if (submitChangeRequestField) submitChangeRequestField.value = 'true';
+            if (changeRequestTitleField) changeRequestTitleField.value = title;
+            if (changeRequestDescriptionField) changeRequestDescriptionField.value = description;
+
+            // Update textarea with editor content before submission
+            textarea.value = editor.getMarkdown();
+
+            // Submit the form using fetch action to handle JSON redirect response
+            submitFormFetchAction(editForm);
+
+            return true; // Allow modal to close
+          },
+          onHidden: () => {
+            // Clear error state when modal is closed
+            modalTitleInput?.closest('.field')?.classList.remove('error');
+          },
+        }).modal('show');
+      });
+
+      // Clear error state when user starts typing in title field
+      modalTitleInput?.addEventListener('input', () => {
+        modalTitleInput.closest('.field')?.classList.remove('error');
+      });
+    }
+
+    // Handle direct Submit Changes button (for repo owners - no modal needed)
     const submitChangesButton = document.querySelector<HTMLButtonElement>('#submit-changes-button');
     if (submitChangesButton && !submitChangesButton.classList.contains('disabled')) {
       submitChangesButton.addEventListener('click', async () => {
-        // Check if this is a submit-change-request action that needs confirmation
-        const isSubmitChangeRequest = submitChangesButton.getAttribute('data-submit-change-request') === 'true';
-
-        if (isSubmitChangeRequest) {
-          // Get confirmation modal content from data attributes
-          const title = submitChangesButton.getAttribute('data-confirm-title') || 'Submit Changes';
-          const body = submitChangesButton.getAttribute('data-confirm-body') || 'This will create a pull request with your changes.';
-          const confirmText = submitChangesButton.getAttribute('data-confirm-yes') || 'Submit';
-          const cancelText = submitChangesButton.getAttribute('data-confirm-cancel') || 'Cancel';
-
-          // Show confirmation modal
-          const confirmed = await showForkConfirmModal(title, body, confirmText, cancelText);
-          if (!confirmed) {
-            return; // User cancelled, do nothing
-          }
-
-          // Set submit_change_request to true, fork_and_edit to false
-          const forkAndEditField = document.querySelector<HTMLInputElement>('#fork_and_edit');
-          const submitChangeRequestField = document.querySelector<HTMLInputElement>('#submit_change_request');
-          if (forkAndEditField) forkAndEditField.value = 'false';
-          if (submitChangeRequestField) submitChangeRequestField.value = 'true';
-
-          // Set hardcoded values for change request title and description (for testing)
-          const changeRequestTitleField = document.querySelector<HTMLInputElement>('#change_request_title');
-          const changeRequestDescriptionField = document.querySelector<HTMLInputElement>('#change_request_description');
-          if (changeRequestTitleField) changeRequestTitleField.value = 'Change Request Title example';
-          if (changeRequestDescriptionField) changeRequestDescriptionField.value = 'This is an example of a message, coming from the modal upon submitting a change request';
-        }
-
         // Update textarea with editor content before submission
         textarea.value = editor.getMarkdown();
 
