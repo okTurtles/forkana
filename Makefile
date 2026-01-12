@@ -426,6 +426,14 @@ lint-yaml: .venv ## lint yaml files
 watch: ## watch everything and continuously rebuild
 	@bash tools/watch.sh
 
+.PHONY: watch-backend-debug
+watch-backend-debug: go-check ## watch backend (debug) and continuously rebuild
+	GITEA_RUN_MODE=dev $(GO) run $(AIR_PACKAGE) -c .air.debug.toml
+
+.PHONY: watch-debug
+watch-debug: ## watch frontend + backend, with backend in debug mode
+	@bash tools/watch_debug.sh
+
 .PHONY: watch-frontend
 watch-frontend: node-check node_modules ## watch frontend files and continuously rebuild
 	@rm -rf $(WEBPACK_DEST_ENTRIES)
