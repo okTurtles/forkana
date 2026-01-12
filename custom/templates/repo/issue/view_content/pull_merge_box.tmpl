@@ -210,7 +210,7 @@
 
 				{{if and .AllowMerge .IsBaseRepoOwner}} {{/* user is allowed to merge and is the repository owner */}}
 					{{$prUnit := .Repository.MustGetUnit ctx ctx.Consts.RepoUnitTypePullRequests}}
-					{{if or $prUnit.PullRequestsConfig.AllowMerge $prUnit.PullRequestsConfig.AllowRebase $prUnit.PullRequestsConfig.AllowRebaseMerge $prUnit.PullRequestsConfig.AllowSquash $prUnit.PullRequestsConfig.AllowFastForwardOnly}}
+					{{if $prUnit.PullRequestsConfig.AllowSquash}} {{/* Forkana: only squash merge is supported */}}
 						{{$hasPendingPullRequestMergeTip := ""}}
 						{{if .HasPendingPullRequestMerge}}
 							{{$createdPRMergeStr := DateUtils.TimeSince .PendingPullRequestMerge.CreatedUnix}}
@@ -248,30 +248,8 @@
 							};
 
 							const generalHideAutoMerge = mergeForm.canMergeNow && mergeForm.allOverridableChecksOk; // if this pr can be merged now, then hide the auto merge
+							// Forkana: only squash merge is supported - all other merge styles are removed
 							mergeForm['mergeStyles'] = [
-								{
-									'name': 'merge',
-									'allowed': {{$prUnit.PullRequestsConfig.AllowMerge}},
-									'textDoMerge': {{ctx.Locale.Tr "repo.pulls.merge_pull_request"}},
-									'mergeTitleFieldText': defaultMergeTitle,
-									'mergeMessageFieldText': defaultMergeMessage,
-									'hideAutoMerge': generalHideAutoMerge,
-								},
-								{
-									'name': 'rebase',
-									'allowed': {{$prUnit.PullRequestsConfig.AllowRebase}},
-									'textDoMerge': {{ctx.Locale.Tr "repo.pulls.rebase_merge_pull_request"}},
-									'hideMergeMessageTexts': true,
-									'hideAutoMerge': generalHideAutoMerge,
-								},
-								{
-									'name': 'rebase-merge',
-									'allowed': {{$prUnit.PullRequestsConfig.AllowRebaseMerge}},
-									'textDoMerge': {{ctx.Locale.Tr "repo.pulls.rebase_merge_commit_pull_request"}},
-									'mergeTitleFieldText': defaultMergeTitle,
-									'mergeMessageFieldText': defaultMergeMessage,
-									'hideAutoMerge': generalHideAutoMerge,
-								},
 								{
 									'name': 'squash',
 									'allowed': {{$prUnit.PullRequestsConfig.AllowSquash}},
@@ -279,20 +257,6 @@
 									'mergeTitleFieldText': defaultSquashMergeTitle,
 									'mergeMessageFieldText': {{.GetCommitMessages}} + defaultSquashMergeMessage,
 									'hideAutoMerge': generalHideAutoMerge,
-								},
-								{
-									'name': 'fast-forward-only',
-									'allowed': {{and $prUnit.PullRequestsConfig.AllowFastForwardOnly (eq .Issue.PullRequest.CommitsBehind 0)}},
-									'textDoMerge': {{ctx.Locale.Tr "repo.pulls.fast_forward_only_merge_pull_request"}},
-									'hideMergeMessageTexts': true,
-									'hideAutoMerge': generalHideAutoMerge,
-								},
-								{
-									'name': 'manually-merged',
-									'allowed': {{$prUnit.PullRequestsConfig.AllowManualMerge}},
-									'textDoMerge': {{ctx.Locale.Tr "repo.pulls.merge_manually"}},
-									'hideMergeMessageTexts': true,
-									'hideAutoMerge': true,
 								}
 							];
 							window.config.pageData.pullRequestMergeForm = mergeForm;
