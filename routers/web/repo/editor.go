@@ -363,7 +363,9 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
-	if parsed.CommitFormOptions.NeedFork {
+	// Skip the NeedFork workflow if ForkAndEdit is true
+	// The ForkAndEdit workflow (handled later) will create the fork
+	if parsed.CommitFormOptions.NeedFork && !parsed.form.ForkAndEdit {
 		baseRepo := ctx.Repo.Repository
 		repoName := getUniqueRepositoryName(ctx, ctx.Doer.ID, baseRepo.Name)
 		if repoName == "" {
@@ -478,13 +480,24 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
+	// Determine target repository - either the original or a fork
+	targetRepo := ctx.Repo.Repository
+
+	// Handle fork-and-edit workflow
+	if parsed.form.ForkAndEdit {
+		targetRepo = handleForkAndEdit(ctx)
+		if ctx.Written() {
+			return
+		}
+	}
+
 	// Check if this is the first content being added to an empty repository with a subject
 	// We need to capture this before the commit because the commit will mark the repo as non-empty
 	wasEmpty := ctx.Repo.Repository.IsEmpty
 	subjectID := ctx.Repo.Repository.SubjectID
 	isNotFork := !ctx.Repo.Repository.IsFork
 
-	_, err := files_service.ChangeRepoFiles(ctx, ctx.Repo.Repository, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: parsed.form.LastCommit,
 		OldBranch:    parsed.OldBranchName,
 		NewBranch:    parsed.NewBranchName,
@@ -514,7 +527,56 @@ func EditFilePost(ctx *context.Context) {
 		handleFirstArticleBecomesRoot(ctx, subjectID)
 	}
 
+	// If we committed to a fork, redirect to the fork's article page
+	if parsed.form.ForkAndEdit && targetRepo != nil {
+		ctx.JSONRedirect(targetRepo.Link() + "?mode=read")
+		return
+	}
+
 	redirectForCommitChoice(ctx, parsed, parsed.form.TreePath)
+}
+
+// handleForkAndEdit handles the fork-and-edit workflow
+// It returns the fork repository to commit to, or nil if an error occurred
+func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
+	originalRepo := ctx.Repo.Repository
+
+	// Prevent bypassing UI restrictions
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, originalRepo)
+	if err != nil {
+		ctx.ServerError("CheckForkOnEditPermissions", err)
+		return nil
+	}
+
+	// Block if user already owns a different repository for the same subject
+	if perms.BlockedBySubject {
+		ctx.JSONError(ctx.Tr("repo.fork.already_own_subject_repo"))
+		return nil
+	}
+
+	// Return existing fork if user already has one
+	if perms.HasExistingFork && perms.ExistingFork != nil {
+		return perms.ExistingFork
+	}
+
+	// Create a new fork
+	forkName := getUniqueRepositoryName(ctx, ctx.Doer.ID, originalRepo.Name)
+	if forkName == "" {
+		ctx.JSONError(ctx.Tr("repo.fork.failed"))
+		return nil
+	}
+
+	fork := ForkRepoTo(ctx, ctx.Doer, repo_service.ForkRepoOptions{
+		BaseRepo:     originalRepo,
+		Name:         forkName,
+		Description:  originalRepo.Description,
+		SingleBranch: originalRepo.DefaultBranch,
+	})
+	if ctx.Written() {
+		return nil
+	}
+
+	return fork
 }
 
 // DeleteFile render delete file page

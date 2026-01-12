@@ -15,7 +15,7 @@
                 {{if .Repository.IsFork}}
                     <span class="tw-inline-flex tw-items-center">
                         {{svg "octicon-repo-forked" 14 "tw-mr-1"}}
-                        Forked of:
+                        {{ctx.Locale.Tr "repo.editor.forked_of"}}
                         {{if .Repository.BaseRepo}}
                             {{/* Go html/template automatically HTML-escapes these strings to prevent XSS */}}
                             <a class="tw-ml-1" href="{{.Repository.BaseRepo.Link}}">{{.Repository.BaseRepo.OwnerName}} / {{.Repository.BaseRepo.Name}}</a>
@@ -29,7 +29,7 @@
         </div>
         <div class="tw-flex tw-items-center tw-gap-3">
             <a class="tw-font-bold tw-inline-flex tw-items-center muted" href="#" data-global-click="onCopyContentButtonClick" data-clipboard-text="{{.Repository.Owner.Name}}/{{.Repository.Name}}@{{.BranchName}}">
-                {{svg "octicon-link" 14 "tw-mr-1"}} CopyRef
+                {{svg "octicon-link" 14 "tw-mr-1"}} {{ctx.Locale.Tr "repo.editor.copy_ref"}}
             </a>
         </div>
     </div>
@@ -38,9 +38,32 @@
             <h4>{{.NotEditableReason}}</h4>
             <p>{{ctx.Locale.Tr "repo.editor.file_not_editable_hint"}}</p>
         </div>
+    {{else if .HasOwnRepoForSubject}}
+        {{/* User already owns a different repository for this subject - show message instead of editor.
+             SubjectRelation should always be loaded here (via LoadSubject in ArticleView),
+             but we fall back to Repository.Name as a defensive measure. */}}
+        {{$subjectName := Iif .Repository.SubjectRelation .Repository.SubjectRelation.Name .Repository.Name}}
+        <div class="ui info message">
+            <div class="header">
+                {{svg "octicon-info" 16 "tw-mr-2"}}
+                {{ctx.Locale.Tr "repo.editor.already_have_article"}}
+            </div>
+            <p class="tw-mt-2">
+                {{ctx.Locale.Tr "repo.editor.cannot_edit_own_subject" $subjectName}}
+            </p>
+            <p>
+                {{ctx.Locale.Tr "repo.editor.your_article"}} <a href="{{.OwnRepoForSubject.Link}}" class="tw-font-semibold">{{.OwnRepoForSubject.OwnerName}} / {{$subjectName}}</a>
+            </p>
+            <p class="tw-text-sm tw-text-gray-600 tw-mt-2">
+                {{ctx.Locale.Tr "repo.editor.one_article_per_subject"}}
+            </p>
+        </div>
     {{else}}
         {{/* Editor form */}}
-        <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}">
+        <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoOperationsLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}"
+              data-can-edit-directly="{{if .IsRepoOwner}}true{{else}}false{{end}}"
+              data-has-existing-fork="{{if .HasExistingFork}}true{{else}}false{{end}}"
+              data-needs-fork="{{if .NeedsFork}}true{{else}}false{{end}}">
             {{.CsrfTokenHtml}}
             <input type="hidden" name="last_commit" value="{{.LastCommitID}}">
             <input type="hidden" name="tree_path" value="{{.ReadmeTreePath}}">
@@ -49,6 +72,8 @@
             {{/* Optional commit message fields - will use default if empty */}}
             <input type="hidden" name="commit_summary" value="">
             <input type="hidden" name="commit_message" value="">
+            {{/* Fork-on-edit field - only true when user needs to create a new fork (not when they have an existing fork, as that case shows a link instead of a form) */}}
+            <input type="hidden" id="fork_and_edit" name="fork_and_edit" value="{{if .NeedsFork}}true{{else}}false{{end}}">
 
              <div class="field">
                  <div class="tw-p-0">

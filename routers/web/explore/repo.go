@@ -712,6 +712,9 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			}
 		}
 		ctx.Data["FileSize"] = fileSize
+
+		// Set up fork-on-edit context data
+		prepareArticleForkOnEditData(ctx)
 	case "history":
 		// For history mode, get file commit history
 		commitsCount, err := gitRepo.FileCommitsCount(defaultBranch, readmeTreePath)
@@ -819,4 +822,30 @@ func getFileContributorCount(gitRepo *git.Repository, branch, filePath string) (
 	}
 
 	return int64(len(lines)), nil
+}
+
+// prepareArticleForkOnEditData sets up context data for fork-on-edit workflow
+// This determines whether the user can edit directly, needs to fork, or already has a fork
+func prepareArticleForkOnEditData(ctx *context.Context) {
+	// Default values
+	ctx.Data["NeedsFork"] = false
+	ctx.Data["HasExistingFork"] = false
+	ctx.Data["ExistingFork"] = nil
+	ctx.Data["IsRepoOwner"] = false
+	ctx.Data["HasOwnRepoForSubject"] = false
+	ctx.Data["OwnRepoForSubject"] = nil
+
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, ctx.Repo.Repository)
+	if err != nil {
+		ctx.ServerError("CheckForkOnEditPermissions", err)
+		return
+	}
+
+	// Map permissions to context data
+	ctx.Data["IsRepoOwner"] = perms.IsRepoOwner
+	ctx.Data["HasOwnRepoForSubject"] = perms.BlockedBySubject
+	ctx.Data["OwnRepoForSubject"] = perms.OwnRepoForSubject
+	ctx.Data["HasExistingFork"] = perms.HasExistingFork
+	ctx.Data["ExistingFork"] = perms.ExistingFork
+	ctx.Data["NeedsFork"] = perms.NeedsFork
 }
