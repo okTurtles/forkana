@@ -6,6 +6,7 @@ package repo
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	access_model "code.gitea.io/gitea/models/perm/access"
@@ -330,7 +331,7 @@ func buildDiffLines(lines1, lines2 []string) []*gitdiff.DiffLine {
 	// Add section header
 	diffLines = append(diffLines, &gitdiff.DiffLine{
 		Type:    gitdiff.DiffLineSection,
-		Content: "@@ -1," + string(rune(len(lines1))) + " +1," + string(rune(len(lines2))) + " @@",
+		Content: "@@ -1," + strconv.Itoa(len(lines1)) + " +1," + strconv.Itoa(len(lines2)) + " @@",
 		SectionInfo: &gitdiff.DiffLineSectionInfo{
 			Path:          "README.md",
 			LastLeftIdx:   0,
