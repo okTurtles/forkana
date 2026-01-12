@@ -888,6 +888,11 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 	ctx.Data["ShowMergeInstructions"] = canWriteToHeadRepo
 	ctx.Data["AllowMerge"] = allowMerge
 
+	// Check if the current user is the owner of the base repository (target of the PR)
+	// This is used to restrict merge operations to repository owners only
+	isBaseRepoOwner := ctx.IsSigned && ctx.Doer.ID == pull.BaseRepo.OwnerID
+	ctx.Data["IsBaseRepoOwner"] = isBaseRepoOwner
+
 	prUnit, err := issue.Repo.GetUnit(ctx, unit.TypePullRequests)
 	if err != nil {
 		ctx.ServerError("GetUnit", err)
