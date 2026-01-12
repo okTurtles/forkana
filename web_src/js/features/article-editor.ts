@@ -109,6 +109,12 @@ export function initArticleEditor() {
           const submitChangeRequestField = document.querySelector<HTMLInputElement>('#submit_change_request');
           if (forkAndEditField) forkAndEditField.value = 'false';
           if (submitChangeRequestField) submitChangeRequestField.value = 'true';
+
+          // Set hardcoded values for change request title and description (for testing)
+          const changeRequestTitleField = document.querySelector<HTMLInputElement>('#change_request_title');
+          const changeRequestDescriptionField = document.querySelector<HTMLInputElement>('#change_request_description');
+          if (changeRequestTitleField) changeRequestTitleField.value = 'Change Request Title example';
+          if (changeRequestDescriptionField) changeRequestDescriptionField.value = 'This is an example of a message, coming from the modal upon submitting a change request';
         }
 
         // Update textarea with editor content before submission

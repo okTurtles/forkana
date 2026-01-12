@@ -665,8 +665,9 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	}
 
 	// Create the change request
-	// Generate a title based on the file being edited
-	prTitle := ctx.Locale.TrString("repo.editor.submit_changes_pr_title", path.Base(form.TreePath))
+	// Use custom title if provided, otherwise generate a title based on the file being edited
+	prTitle := util.IfZero(strings.TrimSpace(form.ChangeRequestTitle), ctx.Locale.TrString("repo.editor.submit_changes_pr_title", path.Base(form.TreePath)))
+	prContent := strings.TrimSpace(form.ChangeRequestDescription)
 
 	pullIssue := &issues_model.Issue{
 		RepoID:   targetRepo.ID,
@@ -675,7 +676,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		PosterID: ctx.Doer.ID,
 		Poster:   ctx.Doer,
 		IsPull:   true,
-		Content:  "", // Could add a default description if needed
+		Content:  prContent,
 	}
 
 	// Same-repo CR: HeadRepo and BaseRepo are both the target repository

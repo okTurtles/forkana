@@ -39,9 +39,11 @@ func (f *CommitCommonForm) GetCommitCommonForm() *CommitCommonForm {
 
 type EditRepoFileForm struct {
 	CommitCommonForm
-	Content             optional.Option[string]
-	ForkAndEdit         bool // If true, fork the repository first and commit to the fork
-	SubmitChangeRequest bool // If true, fork + create branch + commit + create PR back to original
+	Content                  optional.Option[string]
+	ForkAndEdit              bool   // If true, fork the repository first and commit to the fork
+	SubmitChangeRequest      bool   // If true, fork + create branch + commit + create CR back to original
+	ChangeRequestTitle       string // Optional custom title for the Change Request
+	ChangeRequestDescription string // Optional custom description for the Change Request
 }
 
 type DeleteRepoFileForm struct {
