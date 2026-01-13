@@ -3,8 +3,27 @@
 	{{template "explore/navbar" .}}
 	<div class="ui container">
 		{{template "explore/search" .}}
-		{{template "explore/user_list" .}}
-		{{template "base/paginate" .}}
+		<div class="explore-users-list-container">
+			{{template "explore/user_list" .}}
+		</div>
+		{{if .Page.Paginater}}
+			<div class="pagination-container">
+				<div class="pagination-info">
+					{{if gt (.Page.Paginater.TotalPages) 0}}
+						{{$pagingNum := .Page.Paginater.PagingNum}}
+						{{$current := .Page.Paginater.Current}}
+						{{$total := .Page.Paginater.Total}}
+						{{$start := Eval $current "*" $pagingNum "-" $pagingNum "+" 1}}
+						{{$end := Eval $current "*" $pagingNum}}
+						{{if gt $end $total}}{{$end = $total}}{{end}}
+						{{$start}}-{{$end}} of {{$total}}
+					{{end}}
+				</div>
+				{{template "base/paginate" .}}
+			</div>
+		{{else}}
+			{{template "base/paginate" .}}
+		{{end}}
 	</div>
 </div>
 {{template "base/footer" .}}

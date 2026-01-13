@@ -13,15 +13,9 @@
 				</div>
 				<div class="flex-item-body">
 					{{if .Location}}
-						<span class="flex-text-inline">{{svg "octicon-location"}}{{.Location}}</span>
+						<span class="user-location">{{.Location}}</span>
 					{{end}}
-					{{if and .Email (or (and $.ShowUserEmail $.IsSigned (not .KeepEmailPrivate)) $.PageIsAdminUsers)}}
-						<span class="flex-text-inline">
-							{{svg "octicon-mail"}}
-							<a href="mailto:{{.Email}}">{{.Email}}</a>
-						</span>
-					{{end}}
-					<span class="flex-text-inline">{{svg "octicon-calendar"}}{{ctx.Locale.Tr "user.joined_on" (DateUtils.AbsoluteShort .CreatedUnix)}}</span>
+					<span class="user-joined">Joined on {{DateUtils.AbsoluteShort .CreatedUnix}}</span>
 				</div>
 			</div>
 		</div>
