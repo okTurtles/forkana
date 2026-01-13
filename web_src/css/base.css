@@ -737,6 +737,7 @@ overflow-menu {
 overflow-menu .overflow-menu-items {
   display: flex;
   flex: 1;
+  padding: 0 1rem;
 }
 
 overflow-menu .overflow-menu-items .item {
