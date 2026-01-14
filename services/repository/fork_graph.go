@@ -37,8 +37,9 @@ var (
 	// forkStatsCacheKeys tracks active cache keys per repository for invalidation.
 	// Key: repoID (int64), Value: map[string]struct{} (set of cache keys)
 	// This enables efficient cache invalidation when commits are pushed to a repository.
-	forkStatsCacheKeys     = sync.Map{}
-	forkStatsCacheKeysLock = sync.Mutex{}
+	// Uses a regular map with mutex for simpler synchronization (no type assertions needed).
+	forkStatsCacheKeys     = make(map[int64]map[string]struct{})
+	forkStatsCacheKeysLock sync.Mutex
 )
 
 // IsErrMaxDepthExceeded checks if an error is ErrMaxDepthExceeded
@@ -67,14 +68,12 @@ func registerForkStatsCacheKey(repoID int64, cacheKey string) {
 	forkStatsCacheKeysLock.Lock()
 	defer forkStatsCacheKeysLock.Unlock()
 
-	var keys map[string]struct{}
-	if v, ok := forkStatsCacheKeys.Load(repoID); ok {
-		keys = v.(map[string]struct{})
-	} else {
+	keys, ok := forkStatsCacheKeys[repoID]
+	if !ok {
 		keys = make(map[string]struct{})
+		forkStatsCacheKeys[repoID] = keys
 	}
 	keys[cacheKey] = struct{}{}
-	forkStatsCacheKeys.Store(repoID, keys)
 }
 
 // InvalidateForkContributorStatsCache invalidates all fork contributor stats cache entries
@@ -91,14 +90,13 @@ func InvalidateForkContributorStatsCache(repoID int64) {
 	}
 
 	forkStatsCacheKeysLock.Lock()
-	v, ok := forkStatsCacheKeys.Load(repoID)
+	keys, ok := forkStatsCacheKeys[repoID]
 	if !ok {
 		forkStatsCacheKeysLock.Unlock()
 		return
 	}
-	keys := v.(map[string]struct{})
 	// Clear the keys map for this repo
-	forkStatsCacheKeys.Delete(repoID)
+	delete(forkStatsCacheKeys, repoID)
 	forkStatsCacheKeysLock.Unlock()
 
 	// Delete all cached entries for this repository
