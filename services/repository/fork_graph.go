@@ -111,6 +111,32 @@ func InvalidateForkContributorStatsCache(repoID int64) {
 	}
 }
 
+// getForkStatsCacheKeysForTesting returns the registered cache keys for a repository.
+// This function is intended for testing purposes only.
+func getForkStatsCacheKeysForTesting(repoID int64) map[string]struct{} {
+	forkStatsCacheKeysLock.Lock()
+	defer forkStatsCacheKeysLock.Unlock()
+
+	keys, ok := forkStatsCacheKeys[repoID]
+	if !ok {
+		return nil
+	}
+	// Return a copy to avoid race conditions
+	result := make(map[string]struct{}, len(keys))
+	for k := range keys {
+		result[k] = struct{}{}
+	}
+	return result
+}
+
+// clearForkStatsCacheKeysForTesting clears all registered cache keys.
+// This function is intended for testing purposes only.
+func clearForkStatsCacheKeysForTesting() {
+	forkStatsCacheKeysLock.Lock()
+	defer forkStatsCacheKeysLock.Unlock()
+	forkStatsCacheKeys = make(map[int64]map[string]struct{})
+}
+
 // ForkGraphParams represents parameters for building fork graph
 type ForkGraphParams struct {
 	IncludeContributors bool

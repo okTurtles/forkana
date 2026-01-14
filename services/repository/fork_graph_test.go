@@ -5,12 +5,16 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/cache"
+	"code.gitea.io/gitea/modules/setting"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -524,4 +528,298 @@ func TestCycleDetection_DeepForkChain(t *testing.T) {
 
 	// Verify visited map has entries (cycle detection is working)
 	assert.NotEmpty(t, visited)
+}
+
+// TestRegisterForkStatsCacheKey tests the registerForkStatsCacheKey function
+func TestRegisterForkStatsCacheKey(t *testing.T) {
+	// Clean up before and after test
+	clearForkStatsCacheKeysForTesting()
+	defer clearForkStatsCacheKeysForTesting()
+
+	// Test 1: Register a single key for a repository
+	registerForkStatsCacheKey(1, "key1")
+	keys := getForkStatsCacheKeysForTesting(1)
+	assert.NotNil(t, keys)
+	assert.Len(t, keys, 1)
+	_, exists := keys["key1"]
+	assert.True(t, exists, "key1 should be registered")
+
+	// Test 2: Register multiple keys for the same repository
+	registerForkStatsCacheKey(1, "key2")
+	registerForkStatsCacheKey(1, "key3")
+	keys = getForkStatsCacheKeysForTesting(1)
+	assert.Len(t, keys, 3)
+	_, exists = keys["key2"]
+	assert.True(t, exists, "key2 should be registered")
+	_, exists = keys["key3"]
+	assert.True(t, exists, "key3 should be registered")
+
+	// Test 3: Register keys for different repositories
+	registerForkStatsCacheKey(2, "key_repo2")
+	keys1 := getForkStatsCacheKeysForTesting(1)
+	keys2 := getForkStatsCacheKeysForTesting(2)
+	assert.Len(t, keys1, 3, "repo 1 should still have 3 keys")
+	assert.Len(t, keys2, 1, "repo 2 should have 1 key")
+	_, exists = keys2["key_repo2"]
+	assert.True(t, exists, "key_repo2 should be registered for repo 2")
+
+	// Test 4: Registering the same key twice should not duplicate
+	registerForkStatsCacheKey(1, "key1")
+	keys = getForkStatsCacheKeysForTesting(1)
+	assert.Len(t, keys, 3, "duplicate key should not increase count")
+
+	// Test 5: Non-existent repository should return nil
+	keys = getForkStatsCacheKeysForTesting(999)
+	assert.Nil(t, keys, "non-existent repo should return nil")
+}
+
+// TestRegisterForkStatsCacheKeyConcurrent tests thread-safety of registerForkStatsCacheKey
+func TestRegisterForkStatsCacheKeyConcurrent(t *testing.T) {
+	// Clean up before and after test
+	clearForkStatsCacheKeysForTesting()
+	defer clearForkStatsCacheKeysForTesting()
+
+	const numGoroutines = 100
+	const keysPerGoroutine = 10
+	repoID := int64(1)
+
+	// Use a WaitGroup to synchronize goroutines
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	// Launch concurrent goroutines to register keys
+	for i := 0; i < numGoroutines; i++ {
+		go func(goroutineID int) {
+			defer wg.Done()
+			for j := 0; j < keysPerGoroutine; j++ {
+				key := fmt.Sprintf("key_%d_%d", goroutineID, j)
+				registerForkStatsCacheKey(repoID, key)
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Verify all keys were registered
+	keys := getForkStatsCacheKeysForTesting(repoID)
+	assert.NotNil(t, keys)
+	expectedKeys := numGoroutines * keysPerGoroutine
+	assert.Len(t, keys, expectedKeys, "all unique keys should be registered")
+}
+
+// TestInvalidateForkContributorStatsCache tests the InvalidateForkContributorStatsCache function
+func TestInvalidateForkContributorStatsCache(t *testing.T) {
+	// Clean up before and after test
+	clearForkStatsCacheKeysForTesting()
+	defer clearForkStatsCacheKeysForTesting()
+
+	// Create a mock cache for testing
+	mockCache, err := cache.NewStringCache(setting.Cache{})
+	assert.NoError(t, err)
+
+	// Save original cache and restore after test
+	originalCache := cache.GetCache()
+	cache.SetDefaultCache(mockCache)
+	defer cache.SetDefaultCache(originalCache)
+
+	// Test 1: Invalidate with no registered keys (should not panic)
+	InvalidateForkContributorStatsCache(999)
+	// No assertion needed - just verify no panic
+
+	// Test 2: Register keys and add data to cache, then invalidate
+	repoID := int64(1)
+	cacheKey1 := "ForkContributorStats/1/1234567890/90"
+	cacheKey2 := "ForkContributorStats/1/1234567890/30"
+
+	// Add data to cache
+	assert.NoError(t, mockCache.Put(cacheKey1, "test_data_1", 300))
+	assert.NoError(t, mockCache.Put(cacheKey2, "test_data_2", 300))
+
+	// Verify data exists in cache
+	_, exists := mockCache.Get(cacheKey1)
+	assert.True(t, exists, "cacheKey1 should exist before invalidation")
+	_, exists = mockCache.Get(cacheKey2)
+	assert.True(t, exists, "cacheKey2 should exist before invalidation")
+
+	// Register the cache keys
+	registerForkStatsCacheKey(repoID, cacheKey1)
+	registerForkStatsCacheKey(repoID, cacheKey2)
+
+	// Verify keys are registered
+	keys := getForkStatsCacheKeysForTesting(repoID)
+	assert.Len(t, keys, 2)
+
+	// Invalidate the cache
+	InvalidateForkContributorStatsCache(repoID)
+
+	// Verify cache entries are deleted
+	_, exists = mockCache.Get(cacheKey1)
+	assert.False(t, exists, "cacheKey1 should be deleted after invalidation")
+	_, exists = mockCache.Get(cacheKey2)
+	assert.False(t, exists, "cacheKey2 should be deleted after invalidation")
+
+	// Verify keys are cleared from tracking map
+	keys = getForkStatsCacheKeysForTesting(repoID)
+	assert.Nil(t, keys, "keys should be cleared after invalidation")
+
+	// Test 3: Verify other repositories' keys are not affected
+	otherRepoID := int64(2)
+	otherCacheKey := "ForkContributorStats/2/1234567890/90"
+	assert.NoError(t, mockCache.Put(otherCacheKey, "other_data", 300))
+	registerForkStatsCacheKey(otherRepoID, otherCacheKey)
+
+	// Invalidate repo 1 again (should be no-op now)
+	InvalidateForkContributorStatsCache(repoID)
+
+	// Verify repo 2's data is still intact
+	_, exists = mockCache.Get(otherCacheKey)
+	assert.True(t, exists, "other repo's cache should not be affected")
+	keys = getForkStatsCacheKeysForTesting(otherRepoID)
+	assert.Len(t, keys, 1, "other repo's keys should not be affected")
+}
+
+// TestInvalidateForkContributorStatsCacheNilCache tests behavior when cache is nil
+func TestInvalidateForkContributorStatsCacheNilCache(t *testing.T) {
+	// Clean up before and after test
+	clearForkStatsCacheKeysForTesting()
+	defer clearForkStatsCacheKeysForTesting()
+
+	// Save original cache and set to nil
+	originalCache := cache.GetCache()
+	cache.SetDefaultCache(nil)
+	defer cache.SetDefaultCache(originalCache)
+
+	// Register some keys
+	registerForkStatsCacheKey(1, "some_key")
+
+	// This should return early without panic
+	InvalidateForkContributorStatsCache(1)
+
+	// Keys should still be registered (not cleared because cache was nil)
+	// Note: The function returns early when cache is nil, so keys remain
+	keys := getForkStatsCacheKeysForTesting(1)
+	assert.Len(t, keys, 1, "keys should remain when cache is nil")
+}
+
+// TestForkContributorStatsCacheIntegration tests the complete cache lifecycle
+func TestForkContributorStatsCacheIntegration(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// Clean up before and after test
+	clearForkStatsCacheKeysForTesting()
+	defer clearForkStatsCacheKeysForTesting()
+
+	// Create a mock cache for testing
+	mockCache, err := cache.NewStringCache(setting.Cache{})
+	assert.NoError(t, err)
+
+	// Save original cache and restore after test
+	originalCache := cache.GetCache()
+	cache.SetDefaultCache(mockCache)
+	defer cache.SetDefaultCache(originalCache)
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+	// Step 1: Call getContributorStats to populate the cache
+	// Using a non-zero since time to simulate fork behavior
+	sinceTime := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	stats, err := getContributorStats(repo, 90, sinceTime)
+	assert.NoError(t, err)
+	assert.NotNil(t, stats)
+
+	// Step 2: Note about cache key registration
+	// The cache key format is: ForkContributorStats/{repoID}/{sinceUnix}/{days}
+	// The cache key may or may not be registered depending on whether
+	// the primary cache (GetContributorStats) returns data. If it returns
+	// ErrAwaitGeneration, the secondary cache won't be populated.
+	// We test the registration mechanism directly instead by manually
+	// registering and populating the cache.
+
+	// Step 3: Manually register and populate cache to test invalidation
+	testCacheKey := fmt.Sprintf("ForkContributorStats/%d/1234567890/90", repo.ID)
+	testStats := ContributorStats{TotalCount: 5, RecentCount: 3}
+	assert.NoError(t, mockCache.PutJSON(testCacheKey, testStats, 300))
+	registerForkStatsCacheKey(repo.ID, testCacheKey)
+
+	// Verify cache entry exists
+	var cachedStats ContributorStats
+	exists, cacheErr := mockCache.GetJSON(testCacheKey, &cachedStats)
+	assert.True(t, exists, "cache entry should exist")
+	assert.Nil(t, cacheErr)
+	assert.Equal(t, 5, cachedStats.TotalCount)
+	assert.Equal(t, 3, cachedStats.RecentCount)
+
+	// Verify key is registered
+	keys := getForkStatsCacheKeysForTesting(repo.ID)
+	assert.NotNil(t, keys)
+	_, keyExists := keys[testCacheKey]
+	assert.True(t, keyExists, "cache key should be registered")
+
+	// Step 4: Invalidate the cache (simulating a push event)
+	InvalidateForkContributorStatsCache(repo.ID)
+
+	// Step 5: Verify cache entry is deleted
+	exists, _ = mockCache.GetJSON(testCacheKey, &cachedStats)
+	assert.False(t, exists, "cache entry should be deleted after invalidation")
+
+	// Step 6: Verify keys are cleared
+	keys = getForkStatsCacheKeysForTesting(repo.ID)
+	assert.Nil(t, keys, "keys should be cleared after invalidation")
+
+	// Step 7: Verify getContributorStats still works after invalidation
+	stats, err = getContributorStats(repo, 90, sinceTime)
+	assert.NoError(t, err)
+	assert.NotNil(t, stats)
+}
+
+// TestInvalidateForkContributorStatsCacheMultipleKeys tests invalidation with many keys
+func TestInvalidateForkContributorStatsCacheMultipleKeys(t *testing.T) {
+	// Clean up before and after test
+	clearForkStatsCacheKeysForTesting()
+	defer clearForkStatsCacheKeysForTesting()
+
+	// Create a mock cache for testing
+	mockCache, err := cache.NewStringCache(setting.Cache{})
+	assert.NoError(t, err)
+
+	// Save original cache and restore after test
+	originalCache := cache.GetCache()
+	cache.SetDefaultCache(mockCache)
+	defer cache.SetDefaultCache(originalCache)
+
+	repoID := int64(1)
+	numKeys := 50
+
+	// Register many keys and add data to cache
+	for i := 0; i < numKeys; i++ {
+		cacheKey := fmt.Sprintf("ForkContributorStats/%d/%d/%d", repoID, i, 90)
+		assert.NoError(t, mockCache.Put(cacheKey, fmt.Sprintf("data_%d", i), 300))
+		registerForkStatsCacheKey(repoID, cacheKey)
+	}
+
+	// Verify all keys are registered
+	keys := getForkStatsCacheKeysForTesting(repoID)
+	assert.Len(t, keys, numKeys)
+
+	// Verify all cache entries exist
+	for i := 0; i < numKeys; i++ {
+		cacheKey := fmt.Sprintf("ForkContributorStats/%d/%d/%d", repoID, i, 90)
+		_, exists := mockCache.Get(cacheKey)
+		assert.True(t, exists, "cache entry %d should exist", i)
+	}
+
+	// Invalidate all at once
+	InvalidateForkContributorStatsCache(repoID)
+
+	// Verify all cache entries are deleted
+	for i := 0; i < numKeys; i++ {
+		cacheKey := fmt.Sprintf("ForkContributorStats/%d/%d/%d", repoID, i, 90)
+		_, exists := mockCache.Get(cacheKey)
+		assert.False(t, exists, "cache entry %d should be deleted", i)
+	}
+
+	// Verify keys are cleared
+	keys = getForkStatsCacheKeysForTesting(repoID)
+	assert.Nil(t, keys)
 }
