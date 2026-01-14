@@ -478,19 +478,28 @@ func getForkSinceTime(repo *repo_model.Repository) time.Time {
 
 // hasCommitsAfter checks if a contributor has any commits after the given time.
 // Returns true if since is zero (no filtering) or if the contributor has at least one commit after since.
-// Note: Due to weekly granularity of contributor data, this may over-count contributors
-// for forks created mid-week by including contributors who only have pre-fork commits
-// within the same calendar week as the fork creation.
+//
+// Due to weekly granularity of contributor data, we use a conservative approach:
+// we only count contributors whose commit weeks START after the fork creation time.
+// This may under-count contributors who have post-fork commits in a week that started
+// before the fork, but it ensures we don't over-count by including contributors who
+// only have pre-fork commits in a week that overlaps with the fork creation.
+//
+// Trade-off: For forks created mid-week, contributors who made commits both before
+// and after the fork in that same week will be excluded. This is acceptable because:
+// 1. It's a conservative approach that avoids inflating fork contributor counts
+// 2. The edge case only affects forks created mid-week with active contributors
+// 3. Accurate per-commit filtering would require querying git directly
 func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
 	if since.IsZero() {
 		return true
 	}
 	for _, week := range contributor.Weeks {
 		weekTime := time.UnixMilli(week.Week)
-		// Check if the week ends after since (week end = week start + 7 days)
-		// This ensures we include weeks that overlap with the post-fork period
-		weekEndTime := weekTime.AddDate(0, 0, 7)
-		if weekEndTime.After(since) && week.Commits > 0 {
+		// Check if the week starts after since (conservative approach)
+		// This ensures we only count contributors with commits in weeks that
+		// definitively started after the fork creation time
+		if !weekTime.Before(since) && week.Commits > 0 {
 			return true
 		}
 	}

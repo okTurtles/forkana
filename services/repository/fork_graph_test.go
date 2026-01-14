@@ -247,7 +247,9 @@ func TestGetContributorStats(t *testing.T) {
 }
 
 func TestHasCommitsAfter(t *testing.T) {
-	// Test the hasCommitsAfter helper function directly to verify mid-week edge case handling
+	// Test the hasCommitsAfter helper function directly to verify conservative filtering
+	// The function uses week START time for comparison (not week end) to avoid over-counting
+	// contributors who only have pre-fork commits in a week that overlaps with fork creation.
 
 	// Create a mock contributor with commits in a specific week
 	// Week starts on Sunday 2024-01-07 (Unix timestamp in milliseconds)
@@ -270,6 +272,7 @@ func TestHasCommitsAfter(t *testing.T) {
 		"Zero since time should return true")
 
 	// Test 2: Since time before the week should return true
+	// Week starts Jan 7, since is Jan 1 -> week starts after since
 	beforeWeek := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC) // Before the week
 	assert.True(t, hasCommitsAfter(contributor, beforeWeek),
 		"Since time before the week should return true")
@@ -279,26 +282,33 @@ func TestHasCommitsAfter(t *testing.T) {
 	assert.False(t, hasCommitsAfter(contributor, afterWeek),
 		"Since time after the week ends should return false")
 
-	// Test 4: MID-WEEK EDGE CASE - Since time mid-week (Wednesday) should return true
+	// Test 4: MID-WEEK EDGE CASE - Since time mid-week (Wednesday) should return FALSE
 	// This is the key edge case: fork created on Wednesday, commits exist in that week
-	// The week started Sunday (before fork) but ends Sunday (after fork)
-	// So commits made Thursday-Saturday should be counted
+	// The week started Sunday (BEFORE fork), so we conservatively exclude this contributor
+	// to avoid over-counting contributors who may only have pre-fork commits.
+	// Trade-off: We may under-count contributors who have post-fork commits in this week.
 	midWeek := time.Date(2024, 1, 10, 12, 0, 0, 0, time.UTC) // Wednesday noon
-	assert.True(t, hasCommitsAfter(contributor, midWeek),
-		"Mid-week since time should return true because week ends after since")
+	assert.False(t, hasCommitsAfter(contributor, midWeek),
+		"Mid-week since time should return false because week started before since (conservative)")
 
 	// Test 5: Since time exactly at week end should return false
-	// Week ends at the start of the next Sunday (2024-01-14 00:00:00)
+	// Week starts Jan 7, since is Jan 14 -> week starts before since
 	weekEnd := time.Date(2024, 1, 14, 0, 0, 0, 0, time.UTC)
 	assert.False(t, hasCommitsAfter(contributor, weekEnd),
 		"Since time at week end should return false")
 
-	// Test 6: Since time just before week end should return true
+	// Test 6: Since time just before week end should return false (conservative)
+	// Week starts Jan 7, since is Jan 13 23:59:59 -> week starts before since
 	justBeforeWeekEnd := time.Date(2024, 1, 13, 23, 59, 59, 0, time.UTC) // Saturday 23:59:59
-	assert.True(t, hasCommitsAfter(contributor, justBeforeWeekEnd),
-		"Since time just before week end should return true")
+	assert.False(t, hasCommitsAfter(contributor, justBeforeWeekEnd),
+		"Since time just before week end should return false (week started before since)")
 
-	// Test 7: Contributor with no commits should return false
+	// Test 7: Since time exactly at week start should return true
+	// Week starts Jan 7, since is Jan 7 -> !weekTime.Before(since) = true
+	assert.True(t, hasCommitsAfter(contributor, weekStart),
+		"Since time exactly at week start should return true")
+
+	// Test 8: Contributor with no commits should return false
 	emptyContributor := &ContributorData{
 		Name:         "Empty User",
 		TotalCommits: 0,
@@ -311,6 +321,28 @@ func TestHasCommitsAfter(t *testing.T) {
 	}
 	assert.False(t, hasCommitsAfter(emptyContributor, beforeWeek),
 		"Contributor with no commits should return false even with valid since time")
+
+	// Test 9: Contributor with commits in a later week should return true
+	// even if they also have commits in an earlier week
+	laterWeekStart := time.Date(2024, 1, 14, 0, 0, 0, 0, time.UTC) // Next Sunday
+	laterWeekStartMs := laterWeekStart.UnixMilli()
+	multiWeekContributor := &ContributorData{
+		Name:         "Multi-week User",
+		TotalCommits: 10,
+		Weeks: map[int64]*WeekData{
+			weekStartMs: {
+				Week:    weekStartMs,
+				Commits: 5, // Pre-fork week
+			},
+			laterWeekStartMs: {
+				Week:    laterWeekStartMs,
+				Commits: 5, // Post-fork week
+			},
+		},
+	}
+	// Fork created mid-week Jan 10 -> later week (Jan 14) starts after fork
+	assert.True(t, hasCommitsAfter(multiWeekContributor, midWeek),
+		"Contributor with commits in a later week should return true")
 }
 
 func TestProcessingTimeout(t *testing.T) {
