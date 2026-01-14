@@ -586,13 +586,20 @@ func getContributorStats(repo *repo_model.Repository, days int, since time.Time)
 		return &cachedStats, nil
 	}
 
-	// Secondary cache miss - prevent stampede by checking if another goroutine is computing
-	// If another goroutine is already computing this key, we compute without caching
-	// to avoid blocking. The first goroutine will populate the cache.
+	// Secondary cache miss - prevent stampede by checking if another goroutine is computing.
+	// LoadOrStore atomically checks if a key exists and stores a value if not.
+	// Returns (value, true) if key already existed, (value, false) if we stored it.
+	//
+	// Stampede prevention strategy:
+	// - First goroutine: acquires lock (shouldCache=true), computes, caches result, releases lock
+	// - Concurrent goroutines: see lock held (shouldCache=false), compute without caching
+	//
+	// This avoids blocking while ensuring exactly one goroutine populates the cache.
 	_, alreadyComputing := forkStatsComputeLock.LoadOrStore(secondaryCacheKey, struct{}{})
 	shouldCache := !alreadyComputing
 	if shouldCache {
-		// We acquired the lock - ensure we release it when done
+		// This defer will execute when getContributorStats returns, regardless of
+		// which return path is taken. This ensures the lock is always released.
 		defer forkStatsComputeLock.Delete(secondaryCacheKey)
 	}
 
