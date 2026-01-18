@@ -22,7 +22,7 @@
 				{{svg "octicon-file"}} Article<span class="not-mobile"> view</span>
 				</a>
 		</div>
-			<button class="ui button tiny compact tw-h-9" id="compare-mode-button" onclick="this.classList.toggle('primary'); window.dispatchEvent(new CustomEvent('repo:compare-mode-toggle'));">
+			<button class="ui button tiny compact tw-h-9" id="compare-mode-button" data-global-click="onCompareModeToggle">
 				{{svg "octicon-file-diff" 16}}<span class="not-mobile tw-ml-1">Compare</span>
 			</button>
 		</overflow-menu>

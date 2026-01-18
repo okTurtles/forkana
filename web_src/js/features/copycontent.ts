@@ -52,3 +52,10 @@ export function initCopyContent() {
     }
   });
 }
+
+export function initCompareModeToggle() {
+  registerGlobalEventFunc('click', 'onCompareModeToggle', (btn: HTMLElement) => {
+    btn.classList.toggle('primary');
+    window.dispatchEvent(new CustomEvent('repo:compare-mode-toggle'));
+  });
+}
