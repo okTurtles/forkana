@@ -87,7 +87,7 @@ func TestSubmitChangeRequest(t *testing.T) {
 		htmlDoc := NewHTMLParser(t, resp.Body)
 
 		// Try to submit without submit_change_request in form or query
-		// This should fail because the middleware checks the form value
+		// This should fail because the middleware checks the form value (query params AND form data)
 		form := map[string]string{
 			"_csrf":         htmlDoc.GetCSRF(),
 			"last_commit":   htmlDoc.GetInputValueByName("last_commit"),
