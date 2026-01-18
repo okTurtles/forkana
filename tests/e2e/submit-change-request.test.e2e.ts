@@ -30,7 +30,7 @@ test.describe('Submit Change Request Workflow', () => {
       await expect(forkButton).toBeVisible({timeout: 10000});
 
       // Submit Change Request button for submit-change-request workflow
-      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+      const submitCRButton = page.locator('#pre-submit-changes-button');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       // Button should contain appropriate text
@@ -77,7 +77,7 @@ test.describe('Submit Change Request Workflow', () => {
       await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
       await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
-      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+      const submitCRButton = page.locator('#pre-submit-changes-button');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       // Scroll button into view and ensure it's clickable
@@ -89,16 +89,19 @@ test.describe('Submit Change Request Workflow', () => {
       // eslint-disable-next-line playwright/no-force-option
       await submitCRButton.click({force: true});
 
-      // Modal should appear with confirmation message (longer timeout for mobile)
-      const modal = page.locator('.ui.g-modal-confirm.modal.visible');
+      // Modal should appear with title/description form (longer timeout for mobile)
+      const modal = page.locator('#submit-change-request-modal.visible');
       await expect(modal).toBeVisible({timeout: 10000});
 
-      // Modal should have appropriate header and content
+      // Modal should have appropriate header and form fields
       const header = modal.locator('.header');
       await expect(header).toContainText(/Change Request|Submit/i);
 
-      const content = modal.locator('.content');
-      await expect(content).toBeVisible();
+      // Modal should have title and description fields
+      const titleInput = modal.locator('#modal-cr-title');
+      await expect(titleInput).toBeVisible();
+      const descriptionInput = modal.locator('#modal-cr-description');
+      await expect(descriptionInput).toBeVisible();
 
       await context.close();
     });
@@ -115,7 +118,7 @@ test.describe('Submit Change Request Workflow', () => {
 
       const urlBefore = page.url();
 
-      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+      const submitCRButton = page.locator('#pre-submit-changes-button');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       // Scroll button into view and ensure it's clickable
@@ -127,7 +130,7 @@ test.describe('Submit Change Request Workflow', () => {
       // eslint-disable-next-line playwright/no-force-option
       await submitCRButton.click({force: true});
 
-      const modal = page.locator('.ui.g-modal-confirm.modal.visible');
+      const modal = page.locator('#submit-change-request-modal.visible');
       await expect(modal).toBeVisible({timeout: 10000});
 
       // Wait for modal animation to complete
@@ -160,7 +163,7 @@ test.describe('Submit Change Request Workflow', () => {
       await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
       await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
-      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+      const submitCRButton = page.locator('#pre-submit-changes-button');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       // Focus the button and press Enter
@@ -168,7 +171,7 @@ test.describe('Submit Change Request Workflow', () => {
       await page.keyboard.press('Enter');
 
       // Modal should open
-      const modal = page.locator('.ui.g-modal-confirm.modal.visible');
+      const modal = page.locator('#submit-change-request-modal.visible');
       await expect(modal).toBeVisible({timeout: 5000});
 
       await context.close();
@@ -184,7 +187,7 @@ test.describe('Submit Change Request Workflow', () => {
       await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
       await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
-      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+      const submitCRButton = page.locator('#pre-submit-changes-button');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       // Scroll button into view and ensure it's clickable
@@ -196,7 +199,7 @@ test.describe('Submit Change Request Workflow', () => {
       // eslint-disable-next-line playwright/no-force-option
       await submitCRButton.click({force: true});
 
-      const modal = page.locator('.ui.g-modal-confirm.modal.visible');
+      const modal = page.locator('#submit-change-request-modal.visible');
       await expect(modal).toBeVisible({timeout: 10000});
 
       // Press Escape to close
@@ -216,7 +219,7 @@ test.describe('Submit Change Request Workflow', () => {
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+      const submitCRButton = page.locator('#pre-submit-changes-button');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
 
       // Button should have a tooltip explaining the action
@@ -270,7 +273,7 @@ test.describe('Submit Change Request vs Fork Button', () => {
     await expect(forkButton).toContainText(/Fork/i);
 
     // Submit Change Request button should also be visible (for in-repo CR workflow)
-    const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+    const submitCRButton = page.locator('#pre-submit-changes-button');
     await expect(submitCRButton).toBeVisible({timeout: 10000});
     await expect(submitCRButton).toContainText(/Submit/i);
 
