@@ -588,10 +588,10 @@ func TestRegisterForkStatsCacheKeyConcurrent(t *testing.T) {
 	wg.Add(numGoroutines)
 
 	// Launch concurrent goroutines to register keys
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(goroutineID int) {
 			defer wg.Done()
-			for j := 0; j < keysPerGoroutine; j++ {
+			for j := range keysPerGoroutine {
 				key := fmt.Sprintf("key_%d_%d", goroutineID, j)
 				registerForkStatsCacheKey(repoID, key)
 			}
@@ -792,7 +792,7 @@ func TestInvalidateForkContributorStatsCacheMultipleKeys(t *testing.T) {
 	numKeys := 50
 
 	// Register many keys and add data to cache
-	for i := 0; i < numKeys; i++ {
+	for i := range numKeys {
 		cacheKey := fmt.Sprintf("ForkContributorStats/%d/%d/%d", repoID, i, 90)
 		assert.NoError(t, mockCache.Put(cacheKey, fmt.Sprintf("data_%d", i), 300))
 		registerForkStatsCacheKey(repoID, cacheKey)
@@ -803,7 +803,7 @@ func TestInvalidateForkContributorStatsCacheMultipleKeys(t *testing.T) {
 	assert.Len(t, keys, numKeys)
 
 	// Verify all cache entries exist
-	for i := 0; i < numKeys; i++ {
+	for i := range numKeys {
 		cacheKey := fmt.Sprintf("ForkContributorStats/%d/%d/%d", repoID, i, 90)
 		_, exists := mockCache.Get(cacheKey)
 		assert.True(t, exists, "cache entry %d should exist", i)
@@ -813,7 +813,7 @@ func TestInvalidateForkContributorStatsCacheMultipleKeys(t *testing.T) {
 	InvalidateForkContributorStatsCache(repoID)
 
 	// Verify all cache entries are deleted
-	for i := 0; i < numKeys; i++ {
+	for i := range numKeys {
 		cacheKey := fmt.Sprintf("ForkContributorStats/%d/%d/%d", repoID, i, 90)
 		_, exists := mockCache.Get(cacheKey)
 		assert.False(t, exists, "cache entry %d should be deleted", i)
