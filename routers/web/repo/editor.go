@@ -596,6 +596,12 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 // from that branch to the default branch (same-repo CR, no fork involved).
 // Returns the created change request, or nil if an error occurred.
 func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileForm, parsed *preparedEditorCommitForm[*forms.EditRepoFileForm]) *issues_model.PullRequest {
+	// Verify user is authenticated (defense-in-depth, middleware should already handle this)
+	if ctx.Doer == nil {
+		ctx.JSONError(ctx.Tr("error.not_found"))
+		return nil
+	}
+
 	targetRepo := ctx.Repo.Repository
 
 	// Check if the repository allows pull requests
