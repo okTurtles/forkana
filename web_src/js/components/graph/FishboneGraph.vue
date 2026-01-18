@@ -1078,7 +1078,17 @@ function goToComparison() {
   if (compareSelection.value.length !== 2) return;
 
   const [first, second] = compareSelection.value;
-  const subject = first.repoSubject || second.repoSubject || props.subject || '';
+  const subject1 = first.repoSubject || props.subject || '';
+  const subject2 = second.repoSubject || props.subject || '';
+
+  // Validate both articles have the same subject
+  if (subject1 !== subject2) {
+    console.warn('FishboneGraph: cannot compare articles from different subjects');
+    announceToScreenReader('Cannot compare articles from different subjects.');
+    return;
+  }
+
+  const subject = subject1;
   const owner1 = first.repoOwner || first.fullName?.split('/')[0] || '';
   const owner2 = second.repoOwner || second.fullName?.split('/')[0] || '';
 
