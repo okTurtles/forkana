@@ -613,7 +613,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	// Validate that content is provided
 	if !form.Content.Has() {
-		ctx.JSONError(ctx.Tr("repo.editor.fail_to_update_file", form.TreePath, "content is required"))
+		ctx.JSONError(ctx.Tr("repo.editor.content_required"))
 		return nil
 	}
 
