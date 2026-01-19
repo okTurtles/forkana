@@ -1094,6 +1094,7 @@ function goToComparison() {
 
   if (!subject || !owner1 || !owner2) {
     console.warn('FishboneGraph: missing data for comparison URL');
+    announceToScreenReader('Unable to compare: missing article information.');
     return;
   }
 
