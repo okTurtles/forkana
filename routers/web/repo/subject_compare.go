@@ -313,14 +313,22 @@ func convertToGiteaDiff(lines1, lines2 []string, name1, name2 string) *gitdiff.D
 	}
 }
 
+// Line type constants for SplitViewLine
+const (
+	LineTypeEmpty = iota
+	LineTypePlain
+	LineTypeAdd
+	LineTypeDel
+)
+
 // SplitViewLine represents a paired line for side-by-side diff rendering
 type SplitViewLine struct {
 	LeftIdx      int
 	LeftContent  string
-	LeftType     int // 0=empty, 1=plain, 2=add, 3=del
+	LeftType     int
 	RightIdx     int
 	RightContent string
-	RightType    int // 0=empty, 1=plain, 2=add, 3=del
+	RightType    int
 }
 
 // buildDiffLines creates DiffLines by comparing two sets of lines
@@ -426,10 +434,10 @@ func pairDiffLinesForSplitView(diffLines []*gitdiff.DiffLine) []SplitViewLine {
 			result = append(result, SplitViewLine{
 				LeftIdx:      line.LeftIdx,
 				LeftContent:  content,
-				LeftType:     1, // plain
+				LeftType:     LineTypePlain,
 				RightIdx:     line.RightIdx,
 				RightContent: content,
-				RightType:    1, // plain
+				RightType:    LineTypePlain,
 			})
 			i++
 			continue
@@ -463,9 +471,9 @@ func pairDiffLinesForSplitView(diffLines []*gitdiff.DiffLine) []SplitViewLine {
 				}
 				pair.LeftIdx = delLines[j].LeftIdx
 				pair.LeftContent = content
-				pair.LeftType = 3 // del
+				pair.LeftType = LineTypeDel
 			} else {
-				pair.LeftType = 0 // empty
+				pair.LeftType = LineTypeEmpty
 			}
 
 			// Right side (addition)
@@ -476,9 +484,9 @@ func pairDiffLinesForSplitView(diffLines []*gitdiff.DiffLine) []SplitViewLine {
 				}
 				pair.RightIdx = addLines[j].RightIdx
 				pair.RightContent = content
-				pair.RightType = 2 // add
+				pair.RightType = LineTypeAdd
 			} else {
-				pair.RightType = 0 // empty
+				pair.RightType = LineTypeEmpty
 			}
 
 			result = append(result, pair)
