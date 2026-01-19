@@ -223,3 +223,135 @@ func TestBuildDiffLines(t *testing.T) {
 		})
 	}
 }
+
+func TestPairDiffLinesForSplitView(t *testing.T) {
+	tests := []struct {
+		name       string
+		lines1     []string
+		lines2     []string
+		wantPairs  int
+		checkPairs func(t *testing.T, pairs []SplitViewLine)
+	}{
+		{
+			name:      "identical content shows plain lines on both sides",
+			lines1:    []string{"line1", "line2", "line3"},
+			lines2:    []string{"line1", "line2", "line3"},
+			wantPairs: 3,
+			checkPairs: func(t *testing.T, pairs []SplitViewLine) {
+				for i, pair := range pairs {
+					assert.Equal(t, LineTypePlain, pair.LeftType, "pair %d left should be plain", i)
+					assert.Equal(t, LineTypePlain, pair.RightType, "pair %d right should be plain", i)
+					assert.Equal(t, pair.LeftContent, pair.RightContent, "pair %d content should match", i)
+				}
+			},
+		},
+		{
+			name:      "single line modification pairs delete with add",
+			lines1:    []string{"line1", "old line", "line3"},
+			lines2:    []string{"line1", "new line", "line3"},
+			wantPairs: 3,
+			checkPairs: func(t *testing.T, pairs []SplitViewLine) {
+				// First and last should be plain
+				assert.Equal(t, LineTypePlain, pairs[0].LeftType)
+				assert.Equal(t, LineTypePlain, pairs[0].RightType)
+				assert.Equal(t, LineTypePlain, pairs[2].LeftType)
+				assert.Equal(t, LineTypePlain, pairs[2].RightType)
+				// Middle should be del/add pair
+				assert.Equal(t, LineTypeDel, pairs[1].LeftType)
+				assert.Equal(t, LineTypeAdd, pairs[1].RightType)
+				assert.Equal(t, "old line", pairs[1].LeftContent)
+				assert.Equal(t, "new line", pairs[1].RightContent)
+			},
+		},
+		{
+			name:      "multiple consecutive changes pair correctly",
+			lines1:    []string{"a", "b", "c"},
+			lines2:    []string{"x", "y", "z"},
+			wantPairs: 3,
+			checkPairs: func(t *testing.T, pairs []SplitViewLine) {
+				// All should be del/add pairs
+				for i, pair := range pairs {
+					assert.Equal(t, LineTypeDel, pair.LeftType, "pair %d left should be del", i)
+					assert.Equal(t, LineTypeAdd, pair.RightType, "pair %d right should be add", i)
+				}
+				assert.Equal(t, "a", pairs[0].LeftContent)
+				assert.Equal(t, "x", pairs[0].RightContent)
+				assert.Equal(t, "b", pairs[1].LeftContent)
+				assert.Equal(t, "y", pairs[1].RightContent)
+				assert.Equal(t, "c", pairs[2].LeftContent)
+				assert.Equal(t, "z", pairs[2].RightContent)
+			},
+		},
+		{
+			name:      "more deletions than additions shows empty on right",
+			lines1:    []string{"a", "b", "c"},
+			lines2:    []string{"x"},
+			wantPairs: 3,
+			checkPairs: func(t *testing.T, pairs []SplitViewLine) {
+				// First pair: del/add
+				assert.Equal(t, LineTypeDel, pairs[0].LeftType)
+				assert.Equal(t, LineTypeAdd, pairs[0].RightType)
+				// Remaining pairs: del/empty
+				assert.Equal(t, LineTypeDel, pairs[1].LeftType)
+				assert.Equal(t, LineTypeEmpty, pairs[1].RightType)
+				assert.Equal(t, LineTypeDel, pairs[2].LeftType)
+				assert.Equal(t, LineTypeEmpty, pairs[2].RightType)
+			},
+		},
+		{
+			name:      "more additions than deletions shows empty on left",
+			lines1:    []string{"a"},
+			lines2:    []string{"x", "y", "z"},
+			wantPairs: 3,
+			checkPairs: func(t *testing.T, pairs []SplitViewLine) {
+				// First pair: del/add
+				assert.Equal(t, LineTypeDel, pairs[0].LeftType)
+				assert.Equal(t, LineTypeAdd, pairs[0].RightType)
+				// Remaining pairs: empty/add
+				assert.Equal(t, LineTypeEmpty, pairs[1].LeftType)
+				assert.Equal(t, LineTypeAdd, pairs[1].RightType)
+				assert.Equal(t, LineTypeEmpty, pairs[2].LeftType)
+				assert.Equal(t, LineTypeAdd, pairs[2].RightType)
+			},
+		},
+		{
+			name:      "interleaved changes with context",
+			lines1:    []string{"header", "old1", "middle", "old2", "footer"},
+			lines2:    []string{"header", "new1", "middle", "new2", "footer"},
+			wantPairs: 5,
+			checkPairs: func(t *testing.T, pairs []SplitViewLine) {
+				// header: plain
+				assert.Equal(t, LineTypePlain, pairs[0].LeftType)
+				assert.Equal(t, "header", pairs[0].LeftContent)
+				// old1->new1: del/add
+				assert.Equal(t, LineTypeDel, pairs[1].LeftType)
+				assert.Equal(t, LineTypeAdd, pairs[1].RightType)
+				assert.Equal(t, "old1", pairs[1].LeftContent)
+				assert.Equal(t, "new1", pairs[1].RightContent)
+				// middle: plain
+				assert.Equal(t, LineTypePlain, pairs[2].LeftType)
+				assert.Equal(t, "middle", pairs[2].LeftContent)
+				// old2->new2: del/add
+				assert.Equal(t, LineTypeDel, pairs[3].LeftType)
+				assert.Equal(t, LineTypeAdd, pairs[3].RightType)
+				assert.Equal(t, "old2", pairs[3].LeftContent)
+				assert.Equal(t, "new2", pairs[3].RightContent)
+				// footer: plain
+				assert.Equal(t, LineTypePlain, pairs[4].LeftType)
+				assert.Equal(t, "footer", pairs[4].LeftContent)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diffLines := buildDiffLines(tt.lines1, tt.lines2)
+			pairs := pairDiffLinesForSplitView(diffLines)
+
+			assert.Len(t, pairs, tt.wantPairs, "unexpected number of pairs")
+			if tt.checkPairs != nil {
+				tt.checkPairs(t, pairs)
+			}
+		})
+	}
+}
