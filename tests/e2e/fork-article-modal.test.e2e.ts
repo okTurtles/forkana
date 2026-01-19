@@ -305,8 +305,12 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
 
-      const submitCRButton = page.locator('#submit-changes-button[data-submit-change-request="true"]');
+      // Submit Change Request button (opens modal for PR creation)
+      const submitCRButton = page.locator('#pre-submit-changes-button');
       await expect(submitCRButton).toBeVisible({timeout: 10000});
+
+      // Verify button text contains "Submit Changes"
+      await expect(submitCRButton).toContainText(/Submit Changes/i);
 
       await context.close();
     });
