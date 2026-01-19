@@ -1098,7 +1098,8 @@ function goToComparison() {
     return;
   }
 
-  const compareUrl = `/subject/${encodeURIComponent(subject)}/compare/${encodeURIComponent(owner1)}...${encodeURIComponent(owner2)}`;
+  const suburl = window.config.suburl || '';
+  const compareUrl = `${suburl}/subject/${encodeURIComponent(subject)}/compare/${encodeURIComponent(owner1)}...${encodeURIComponent(owner2)}`;
   window.location.href = compareUrl;
 }
 </script>
