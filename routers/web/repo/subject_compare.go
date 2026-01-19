@@ -12,6 +12,7 @@ import (
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
+	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
@@ -118,17 +119,44 @@ func CompareReadme(ctx *context.Context) {
 		return
 	}
 
-	// Get README content from each repo's default branch HEAD
-	readme1Content, readme1Name, err := getReadmeContent(ctx, repo1)
-	if err != nil && !isReadmeNotFoundError(err) {
-		ctx.ServerError("getReadmeContent (repo1)", err)
-		return
+	// Open git repositories once and reuse handles for both README content and contributor count
+	// This reduces I/O operations from 4 git repository opens (2 per repo) to 2 (1 per repo)
+	var readme1Content, readme1Name string
+	var readme2Content, readme2Name string
+	var repo1ContributorCount, repo2ContributorCount int64
+
+	// Process repo1: open once, get README and contributor count
+	if !repo1.IsEmpty {
+		gitRepo1, err := gitrepo.OpenRepository(ctx, repo1)
+		if err != nil {
+			ctx.ServerError("OpenRepository (repo1)", err)
+			return
+		}
+		defer gitRepo1.Close()
+
+		readme1Content, readme1Name, err = getReadmeContent(gitRepo1, repo1)
+		if err != nil && !isReadmeNotFoundError(err) {
+			ctx.ServerError("getReadmeContent (repo1)", err)
+			return
+		}
+		repo1ContributorCount = getContributorCount(gitRepo1, repo1)
 	}
 
-	readme2Content, readme2Name, err := getReadmeContent(ctx, repo2)
-	if err != nil && !isReadmeNotFoundError(err) {
-		ctx.ServerError("getReadmeContent (repo2)", err)
-		return
+	// Process repo2: open once, get README and contributor count
+	if !repo2.IsEmpty {
+		gitRepo2, err := gitrepo.OpenRepository(ctx, repo2)
+		if err != nil {
+			ctx.ServerError("OpenRepository (repo2)", err)
+			return
+		}
+		defer gitRepo2.Close()
+
+		readme2Content, readme2Name, err = getReadmeContent(gitRepo2, repo2)
+		if err != nil && !isReadmeNotFoundError(err) {
+			ctx.ServerError("getReadmeContent (repo2)", err)
+			return
+		}
+		repo2ContributorCount = getContributorCount(gitRepo2, repo2)
 	}
 
 	// Generate diff using diffmatchpatch
@@ -136,10 +164,6 @@ func CompareReadme(ctx *context.Context) {
 
 	// Generate paired lines for side-by-side/mirror comparison view
 	splitViewLines := generateSplitViewLines(readme1Content, readme2Content)
-
-	// Get contributor counts for both repos
-	repo1ContributorCount := getContributorCount(ctx, repo1)
-	repo2ContributorCount := getContributorCount(ctx, repo2)
 
 	// Set up template data
 	ctx.Data["Title"] = "Point of Contention: " + owner1 + " vs " + owner2
@@ -191,18 +215,12 @@ func isReadmeNotFoundError(err error) bool {
 }
 
 // getReadmeContent retrieves the README content from a repository's default branch HEAD
-func getReadmeContent(ctx *context.Context, repo *repo_model.Repository) (content, filename string, err error) {
+// It accepts an already-opened git repository handle to avoid redundant I/O operations
+func getReadmeContent(gitRepo *git.Repository, repo *repo_model.Repository) (content, filename string, err error) {
 	// Handle empty repositories
 	if repo.IsEmpty {
 		return "", "", ErrReadmeNotFound
 	}
-
-	// Open the git repository
-	gitRepo, err := gitrepo.OpenRepository(ctx, repo)
-	if err != nil {
-		return "", "", err
-	}
-	defer gitRepo.Close()
 
 	// Get the default branch commit
 	commit, err := gitRepo.GetBranchCommit(repo.DefaultBranch)
@@ -222,17 +240,11 @@ func getReadmeContent(ctx *context.Context, repo *repo_model.Repository) (conten
 }
 
 // getContributorCount retrieves the contributor count for a repository
-func getContributorCount(ctx *context.Context, repo *repo_model.Repository) int64 {
+// It accepts an already-opened git repository handle to avoid redundant I/O operations
+func getContributorCount(gitRepo *git.Repository, repo *repo_model.Repository) int64 {
 	if repo.IsEmpty {
 		return 0
 	}
-
-	gitRepo, err := gitrepo.OpenRepository(ctx, repo)
-	if err != nil {
-		log.Warn("Failed to open repository %s for contributor count: %v", repo.FullName(), err)
-		return 0
-	}
-	defer gitRepo.Close()
 
 	count, err := gitRepo.GetContributorCount(repo.DefaultBranch)
 	if err != nil {
