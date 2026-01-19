@@ -251,9 +251,8 @@ func TestGetRepositoriesBySubjectIDAndOwners_CaseInsensitive(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	// Should find the repo regardless of case
-	if len(repos) > 0 {
-		assert.Equal(t, repo1.ID, repos[0].ID)
-	}
+	assert.Len(t, repos, 1, "Should find repo regardless of case")
+	assert.Equal(t, repo1.ID, repos[0].ID)
 }
 
 func TestGetRepositoriesBySubjectIDAndOwners_NoMatches(t *testing.T) {
