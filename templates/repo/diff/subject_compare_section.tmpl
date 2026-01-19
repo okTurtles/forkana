@@ -23,8 +23,8 @@
 		<div class="tw-p-2">
 			<strong>
 				{{svg "octicon-repo-forked" 16}}
-				<a href="/{{$Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> /
-				<a href="/article/{{$Repo1.Owner.Name}}/{{$Subject.Name}}">{{$Subject.Name}}</a>
+				<a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> /
+				<a href="{{AppSubUrl}}/article/{{PathEscape $Repo1.Owner.Name}}/{{PathEscapeSegments $Subject.Name}}">{{$Subject.Name}}</a>
 			</strong>
 			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}} · Last update: {{$Repo1.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
 		</div>
@@ -33,8 +33,8 @@
 		<div class="tw-p-2">
 			<strong>
 				{{svg "octicon-repo-forked" 16}}
-				<a href="/{{$Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> /
-				<a href="/article/{{$Repo2.Owner.Name}}/{{$Subject.Name}}">{{$Subject.Name}}</a>
+				<a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> /
+				<a href="{{AppSubUrl}}/article/{{PathEscape $Repo2.Owner.Name}}/{{PathEscapeSegments $Subject.Name}}">{{$Subject.Name}}</a>
 			</strong>
 			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}} · Last update: {{$Repo2.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
 		</div>
@@ -90,7 +90,7 @@
 				<td colspan="3" class="diff-mobile-header-cell">
 					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
 						{{svg "octicon-repo-forked" 14}}
-						<strong><a href="/{{$Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> / {{$Subject.Name}}</strong>
+						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> / {{$Subject.Name}}</strong>
 						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}}</span>
 					</div>
 				</td>
@@ -112,7 +112,7 @@
 				<td colspan="3" class="diff-mobile-header-cell">
 					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
 						{{svg "octicon-repo-forked" 14}}
-						<strong><a href="/{{$Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> / {{$Subject.Name}}</strong>
+						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> / {{$Subject.Name}}</strong>
 						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}}</span>
 					</div>
 				</td>
@@ -136,7 +136,7 @@
 				<td colspan="3" class="diff-mobile-header-cell">
 					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
 						{{svg "octicon-repo-forked" 14}}
-						<strong><a href="/{{$Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> / {{$Subject.Name}}</strong>
+						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> / {{$Subject.Name}}</strong>
 						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}}</span>
 					</div>
 				</td>
@@ -164,7 +164,7 @@
 				<td colspan="3" class="diff-mobile-header-cell">
 					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
 						{{svg "octicon-repo-forked" 14}}
-						<strong><a href="/{{$Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> / {{$Subject.Name}}</strong>
+						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> / {{$Subject.Name}}</strong>
 						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}}</span>
 					</div>
 				</td>
