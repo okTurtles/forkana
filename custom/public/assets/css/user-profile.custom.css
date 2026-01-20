@@ -131,6 +131,11 @@
   margin-bottom: 16px;
 }
 
+/* Scoped padding for overflow-menu items (instead of global base.css change) */
+.user.profile overflow-menu .overflow-menu-items {
+  padding: 0 1rem;
+}
+
 .user.profile overflow-menu .item {
   padding: 10px 16px !important;
   margin: 0 !important;
