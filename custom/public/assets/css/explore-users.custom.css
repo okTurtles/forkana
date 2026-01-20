@@ -56,12 +56,13 @@
   font-weight: 500;
 }
 
-.page-content.explore.users .flex-item .flex-item-body {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: flex-start !important;
-  flex-wrap: nowrap !important;
-  gap: 2px !important;
+/* User meta info - increased specificity to avoid !important */
+html body .page-content.explore.users .flex-list .flex-item .flex-item-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  gap: 2px;
   font-size: 13px;
   color: var(--color-text-light-2);
 }
