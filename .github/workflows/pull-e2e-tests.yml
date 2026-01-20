@@ -39,3 +39,4 @@ jobs:
             tests/e2e/test-artifacts/
             tests/e2e/reports/
           retention-days: 30
+          if-no-files-found: ignore
