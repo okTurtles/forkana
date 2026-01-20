@@ -16,9 +16,6 @@ func ChangeReviewContentToText(x *xorm.Engine) error {
 	case schemas.ORACLE:
 		_, err := x.Exec("ALTER TABLE review MODIFY content TEXT")
 		return err
-	case schemas.MSSQL:
-		_, err := x.Exec("ALTER TABLE review ALTER COLUMN content TEXT")
-		return err
 	case schemas.POSTGRES:
 		_, err := x.Exec("ALTER TABLE review ALTER COLUMN content TYPE TEXT")
 		return err

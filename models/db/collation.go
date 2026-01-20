@@ -41,20 +41,6 @@ func findAvailableCollationsMySQL(x *xorm.Engine) (ret container.Set[string], er
 	return ret, nil
 }
 
-func findAvailableCollationsMSSQL(x *xorm.Engine) (ret container.Set[string], err error) {
-	var res []struct {
-		Name string
-	}
-	if err = x.SQL("SELECT * FROM sys.fn_helpcollations() WHERE name LIKE '%[_]CS[_]AS%'").Find(&res); err != nil {
-		return nil, err
-	}
-	ret = make(container.Set[string], len(res))
-	for _, r := range res {
-		ret.Add(r.Name)
-	}
-	return ret, nil
-}
-
 func CheckCollations(x *xorm.Engine) (*CheckCollationsResult, error) {
 	dbTables, err := x.DBMetas()
 	if err != nil {
@@ -84,18 +70,6 @@ func CheckCollations(x *xorm.Engine) (*CheckCollationsResult, error) {
 			// MariaDB adds the "utf8mb4_" prefix, eg: "utf8mb4_uca1400_as_cs", but not the name "uca1400_as_cs" in "SHOW COLLATION"
 			// At the moment, it's safe to ignore the database difference, just trim the prefix and compare. It could be fixed easily if there is any problem in the future.
 			return a == b || strings.TrimPrefix(a, "utf8mb4_") == strings.TrimPrefix(b, "utf8mb4_")
-		}
-	} else if x.Dialect().URI().DBType == schemas.MSSQL {
-		if _, err = x.SQL("SELECT DATABASEPROPERTYEX(DB_NAME(), 'Collation')").Get(&res.DatabaseCollation); err != nil {
-			return nil, err
-		}
-		res.IsCollationCaseSensitive = func(s string) bool {
-			return strings.HasSuffix(s, "_CS_AS")
-		}
-		candidateCollations = []string{"Latin1_General_CS_AS"}
-		res.AvailableCollation, err = findAvailableCollationsMSSQL(x)
-		if err != nil {
-			return nil, err
 		}
 	} else {
 		return nil, nil
@@ -147,10 +121,6 @@ func alterDatabaseCollation(x *xorm.Engine, collation string) error {
 	if x.Dialect().URI().DBType == schemas.MYSQL {
 		_, err := x.Exec("ALTER DATABASE CHARACTER SET utf8mb4 COLLATE " + collation)
 		return err
-	} else if x.Dialect().URI().DBType == schemas.MSSQL {
-		// TODO: MSSQL has many limitations on changing database collation, it could fail in many cases.
-		_, err := x.Exec("ALTER DATABASE CURRENT COLLATE " + collation)
-		return err
 	}
 	return errors.New("unsupported database type")
 }
@@ -166,12 +136,10 @@ func preprocessDatabaseCollation(x *xorm.Engine) {
 	}
 
 	// try to alter database collation to expected if the database is empty, it might fail in some cases (and it isn't necessary to succeed)
-	// at the moment, there is no "altering" solution for MSSQL, site admin should manually change the database collation
 	if !r.CollationEquals(r.DatabaseCollation, r.ExpectedCollation) && r.ExistingTableNumber == 0 {
 		if err = alterDatabaseCollation(x, r.ExpectedCollation); err != nil {
 			log.Error("Failed to change database collation to %q: %v", r.ExpectedCollation, err)
 		} else {
-			_, _ = x.Exec("SELECT 1") // after "altering", MSSQL's session becomes invalid, so make a simple query to "refresh" the session
 			if r, err = CheckCollations(x); err != nil {
 				log.Error("Failed to check database collation again after altering: %v", err) // impossible case
 				return

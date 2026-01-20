@@ -143,17 +143,6 @@ func AddSubjectSlugColumn(x *xorm.Engine) error {
 			return fmt.Errorf("failed to add UNIQUE constraint to slug: %w", err)
 		}
 
-	case "mssql":
-		// MSSQL: Alter column and add constraint
-		if _, err := sess.Exec(`ALTER TABLE [subject] ALTER COLUMN [slug] VARCHAR(255) NOT NULL`); err != nil {
-			_ = sess.Rollback()
-			return fmt.Errorf("failed to add NOT NULL constraint to slug: %w", err)
-		}
-		if _, err := sess.Exec(`ALTER TABLE [subject] ADD CONSTRAINT [UQE_subject_slug] UNIQUE ([slug])`); err != nil {
-			_ = sess.Rollback()
-			return fmt.Errorf("failed to add UNIQUE constraint to slug: %w", err)
-		}
-
 	default:
 		_ = sess.Rollback()
 		return fmt.Errorf("unsupported database type: %s", dialect)
@@ -172,10 +161,6 @@ func AddSubjectSlugColumn(x *xorm.Engine) error {
 	case "sqlite3":
 		// Try to drop the unique index on name (ignore error if it doesn't exist)
 		_, _ = sess.Exec(`DROP INDEX IF EXISTS "UQE_subject_name"`)
-
-	case "mssql":
-		// Try to drop the unique constraint on name (ignore error if it doesn't exist)
-		_, _ = sess.Exec(`ALTER TABLE [subject] DROP CONSTRAINT IF EXISTS [UQE_subject_name]`)
 	}
 
 	if err := sess.Commit(); err != nil {

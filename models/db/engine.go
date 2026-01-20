@@ -13,9 +13,8 @@ import (
 
 	"xorm.io/xorm"
 
-	_ "github.com/go-sql-driver/mysql"  // Needed for the MySQL driver
-	_ "github.com/lib/pq"               // Needed for the Postgresql driver
-	_ "github.com/microsoft/go-mssqldb" // Needed for the MSSQL driver
+	_ "github.com/go-sql-driver/mysql" // Needed for the MySQL driver
+	_ "github.com/lib/pq"              // Needed for the Postgresql driver
 )
 
 var (

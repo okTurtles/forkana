@@ -4,10 +4,7 @@
 package v1_22
 
 import (
-	"fmt"
-
 	"xorm.io/xorm"
-	"xorm.io/xorm/schemas"
 )
 
 func AddCombinedIndexToIssueUser(x *xorm.Engine) error {
@@ -23,18 +20,12 @@ func AddCombinedIndexToIssueUser(x *xorm.Engine) error {
 		return err
 	}
 	for _, issueUser := range duplicatedIssueUsers {
-		if x.Dialect().URI().DBType == schemas.MSSQL {
-			if _, err := x.Exec(fmt.Sprintf("delete from issue_user where id in (SELECT top %d id FROM issue_user WHERE issue_id = ? and uid = ?)", issueUser.Cnt-1), issueUser.IssueID, issueUser.UID); err != nil {
-				return err
-			}
-		} else {
-			var ids []int64
-			if err := x.SQL("SELECT id FROM issue_user WHERE issue_id = ? and uid = ? limit ?", issueUser.IssueID, issueUser.UID, issueUser.Cnt-1).Find(&ids); err != nil {
-				return err
-			}
-			if _, err := x.Table("issue_user").In("id", ids).Delete(); err != nil {
-				return err
-			}
+		var ids []int64
+		if err := x.SQL("SELECT id FROM issue_user WHERE issue_id = ? and uid = ? limit ?", issueUser.IssueID, issueUser.UID, issueUser.Cnt-1).Find(&ids); err != nil {
+			return err
+		}
+		if _, err := x.Table("issue_user").In("id", ids).Delete(); err != nil {
+			return err
 		}
 	}
 

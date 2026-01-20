@@ -18,8 +18,6 @@ func ChangeU2FCounterType(x *xorm.Engine) error {
 		_, err = x.Exec("ALTER TABLE `u2f_registration` MODIFY `counter` BIGINT")
 	case schemas.POSTGRES:
 		_, err = x.Exec("ALTER TABLE `u2f_registration` ALTER COLUMN `counter` SET DATA TYPE bigint")
-	case schemas.MSSQL:
-		_, err = x.Exec("ALTER TABLE `u2f_registration` ALTER COLUMN `counter` BIGINT")
 	}
 
 	if err != nil {

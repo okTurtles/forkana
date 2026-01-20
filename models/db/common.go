@@ -47,8 +47,6 @@ func BuilderDialect() string {
 		return builder.SQLITE
 	case setting.Database.Type.IsPostgreSQL():
 		return builder.POSTGRES
-	case setting.Database.Type.IsMSSQL():
-		return builder.MSSQL
 	default:
 		return ""
 	}

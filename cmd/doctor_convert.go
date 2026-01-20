@@ -18,7 +18,7 @@ import (
 var cmdDoctorConvert = &cli.Command{
 	Name:        "convert",
 	Usage:       "Convert the database",
-	Description: "A command to convert an existing MySQL database from utf8 to utf8mb4 or MSSQL database from varchar to nvarchar",
+	Description: "A command to convert an existing MySQL database from utf8 to utf8mb4",
 	Action:      runDoctorConvert,
 }
 
@@ -33,21 +33,14 @@ func runDoctorConvert(ctx context.Context, cmd *cli.Command) error {
 	log.Info("Log path: %s", setting.Log.RootPath)
 	log.Info("Configuration file: %s", setting.CustomConf)
 
-	switch {
-	case setting.Database.Type.IsMySQL():
+	if setting.Database.Type.IsMySQL() {
 		if err := db.ConvertDatabaseTable(); err != nil {
 			log.Fatal("Failed to convert database & table: %v", err)
 			return err
 		}
 		fmt.Println("Converted successfully, please confirm your database's character set is now utf8mb4")
-	case setting.Database.Type.IsMSSQL():
-		if err := db.ConvertVarcharToNVarchar(); err != nil {
-			log.Fatal("Failed to convert database from varchar to nvarchar: %v", err)
-			return err
-		}
-		fmt.Println("Converted successfully, please confirm your database's all columns character is NVARCHAR now")
-	default:
-		fmt.Println("This command can only be used with a MySQL or MSSQL database")
+	} else {
+		fmt.Println("This command can only be used with a MySQL database")
 	}
 
 	return nil

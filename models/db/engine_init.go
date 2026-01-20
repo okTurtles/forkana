@@ -42,11 +42,8 @@ func newXORMEngine() (*xorm.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	switch setting.Database.Type {
-	case "mysql":
+	if setting.Database.Type == "mysql" {
 		engine.Dialect().SetParams(map[string]string{"rowFormat": "DYNAMIC"})
-	case "mssql":
-		engine.Dialect().SetParams(map[string]string{"DEFAULT_VARCHAR": "nvarchar"})
 	}
 	engine.SetSchema(setting.Database.Schema)
 	return engine, nil

@@ -84,17 +84,6 @@ func RecreateTable(sess *xorm.Session, bean any) error {
 	if len(newTableColumns) == 0 {
 		return errors.New("no columns in new table")
 	}
-	hasID := false
-	for _, column := range newTableColumns {
-		hasID = hasID || (column.IsPrimaryKey && column.IsAutoIncrement)
-	}
-
-	if hasID && setting.Database.Type.IsMSSQL() {
-		if _, err := sess.Exec(fmt.Sprintf("SET IDENTITY_INSERT `%s` ON", tempTableName)); err != nil {
-			log.Error("Unable to set identity insert for table %s. Error: %v", tempTableName, err)
-			return err
-		}
-	}
 
 	sqlStringBuilder := &strings.Builder{}
 	_, _ = sqlStringBuilder.WriteString("INSERT INTO `")
@@ -141,13 +130,6 @@ func RecreateTable(sess *xorm.Session, bean any) error {
 	if _, err := sess.Exec(sqlStringBuilder.String()); err != nil {
 		log.Error("Unable to set copy data in to temp table %s. Error: %v", tempTableName, err)
 		return err
-	}
-
-	if hasID && setting.Database.Type.IsMSSQL() {
-		if _, err := sess.Exec(fmt.Sprintf("SET IDENTITY_INSERT `%s` OFF", tempTableName)); err != nil {
-			log.Error("Unable to switch off identity insert for table %s. Error: %v", tempTableName, err)
-			return err
-		}
 	}
 
 	switch {
@@ -292,18 +274,6 @@ func RecreateTable(sess *xorm.Session, bean any) error {
 				}
 			}
 		}
-	case setting.Database.Type.IsMSSQL():
-		// MSSQL will drop all the constraints on the old table
-		if _, err := sess.Exec(fmt.Sprintf("DROP TABLE `%s`", tableName)); err != nil {
-			log.Error("Unable to drop old table %s. Error: %v", tableName, err)
-			return err
-		}
-
-		// MSSQL sp_rename will move all the constraints from the temporary table to the new table
-		if _, err := sess.Exec(fmt.Sprintf("sp_rename `%s`,`%s`", tempTableName, tableName)); err != nil {
-			log.Error("Unable to rename %s to %s. Error: %v", tempTableName, tableName, err)
-			return err
-		}
 	default:
 		log.Fatal("Unrecognized DB")
 	}
@@ -439,40 +409,6 @@ func DropTableColumns(sess *xorm.Session, tableName string, columnNames ...strin
 		if _, err := sess.Exec(fmt.Sprintf("ALTER TABLE `%s` %s", tableName, cols)); err != nil {
 			return fmt.Errorf("Drop table `%s` columns %v: %v", tableName, columnNames, err)
 		}
-	case setting.Database.Type.IsMSSQL():
-		cols := ""
-		for _, col := range columnNames {
-			if cols != "" {
-				cols += ", "
-			}
-			cols += "`" + strings.ToLower(col) + "`"
-		}
-		sql := fmt.Sprintf("SELECT Name FROM sys.default_constraints WHERE parent_object_id = OBJECT_ID('%[1]s') AND parent_column_id IN (SELECT column_id FROM sys.columns WHERE LOWER(name) IN (%[2]s) AND object_id = OBJECT_ID('%[1]s'))",
-			tableName, strings.ReplaceAll(cols, "`", "'"))
-		constraints := make([]string, 0)
-		if err := sess.SQL(sql).Find(&constraints); err != nil {
-			return fmt.Errorf("Find constraints: %v", err)
-		}
-		for _, constraint := range constraints {
-			if _, err := sess.Exec(fmt.Sprintf("ALTER TABLE `%s` DROP CONSTRAINT `%s`", tableName, constraint)); err != nil {
-				return fmt.Errorf("Drop table `%s` default constraint `%s`: %v", tableName, constraint, err)
-			}
-		}
-		sql = fmt.Sprintf("SELECT DISTINCT Name FROM sys.indexes INNER JOIN sys.index_columns ON indexes.index_id = index_columns.index_id AND indexes.object_id = index_columns.object_id WHERE indexes.object_id = OBJECT_ID('%[1]s') AND index_columns.column_id IN (SELECT column_id FROM sys.columns WHERE LOWER(name) IN (%[2]s) AND object_id = OBJECT_ID('%[1]s'))",
-			tableName, strings.ReplaceAll(cols, "`", "'"))
-		constraints = make([]string, 0)
-		if err := sess.SQL(sql).Find(&constraints); err != nil {
-			return fmt.Errorf("Find constraints: %v", err)
-		}
-		for _, constraint := range constraints {
-			if _, err := sess.Exec(fmt.Sprintf("DROP INDEX `%[2]s` ON `%[1]s`", tableName, constraint)); err != nil {
-				return fmt.Errorf("Drop index `%[2]s` on `%[1]s`: %v", tableName, constraint, err)
-			}
-		}
-
-		if _, err := sess.Exec(fmt.Sprintf("ALTER TABLE `%s` DROP COLUMN %s", tableName, cols)); err != nil {
-			return fmt.Errorf("Drop table `%s` columns %v: %v", tableName, columnNames, err)
-		}
 	default:
 		log.Fatal("Unrecognized DB")
 	}
@@ -482,33 +418,6 @@ func DropTableColumns(sess *xorm.Session, tableName string, columnNames ...strin
 
 // ModifyColumn will modify column's type or other property. SQLITE is not supported
 func ModifyColumn(x *xorm.Engine, tableName string, col *schemas.Column) error {
-	var indexes map[string]*schemas.Index
-	var err error
-	// MSSQL have to remove index at first, otherwise alter column will fail
-	// ref. https://sqlzealots.com/2018/05/09/error-message-the-index-is-dependent-on-column-alter-table-alter-column-failed-because-one-or-more-objects-access-this-column/
-	if x.Dialect().URI().DBType == schemas.MSSQL {
-		indexes, err = x.Dialect().GetIndexes(x.DB(), context.Background(), tableName)
-		if err != nil {
-			return err
-		}
-
-		for _, index := range indexes {
-			_, err = x.Exec(x.Dialect().DropIndexSQL(tableName, index))
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	defer func() {
-		for _, index := range indexes {
-			_, err = x.Exec(x.Dialect().CreateIndexSQL(tableName, index))
-			if err != nil {
-				log.Error("Create index %s on table %s failed: %v", index.Name, tableName, err)
-			}
-		}
-	}()
-
 	alterSQL := x.Dialect().ModifyColumnSQL(tableName, col)
 	if _, err := x.Exec(alterSQL); err != nil {
 		return err
@@ -606,21 +515,6 @@ func deleteDB() error {
 				return err
 			}
 			return nil
-		}
-	case setting.Database.Type.IsMSSQL():
-		host, port := setting.ParseMSSQLHostPort(setting.Database.Host)
-		db, err := sql.Open("mssql", fmt.Sprintf("server=%s; port=%s; database=%s; user id=%s; password=%s;",
-			host, port, "master", setting.Database.User, setting.Database.Passwd))
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-
-		if _, err = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS [%s]", setting.Database.Name)); err != nil {
-			return err
-		}
-		if _, err = db.Exec(fmt.Sprintf("CREATE DATABASE [%s]", setting.Database.Name)); err != nil {
-			return err
 		}
 	}
 
