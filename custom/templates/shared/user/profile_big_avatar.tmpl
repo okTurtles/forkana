@@ -62,7 +62,7 @@
 			{{end}}
 			{{if .ContextUser.Website}}
 				{{/* Only render website link if it starts with http:// or https:// to prevent XSS */}}
-				{{if or (HasPrefix .ContextUser.Website "http://") (HasPrefix .ContextUser.Website "https://")}}
+				{{if or (StringUtils.HasPrefix .ContextUser.Website "http://") (StringUtils.HasPrefix .ContextUser.Website "https://")}}
 				<li>
 					{{svg "octicon-link"}}
 					<a target="_blank" rel="noopener noreferrer me" href="{{.ContextUser.Website}}">{{.ContextUser.Website}}</a>
