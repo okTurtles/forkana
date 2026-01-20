@@ -27,7 +27,12 @@ export default {
   retries: env.CI ? 2 : 0,
 
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: [['list'], ['html', {outputFolder: 'tests/e2e/reports/', open: 'never'}]],
+  reporter: [
+    ['list'],
+    ['html', {outputFolder: 'tests/e2e/reports/', open: 'never'}],
+    // GitHub reporter creates annotations in PR "Files Changed" tab on test failures
+    ...(env.CI ? [['github'] as const] : []),
+  ],
 
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
