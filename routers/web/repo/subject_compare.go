@@ -1,0 +1,509 @@
+// Copyright 2025 okTurtles Foundation. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+package repo
+
+import (
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+
+	access_model "code.gitea.io/gitea/models/perm/access"
+	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unit"
+	"code.gitea.io/gitea/modules/git"
+	"code.gitea.io/gitea/modules/gitrepo"
+	"code.gitea.io/gitea/modules/log"
+	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/services/context"
+	"code.gitea.io/gitea/services/gitdiff"
+
+	"github.com/sergi/go-diff/diffmatchpatch"
+)
+
+// readmeFileNames is the list of README file names to search for, in priority order
+var readmeFileNames = []string{
+	"README.md",
+	"readme.md",
+	"Readme.md",
+	"README.MD",
+	"README",
+	"readme",
+	"README.txt",
+	"readme.txt",
+}
+
+// CompareReadme shows a diff between README files from two repos in the same subject
+func CompareReadme(ctx *context.Context) {
+	subjectName := ctx.PathParam("subjectname")
+	ownerParams := ctx.PathParam("owners")
+
+	// Parse owner1...owner2 format
+	owner1, owner2, err := parseOwnerParams(ownerParams)
+	if err != nil {
+		ctx.NotFound(err)
+		return
+	}
+
+	// Prevent self-comparison
+	if strings.EqualFold(owner1, owner2) {
+		ctx.NotFound(errors.New("cannot compare repository with itself"))
+		return
+	}
+
+	// Get subject
+	subject, err := repo_model.GetSubjectByName(ctx, subjectName)
+	if err != nil {
+		if repo_model.IsErrSubjectNotExist(err) {
+			ctx.NotFound(err)
+		} else {
+			ctx.ServerError("GetSubjectByName", err)
+		}
+		return
+	}
+
+	// Get both repositories
+	repos, err := repo_model.GetRepositoriesBySubjectIDAndOwners(ctx, subject.ID, []string{owner1, owner2})
+	if err != nil {
+		ctx.ServerError("GetRepositoriesBySubjectIDAndOwners", err)
+		return
+	}
+
+	// Find repo1 and repo2 from the results
+	var repo1, repo2 *repo_model.Repository
+	for _, r := range repos {
+		if strings.EqualFold(r.OwnerName, owner1) {
+			repo1 = r
+			repo1.SubjectRelation = subject
+		} else if strings.EqualFold(r.OwnerName, owner2) {
+			repo2 = r
+			repo2.SubjectRelation = subject
+		}
+	}
+
+	// Check if both repositories were found
+	if repo1 == nil {
+		ctx.NotFound(repo_model.ErrRepoNotExist{OwnerName: owner1})
+		return
+	}
+	if repo2 == nil {
+		ctx.NotFound(repo_model.ErrRepoNotExist{OwnerName: owner2})
+		return
+	}
+
+	// Load owners for both repos
+	if err := repos.LoadOwners(ctx); err != nil {
+		ctx.ServerError("LoadOwners", err)
+		return
+	}
+
+	// Check permissions for both repos
+	perm1, err := access_model.GetUserRepoPermission(ctx, repo1, ctx.Doer)
+	if err != nil {
+		ctx.ServerError("GetUserRepoPermission (repo1)", err)
+		return
+	}
+	if !perm1.CanRead(unit.TypeCode) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	perm2, err := access_model.GetUserRepoPermission(ctx, repo2, ctx.Doer)
+	if err != nil {
+		ctx.ServerError("GetUserRepoPermission (repo2)", err)
+		return
+	}
+	if !perm2.CanRead(unit.TypeCode) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Open git repositories once and reuse handles for both README content and contributor count
+	// This reduces I/O operations from 4 git repository opens (2 per repo) to 2 (1 per repo)
+	var readme1Content, readme1Name string
+	var readme2Content, readme2Name string
+	var repo1ContributorCount, repo2ContributorCount int64
+
+	// Process repo1: open once, get README and contributor count
+	if !repo1.IsEmpty {
+		gitRepo1, err := gitrepo.OpenRepository(ctx, repo1)
+		if err != nil {
+			ctx.ServerError("OpenRepository (repo1)", err)
+			return
+		}
+		defer gitRepo1.Close()
+
+		readme1Content, readme1Name, err = getReadmeContent(gitRepo1, repo1)
+		if err != nil && !isReadmeNotFoundError(err) {
+			ctx.ServerError("getReadmeContent (repo1)", err)
+			return
+		}
+		repo1ContributorCount = getContributorCount(gitRepo1, repo1)
+	}
+
+	// Process repo2: open once, get README and contributor count
+	if !repo2.IsEmpty {
+		gitRepo2, err := gitrepo.OpenRepository(ctx, repo2)
+		if err != nil {
+			ctx.ServerError("OpenRepository (repo2)", err)
+			return
+		}
+		defer gitRepo2.Close()
+
+		readme2Content, readme2Name, err = getReadmeContent(gitRepo2, repo2)
+		if err != nil && !isReadmeNotFoundError(err) {
+			ctx.ServerError("getReadmeContent (repo2)", err)
+			return
+		}
+		repo2ContributorCount = getContributorCount(gitRepo2, repo2)
+	}
+
+	// Generate diff using diffmatchpatch
+	diff := generateReadmeDiff(readme1Content, readme2Content, readme1Name, readme2Name)
+
+	// Generate paired lines for side-by-side/mirror comparison view
+	splitViewLines := generateSplitViewLines(readme1Content, readme2Content)
+
+	// Set up template data
+	ctx.Data["Title"] = "Point of Contention: " + owner1 + " vs " + owner2
+	ctx.Data["Subject"] = subject
+	ctx.Data["Repo1"] = repo1
+	ctx.Data["Repo2"] = repo2
+	ctx.Data["Repo1ContributorCount"] = repo1ContributorCount
+	ctx.Data["Repo2ContributorCount"] = repo2ContributorCount
+	ctx.Data["Owner1"] = owner1
+	ctx.Data["Owner2"] = owner2
+	ctx.Data["Readme1Content"] = readme1Content
+	ctx.Data["Readme2Content"] = readme2Content
+	ctx.Data["Readme1Name"] = readme1Name
+	ctx.Data["Readme2Name"] = readme2Name
+	ctx.Data["Diff"] = diff
+	ctx.Data["SplitViewLines"] = splitViewLines
+	ctx.Data["IsSplitStyle"] = true
+	ctx.Data["PageIsSubjectCompare"] = true
+
+	// Set Repository data needed by repo/header template for view tabs
+	ctx.Data["Repository"] = repo1
+	ctx.Data["IsBubbleView"] = false
+	ctx.Data["IsTableView"] = false
+	ctx.Data["IsArticleView"] = false
+
+	ctx.HTML(http.StatusOK, "repo/diff/subject_compare")
+}
+
+// parseOwnerParams parses the "owner1...owner2" format from the URL
+func parseOwnerParams(params string) (owner1, owner2 string, err error) {
+	parts := strings.Split(params, "...")
+	if len(parts) != 2 {
+		return "", "", errors.New("invalid owner format, expected owner1...owner2")
+	}
+	owner1 = strings.TrimSpace(parts[0])
+	owner2 = strings.TrimSpace(parts[1])
+	if owner1 == "" || owner2 == "" {
+		return "", "", errors.New("owner names cannot be empty")
+	}
+	return owner1, owner2, nil
+}
+
+// ErrReadmeNotFound is returned when no README file is found in the repository
+var ErrReadmeNotFound = errors.New("README file not found")
+
+// isReadmeNotFoundError checks if the error is a README not found error
+func isReadmeNotFoundError(err error) bool {
+	return errors.Is(err, ErrReadmeNotFound)
+}
+
+// getReadmeContent retrieves the README content from a repository's default branch HEAD
+// It accepts an already-opened git repository handle to avoid redundant I/O operations
+func getReadmeContent(gitRepo *git.Repository, repo *repo_model.Repository) (content, filename string, err error) {
+	// Handle empty repositories
+	if repo.IsEmpty {
+		return "", "", ErrReadmeNotFound
+	}
+
+	// Get the default branch commit
+	commit, err := gitRepo.GetBranchCommit(repo.DefaultBranch)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Try to find README file
+	for _, name := range readmeFileNames {
+		fileContent, err := commit.GetFileContent(name, int(setting.UI.MaxDisplayFileSize))
+		if err == nil {
+			return fileContent, name, nil
+		}
+	}
+
+	return "", "", ErrReadmeNotFound
+}
+
+// getContributorCount retrieves the contributor count for a repository
+// It accepts an already-opened git repository handle to avoid redundant I/O operations
+func getContributorCount(gitRepo *git.Repository, repo *repo_model.Repository) int64 {
+	if repo.IsEmpty {
+		return 0
+	}
+
+	count, err := gitRepo.GetContributorCount(repo.DefaultBranch)
+	if err != nil {
+		log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
+		return 0
+	}
+	return count
+}
+
+// generateReadmeDiff generates a diff between two README contents
+func generateReadmeDiff(content1, content2, name1, name2 string) *gitdiff.Diff {
+	// Split content into lines for line-based diff
+	lines1 := strings.Split(content1, "\n")
+	lines2 := strings.Split(content2, "\n")
+
+	// Convert to Gitea's diff format
+	return convertToGiteaDiff(lines1, lines2, name1, name2)
+}
+
+// generateSplitViewLines generates paired lines for side-by-side rendering
+func generateSplitViewLines(content1, content2 string) []SplitViewLine {
+	// Split content into lines for line-based diff
+	lines1 := strings.Split(content1, "\n")
+	lines2 := strings.Split(content2, "\n")
+
+	// Build diff lines first
+	diffLines := buildDiffLines(lines1, lines2)
+
+	// Pair them for split view
+	return pairDiffLinesForSplitView(diffLines)
+}
+
+// convertToGiteaDiff converts line arrays to Gitea's Diff structure
+func convertToGiteaDiff(lines1, lines2 []string, name1, name2 string) *gitdiff.Diff {
+	// Determine the filename to use
+	filename := "README.md"
+	if name1 != "" {
+		filename = name1
+	} else if name2 != "" {
+		filename = name2
+	}
+
+	// Build DiffLines from the line-based comparison
+	diffLines := buildDiffLines(lines1, lines2)
+
+	// Create a single section with all lines
+	section := &gitdiff.DiffSection{
+		FileName: filename,
+		Lines:    diffLines,
+	}
+
+	// Calculate additions and deletions
+	additions := 0
+	deletions := 0
+	for _, line := range diffLines {
+		switch line.Type {
+		case gitdiff.DiffLineAdd:
+			additions++
+		case gitdiff.DiffLineDel:
+			deletions++
+		}
+	}
+
+	// Create the DiffFile
+	diffFile := &gitdiff.DiffFile{
+		Name:      filename,
+		OldName:   filename,
+		Addition:  additions,
+		Deletion:  deletions,
+		Type:      gitdiff.DiffFileChange,
+		Sections:  []*gitdiff.DiffSection{section},
+		IsCreated: name1 == "" && name2 != "",
+		IsDeleted: name1 != "" && name2 == "",
+	}
+
+	return &gitdiff.Diff{
+		Files: []*gitdiff.DiffFile{diffFile},
+	}
+}
+
+// Line type constants for SplitViewLine
+const (
+	LineTypeEmpty = iota
+	LineTypePlain
+	LineTypeAdd
+	LineTypeDel
+)
+
+// SplitViewLine represents a paired line for side-by-side diff rendering
+type SplitViewLine struct {
+	LeftIdx      int
+	LeftContent  string
+	LeftType     int
+	RightIdx     int
+	RightContent string
+	RightType    int
+}
+
+// buildDiffLines creates DiffLines by comparing two sets of lines
+func buildDiffLines(lines1, lines2 []string) []*gitdiff.DiffLine {
+	// Use a simple line-by-line diff algorithm (LCS-based)
+	diffLines := make([]*gitdiff.DiffLine, 0)
+
+	// Add section header
+	diffLines = append(diffLines, &gitdiff.DiffLine{
+		Type:    gitdiff.DiffLineSection,
+		Content: "@@ -1," + strconv.Itoa(len(lines1)) + " +1," + strconv.Itoa(len(lines2)) + " @@",
+		SectionInfo: &gitdiff.DiffLineSectionInfo{
+			Path:          "README.md",
+			LastLeftIdx:   0,
+			LastRightIdx:  0,
+			LeftIdx:       1,
+			RightIdx:      1,
+			LeftHunkSize:  len(lines1),
+			RightHunkSize: len(lines2),
+		},
+	})
+
+	// Use Myers diff algorithm via diffmatchpatch for line-level comparison
+	dmp := diffmatchpatch.New()
+
+	// Join lines with a unique separator for line-based diff
+	text1 := strings.Join(lines1, "\n")
+	text2 := strings.Join(lines2, "\n")
+
+	// Get line-based diff
+	a, b, lineArray := dmp.DiffLinesToChars(text1, text2)
+	diffs := dmp.DiffMain(a, b, false)
+	diffs = dmp.DiffCharsToLines(diffs, lineArray)
+	diffs = dmp.DiffCleanupSemantic(diffs)
+
+	leftIdx := 1
+	rightIdx := 1
+
+	for _, d := range diffs {
+		lines := strings.SplitSeq(strings.TrimSuffix(d.Text, "\n"), "\n")
+		for line := range lines {
+			if line == "" && d.Text == "" {
+				continue
+			}
+			switch d.Type {
+			case diffmatchpatch.DiffEqual:
+				diffLines = append(diffLines, &gitdiff.DiffLine{
+					LeftIdx:  leftIdx,
+					RightIdx: rightIdx,
+					Type:     gitdiff.DiffLinePlain,
+					Content:  " " + line,
+					Match:    0,
+				})
+				leftIdx++
+				rightIdx++
+			case diffmatchpatch.DiffDelete:
+				diffLines = append(diffLines, &gitdiff.DiffLine{
+					LeftIdx:  leftIdx,
+					RightIdx: 0,
+					Type:     gitdiff.DiffLineDel,
+					Content:  "-" + line,
+					Match:    -1,
+				})
+				leftIdx++
+			case diffmatchpatch.DiffInsert:
+				diffLines = append(diffLines, &gitdiff.DiffLine{
+					LeftIdx:  0,
+					RightIdx: rightIdx,
+					Type:     gitdiff.DiffLineAdd,
+					Content:  "+" + line,
+					Match:    -1,
+				})
+				rightIdx++
+			}
+		}
+	}
+
+	return diffLines
+}
+
+// pairDiffLinesForSplitView pairs delete/add lines for side-by-side rendering
+// It groups consecutive delete lines with consecutive add lines so they appear
+// on the same row in the mirror comparison view
+func pairDiffLinesForSplitView(diffLines []*gitdiff.DiffLine) []SplitViewLine {
+	result := make([]SplitViewLine, 0)
+	i := 0
+
+	for i < len(diffLines) {
+		line := diffLines[i]
+
+		// Skip section headers
+		if line.Type == gitdiff.DiffLineSection {
+			i++
+			continue
+		}
+
+		// Handle plain/equal lines - show on both sides
+		if line.Type == gitdiff.DiffLinePlain {
+			content := line.Content
+			if len(content) > 0 && content[0] == ' ' {
+				content = content[1:]
+			}
+			result = append(result, SplitViewLine{
+				LeftIdx:      line.LeftIdx,
+				LeftContent:  content,
+				LeftType:     LineTypePlain,
+				RightIdx:     line.RightIdx,
+				RightContent: content,
+				RightType:    LineTypePlain,
+			})
+			i++
+			continue
+		}
+
+		// Collect consecutive delete lines
+		delLines := make([]*gitdiff.DiffLine, 0)
+		for i < len(diffLines) && diffLines[i].Type == gitdiff.DiffLineDel {
+			delLines = append(delLines, diffLines[i])
+			i++
+		}
+
+		// Collect consecutive add lines that follow
+		addLines := make([]*gitdiff.DiffLine, 0)
+		for i < len(diffLines) && diffLines[i].Type == gitdiff.DiffLineAdd {
+			addLines = append(addLines, diffLines[i])
+			i++
+		}
+
+		// Pair up delete and add lines
+		maxLen := max(len(addLines), len(delLines))
+
+		for j := range maxLen {
+			pair := SplitViewLine{}
+
+			// Left side (deletion)
+			if j < len(delLines) {
+				content := delLines[j].Content
+				if len(content) > 0 && content[0] == '-' {
+					content = content[1:]
+				}
+				pair.LeftIdx = delLines[j].LeftIdx
+				pair.LeftContent = content
+				pair.LeftType = LineTypeDel
+			} else {
+				pair.LeftType = LineTypeEmpty
+			}
+
+			// Right side (addition)
+			if j < len(addLines) {
+				content := addLines[j].Content
+				if len(content) > 0 && content[0] == '+' {
+					content = content[1:]
+				}
+				pair.RightIdx = addLines[j].RightIdx
+				pair.RightContent = content
+				pair.RightType = LineTypeAdd
+			} else {
+				pair.RightType = LineTypeEmpty
+			}
+
+			result = append(result, pair)
+		}
+	}
+
+	return result
+}
