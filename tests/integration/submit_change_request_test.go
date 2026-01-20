@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -247,7 +248,7 @@ func TestSubmitChangeRequestWhitespaceOnlyContent(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc // capture range variable
+		// capture range variable
 		t.Run(tc.name, func(t *testing.T) {
 			onGiteaRun(t, func(t *testing.T, u *url.URL) {
 				owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
@@ -415,13 +416,7 @@ func TestSubmitChangeRequestPRCreationFailureCleanup(t *testing.T) {
 		for _, branchName := range finalBranches {
 			if strings.HasPrefix(branchName, nonOwner.LowerName+"-patch-") {
 				// Check if this branch existed before the test
-				found := false
-				for _, initialBranch := range initialBranches {
-					if initialBranch == branchName {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(initialBranches, branchName)
 				assert.True(t, found,
 					"Branch %s should not exist as it should have been cleaned up", branchName)
 			}
