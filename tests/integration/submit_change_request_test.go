@@ -5,10 +5,13 @@ package integration
 
 import (
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"testing"
 
+	auth_model "code.gitea.io/gitea/models/auth"
+	git_model "code.gitea.io/gitea/models/git"
 	issues_model "code.gitea.io/gitea/models/issues"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
@@ -212,7 +215,7 @@ func TestSubmitChangeRequestErrorCases(t *testing.T) {
 		// This test documents the expected behavior
 		if resp.Code == http.StatusBadRequest {
 			respBody := resp.Body.String()
-			assert.Contains(t, respBody, "content",
+			assert.Contains(t, respBody, "Content",
 				"Error message should mention content issue")
 		}
 	})
@@ -277,5 +280,95 @@ func TestSubmitChangeRequestSecurityBypass(t *testing.T) {
 		// Should get 404 (permission denied)
 		assert.Equal(t, http.StatusNotFound, resp.Code,
 			"submit_change_request=true should NOT bypass CanWriteToBranch for _upload action")
+	})
+}
+
+// TestSubmitChangeRequestPRCreationFailureCleanup tests that orphaned branches are cleaned up
+// when PR creation fails after the branch has been created (SCR-002 fix verification).
+// This test uses user blocking to trigger a PR creation failure.
+func TestSubmitChangeRequestPRCreationFailureCleanup(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		// Test fixtures:
+		// - user2 owns repo1 (ID: 1)
+		// - user4 is a regular user who doesn't own repo1
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		// Get initial branch count for the repository
+		initialBranches, err := git_model.FindBranchNames(t.Context(), git_model.FindBranchOptions{
+			RepoID: repo.ID,
+		})
+		require.NoError(t, err)
+		initialBranchCount := len(initialBranches)
+
+		// Step 1: Owner blocks the non-owner user
+		// This will cause NewPullRequest() to fail with ErrBlockedUser
+		ownerToken := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteUser)
+		blockReq := NewRequest(t, "PUT", "/api/v1/user/blocks/"+nonOwner.Name).
+			AddTokenAuth(ownerToken)
+		MakeRequest(t, blockReq, http.StatusNoContent)
+
+		// Ensure we unblock the user after the test
+		defer func() {
+			unblockReq := NewRequest(t, "DELETE", "/api/v1/user/blocks/"+nonOwner.Name).
+				AddTokenAuth(ownerToken)
+			MakeRequest(t, unblockReq, http.StatusNoContent)
+		}()
+
+		// Step 2: Non-owner attempts to submit a change request
+		// The branch will be created, but PR creation will fail due to blocking
+		sessionNonOwner := loginUser(t, nonOwner.Name)
+
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		// Submit a change request - this should fail due to user being blocked
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               "# Test content for PR failure cleanup\n\nThis should trigger cleanup.\n",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+
+		req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		// The request should fail (500 Internal Server Error due to blocked user)
+		// The exact status code depends on how the error is handled
+		assert.NotEqual(t, http.StatusOK, resp.Code,
+			"Request should fail when user is blocked")
+
+		// Step 3: Verify that no orphaned branch was left behind
+		// The branch cleanup should have removed any branch that was created
+		finalBranches, err := git_model.FindBranchNames(t.Context(), git_model.FindBranchOptions{
+			RepoID: repo.ID,
+		})
+		require.NoError(t, err)
+
+		// Check that no new branches were added (cleanup worked)
+		assert.Equal(t, initialBranchCount, len(finalBranches),
+			"No orphaned branches should remain after PR creation failure; initial: %d, final: %d",
+			initialBranchCount, len(finalBranches))
+
+		// Additionally, verify no branch matching the expected pattern exists
+		for _, branchName := range finalBranches {
+			if strings.HasPrefix(branchName, nonOwner.LowerName+"-patch-") {
+				// Check if this branch existed before the test
+				found := false
+				for _, initialBranch := range initialBranches {
+					if initialBranch == branchName {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found,
+					"Branch %s should not exist as it should have been cleaned up", branchName)
+			}
+		}
 	})
 }
