@@ -1021,7 +1021,8 @@ function onBubbleView(n: Node) {
 /* Click handler for joint-parent: navigate to fork comparison page */
 function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string }) {
   if (!joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
-  const compareUrl = `/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`;
+  const suburl = window.config?.suburl || '';
+  const compareUrl = `${suburl}/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`;
   window.location.href = compareUrl;
 }
 
