@@ -94,7 +94,7 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
 }
 
 .compare-popup {
-  background: #ffffff;
+  background: var(--color-body);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
   width: 100%;
@@ -108,13 +108,13 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
   align-items: center;
   justify-content: space-between;
   padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-secondary);
 }
 
 .compare-popup-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -127,14 +127,14 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: #6b7280;
+  color: var(--color-text-light-2);
   cursor: pointer;
   transition: background-color 0.15s, color 0.15s;
 }
 
 .compare-popup-close:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .compare-popup-close svg {
@@ -150,7 +150,7 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
   display: flex;
   gap: 0.875rem;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--color-secondary);
 }
 
 .compare-article-card:last-child {
@@ -160,7 +160,7 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
 .compare-article-icon {
   width: 24px;
   height: 24px;
-  color: #9ca3af;
+  color: var(--color-text-light-2);
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -190,7 +190,7 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
 
 .compare-article-meta {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--color-text-light-2);
   line-height: 1.5;
 }
 
@@ -201,19 +201,19 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
 .compare-popup-button {
   width: 100%;
   padding: 0.75rem 1.5rem;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: var(--color-hover);
+  border: 1px solid var(--color-secondary);
   border-radius: 8px;
   font-size: 0.9375rem;
   font-weight: 500;
-  color: #374151;
+  color: var(--color-text);
   cursor: pointer;
   transition: background-color 0.15s, border-color 0.15s, transform 0.1s;
 }
 
 .compare-popup-button:hover {
-  background: #f3f4f6;
-  border-color: #d1d5db;
+  background: var(--color-active);
+  border-color: var(--color-secondary);
 }
 
 .compare-popup-button:active {
