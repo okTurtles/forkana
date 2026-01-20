@@ -82,3 +82,18 @@ export function formatDatetime(date: Date | number): string {
   }
   return dateFormat.format(date);
 }
+
+/**
+ * Format a date string to YYYY-MM-DD format.
+ * Returns the fallback value if dateStr is null/undefined/invalid.
+ */
+export function formatDateYMD(dateStr?: string | null, fallback: string = ''): string {
+  if (!dateStr) return fallback;
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return fallback;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+

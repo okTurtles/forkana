@@ -3,6 +3,8 @@
    Modal popup for comparing two selected articles.
    Shows article details and provides a button to navigate to comparison page. */
 
+import { formatDateYMD } from '../../utils/time.ts';
+
 defineProps<{
   articles: Array<{
     id: string;
@@ -21,15 +23,6 @@ const emit = defineEmits<{
   (e: 'compare'): void;
 }>();
 
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return 'Unknown';
-  const date = new Date(dateStr);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 function getOwner(article: { repoOwner?: string; fullName?: string }): string {
   return article.repoOwner || article.fullName?.split('/')[0] || 'Unknown';
 }
@@ -47,7 +40,7 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
         <h2 id="compare-popup-title" class="compare-popup-title">{{ articles.length }} articles selected</h2>
         <button class="compare-popup-close" @click="emit('close')" aria-label="Close comparison popup">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </button>
       </header>
@@ -59,8 +52,7 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
             <!-- Fork icon -->
             <svg viewBox="0 0 16 16" fill="currentColor">
               <path
-                d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z"
-              />
+                d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z" />
             </svg>
           </div>
           <div class="compare-article-content">
@@ -74,7 +66,7 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
               {{ article.children?.length || 0 }} Fork{{ (article.children?.length || 0) === 1 ? '' : 's' }}
             </div>
             <div class="compare-article-meta">
-              Last updated: {{ formatDate(article.updatedAt) }}
+              Last updated: {{ formatDateYMD(article.updatedAt, 'Unknown') }}
             </div>
           </div>
         </article>

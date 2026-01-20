@@ -6,6 +6,7 @@
    This keeps label logic independent from layout and D3. */
 
 import { computed, watch, reactive } from "vue";
+import { formatDateYMD } from '../../utils/time.ts';
 
 /* ──────────────────────────────────────────────────────────────────────────────
    LABEL LAYOUT CONSTANTS (all values explained to avoid "magic numbers")
@@ -70,15 +71,8 @@ const fit = reactive({
 /* Label text: simple helper function for pluralization (not computed to avoid unnecessary reactivity) */
 const getLabelText = (count: number) => count === 1 ? "Contributor" : "Contributors";
 
-/* Format date to yyyy-mm-dd */
-const formattedDate = computed(() => {
-  if (!props.updatedAt) return '';
-  const date = new Date(props.updatedAt);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-});
+/* Format date to yyyy-mm-dd using shared utility */
+const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 
 /* Recompute label visibility whenever r or k or updatedAt change. */
 function recomputeFit() {
@@ -174,30 +168,24 @@ function onKeyDown(ev: KeyboardEvent) {
 
 <template>
   <!-- One node group at (x,y); we let the parent group receive the world transform -->
-  <g
-    class="node cursor-pointer select-none" :transform="gTransform" role="button"
+  <g class="node cursor-pointer select-none" :transform="gTransform" role="button"
     :aria-label="`Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
-    :aria-pressed="isActive ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
-  >
+    :aria-pressed="isActive ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown">
     <!-- Bubble circle with soft gradient & subtle stroke/shadow -->
-    <circle
-      class="node-circle" :class="{
-        'compare-dashed': props.isCompareMode && props.compareState === 'none',
-        'compare-selected-first': props.compareState === 'first',
-        'compare-selected-second': props.compareState === 'second'
-      }" :r="r" fill="url(#bubbleGrad)"
+    <circle class="node-circle" :class="{
+      'compare-dashed': props.isCompareMode && props.compareState === 'none',
+      'compare-selected-first': props.compareState === 'first',
+      'compare-selected-second': props.compareState === 'second'
+    }" :r="r" fill="url(#bubbleGrad)"
       :stroke="props.compareState === 'first' || props.compareState === 'second' ? 'var(--color-primary)' : isActive ? 'var(--color-primary)' : '#DBE2EA'"
       :stroke-width="props.compareState === 'first' || props.compareState === 'second' ? 3 : 1"
       :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : 'none'"
-      filter="url(#softShadow)"
-    />
+      filter="url(#softShadow)" />
 
     <!-- HTML Labels: using foreignObject for efficient text rendering -->
     <!-- Calculate the size needed for the foreignObject container -->
-    <foreignObject
-      :x="-r" :y="-r" :width="r * 2" :height="r * 2" :transform="`scale(${1 / k})`"
-      style="overflow: visible; pointer-events: none;"
-    >
+    <foreignObject :x="-r" :y="-r" :width="r * 2" :height="r * 2" :transform="`scale(${1 / k})`"
+      style="overflow: visible; pointer-events: none;">
       <div xmlns="http://www.w3.org/1999/xhtml" class="html-label-wrapper">
         <!-- Combined layout: count and label on same line with larger font -->
         <div v-if="fit.showCombined" class="combined" :style="`font-size: ${fit.fsCombined}px;`">
@@ -212,28 +200,22 @@ function onKeyDown(ev: KeyboardEvent) {
           </div>
 
           <!-- "Contributors/Contributor": only if fits -->
-          <div
-            v-if="fit.showLabel" class="label"
-            :style="`font-size: ${fit.fsLabel}px; margin-top: ${LABEL_GAP_PRIMARY}px;`"
-          >
+          <div v-if="fit.showLabel" class="label"
+            :style="`font-size: ${fit.fsLabel}px; margin-top: ${LABEL_GAP_PRIMARY}px;`">
             {{ getLabelText(contributors) }}
           </div>
         </template>
 
         <!-- "Last updated …": only if fits -->
-        <div
-          v-if="fit.showUpdated" class="updated"
-          :style="`font-size: ${fit.fsSmall}px; margin-top: ${fit.showCombined || fit.showLabel ? LABEL_GAP_SECONDARY : LABEL_GAP_PRIMARY}px;`"
-        >
+        <div v-if="fit.showUpdated" class="updated"
+          :style="`font-size: ${fit.fsSmall}px; margin-top: ${fit.showCombined || fit.showLabel ? LABEL_GAP_SECONDARY : LABEL_GAP_PRIMARY}px;`">
           <div>Last updated</div>
           <div :style="`margin-top: ${LABEL_GAP_UPDATED_INNER}px;`">{{ formattedDate }}</div>
         </div>
 
         <!-- View article button: only if active and bubble is large enough -->
-        <button
-          v-if="showButton" class="view-button" :style="`margin-top: ${BUTTON_MARGIN_TOP}px;`" @click="onView"
-          @keydown.enter.prevent="onView" @keydown.space.prevent="onView" aria-label="View article details"
-        >
+        <button v-if="showButton" class="view-button" :style="`margin-top: ${BUTTON_MARGIN_TOP}px;`" @click="onView"
+          @keydown.enter.prevent="onView" @keydown.space.prevent="onView" aria-label="View article details">
           View article
         </button>
       </div>
