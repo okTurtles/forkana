@@ -716,6 +716,10 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	if err := pull_service.NewPullRequest(ctx, prOpts); err != nil {
 		log.Error("handleSubmitChangeRequest: failed to create change request: %v", err)
+		// Attempt to clean up the orphaned branch
+		if delErr := repo_service.DeleteBranch(ctx, ctx.Doer, targetRepo, gitRepo, branchName, nil); delErr != nil {
+			log.Error("handleSubmitChangeRequest: failed to cleanup branch %s: %v", branchName, delErr)
+		}
 		ctx.ServerError("NewPullRequest", err)
 		return nil
 	}
