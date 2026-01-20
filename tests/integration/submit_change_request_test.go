@@ -405,7 +405,7 @@ func TestSubmitChangeRequestPRCreationFailureCleanup(t *testing.T) {
 		require.NoError(t, err)
 
 		// Check that no new branches were added (cleanup worked)
-		assert.Equal(t, initialBranchCount, len(finalBranches),
+		assert.Len(t, finalBranches, initialBranchCount,
 			"No orphaned branches should remain after PR creation failure; initial: %d, final: %d",
 			initialBranchCount, len(finalBranches))
 
