@@ -624,8 +624,8 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		return nil
 	}
 
-	// Validate that content is provided
-	if !form.Content.Has() {
+	// Validate that content is provided and is not empty/whitespace-only
+	if !form.Content.Has() || strings.TrimSpace(form.Content.Value()) == "" {
 		ctx.JSONError(ctx.Tr("repo.editor.content_required"))
 		return nil
 	}
