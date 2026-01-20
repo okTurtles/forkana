@@ -27,7 +27,7 @@
 .repository .unicode-escaped .ambiguous-code-point {
   border: 1px var(--color-yellow) solid;
 }
-/* 
+/*
 .issue-content {
   display: flex;
   align-items: flex-start;
