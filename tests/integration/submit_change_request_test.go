@@ -228,6 +228,60 @@ func TestSubmitChangeRequestErrorCases(t *testing.T) {
 	})
 }
 
+// TestSubmitChangeRequestWhitespaceOnlyContent tests that submitting content containing only
+// whitespace characters is rejected with HTTP 400 Bad Request (SCR-001 fix verification).
+func TestSubmitChangeRequestWhitespaceOnlyContent(t *testing.T) {
+	// Test cases for various whitespace-only content scenarios
+	testCases := []struct {
+		name    string
+		content string
+	}{
+		{"OnlySpaces", "     "},
+		{"OnlyTabs", "\t\t\t"},
+		{"OnlyNewlines", "\n\n\n"},
+		{"MixedWhitespace", "  \t\n  \t\n  "},
+		{"SingleSpace", " "},
+		{"SingleNewline", "\n"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc // capture range variable
+		t.Run(tc.name, func(t *testing.T) {
+			onGiteaRun(t, func(t *testing.T, u *url.URL) {
+				owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+				nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+				repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+				sessionNonOwner := loginUser(t, nonOwner.Name)
+
+				// Get the edit page
+				editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+				req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+				resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+				htmlDoc := NewHTMLParser(t, resp.Body)
+
+				// Submit with whitespace-only content
+				form := map[string]string{
+					"_csrf":                 htmlDoc.GetCSRF(),
+					"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+					"tree_path":             "README.md",
+					"content":               tc.content, // Whitespace-only content
+					"commit_choice":         "direct",
+					"submit_change_request": "true",
+				}
+
+				req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+				resp = sessionNonOwner.MakeRequest(t, req, http.StatusBadRequest)
+
+				// Verify the error response mentions content
+				respBody := resp.Body.String()
+				assert.Contains(t, respBody, "Content",
+					"Error message should mention content issue for whitespace-only content: %q", tc.content)
+			})
+		})
+	}
+}
+
 // TestSubmitChangeRequestSecurityBypass tests that submit_change_request=true cannot be used
 // to bypass permission checks on non-edit endpoints.
 func TestSubmitChangeRequestSecurityBypass(t *testing.T) {
