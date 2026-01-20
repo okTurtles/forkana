@@ -233,9 +233,10 @@ func redirectForCommitChoice[T any](ctx *context.Context, parsed *preparedEditor
 		}
 	}
 
-	// Check if the request came from an article-based route
-	// If so, redirect back to the article view instead of the file view
-	if strings.HasPrefix(ctx.Req.URL.Path, "/article/") {
+	// Check if the request came from an edit to the article route
+	// If so, redirect to the article view instead of the file view
+	articleEditPath := path.Join("_edit", parsed.NewBranchName, treePath)
+	if strings.Contains(ctx.Req.URL.Path, articleEditPath) {
 		ctx.JSONRedirect(ctx.Repo.RepoLink)
 		return
 	}
