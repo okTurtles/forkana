@@ -2,7 +2,7 @@ root = "."
 tmp_dir = ".air"
 
 [build]
-pre_cmd = ["killall -9 gitea 2>/dev/null || true"]
+pre_cmd = ["killall -9 gitea 2>/dev/null || true"] # kill off potential zombie processes from previous runs
 
 # Build a debug-friendly binary with DWARF info:
 # NOTE: GOFLAGS must not contain a bare "-l" token, so we pass -gcflags twice.
