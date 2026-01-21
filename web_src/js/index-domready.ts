@@ -44,7 +44,7 @@ import {initRepoBranchButton} from './features/repo-branch.ts';
 import {initCommonOrganization} from './features/common-organization.ts';
 import {initRepoWikiForm} from './features/repo-wiki.ts';
 import {initRepository, initBranchSelectorTabs} from './features/repo-legacy.ts';
-import {initCopyContent} from './features/copycontent.ts';
+import {initCopyContent, initCompareModeToggle} from './features/copycontent.ts';
 import {initCaptcha} from './features/captcha.ts';
 import {initRepositoryActionView} from './features/repo-actions.ts';
 import {initGlobalTooltips} from './modules/tippy.ts';
@@ -110,6 +110,7 @@ const initPerformanceTracer = callInitFunctions([
   initTableSort,
   initFindFileInRepo,
   initCopyContent,
+  initCompareModeToggle,
 
   initAdminCommon,
   initAdminUserListSearchForm,

@@ -1,0 +1,158 @@
+/* Explore Users Page Styling - Matches mockup design */
+
+/* Search/Filter bar container */
+.page-content.explore.users .ui.small.secondary.filter.menu {
+  margin-bottom: 16px;
+}
+
+/* Filter and Sort dropdowns styling */
+.page-content.explore.users .ui.small.secondary.filter.menu .ui.dropdown.type.jump.item {
+  padding: 8px 12px;
+  border: 1px solid var(--color-secondary);
+  border-radius: 6px;
+  background: var(--color-body);
+  margin-left: 8px;
+}
+
+.page-content.explore.users .ui.small.secondary.filter.menu .ui.dropdown.type.jump.item:hover {
+  background: var(--color-hover);
+}
+
+/* Bordered container for user list */
+.page-content.explore.users .explore-users-list-container {
+  border: 1px solid var(--color-secondary);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-body);
+}
+
+.page-content.explore.users .explore-users-list-container .flex-list {
+  margin: 0;
+}
+
+.page-content.explore.users .explore-users-list-container .flex-item {
+  padding: 16px 20px;
+}
+
+.page-content.explore.users .explore-users-list-container .flex-item:first-child {
+  padding-top: 16px;
+}
+
+.page-content.explore.users .explore-users-list-container .flex-item:last-child {
+  padding-bottom: 16px;
+}
+
+/* User list item styling */
+.page-content.explore.users .flex-item .flex-item-leading img,
+.page-content.explore.users .flex-item .flex-item-leading svg {
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+}
+
+.page-content.explore.users .flex-item .flex-item-title a {
+  color: var(--color-primary);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* User meta info - increased specificity to avoid !important */
+html body .page-content.explore.users .flex-list .flex-item .flex-item-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--color-text-light-2);
+}
+
+.page-content.explore.users .flex-item .flex-item-body .user-location {
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.page-content.explore.users .flex-item .flex-item-body .user-joined {
+  color: var(--color-text-light-2);
+  font-size: 13px;
+}
+
+/* Hide icons in user list for cleaner look matching mockup */
+.page-content.explore.users .flex-item .flex-item-body .svg {
+  display: none;
+}
+
+/* Pagination container with item count */
+.page-content.explore.users .pagination-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding: 0 4px;
+}
+
+.page-content.explore.users .pagination-info {
+  font-size: 14px;
+  color: var(--color-text-light-2);
+}
+
+/* Pagination menu styling for explore users */
+.page-content.explore.users .ui.pagination.menu {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  gap: 4px;
+}
+
+.page-content.explore.users .ui.pagination.menu .item {
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 14px;
+  border: none;
+}
+
+.page-content.explore.users .ui.pagination.menu .item::before {
+  display: none;
+}
+
+.page-content.explore.users .ui.pagination.menu .item:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.page-content.explore.users .ui.pagination.menu .item.active {
+  background: var(--color-primary);
+  color: white;
+  font-weight: 500;
+}
+
+.page-content.explore.users .ui.pagination.menu .item.navigation {
+  color: var(--color-primary);
+  gap: 4px;
+}
+
+.page-content.explore.users .ui.pagination.menu .item.navigation:hover {
+  background: var(--color-hover);
+}
+
+.page-content.explore.users .ui.pagination.menu .item.navigation.disabled {
+  color: var(--color-text-light-3);
+}
+
+/* Hide first/last navigation, show only prev/next */
+.page-content.explore.users .ui.pagination.menu .item.navigation .svg.gitea-double-chevron-left,
+.page-content.explore.users .ui.pagination.menu .item.navigation .svg.gitea-double-chevron-right {
+  display: none;
+}
+
+.page-content.explore.users .center.page.buttons {
+  display: flex;
+  justify-content: flex-end;
+}

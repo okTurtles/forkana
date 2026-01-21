@@ -199,6 +199,11 @@ func pushUpdates(optsList []*repo_module.PushUpdateOptions) error {
 					}
 				}
 
+				// Invalidate fork contributor stats cache to ensure fresh data after push
+				// This is especially important for forks where contributor counts are filtered
+				// by the fork creation time
+				InvalidateForkContributorStatsCache(repo.ID)
+
 				commits := repo_module.GitToPushCommits(l)
 				commits.HeadCommit = repo_module.CommitToPushCommit(newCommit)
 

@@ -13,6 +13,7 @@ gitea-theme-meta-info {
   --color-hover: #E9E7FF66;
   --color-muted: #F6F8FA;
   --color-muted-text: #59636E;
+  --color-text-light-3: #59636E;
 
   --color-warning-border: #d4a72c66;
   --color-warning-text: #9A6700;
@@ -20,5 +21,11 @@ gitea-theme-meta-info {
 
   --color-success-border: #4AC26B66;
   --color-success-bg: #DAFBE1;
+
+  --color-box-header: #F6F8FA;
+  --color-diff-removed-linenum-bg: #FFE7D1;
+  --color-diff-removed-row-bg: #FFE7D1;
+  --color-diff-added-linenum-bg: #E5E9FF;
+  --color-diff-added-row-bg: #E5E9FF;
 }
 

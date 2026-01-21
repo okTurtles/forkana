@@ -1,0 +1,191 @@
+{{$Subject := .root.Subject}}
+{{$Repo1 := .root.Repo1}}
+{{$Repo2 := .root.Repo2}}
+{{$SplitViewLines := .root.SplitViewLines}}
+{{$Repo1ContributorCount := .root.Repo1ContributorCount}}
+{{$Repo2ContributorCount := .root.Repo2ContributorCount}}
+<colgroup class="diff-colgroup-desktop">
+	<col width="50">
+	<col width="10">
+	<col>
+	<col width="50">
+	<col width="10">
+	<col>
+</colgroup>
+<colgroup class="diff-colgroup-mobile">
+	<col width="50">
+	<col width="10">
+	<col>
+</colgroup>
+{{/* Desktop: Show side-by-side repo headers at top */}}
+<tr class="diff-repo-header-row diff-desktop-only">
+	<td colspan="3" class="diff-repo-header-cell diff-repo-header-left">
+		<div class="tw-p-2">
+			<strong>
+				{{svg "octicon-repo-forked" 16}}
+				<a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> /
+				<a href="{{AppSubUrl}}/article/{{PathEscape $Repo1.Owner.Name}}/{{PathEscapeSegments $Subject.Name}}">{{$Subject.Name}}</a>
+			</strong>
+			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}} · Last update: {{$Repo1.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
+		</div>
+	</td>
+	<td colspan="3" class="diff-repo-header-cell diff-repo-header-right tw-border-l tw-border-[#d1d9e0]">
+		<div class="tw-p-2">
+			<strong>
+				{{svg "octicon-repo-forked" 16}}
+				<a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> /
+				<a href="{{AppSubUrl}}/article/{{PathEscape $Repo2.Owner.Name}}/{{PathEscapeSegments $Subject.Name}}">{{$Subject.Name}}</a>
+			</strong>
+			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}} · Last update: {{$Repo2.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
+		</div>
+	</td>
+</tr>
+{{range $i, $line := $SplitViewLines}}
+	{{if eq $line.LeftType 1}}{{/* Both sides are plain/equal - show once on mobile */}}
+		<tr class="same-code nl-{{$i}} ol-{{$i}}" data-line-type="same">
+			<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
+				<span>{{$line.LeftIdx}}</span>
+			</td>
+			<td class="lines-type-marker lines-type-marker-old">
+				<span class="tw-font-mono" data-type-marker=" "></span>
+			</td>
+			<td class="lines-code lines-code-old">
+				<code class="code-inner">{{$line.LeftContent}}</code>
+			</td>
+			<td class="lines-num lines-num-new diff-desktop-only" data-line-num="{{$line.RightIdx}}">
+				<span>{{$line.RightIdx}}</span>
+			</td>
+			<td class="lines-type-marker lines-type-marker-new diff-desktop-only">
+				<span class="tw-font-mono" data-type-marker=" "></span>
+			</td>
+			<td class="lines-code lines-code-new diff-desktop-only">
+				<code class="code-inner">{{$line.RightContent}}</code>
+			</td>
+		</tr>
+	{{else}}{{/* Paired delete/add lines - mirror comparison */}}
+		{{if and (eq $line.LeftType 3) (eq $line.RightType 2)}}
+			{{/* Desktop: Both delete and add on same row */}}
+			<tr class="del-code nl-{{$i}} ol-{{$i}} diff-desktop-only" data-line-type="diff">
+				<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
+					<span>{{$line.LeftIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-old">
+					<span class="tw-font-mono" data-type-marker="-"></span>
+				</td>
+				<td class="lines-code lines-code-old">
+					<code class="code-inner">{{$line.LeftContent}}</code>
+				</td>
+				<td class="lines-num lines-num-new add-code" data-line-num="{{$line.RightIdx}}">
+					<span>{{$line.RightIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-new add-code">
+					<span class="tw-font-mono" data-type-marker="+"></span>
+				</td>
+				<td class="lines-code lines-code-new add-code">
+					<code class="code-inner">{{$line.RightContent}}</code>
+				</td>
+			</tr>
+			{{/* Mobile: Header for first owner's content */}}
+			<tr class="diff-mobile-only diff-mobile-header diff-mobile-header-del">
+				<td colspan="3" class="diff-mobile-header-cell">
+					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
+						{{svg "octicon-repo-forked" 14}}
+						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> / {{$Subject.Name}}</strong>
+						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}}</span>
+					</div>
+				</td>
+			</tr>
+			{{/* Mobile: Delete row */}}
+			<tr class="del-code nl-{{$i}}-del ol-{{$i}} diff-mobile-only" data-line-type="del">
+				<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
+					<span>{{$line.LeftIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-old">
+					<span class="tw-font-mono" data-type-marker="-"></span>
+				</td>
+				<td class="lines-code lines-code-old">
+					<code class="code-inner">{{$line.LeftContent}}</code>
+				</td>
+			</tr>
+			{{/* Mobile: Header for second owner's content */}}
+			<tr class="diff-mobile-only diff-mobile-header diff-mobile-header-add">
+				<td colspan="3" class="diff-mobile-header-cell">
+					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
+						{{svg "octicon-repo-forked" 14}}
+						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> / {{$Subject.Name}}</strong>
+						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}}</span>
+					</div>
+				</td>
+			</tr>
+			{{/* Mobile: Add row */}}
+			<tr class="add-code nl-{{$i}}-add ol-{{$i}} diff-mobile-only" data-line-type="add">
+				<td class="lines-num lines-num-new" data-line-num="{{$line.RightIdx}}">
+					<span>{{$line.RightIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-new">
+					<span class="tw-font-mono" data-type-marker="+"></span>
+				</td>
+				<td class="lines-code lines-code-new">
+					<code class="code-inner">{{$line.RightContent}}</code>
+				</td>
+			</tr>
+		{{else if eq $line.LeftType 3}}
+			{{/* Only delete on left, empty on right */}}
+			{{/* Mobile: Header */}}
+			<tr class="diff-mobile-only diff-mobile-header diff-mobile-header-del">
+				<td colspan="3" class="diff-mobile-header-cell">
+					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
+						{{svg "octicon-repo-forked" 14}}
+						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> / {{$Subject.Name}}</strong>
+						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}}</span>
+					</div>
+				</td>
+			</tr>
+			<tr class="del-code nl-{{$i}} ol-{{$i}}" data-line-type="del">
+				<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}">
+					<span>{{$line.LeftIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-old">
+					<span class="tw-font-mono" data-type-marker="-"></span>
+				</td>
+				<td class="lines-code lines-code-old">
+					<code class="code-inner">{{$line.LeftContent}}</code>
+				</td>
+				<td class="lines-num lines-num-new diff-desktop-only"></td>
+				<td class="lines-type-marker lines-type-marker-new diff-desktop-only"></td>
+				<td class="lines-code lines-code-new diff-desktop-only">
+					<code class="code-inner"></code>
+				</td>
+			</tr>
+		{{else if eq $line.RightType 2}}
+			{{/* Only add on right, empty on left */}}
+			{{/* Mobile: Header */}}
+			<tr class="diff-mobile-only diff-mobile-header diff-mobile-header-add">
+				<td colspan="3" class="diff-mobile-header-cell">
+					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
+						{{svg "octicon-repo-forked" 14}}
+						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> / {{$Subject.Name}}</strong>
+						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}}</span>
+					</div>
+				</td>
+			</tr>
+			<tr class="add-code nl-{{$i}} ol-{{$i}}" data-line-type="add">
+				<td class="lines-num lines-num-old diff-desktop-only"></td>
+				<td class="lines-type-marker lines-type-marker-old diff-desktop-only"></td>
+				<td class="lines-code lines-code-old diff-desktop-only">
+					<code class="code-inner"></code>
+				</td>
+				<td class="lines-num lines-num-new" data-line-num="{{$line.RightIdx}}">
+					<span>{{$line.RightIdx}}</span>
+				</td>
+				<td class="lines-type-marker lines-type-marker-new">
+					<span class="tw-font-mono" data-type-marker="+"></span>
+				</td>
+				<td class="lines-code lines-code-new">
+					<code class="code-inner">{{$line.RightContent}}</code>
+				</td>
+			</tr>
+		{{end}}
+	{{end}}
+{{end}}
+

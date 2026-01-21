@@ -154,15 +154,28 @@ func (repo *Repository) GetCodeActivityStats(fromTime time.Time, branch string) 
 	return stats, nil
 }
 
-// GetContributorCount returns the number of unique contributors for the given branch
-func (repo *Repository) GetContributorCount(branch string) (int64, error) {
+// GetContributorCount returns the number of unique contributors for the given branch.
+// If since is non-zero, only counts contributors who made commits after that time.
+// This is useful for forks where we only want to count post-fork contributions.
+func (repo *Repository) GetContributorCount(branch string, since time.Time) (int64, error) {
 	if len(branch) == 0 {
 		branch = "HEAD"
 	}
 
-	// Use git shortlog to get unique contributors efficiently
-	stdout, _, err := gitcmd.NewCommand("shortlog", "-sn", "--all").
-		AddDynamicArguments(branch).
+	// Use git shortlog to get unique contributors efficiently.
+	// Note: We intentionally omit --all to count only the specified branch.
+	// For forks with --since filtering, this ensures we only count contributors
+	// who committed to this specific branch after the fork date, excluding
+	// inherited contributors from all branches of the parent repository.
+	cmd := gitcmd.NewCommand("shortlog", "-sn")
+
+	// If since is provided, only count commits after that time
+	// This is used for forks to exclude inherited history from the parent repository
+	if !since.IsZero() {
+		cmd.AddOptionFormat("--since=%s", since.Format(time.RFC3339))
+	}
+
+	stdout, _, err := cmd.AddDynamicArguments(branch).
 		RunStdString(repo.Ctx, &gitcmd.RunOpts{Dir: repo.Path})
 	if err != nil {
 		return 0, err
