@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -246,7 +247,11 @@ func getContributorCount(gitRepo *git.Repository, repo *repo_model.Repository) i
 		return 0
 	}
 
-	count, err := gitRepo.GetContributorCount(repo.DefaultBranch)
+	var since time.Time
+	if repo.IsFork && repo.CreatedUnix > 0 {
+		since = repo.CreatedUnix.AsTime()
+	}
+	count, err := gitRepo.GetContributorCount(repo.DefaultBranch, since)
 	if err != nil {
 		log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
 		return 0
