@@ -1,0 +1,64 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content explore subjects">
+	<!-- Back button -->
+	<div class="ui container">
+		<a href="{{AppSubUrl}}/subject/{{PathEscapeSegments .Subject.Name}}" class="tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-mt-4 back-button">
+			{{svg "octicon-arrow-left" 16}} Back
+		</a>
+	</div>
+
+	<!-- Subject header with view tabs (same as subject page) -->
+	{{template "repo/header" .}}
+
+	<div class="ui container tw-mt-16">
+		<div class="tw-flex tw-items-start tw-justify-between tw-mt-4">
+			<h2 class="ui header tw-m-0 tw-text-16">
+				{{svg "octicon-issue-opened" 16 "tw-mr-1"}}
+				Point of contention <span class="tw-font-normal muted">{{.Owner1}}...{{.Owner2}}</span>
+				<div class="sub header tw-ml-7 tw-text-12 tw-mt-1">
+					<!-- TODO: Use AI to generate this description -->
+					Short description about how these two articles differ.
+				</div>
+			</h2>
+			<div class="tw-flex tw-items-center tw-gap-2">
+				{{/* TODO: These buttons are placeholders for future functionality */}}
+				{{/* Split/unified view toggle - not yet implemented */}}
+				<button class="ui basic button tw-w-9 tw-h-9 tw-min-h-8 tw-m-0 tw-p-0 tw-mt-2" title="Toggle split/unified view" aria-label="Toggle split/unified view" disabled>
+					{{svg "octicon-mirror" 16}}
+				</button>
+				{{/* More options menu - not yet implemented */}}
+				<button class="ui basic button tw-w-9 tw-h-9 tw-min-h-8 tw-m-0 tw-p-0 tw-mt-2" title="More options" aria-label="More options" disabled>
+					{{svg "octicon-kebab-horizontal" 16}}
+				</button>
+			</div>
+		</div>
+
+		{{if and (not .Readme1Name) (not .Readme2Name)}}
+			<div class="ui warning message">
+				<p>{{svg "octicon-alert" 16}} The subjects are empty.</p>
+			</div>
+		{{else if and (eq .Readme1Content .Readme2Content) .Readme1Name .Readme2Name}}
+			<div class="ui info message">
+				<p>{{svg "octicon-check" 16}} The articles are identical.</p>
+			</div>
+		{{else}}
+			<div id="diff-container" class="tw-mt-8">
+				{{if .SplitViewLines}}
+					<div id="diff-file-boxes" class="sixteen wide column">
+						<div class="diff-file-box file-content tw-mt-0">
+							<div class="diff-file-body ui attached unstackable table segment">
+								<div class="file-body file-code unicode-escaped code-diff code-diff-split">
+									<table class="chroma">
+										{{template "repo/diff/subject_compare_section" dict "root" .}}
+									</table>
+								</div>
+							</div>
+						</div>
+					</div>
+				{{end}}
+			</div>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}
+

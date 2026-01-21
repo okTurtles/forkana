@@ -79,6 +79,12 @@ func GetCache() StringCache {
 	return defaultCache
 }
 
+// SetDefaultCache sets the default cache. This is primarily intended for testing.
+// In production, use Init() to initialize the cache from settings.
+func SetDefaultCache(c StringCache) {
+	defaultCache = c
+}
+
 // GetString returns the key value from cache with callback when no key exists in cache
 func GetString(key string, getFunc func() (string, error)) (string, error) {
 	if defaultCache == nil || setting.CacheService.TTL == 0 {

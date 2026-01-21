@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"code.gitea.io/gitea/models/db"
@@ -27,6 +28,18 @@ var (
 	ErrTooManyNodes      = errors.New("too many nodes in graph")
 	ErrProcessingTimeout = errors.New("processing timeout")
 	ErrCycleDetected     = errors.New("cycle detected in fork graph")
+
+	// forkStatsComputeLock prevents cache stampede on secondary cache computation.
+	// When multiple goroutines request the same cache key simultaneously, only one
+	// will compute and cache the result; others will compute without caching.
+	forkStatsComputeLock = sync.Map{}
+
+	// forkStatsCacheKeys tracks active cache keys per repository for invalidation.
+	// Key: repoID (int64), Value: map[string]struct{} (set of cache keys)
+	// This enables efficient cache invalidation when commits are pushed to a repository.
+	// Uses a regular map with mutex for simpler synchronization (no type assertions needed).
+	forkStatsCacheKeys     = make(map[int64]map[string]struct{})
+	forkStatsCacheKeysLock sync.Mutex
 )
 
 // IsErrMaxDepthExceeded checks if an error is ErrMaxDepthExceeded
@@ -47,6 +60,81 @@ func IsErrProcessingTimeout(err error) bool {
 // IsErrCycleDetected checks if an error is ErrCycleDetected
 func IsErrCycleDetected(err error) bool {
 	return errors.Is(err, ErrCycleDetected)
+}
+
+// registerForkStatsCacheKey registers a cache key for a repository.
+// This enables efficient cache invalidation when commits are pushed.
+func registerForkStatsCacheKey(repoID int64, cacheKey string) {
+	forkStatsCacheKeysLock.Lock()
+	defer forkStatsCacheKeysLock.Unlock()
+
+	keys, ok := forkStatsCacheKeys[repoID]
+	if !ok {
+		keys = make(map[string]struct{})
+		forkStatsCacheKeys[repoID] = keys
+	}
+	keys[cacheKey] = struct{}{}
+}
+
+// InvalidateForkContributorStatsCache invalidates all fork contributor stats cache entries
+// for a specific repository. This should be called when commits are pushed to ensure
+// contributor statistics are refreshed.
+//
+// The function is safe to call even if no cache entries exist for the repository.
+// Errors during cache deletion are logged but don't cause the function to fail,
+// as cache invalidation is best-effort.
+func InvalidateForkContributorStatsCache(repoID int64) {
+	c := cache.GetCache()
+	if c == nil {
+		return
+	}
+
+	forkStatsCacheKeysLock.Lock()
+	keys, ok := forkStatsCacheKeys[repoID]
+	if !ok {
+		forkStatsCacheKeysLock.Unlock()
+		return
+	}
+	// Clear the keys map for this repo
+	delete(forkStatsCacheKeys, repoID)
+	forkStatsCacheKeysLock.Unlock()
+
+	// Delete all cached entries for this repository
+	for cacheKey := range keys {
+		if err := c.Delete(cacheKey); err != nil {
+			log.Warn("Failed to invalidate fork contributor stats cache key %s: %v", cacheKey, err)
+		}
+	}
+
+	if len(keys) > 0 {
+		log.Debug("Invalidated %d fork contributor stats cache entries for repo %d", len(keys), repoID)
+	}
+}
+
+// getForkStatsCacheKeysForTesting returns the registered cache keys for a repository.
+// This function is intended for testing purposes only.
+func getForkStatsCacheKeysForTesting(repoID int64) map[string]struct{} {
+	forkStatsCacheKeysLock.Lock()
+	defer forkStatsCacheKeysLock.Unlock()
+
+	keys, ok := forkStatsCacheKeys[repoID]
+	if !ok {
+		return nil
+	}
+	// Return a copy to avoid race conditions
+	result := make(map[string]struct{}, len(keys))
+	for k := range keys {
+		result[k] = struct{}{}
+	}
+	return result
+}
+
+// clearForkStatsCacheKeysForTesting clears all registered cache keys.
+// This function is intended for testing purposes only.
+func clearForkStatsCacheKeysForTesting() {
+	forkStatsCacheKeysLock.Lock()
+	defer forkStatsCacheKeysLock.Unlock()
+	forkStatsCacheKeys = make(map[int64]map[string]struct{})
 }
 
 // ForkGraphParams represents parameters for building fork graph
@@ -106,6 +194,15 @@ type PaginationInfo struct {
 const (
 	maxNodes          = 10000
 	processingTimeout = 30 * time.Second
+
+	// forkContributorStatsCacheKey is the cache key format for pre-filtered fork contributor stats.
+	// Format: "ForkContributorStats/{repoID}/{sinceUnix}/{days}"
+	// This secondary cache stores pre-filtered results to avoid repeated post-cache filtering.
+	forkContributorStatsCacheKey = "ForkContributorStats/%d/%d/%d"
+	// forkContributorStatsCacheTimeout is the TTL for fork contributor stats cache (5 minutes).
+	// This is shorter than the base contributor stats cache (10 minutes) to ensure
+	// the secondary cache doesn't outlive the underlying data.
+	forkContributorStatsCacheTimeout int64 = 60 * 5
 )
 
 // BuildForkGraph builds the fork graph for a repository
@@ -291,7 +388,7 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 
 	// Add contributor stats if requested
 	if params.IncludeContributors {
-		stats, err := getContributorStats(repo, params.ContributorDays)
+		stats, err := getContributorStats(repo, params.ContributorDays, getForkSinceTime(repo))
 		if err != nil {
 			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
 		} else {
@@ -312,7 +409,7 @@ func createLeafNode(repo *repo_model.Repository, level int, params ForkGraphPara
 	}
 
 	if params.IncludeContributors {
-		stats, err := getContributorStats(repo, params.ContributorDays)
+		stats, err := getContributorStats(repo, params.ContributorDays, getForkSinceTime(repo))
 		if err != nil {
 			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
 		} else {
@@ -395,16 +492,118 @@ func sortRepositories(repos []*repo_model.Repository, sortBy string) {
 	})
 }
 
-// getContributorStats gets contributor statistics for a repository
-func getContributorStats(repo *repo_model.Repository, days int) (*ContributorStats, error) {
-	// Use existing contributor stats service
+// getForkSinceTime returns the appropriate since time for contributor filtering.
+// For forks, returns the fork creation time to exclude inherited history from the parent.
+// For non-forks, returns zero time (no filtering).
+func getForkSinceTime(repo *repo_model.Repository) time.Time {
+	if repo.IsFork && repo.CreatedUnix > 0 {
+		return repo.CreatedUnix.AsTime()
+	}
+	return time.Time{}
+}
+
+// hasCommitsAfter checks if a contributor has any commits after the given time.
+// Returns true if since is zero (no filtering) or if the contributor has at least one commit after since.
+//
+// Due to weekly granularity of contributor data, we use a conservative approach:
+// we only count contributors whose commit weeks START after the fork creation time.
+// This may under-count contributors who have post-fork commits in a week that started
+// before the fork, but it ensures we don't over-count by including contributors who
+// only have pre-fork commits in a week that overlaps with the fork creation.
+//
+// Trade-off: For forks created mid-week, contributors who made commits both before
+// and after the fork in that same week will be excluded. This is acceptable because:
+// 1. It's a conservative approach that avoids inflating fork contributor counts
+// 2. The edge case only affects forks created mid-week with active contributors
+// 3. Accurate per-commit filtering would require querying git directly
+func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
+	if since.IsZero() {
+		return true
+	}
+	for _, week := range contributor.Weeks {
+		weekTime := time.UnixMilli(week.Week)
+		// Check if the week starts after since (conservative approach)
+		// This ensures we only count contributors with commits in weeks that
+		// definitively started after the fork creation time
+		if !weekTime.Before(since) && week.Commits > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// getContributorStats gets contributor statistics for a repository.
+// If since is non-zero, only counts contributors who made commits after that time.
+// This is useful for forks where we only want to count post-fork contributions.
+//
+// Caching behavior (two-tier):
+// 1. Secondary cache: Pre-filtered results keyed by (repoID, since, days) - 2 minute TTL
+// 2. Primary cache: Raw contributor data keyed by (repo, revision) - 10 minute TTL
+//
+// The secondary cache eliminates redundant post-cache filtering for high-traffic fork
+// repositories where the same contributor statistics are requested frequently with
+// identical parameters (typically the fork creation time and days window).
+//
+// Cache key scoping:
+// - Primary: "GetContributorStats/{repo.FullName()}/{revision}" - forks have separate entries
+// - Secondary: "ForkContributorStats/{repoID}/{since.Unix()}/{days}" - unique per parameter set
+//
+// Stampede prevention:
+// Uses forkStatsComputeLock (sync.Map) to prevent multiple goroutines from simultaneously
+// computing the same cache key. When a cache miss occurs, only the first goroutine will
+// compute and cache the result; concurrent requests compute without caching to avoid blocking.
+//
+// Cache invalidation:
+// Cache keys are registered in forkStatsCacheKeys for each repository. When commits are
+// pushed, InvalidateForkContributorStatsCache is called to delete all cached entries for
+// that repository, ensuring contributor statistics are refreshed promptly.
+//
+// Fallback behavior:
+// If secondary cache operations fail, the function falls back to computing results
+// from the primary cache to ensure system reliability.
+func getContributorStats(repo *repo_model.Repository, days int, since time.Time) (*ContributorStats, error) {
+	// Validate days parameter to prevent future cutoff times
+	if days < 0 {
+		days = 0
+	}
+
 	c := cache.GetCache()
 	if c == nil {
 		return &ContributorStats{TotalCount: 0, RecentCount: 0}, nil
 	}
 
-	// Call GetContributorStats which handles cache and generation
-	// This function will generate stats if not cached, or return cached stats if available
+	// Build secondary cache key for pre-filtered results
+	// Use Unix timestamp for 'since' (0 if zero time) to create stable cache keys
+	sinceUnix := int64(0)
+	if !since.IsZero() {
+		sinceUnix = since.Unix()
+	}
+	secondaryCacheKey := fmt.Sprintf(forkContributorStatsCacheKey, repo.ID, sinceUnix, days)
+
+	// Try to get pre-filtered results from secondary cache
+	var cachedStats ContributorStats
+	if exists, cacheErr := c.GetJSON(secondaryCacheKey, &cachedStats); exists && cacheErr == nil {
+		return &cachedStats, nil
+	}
+
+	// Secondary cache miss - prevent stampede by checking if another goroutine is computing.
+	// LoadOrStore atomically checks if a key exists and stores a value if not.
+	// Returns (value, true) if key already existed, (value, false) if we stored it.
+	//
+	// Stampede prevention strategy:
+	// - First goroutine: acquires lock (shouldCache=true), computes, caches result, releases lock
+	// - Concurrent goroutines: see lock held (shouldCache=false), compute without caching
+	//
+	// This avoids blocking while ensuring exactly one goroutine populates the cache.
+	_, alreadyComputing := forkStatsComputeLock.LoadOrStore(secondaryCacheKey, struct{}{})
+	shouldCache := !alreadyComputing
+	if shouldCache {
+		// This defer will execute when getContributorStats returns, regardless of
+		// which return path is taken. This ensures the lock is always released.
+		defer forkStatsComputeLock.Delete(secondaryCacheKey)
+	}
+
+	// Compute from primary cache
 	ctx := context.Background()
 	stats, err := GetContributorStats(ctx, c, repo, repo.DefaultBranch)
 	if err != nil {
@@ -415,14 +614,10 @@ func getContributorStats(repo *repo_model.Repository, days int) (*ContributorSta
 		return nil, err
 	}
 
-	// Count total contributors (exclude "total" summary entry)
-	totalCount := len(stats)
-	if _, hasTotal := stats["total"]; hasTotal {
-		totalCount-- // Don't count the "total" summary as a contributor
-	}
-
-	// Count recent contributors
+	// Count contributors in a single pass for efficiency
+	// For forks, only count contributors who have commits after the fork creation time
 	cutoffTime := time.Now().AddDate(0, 0, -days)
+	totalCount := 0
 	recentCount := 0
 
 	for email, contributor := range stats {
@@ -431,7 +626,14 @@ func getContributorStats(repo *repo_model.Repository, days int) (*ContributorSta
 			continue
 		}
 
-		// Check if contributor has commits in the time window
+		// For forks, skip contributors with no post-fork commits
+		if !hasCommitsAfter(contributor, since) {
+			continue
+		}
+
+		totalCount++
+
+		// Check if contributor has commits in the recent time window
 		for _, week := range contributor.Weeks {
 			weekTime := time.UnixMilli(week.Week)
 			if weekTime.After(cutoffTime) && week.Commits > 0 {
@@ -441,10 +643,24 @@ func getContributorStats(repo *repo_model.Repository, days int) (*ContributorSta
 		}
 	}
 
-	return &ContributorStats{
+	result := &ContributorStats{
 		TotalCount:  totalCount,
 		RecentCount: recentCount,
-	}, nil
+	}
+
+	// Store in secondary cache for future requests (only if we hold the compute lock)
+	// This prevents multiple goroutines from racing to write the same cache entry
+	// Errors are logged but don't fail the request - cache is best-effort
+	if shouldCache {
+		if err := c.PutJSON(secondaryCacheKey, result, forkContributorStatsCacheTimeout); err != nil {
+			log.Warn("Failed to cache fork contributor stats for repo %d: %v", repo.ID, err)
+		} else {
+			// Register the cache key for invalidation on push
+			registerForkStatsCacheKey(repo.ID, secondaryCacheKey)
+		}
+	}
+
+	return result, nil
 }
 
 // countVisibleForks counts the number of visible forks in the tree

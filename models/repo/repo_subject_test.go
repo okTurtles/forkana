@@ -182,3 +182,103 @@ func TestGetRepositoryByOwnerAndSubject_ReturnsCorrectRepo(t *testing.T) {
 	assert.Equal(t, repo1.ID, foundRepo.ID)
 	assert.Equal(t, repo1.Owner.Name, foundRepo.OwnerName)
 }
+
+func TestGetRepositoriesBySubjectIDAndOwners(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	// Create a test subject
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Batch Query Test")
+	assert.NoError(t, err)
+
+	// Get two repositories and assign them the same subject
+	repo1, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	err = repo1.LoadOwner(ctx)
+	assert.NoError(t, err)
+	repo1.SubjectID = subject.ID
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo1, "subject_id")
+	assert.NoError(t, err)
+
+	repo2, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	err = repo2.LoadOwner(ctx)
+	assert.NoError(t, err)
+	repo2.SubjectID = subject.ID
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo2, "subject_id")
+	assert.NoError(t, err)
+
+	// Test fetching both repositories in a single query
+	repos, err := repo_model.GetRepositoriesBySubjectIDAndOwners(ctx, subject.ID, []string{repo1.Owner.Name, repo2.Owner.Name})
+	assert.NoError(t, err)
+	assert.Len(t, repos, 2)
+
+	// Verify both repos are returned
+	foundRepo1 := false
+	foundRepo2 := false
+	for _, r := range repos {
+		if r.ID == repo1.ID {
+			foundRepo1 = true
+		}
+		if r.ID == repo2.ID {
+			foundRepo2 = true
+		}
+	}
+	assert.True(t, foundRepo1, "repo1 should be in results")
+	assert.True(t, foundRepo2, "repo2 should be in results")
+}
+
+func TestGetRepositoriesBySubjectIDAndOwners_CaseInsensitive(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	// Create a test subject
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Case Insensitive Test")
+	assert.NoError(t, err)
+
+	// Get a repository and assign it the subject
+	repo1, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	err = repo1.LoadOwner(ctx)
+	assert.NoError(t, err)
+	repo1.SubjectID = subject.ID
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo1, "subject_id")
+	assert.NoError(t, err)
+
+	// Test with different case variations
+	repos, err := repo_model.GetRepositoriesBySubjectIDAndOwners(ctx, subject.ID, []string{
+		"USER2", // uppercase version of owner name
+	})
+	assert.NoError(t, err)
+	// Should find the repo regardless of case
+	assert.Len(t, repos, 1, "Should find repo regardless of case")
+	assert.Equal(t, repo1.ID, repos[0].ID)
+}
+
+func TestGetRepositoriesBySubjectIDAndOwners_NoMatches(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	// Create a test subject
+	subject, err := repo_model.GetOrCreateSubject(ctx, "No Matches Test")
+	assert.NoError(t, err)
+
+	// Query with non-existent owners
+	repos, err := repo_model.GetRepositoriesBySubjectIDAndOwners(ctx, subject.ID, []string{"nonexistent1", "nonexistent2"})
+	assert.NoError(t, err)
+	assert.Empty(t, repos)
+}
+
+func TestGetRepositoriesBySubjectIDAndOwners_EmptyOwnerList(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	// Create a test subject
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Empty Owner List Test")
+	assert.NoError(t, err)
+
+	// Query with empty owner list
+	repos, err := repo_model.GetRepositoriesBySubjectIDAndOwners(ctx, subject.ID, []string{})
+	assert.NoError(t, err)
+	assert.Empty(t, repos)
+}

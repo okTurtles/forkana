@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"time"
 
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/models/renderhelper"
@@ -505,7 +506,8 @@ func RenderRepositoryHistory(ctx *context.Context) {
 		if branch == "" {
 			branch = setting.Repository.DefaultBranch
 		}
-		if count, err := gitRepo.GetContributorCount(branch); err == nil {
+		// Root repo is not a fork, so count all contributors (no since filter)
+		if count, err := gitRepo.GetContributorCount(branch, time.Time{}); err == nil {
 			rootEntry.ContributorCount = count
 		} else {
 			log.Warn("GetContributorCount for %s: %v", rootRepo.FullName(), err)
@@ -537,7 +539,13 @@ func RenderRepositoryHistory(ctx *context.Context) {
 			if err != nil {
 				log.Warn("OpenRepository for fork %s: %v", fork.FullName(), err)
 			} else {
-				if count, err := forkGitRepo.GetContributorCount(branch); err == nil {
+				// For forks, only count contributors who made commits after the fork was created
+				// to exclude inherited history from the parent repository
+				var forkSince time.Time
+				if fork.CreatedUnix > 0 {
+					forkSince = fork.CreatedUnix.AsTime()
+				}
+				if count, err := forkGitRepo.GetContributorCount(branch, forkSince); err == nil {
 					entry.ContributorCount = count
 				} else {
 					log.Warn("GetContributorCount for fork %s: %v", fork.FullName(), err)
@@ -618,8 +626,14 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	}
 
 	// Get contributor count for the readme file (use default branch for contributor count)
+	// For forks, only count contributors who made commits after the fork was created
+	// to exclude inherited history from the parent repository
 	defaultBranch := ctx.Repo.Repository.DefaultBranch
-	contributorCount, err := getFileContributorCount(gitRepo, defaultBranch, readmeTreePath)
+	var contributorSince time.Time
+	if ctx.Repo.Repository.IsFork && ctx.Repo.Repository.CreatedUnix > 0 {
+		contributorSince = ctx.Repo.Repository.CreatedUnix.AsTime()
+	}
+	contributorCount, err := getFileContributorCount(gitRepo, defaultBranch, readmeTreePath, contributorSince)
 	if err != nil {
 		log.Warn("Failed to get contributor count: %v", err)
 		contributorCount = 0
@@ -805,11 +819,20 @@ func processGitCommits(ctx *context.Context, commits []*git.Commit) ([]*user_mod
 	return userCommits, nil
 }
 
-// getFileContributorCount gets the number of unique contributors for a specific file
-func getFileContributorCount(gitRepo *git.Repository, branch, filePath string) (int64, error) {
+// getFileContributorCount gets the number of unique contributors for a specific file.
+// If since is non-zero, only counts contributors who made commits after that time.
+// This is useful for forks where we only want to count post-fork contributions.
+func getFileContributorCount(gitRepo *git.Repository, branch, filePath string, since time.Time) (int64, error) {
 	// Use git shortlog to get unique contributors for the file
-	stdout, _, err := gitcmd.NewCommand("shortlog", "-sn").
-		AddDynamicArguments(branch, "--", filePath).
+	cmd := gitcmd.NewCommand("shortlog", "-sn")
+
+	// If since is provided, only count commits after that time
+	// This is used for forks to exclude inherited history from the parent repository
+	if !since.IsZero() {
+		cmd.AddOptionFormat("--since=%s", since.Format(time.RFC3339))
+	}
+
+	stdout, _, err := cmd.AddDynamicArguments(branch, "--", filePath).
 		RunStdString(gitRepo.Ctx, &gitcmd.RunOpts{Dir: gitRepo.Path})
 	if err != nil {
 		return 0, err

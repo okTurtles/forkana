@@ -6,9 +6,21 @@
 			{{template "shared/search/combo" dict "Value" .Keyword "Placeholder" (ctx.Locale.Tr "search.org_kind")}}
 		{{end}}
 	</form>
+	<!-- Filter -->
+	<div class="ui small dropdown type jump item tw-mr-0">
+		<span class="text">
+			{{svg "octicon-filter" 14}}
+			Filter
+		</span>
+		{{svg "octicon-triangle-down" 14 "dropdown icon"}}
+		<div class="menu">
+			<a class="{{if eq .StatusFilterType ""}}active {{end}}item" href="?sort={{$.SortType}}&q={{$.Keyword}}">{{ctx.Locale.Tr "all"}}</a>
+		</div>
+	</div>
 	<!-- Sort -->
 	<div class="ui small dropdown type jump item tw-mr-0">
 		<span class="text">
+			{{svg "octicon-arrow-switch" 14}}
 			{{ctx.Locale.Tr "repo.issues.filter_sort"}}
 		</span>
 		{{svg "octicon-triangle-down" 14 "dropdown icon"}}
@@ -20,4 +32,3 @@
 		</div>
 	</div>
 </div>
-<div class="divider"></div>
