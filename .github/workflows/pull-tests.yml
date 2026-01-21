@@ -35,6 +35,9 @@ jobs:
       - name: Install frontend dependencies
         run: make deps-frontend
 
+      - name: Run frontend lint
+        run: make lint-frontend
+
       - name: Run frontend tests
         run: make test-frontend
 
@@ -54,7 +57,12 @@ jobs:
           cache: true
 
       - name: Install backend dependencies
-        run: make deps-backend
+        run: make deps-backend deps-tools
+
+      - name: Run backend lint
+        run: make lint-backend
+        env:
+          TAGS: bindata sqlite sqlite_unlock_notify
 
       - name: Build backend
         run: make backend
