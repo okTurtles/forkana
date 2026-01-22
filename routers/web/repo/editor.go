@@ -613,6 +613,13 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	targetRepo := ctx.Repo.Repository
 
+	// Prevent users from submitting change requests to their own repository
+	// They should use direct edit instead
+	if targetRepo.OwnerID == ctx.Doer.ID {
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_submit_cr_to_own_repo"))
+		return nil
+	}
+
 	// Check if the repository allows pull requests
 	if !targetRepo.AllowsPulls(ctx) {
 		ctx.JSONError(ctx.Tr("repo.pulls.disabled"))

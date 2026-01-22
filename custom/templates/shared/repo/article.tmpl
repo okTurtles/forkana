@@ -66,25 +66,28 @@
                             <div class="tw-flex tw-items-center tw-justify-between tw-mb-4">
                                 <div class="tw-flex tw-items-center tw-gap-2">
                                     {{if .IsSigned}}
-                                        {{if .HasExistingFork}}
-                                            {{/* User has an existing fork - redirect to fork's article page */}}
-                                            <a href="{{.ExistingFork.Link}}/article/{{PathEscapeSegments .TreePath}}" class="ui primary button">
-                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                                {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
-                                            </a>
-                                            <span class="tw-text-sm tw-text-gray-500">
-                                                ({{.ExistingFork.OwnerName}}/{{.ExistingFork.Name}})
-                                            </span>
+                                        {{if .IsRepoOwner}}
+                                            {{/* User can edit directly - show simple submit button */}}
+                                            <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
+                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                            </button>
                                         {{else if .HasOwnRepoForSubject}}
-                                            {{/* User already owns a different repository for this subject - show link to their article */}}
+                                            {{/* User owns an independent article for this subject (not a fork of this repo) */}}
+                                            {{/* They cannot submit change requests here - redirect to their own article */}}
                                             <a href="{{.OwnRepoForSubject.Link}}?view=article&mode=edit" class="ui primary button">
                                                 {{svg "octicon-pencil" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.edit_your_article"}}
                                             </a>
-                                        {{else if .IsRepoOwner}}
-                                            {{/* User can edit directly - show simple submit button */}}
-                                            <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
-                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                        {{else if .HasExistingFork}}
+                                            {{/* User has an existing fork of this repo - show both options */}}
+                                            <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="ui secondary button">
+                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
+                                                {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
+                                            </a>
+                                            <button type="button" id="pre-submit-changes-button" class="ui primary button"
+                                                data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
+                                                {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
                                         {{else if .NeedsFork}}

@@ -44,9 +44,14 @@ type ForkOnEditPermissions struct {
 	// ExistingFork is the user's existing fork (nil if none)
 	ExistingFork *repo_model.Repository
 	// BlockedBySubject is true if the user already owns a different repo for the same subject
+	// that is NOT a fork of the current repository (i.e., they have their own independent article)
 	BlockedBySubject bool
 	// OwnRepoForSubject is the user's existing repo for the subject (nil if none)
 	OwnRepoForSubject *repo_model.Repository
+	// CanSubmitChangeRequest is true if the user can submit a change request to this repository.
+	// This is true when the user has an existing fork of this repo (or any repo in the same subject's
+	// fork tree) and wants to propose changes via a pull request instead of editing their own fork.
+	CanSubmitChangeRequest bool
 }
 
 // CheckForkOnEditPermissions determines the user's editing permissions for a repository.
@@ -95,17 +100,43 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 		return nil, err
 	}
 
-	// Process subject ownership result.
-	// BlockedBySubject takes precedence: if the user already owns a different repository
-	// for this subject, they cannot fork or edit this one. We return early in this case,
-	// so the fork detection logic below only runs when the user doesn't own a conflicting repo.
+	// Process the results to determine permissions.
+	// There are several cases to consider:
+	//
+	// 1. User has no repo for this subject (ownRepo == nil):
+	//    - If they have a fork of this repo: HasExistingFork=true, CanSubmitChangeRequest=true
+	//    - If they don't have a fork: NeedsFork=true, CanSubmitChangeRequest=true
+	//
+	// 2. User has a repo for this subject (ownRepo != nil):
+	//    a. Their repo IS a fork of this repo (ownRepo.ID == existingFork.ID):
+	//       - HasExistingFork=true, CanSubmitChangeRequest=true
+	//       - They can submit change requests to propose changes to this article
+	//    b. Their repo is NOT a fork of this repo (independent article):
+	//       - BlockedBySubject=true
+	//       - They cannot fork or submit change requests (one article per subject rule)
+
 	if ownRepo != nil && ownRepo.ID != repo.ID {
-		perms.BlockedBySubject = true
-		perms.OwnRepoForSubject = ownRepo
+		// User owns a repo for this subject - check if it's a fork of the current repo
+		if existingFork != nil && ownRepo.ID == existingFork.ID {
+			// Case 2a: User's repo for the subject IS their fork of this repo
+			// They can submit change requests to propose changes
+			perms.HasExistingFork = true
+			perms.ExistingFork = existingFork
+			perms.OwnRepoForSubject = ownRepo
+			perms.CanSubmitChangeRequest = true
+		} else {
+			// Case 2b: User has an independent article for this subject (not a fork of this repo)
+			// Block them from forking or editing - one article per subject rule
+			perms.BlockedBySubject = true
+			perms.OwnRepoForSubject = ownRepo
+		}
 		return perms, nil
 	}
 
-	// Process fork detection result (only reached if not blocked by subject ownership)
+	// Case 1: User has no repo for this subject
+	// They can submit change requests and potentially fork
+	perms.CanSubmitChangeRequest = true
+
 	if existingFork != nil {
 		perms.HasExistingFork = true
 		perms.ExistingFork = existingFork
