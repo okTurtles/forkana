@@ -861,7 +861,8 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 		}
 
 		if err := pull.LoadBaseRepo(ctx); err != nil {
-			log.Error("LoadBaseRepo: %v", err)
+			ctx.ServerError("LoadBaseRepo", err)
+			return
 		}
 		perm, err := access_model.GetUserRepoPermission(ctx, pull.BaseRepo, ctx.Doer)
 		if err != nil {
