@@ -135,7 +135,9 @@
 		</div>
 	</div>
 
-	{{template "repo/issue/view_content/sidebar" .}}
+	{{if not .Issue.IsPull}}
+		{{template "repo/issue/view_content/sidebar" .}}
+	{{end}}
 </div>
 
 <template id="issue-comment-editor-template">
