@@ -18,23 +18,18 @@ if [[ ! -x "$GOPLS_BIN" ]]; then
   exit 1
 fi
 
-# Detect number of CPUs in a cross-platform way (Linux and macOS)
-if command -v nproc &> /dev/null; then
-  NPROC=$(nproc)
-elif command -v sysctl &> /dev/null; then
-  NPROC=$(sysctl -n hw.ncpu)
-else
-  NPROC=1
-fi
+# Parallelism is configurable via GOPLS_PARALLEL env var.
+# Default to 1 (sequential) to avoid memory pressure on local machines.
+# CI can set a higher value if desired (e.g., GOPLS_PARALLEL=4).
+PARALLEL=${GOPLS_PARALLEL:-1}
 
 # lint all go files with 'gopls check' and look for lines starting with the
 # current absolute path, indicating a error was found. This is necessary
 # because the tool does not set non-zero exit code when errors are found.
 # ref: https://github.com/golang/go/issues/67078
-# Use xargs with parallel execution (-P) to speed up checking many files.
-# Each batch of 100 files is processed in parallel across available cores.
+# Use xargs with configurable parallelism (-P) to process files.
 # Use null-delimited format (-0) to handle filenames with spaces correctly.
-ERROR_LINES=$(printf '%s\0' "$@" | xargs -0 -P "$NPROC" -n 100 "$GOPLS_BIN" check -severity=warning 2>/dev/null | grep -E "^$PWD" | grep -vFf <(printf '%s\n' "${IGNORE_PATTERNS[@]}"));
+ERROR_LINES=$(printf '%s\0' "$@" | xargs -0 -P "$PARALLEL" -n 100 "$GOPLS_BIN" check -severity=warning 2>/dev/null | grep -E "^$PWD" | grep -vFf <(printf '%s\n' "${IGNORE_PATTERNS[@]}"));
 NUM_ERRORS=$(echo -n "$ERROR_LINES" | wc -l)
 
 if [ "$NUM_ERRORS" -eq "0" ]; then
