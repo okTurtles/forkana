@@ -665,6 +665,15 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	gitRepo, err := gitrepo.OpenRepository(ctx, targetRepo)
 	if err != nil {
 		log.Error("handleSubmitChangeRequest: failed to open git repo: %v", err)
+		// Attempt to clean up the orphaned branch - need to open repo specifically for cleanup
+		if cleanupRepo, cleanupErr := gitrepo.OpenRepository(ctx, targetRepo); cleanupErr == nil {
+			if delErr := repo_service.DeleteBranch(ctx, ctx.Doer, targetRepo, cleanupRepo, branchName, nil); delErr != nil {
+				log.Error("handleSubmitChangeRequest: failed to cleanup branch %s: %v", branchName, delErr)
+			}
+			cleanupRepo.Close()
+		} else {
+			log.Error("handleSubmitChangeRequest: failed to open repo for branch cleanup: %v", cleanupErr)
+		}
 		ctx.ServerError("OpenRepository", err)
 		return nil
 	}
@@ -675,6 +684,10 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		git.BranchPrefix+targetRepo.DefaultBranch, git.BranchPrefix+branchName, false, false)
 	if err != nil {
 		log.Error("handleSubmitChangeRequest: failed to get compare info: %v", err)
+		// Attempt to clean up the orphaned branch
+		if delErr := repo_service.DeleteBranch(ctx, ctx.Doer, targetRepo, gitRepo, branchName, nil); delErr != nil {
+			log.Error("handleSubmitChangeRequest: failed to cleanup branch %s: %v", branchName, delErr)
+		}
 		ctx.ServerError("GetCompareInfo", err)
 		return nil
 	}
