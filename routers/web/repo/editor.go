@@ -695,10 +695,9 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// Create the change request
 	// Use custom title if provided, otherwise generate a title based on the file being edited
 	prTitle := util.IfZero(strings.TrimSpace(form.ChangeRequestTitle), ctx.Locale.TrString("repo.editor.submit_changes_pr_title", path.Base(form.TreePath)))
-	// Enforce maximum PR title length (255 characters) to prevent excessively long titles
-	if len(prTitle) > 255 {
-		prTitle = prTitle[:255]
-	}
+	// Enforce maximum PR title length (255 characters) to prevent excessively long titles.
+	// Use rune-based truncation to avoid corrupting multi-byte UTF-8 characters.
+	prTitle = util.TruncateRunes(prTitle, 255)
 	prContent := strings.TrimSpace(form.ChangeRequestDescription)
 
 	pullIssue := &issues_model.Issue{
