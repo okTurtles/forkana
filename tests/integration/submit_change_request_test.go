@@ -428,8 +428,8 @@ func TestSubmitChangeRequestPRCreationFailureCleanup(t *testing.T) {
 // submissions from multiple users correctly generate unique branch names without collisions.
 // This verifies that getUniquePatchBranchName() handles the scenario where multiple users
 // simultaneously submit change requests that would generate similar branch name patterns.
-// Note: The submit-change-request workflow creates a fork for each user and creates the
-// branch/PR in that fork, so each user gets their own repository with their own branch.
+// Note: The submit-change-request workflow creates branches directly in the target repository
+// and creates same-repo PRs (head and base both point to the target repository).
 func TestSubmitChangeRequestConcurrentBranchCollision(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, u *url.URL) {
 		// Test fixtures:
@@ -506,62 +506,56 @@ func TestSubmitChangeRequestConcurrentBranchCollision(t *testing.T) {
 				"User %s should be redirected to a pull request page", userName)
 		}
 
-		// The submit-change-request workflow creates a fork for each user.
-		// Each user's fork will have a branch with the pattern <username>-patch-N.
-		// We need to find the forks and verify the PRs were created there.
+		// The submit-change-request workflow creates branches directly in the target repository
+		// and creates same-repo PRs (HeadRepoID == BaseRepoID == repo.ID).
+		// Each user's branch follows the pattern <username>-patch-N.
 
-		// Find user4's fork of repo1
-		user4Fork, err := repo_model.GetRepositoryByOwnerAndName(t.Context(), user4.Name, repo.Name)
-		require.NoError(t, err, "User4 should have a fork of repo1")
-		require.NotNil(t, user4Fork, "User4's fork should exist")
-
-		// Find user5's fork of repo1
-		user5Fork, err := repo_model.GetRepositoryByOwnerAndName(t.Context(), user5.Name, repo.Name)
-		require.NoError(t, err, "User5 should have a fork of repo1")
-		require.NotNil(t, user5Fork, "User5's fork should exist")
-
-		// Verify PRs were created in each user's fork by querying the base repo
-		// The PRs are same-repo PRs (head and base are both the fork)
-		user4PRs, _, err := issues_model.PullRequests(t.Context(), user4Fork.ID, &issues_model.PullRequestsOptions{
+		// Query PRs from the target repository (repo1 owned by user2)
+		allPRs, _, err := issues_model.PullRequests(t.Context(), repo.ID, &issues_model.PullRequestsOptions{
 			State: "open",
 		})
 		require.NoError(t, err)
 
-		var user4PRCount int
-		for _, pr := range user4PRs {
+		// Find PRs created by user4 and user5
+		var user4PR, user5PR *issues_model.PullRequest
+		for _, pr := range allPRs {
 			if strings.HasPrefix(pr.HeadBranch, user4.LowerName+"-patch-") {
-				user4PRCount++
+				user4PR = pr
 			}
-		}
-		assert.GreaterOrEqual(t, user4PRCount, 1,
-			"User4 should have at least one PR created in their fork")
-
-		user5PRs, _, err := issues_model.PullRequests(t.Context(), user5Fork.ID, &issues_model.PullRequestsOptions{
-			State: "open",
-		})
-		require.NoError(t, err)
-
-		var user5PRCount int
-		for _, pr := range user5PRs {
 			if strings.HasPrefix(pr.HeadBranch, user5.LowerName+"-patch-") {
-				user5PRCount++
+				user5PR = pr
 			}
 		}
-		assert.GreaterOrEqual(t, user5PRCount, 1,
-			"User5 should have at least one PR created in their fork")
 
-		// Verify that the redirect URLs point to different PRs (unique branch names)
-		// Each user should be redirected to their own fork's PR
+		// Verify user4's PR exists and is a same-repo PR
+		require.NotNil(t, user4PR, "User4 should have a PR in the target repository")
+		assert.Equal(t, repo.ID, user4PR.HeadRepoID,
+			"User4's PR head repo should be the target repo (same-repo PR)")
+		assert.Equal(t, repo.ID, user4PR.BaseRepoID,
+			"User4's PR base repo should be the target repo (same-repo PR)")
+
+		// Verify user5's PR exists and is a same-repo PR
+		require.NotNil(t, user5PR, "User5 should have a PR in the target repository")
+		assert.Equal(t, repo.ID, user5PR.HeadRepoID,
+			"User5's PR head repo should be the target repo (same-repo PR)")
+		assert.Equal(t, repo.ID, user5PR.BaseRepoID,
+			"User5's PR base repo should be the target repo (same-repo PR)")
+
+		// Verify that the redirect URLs point to PRs in the target repository (user2/repo1)
 		user4Redirect := results[user4.Name].redirectURL
 		user5Redirect := results[user5.Name].redirectURL
 
-		assert.Contains(t, user4Redirect, user4.Name+"/",
-			"User4 should be redirected to their own fork's PR")
-		assert.Contains(t, user5Redirect, user5.Name+"/",
-			"User5 should be redirected to their own fork's PR")
+		assert.Contains(t, user4Redirect, owner.Name+"/"+repo.Name+"/pulls/",
+			"User4 should be redirected to a PR in the target repository")
+		assert.Contains(t, user5Redirect, owner.Name+"/"+repo.Name+"/pulls/",
+			"User5 should be redirected to a PR in the target repository")
 
-		// The PRs should be in different repositories (each user's fork)
-		assert.NotEqual(t, user4Redirect, user5Redirect,
-			"Users should be redirected to different PRs")
+		// The PRs should have different indices (unique PRs)
+		assert.NotEqual(t, user4PR.Index, user5PR.Index,
+			"Users should have created different PRs with unique indices")
+
+		// Verify branch names are unique
+		assert.NotEqual(t, user4PR.HeadBranch, user5PR.HeadBranch,
+			"Users should have unique branch names")
 	})
 }
