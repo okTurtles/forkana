@@ -524,14 +524,16 @@ func TestSubmitChangeRequestMiddlewareBypass(t *testing.T) {
 
 	t.Run("NewEndpointAllowsSubmitChangeRequest", func(t *testing.T) {
 		// Verify that _new allows submit_change_request=true
-		newURL := path.Join(owner.Name, repo.Name, "_new", repo.DefaultBranch, "/")
+		// Note: When NeedFork is true and tree path is not README.md, the user is redirected to README.md
+		// So we use README.md as the tree path to test the submit_change_request bypass
+		newURL := path.Join(owner.Name, repo.Name, "_new", repo.DefaultBranch, "README.md")
 		req := NewRequest(t, "GET", newURL+"?submit_change_request=true")
 		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
 
 		form := map[string]string{
 			"_csrf":                 htmlDoc.GetCSRF(),
-			"tree_path":             "new-file.md",
+			"tree_path":             "README.md",
 			"content":               "New file content",
 			"commit_choice":         "direct",
 			"submit_change_request": "true",

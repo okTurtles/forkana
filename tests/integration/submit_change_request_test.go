@@ -541,13 +541,18 @@ func TestSubmitChangeRequestConcurrentBranchCollision(t *testing.T) {
 		assert.Equal(t, repo.ID, user5PR.BaseRepoID,
 			"User5's PR base repo should be the target repo (same-repo PR)")
 
-		// Verify that the redirect URLs point to PRs in the target repository (user2/repo1)
+		// Verify that the redirect URLs point to PRs in the target repository
+		// Since repo1 has a subject (example-subject), the URL will be /article/user2/example-subject/pulls/N
 		user4Redirect := results[user4.Name].redirectURL
 		user5Redirect := results[user5.Name].redirectURL
 
-		assert.Contains(t, user4Redirect, owner.Name+"/"+repo.Name+"/pulls/",
+		// Load the subject to get the expected URL format
+		subject := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{ID: repo.SubjectID})
+		expectedURLPrefix := "/article/" + owner.Name + "/" + subject.Name + "/pulls/"
+
+		assert.Contains(t, user4Redirect, expectedURLPrefix,
 			"User4 should be redirected to a PR in the target repository")
-		assert.Contains(t, user5Redirect, owner.Name+"/"+repo.Name+"/pulls/",
+		assert.Contains(t, user5Redirect, expectedURLPrefix,
 			"User5 should be redirected to a PR in the target repository")
 
 		// The PRs should have different indices (unique PRs)

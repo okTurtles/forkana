@@ -365,9 +365,10 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
-	// Skip the NeedFork workflow if ForkAndEdit is true
+	// Skip the NeedFork workflow if ForkAndEdit or SubmitChangeRequest is true
 	// The ForkAndEdit workflow (handled later) will create the fork
-	if parsed.CommitFormOptions.NeedFork && !parsed.form.ForkAndEdit {
+	// The SubmitChangeRequest workflow creates a branch in the target repo directly (no fork)
+	if parsed.CommitFormOptions.NeedFork && !parsed.form.ForkAndEdit && !parsed.form.SubmitChangeRequest {
 		baseRepo := ctx.Repo.Repository
 		repoName := getUniqueRepositoryName(ctx, ctx.Doer.ID, baseRepo.Name)
 		if repoName == "" {
