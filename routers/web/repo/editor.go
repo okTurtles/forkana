@@ -713,6 +713,10 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		Repo:        targetRepo,
 		Issue:       pullIssue,
 		PullRequest: changeRequest,
+		// AllowNonCollaborator: The user was already authorized to submit change requests
+		// by the CanSubmitChangeRequest middleware check. This bypasses the collaborator
+		// check since the user created the patch branch programmatically (not via git push).
+		AllowNonCollaborator: true,
 	}
 
 	if err := pull_service.NewPullRequest(ctx, prOpts); err != nil {
