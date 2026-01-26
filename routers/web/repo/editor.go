@@ -663,7 +663,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// We use InternalPush to skip pre-receive hooks since this is a programmatic operation
 	// where we've already verified the user can submit change requests (via middleware)
 	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
-	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+	_, err = files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: form.LastCommit,
 		OldBranch:    targetRepo.DefaultBranch,
 		NewBranch:    branchName,
