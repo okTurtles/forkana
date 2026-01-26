@@ -85,11 +85,13 @@
                                                 {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
                                             </a>
+                                            {{if .CanSubmitChangeRequest}}
                                             <button type="button" id="pre-submit-changes-button" class="ui primary button"
                                                 data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
                                                 {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
+                                            {{end}}
                                         {{else if .NeedsFork}}
                                             {{/* User needs to create a fork - show fork-and-submit button */}}
                                             <button type="button" id="fork-article-button" class="ui secondary button"
@@ -103,11 +105,13 @@
                                                 {{ctx.Locale.Tr "repo.fork_article"}}
                                             </button>
                                             {{/* Submit Change Request - opens modal for title/description, then creates branch + commit + PR */}}
+                                            {{if .CanSubmitChangeRequest}}
                                             <button type="button" id="pre-submit-changes-button" class="ui primary button"
                                                 data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
                                                 {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
+                                            {{end}}
                                         {{else}}
                                             {{/* Fallback - show disabled button */}}
                                             <button type="button" class="ui primary button disabled">
