@@ -600,6 +600,18 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 	return fork
 }
 
+// cleanupOrphanedBranch attempts to delete a branch that was created but is no longer needed
+// (e.g., when PR creation fails after the branch was already created).
+// It logs any errors but does not propagate them to the caller.
+func cleanupOrphanedBranch(ctx *context.Context, repo *repo_model.Repository, gitRepo *git.Repository, branchName string) {
+	if gitRepo == nil {
+		return
+	}
+	if err := repo_service.DeleteBranch(ctx, ctx.Doer, repo, gitRepo, branchName, nil); err != nil {
+		log.Error("cleanupOrphanedBranch: failed to cleanup branch %s: %v", branchName, err)
+	}
+}
+
 // handleSubmitChangeRequest handles the submit-change-request workflow for article contributions.
 // It creates a unique branch in the target repository, commits the changes, and creates a change request
 // from that branch to the default branch (same-repo CR, no fork involved).
@@ -676,10 +688,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		git.BranchPrefix+targetRepo.DefaultBranch, git.BranchPrefix+branchName, false, false)
 	if err != nil {
 		log.Error("handleSubmitChangeRequest: failed to get compare info: %v", err)
-		// Attempt to clean up the orphaned branch
-		if delErr := repo_service.DeleteBranch(ctx, ctx.Doer, targetRepo, gitRepo, branchName, nil); delErr != nil {
-			log.Error("handleSubmitChangeRequest: failed to cleanup branch %s: %v", branchName, delErr)
-		}
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
 		ctx.ServerError("GetCompareInfo", err)
 		return nil
 	}
@@ -726,10 +735,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	if err := pull_service.NewPullRequest(ctx, prOpts); err != nil {
 		log.Error("handleSubmitChangeRequest: failed to create change request: %v", err)
-		// Attempt to clean up the orphaned branch
-		if delErr := repo_service.DeleteBranch(ctx, ctx.Doer, targetRepo, gitRepo, branchName, nil); delErr != nil {
-			log.Error("handleSubmitChangeRequest: failed to cleanup branch %s: %v", branchName, delErr)
-		}
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
 		ctx.ServerError("NewPullRequest", err)
 		return nil
 	}
