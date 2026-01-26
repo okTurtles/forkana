@@ -700,6 +700,9 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// Use rune-based truncation to avoid corrupting multi-byte UTF-8 characters.
 	prTitle = util.TruncateRunes(prTitle, 255)
 	prContent := strings.TrimSpace(form.ChangeRequestDescription)
+	// Defense-in-depth: cap description length so downstream processing/storage isn't impacted by huge input.
+	// Note: this does not limit the incoming request size.
+	prContent = util.TruncateRunes(prContent, 65535)
 
 	pullIssue := &issues_model.Issue{
 		RepoID:   targetRepo.ID,
