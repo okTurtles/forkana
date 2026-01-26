@@ -665,15 +665,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	gitRepo, err := gitrepo.OpenRepository(ctx, targetRepo)
 	if err != nil {
 		log.Error("handleSubmitChangeRequest: failed to open git repo: %v", err)
-		// Attempt to clean up the orphaned branch - need to open repo specifically for cleanup
-		if cleanupRepo, cleanupErr := gitrepo.OpenRepository(ctx, targetRepo); cleanupErr == nil {
-			if delErr := repo_service.DeleteBranch(ctx, ctx.Doer, targetRepo, cleanupRepo, branchName, nil); delErr != nil {
-				log.Error("handleSubmitChangeRequest: failed to cleanup branch %s: %v", branchName, delErr)
-			}
-			cleanupRepo.Close()
-		} else {
-			log.Error("handleSubmitChangeRequest: failed to open repo for branch cleanup: %v", cleanupErr)
-		}
+		// Note: Branch cleanup not attempted as repository is inaccessible
 		ctx.ServerError("OpenRepository", err)
 		return nil
 	}
