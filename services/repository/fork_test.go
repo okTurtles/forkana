@@ -360,3 +360,71 @@ func TestForkRepositoryTreeSizeLimit(t *testing.T) {
 		assert.NoError(t, err)
 	}
 }
+
+// TestCheckForkOnEditPermissions tests the CheckForkOnEditPermissions function
+// which determines how a user can edit a repository they don't own.
+func TestCheckForkOnEditPermissions(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	t.Run("RepoOwner", func(t *testing.T) {
+		// User owns the repository - should be able to edit directly
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		perms, err := CheckForkOnEditPermissions(t.Context(), user, repo)
+		assert.NoError(t, err)
+		assert.True(t, perms.IsRepoOwner)
+		assert.True(t, perms.CanEditDirectly)
+		assert.False(t, perms.NeedsFork)
+		assert.False(t, perms.HasExistingFork)
+		assert.False(t, perms.BlockedBySubject)
+		assert.False(t, perms.CanSubmitChangeRequest)
+	})
+
+	t.Run("NonOwnerNeedsFork", func(t *testing.T) {
+		// User doesn't own the repository and has no fork - should need to fork
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		perms, err := CheckForkOnEditPermissions(t.Context(), user, repo)
+		assert.NoError(t, err)
+		assert.False(t, perms.IsRepoOwner)
+		assert.False(t, perms.CanEditDirectly)
+		assert.True(t, perms.NeedsFork)
+		assert.False(t, perms.HasExistingFork)
+		assert.False(t, perms.BlockedBySubject)
+		assert.True(t, perms.CanSubmitChangeRequest)
+	})
+
+	t.Run("UserWithExistingFork", func(t *testing.T) {
+		// User has an existing fork of the repository
+		// repo11 is a fork of repo10 owned by user13
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 13})
+		baseRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+
+		perms, err := CheckForkOnEditPermissions(t.Context(), user, baseRepo)
+		assert.NoError(t, err)
+		assert.False(t, perms.IsRepoOwner)
+		assert.False(t, perms.CanEditDirectly)
+		assert.False(t, perms.NeedsFork)
+		assert.True(t, perms.HasExistingFork)
+		assert.False(t, perms.BlockedBySubject)
+		assert.True(t, perms.CanSubmitChangeRequest)
+		assert.NotNil(t, perms.ExistingFork)
+		assert.Equal(t, int64(11), perms.ExistingFork.ID)
+	})
+
+	t.Run("AnonymousUserNoPermissions", func(t *testing.T) {
+		// Anonymous user (nil doer) should have no permissions
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		perms, err := CheckForkOnEditPermissions(t.Context(), nil, repo)
+		assert.NoError(t, err)
+		assert.False(t, perms.IsRepoOwner)
+		assert.False(t, perms.CanEditDirectly)
+		assert.False(t, perms.NeedsFork)
+		assert.False(t, perms.HasExistingFork)
+		assert.False(t, perms.BlockedBySubject)
+		assert.False(t, perms.CanSubmitChangeRequest)
+	})
+}
