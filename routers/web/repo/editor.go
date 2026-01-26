@@ -613,10 +613,29 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	targetRepo := ctx.Repo.Repository
 
+	// Verify user has permission to submit change requests
+	// This checks: not repo owner, not blocked by subject ownership, etc.
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, targetRepo)
+	if err != nil {
+		ctx.ServerError("CheckForkOnEditPermissions", err)
+		return nil
+	}
+
 	// Prevent users from submitting change requests to their own repository
-	// They should use direct edit instead
-	if targetRepo.OwnerID == ctx.Doer.ID {
+	if perms.IsRepoOwner {
 		ctx.JSONError(ctx.Tr("repo.editor.cannot_submit_cr_to_own_repo"))
+		return nil
+	}
+
+	// Block users who own an independent article for this subject
+	if perms.BlockedBySubject {
+		ctx.JSONError(ctx.Tr("repo.fork.already_own_subject_repo"))
+		return nil
+	}
+
+	// Verify user can actually submit change requests
+	if !perms.CanSubmitChangeRequest {
+		ctx.JSONError(ctx.Tr("repo.pulls.disabled"))
 		return nil
 	}
 
