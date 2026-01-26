@@ -486,7 +486,7 @@ func EditFilePost(ctx *context.Context) {
 	// Validate mutually exclusive workflow flags
 	// Both cannot be true simultaneously - this is a security check in case JavaScript fails
 	if parsed.form.ForkAndEdit && parsed.form.SubmitChangeRequest {
-		ctx.JSONError(ctx.Tr("error.occurred"))
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_use_both_fork_and_submit"))
 		return
 	}
 
