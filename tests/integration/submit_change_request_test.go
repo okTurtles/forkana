@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -69,20 +70,23 @@ func TestSubmitChangeRequest(t *testing.T) {
 		assert.Contains(t, redirectURL, "/pulls/", "Should redirect to a pull request page")
 
 		// Verify the pull request was created
-		// Extract PR number from URL (e.g., /user2/repo1/pulls/1)
+		// Extract PR index from redirect URL (e.g., /user2/repo1/pulls/1)
 		parts := strings.Split(redirectURL, "/pulls/")
 		require.Len(t, parts, 2, "URL should contain /pulls/")
+		prIndex, err := strconv.ParseInt(strings.TrimSuffix(parts[1], "/"), 10, 64)
+		require.NoError(t, err, "Should be able to parse PR index from redirect URL")
 
 		// Verify the PR exists and has correct properties
-		prs, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, 1)
-		if err == nil && prs != nil {
-			// Verify it's a same-repo PR (head and base in same repo)
-			assert.Equal(t, repo.ID, prs.HeadRepoID, "Head repo should be the target repo")
-			assert.Equal(t, repo.ID, prs.BaseRepoID, "Base repo should be the target repo")
-			assert.Equal(t, repo.DefaultBranch, prs.BaseBranch, "Base branch should be default branch")
-			assert.Contains(t, prs.HeadBranch, nonOwner.LowerName+"-patch-",
-				"Head branch should follow naming pattern")
-		}
+		pr, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, prIndex)
+		require.NoError(t, err, "PR should exist with index %d", prIndex)
+		require.NotNil(t, pr, "PR should not be nil")
+
+		// Verify it's a same-repo PR (head and base in same repo)
+		assert.Equal(t, repo.ID, pr.HeadRepoID, "Head repo should be the target repo")
+		assert.Equal(t, repo.ID, pr.BaseRepoID, "Base repo should be the target repo")
+		assert.Equal(t, repo.DefaultBranch, pr.BaseBranch, "Base branch should be default branch")
+		assert.Contains(t, pr.HeadBranch, nonOwner.LowerName+"-patch-",
+			"Head branch should follow naming pattern")
 	})
 
 	t.Run("SubmitChangeRequestWithoutQueryParamFails", func(t *testing.T) {

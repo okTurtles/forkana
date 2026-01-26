@@ -486,7 +486,7 @@ func EditFilePost(ctx *context.Context) {
 	// Validate mutually exclusive workflow flags
 	// Both cannot be true simultaneously - this is a security check in case JavaScript fails
 	if parsed.form.ForkAndEdit && parsed.form.SubmitChangeRequest {
-		ctx.JSONError(ctx.Tr("error.occurred"))
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_use_both_fork_and_submit"))
 		return
 	}
 
@@ -600,6 +600,18 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 	return fork
 }
 
+// cleanupOrphanedBranch attempts to delete a branch that was created but is no longer needed
+// (e.g., when PR creation fails after the branch was already created).
+// It logs any errors but does not propagate them to the caller.
+func cleanupOrphanedBranch(ctx *context.Context, repo *repo_model.Repository, gitRepo *git.Repository, branchName string) {
+	if gitRepo == nil {
+		return
+	}
+	if err := repo_service.DeleteBranch(ctx, ctx.Doer, repo, gitRepo, branchName, nil); err != nil {
+		log.Error("cleanupOrphanedBranch: failed to cleanup branch %s: %v", branchName, err)
+	}
+}
+
 // handleSubmitChangeRequest handles the submit-change-request workflow for article contributions.
 // It creates a unique branch in the target repository, commits the changes, and creates a change request
 // from that branch to the default branch (same-repo CR, no fork involved).
@@ -691,15 +703,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	gitRepo, err := gitrepo.OpenRepository(ctx, targetRepo)
 	if err != nil {
 		log.Error("handleSubmitChangeRequest: failed to open git repo: %v", err)
-		// Attempt to clean up the orphaned branch - need to open repo specifically for cleanup
-		if cleanupRepo, cleanupErr := gitrepo.OpenRepository(ctx, targetRepo); cleanupErr == nil {
-			if delErr := repo_service.DeleteBranch(ctx, ctx.Doer, targetRepo, cleanupRepo, branchName, nil); delErr != nil {
-				log.Error("handleSubmitChangeRequest: failed to cleanup branch %s: %v", branchName, delErr)
-			}
-			cleanupRepo.Close()
-		} else {
-			log.Error("handleSubmitChangeRequest: failed to open repo for branch cleanup: %v", cleanupErr)
-		}
+		// Note: Branch cleanup not attempted as repository is inaccessible
 		ctx.ServerError("OpenRepository", err)
 		return nil
 	}
@@ -710,10 +714,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		git.BranchPrefix+targetRepo.DefaultBranch, git.BranchPrefix+branchName, false, false)
 	if err != nil {
 		log.Error("handleSubmitChangeRequest: failed to get compare info: %v", err)
-		// Attempt to clean up the orphaned branch
-		if delErr := repo_service.DeleteBranch(ctx, ctx.Doer, targetRepo, gitRepo, branchName, nil); delErr != nil {
-			log.Error("handleSubmitChangeRequest: failed to cleanup branch %s: %v", branchName, delErr)
-		}
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
 		ctx.ServerError("GetCompareInfo", err)
 		return nil
 	}
@@ -725,6 +726,9 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// Use rune-based truncation to avoid corrupting multi-byte UTF-8 characters.
 	prTitle = util.TruncateRunes(prTitle, 255)
 	prContent := strings.TrimSpace(form.ChangeRequestDescription)
+	// Defense-in-depth: cap description length so downstream processing/storage isn't impacted by huge input.
+	// Note: this does not limit the incoming request size.
+	prContent = util.TruncateRunes(prContent, 65535)
 
 	pullIssue := &issues_model.Issue{
 		RepoID:   targetRepo.ID,
@@ -760,10 +764,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	if err := pull_service.NewPullRequest(ctx, prOpts); err != nil {
 		log.Error("handleSubmitChangeRequest: failed to create change request: %v", err)
-		// Attempt to clean up the orphaned branch
-		if delErr := repo_service.DeleteBranch(ctx, ctx.Doer, targetRepo, gitRepo, branchName, nil); delErr != nil {
-			log.Error("handleSubmitChangeRequest: failed to cleanup branch %s: %v", branchName, delErr)
-		}
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
 		ctx.ServerError("NewPullRequest", err)
 		return nil
 	}
