@@ -623,7 +623,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	// Prevent users from submitting change requests to their own repository
 	if perms.IsRepoOwner {
-		ctx.JSONError(ctx.Tr("repo.editor.cannot_submit_cr_to_own_repo"))
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_submit_change_request_to_own_repo"))
 		return nil
 	}
 
