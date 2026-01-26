@@ -77,16 +77,20 @@
 					<a class="item" href="{{AppSubUrl}}/repo/create">
 						{{svg "octicon-plus"}} {{ctx.Locale.Tr "new_repo"}}
 					</a>
+					{{/* Migration link hidden - not used in Forkana
 					{{if not .DisableMigrations}}
 						<a class="item" href="{{AppSubUrl}}/repo/migrate">
 							{{svg "octicon-repo-push"}} {{ctx.Locale.Tr "new_migrate"}}
 						</a>
 					{{end}}
+					*/}}
+					{{/* New Organization link hidden - not used in Forkana
 					{{if .SignedUser.CanCreateOrganization}}
 					<a class="item" href="{{AppSubUrl}}/org/create">
 						{{svg "octicon-organization"}} {{ctx.Locale.Tr "new_org"}}
 					</a>
 					{{end}}
+					*/}}
 				</div><!-- end content create new menu -->
 			</div><!-- end dropdown menu create new -->
 
