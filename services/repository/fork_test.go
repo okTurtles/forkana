@@ -427,4 +427,75 @@ func TestCheckForkOnEditPermissions(t *testing.T) {
 		assert.False(t, perms.BlockedBySubject)
 		assert.False(t, perms.CanSubmitChangeRequest)
 	})
+
+	t.Run("BlockedBySubjectOwnership", func(t *testing.T) {
+		// User owns an independent article for the same subject (not a fork of the target repo).
+		// This tests the case where:
+		// - User A owns repo X with subject S (root article)
+		// - User B owns repo Y with subject S (fork of X)
+		// - User A tries to edit repo Y → should be blocked because they already have their own article
+
+		// Create a unique subject for this test
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), "BlockedBySubject Test Subject")
+		assert.NoError(t, err)
+
+		// Get user2 (will be the root article owner) and user5 (will own the fork)
+		userWithRoot := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		userWithFork := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+		// Use repo2 as the root article (owned by user2)
+		rootRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+		// Use repo4 as the fork (owned by user5, we'll set it up as a fork)
+		forkRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
+
+		// Verify ownership matches our expectations
+		assert.Equal(t, userWithRoot.ID, rootRepo.OwnerID)
+		assert.Equal(t, userWithFork.ID, forkRepo.OwnerID)
+
+		// Set up the subject relationship: both repos have the same subject
+		// rootRepo is the root (not a fork), forkRepo is a fork of rootRepo
+		originalRootSubjectID := rootRepo.SubjectID
+		originalRootIsFork := rootRepo.IsFork
+		originalRootForkID := rootRepo.ForkID
+		originalForkSubjectID := forkRepo.SubjectID
+		originalForkIsFork := forkRepo.IsFork
+		originalForkForkID := forkRepo.ForkID
+
+		rootRepo.SubjectID = subject.ID
+		rootRepo.IsFork = false
+		rootRepo.ForkID = 0
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id"))
+
+		forkRepo.SubjectID = subject.ID
+		forkRepo.IsFork = true
+		forkRepo.ForkID = rootRepo.ID
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), forkRepo, "subject_id", "is_fork", "fork_id"))
+
+		// Restore original values after test
+		defer func() {
+			rootRepo.SubjectID = originalRootSubjectID
+			rootRepo.IsFork = originalRootIsFork
+			rootRepo.ForkID = originalRootForkID
+			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id")
+
+			forkRepo.SubjectID = originalForkSubjectID
+			forkRepo.IsFork = originalForkIsFork
+			forkRepo.ForkID = originalForkForkID
+			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), forkRepo, "subject_id", "is_fork", "fork_id")
+		}()
+
+		// Now test: userWithRoot tries to edit forkRepo
+		// userWithRoot owns rootRepo (same subject), but rootRepo is NOT a fork of forkRepo
+		// So userWithRoot should be blocked
+		perms, err := CheckForkOnEditPermissions(t.Context(), userWithRoot, forkRepo)
+		assert.NoError(t, err)
+		assert.False(t, perms.IsRepoOwner, "User should not be the owner of the fork repo")
+		assert.False(t, perms.CanEditDirectly, "User should not be able to edit directly")
+		assert.False(t, perms.NeedsFork, "User should not need a fork (they're blocked)")
+		assert.False(t, perms.HasExistingFork, "User should not have an existing fork of this repo")
+		assert.True(t, perms.BlockedBySubject, "User should be blocked because they own an independent article for this subject")
+		assert.False(t, perms.CanSubmitChangeRequest, "User should not be able to submit change requests")
+		assert.NotNil(t, perms.OwnRepoForSubject, "OwnRepoForSubject should be set")
+		assert.Equal(t, rootRepo.ID, perms.OwnRepoForSubject.ID, "OwnRepoForSubject should be the user's root article")
+	})
 }
