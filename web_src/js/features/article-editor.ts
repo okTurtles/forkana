@@ -5,23 +5,39 @@ import {createElementFromHTML} from '../utils/dom.ts';
 import {svg} from '../svg.ts';
 import {html, htmlRaw} from '../utils/html.ts';
 
+// Convert markdown-style bold (**text**) to <strong> tags
+function formatBoldText(text: string): string {
+  return text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
 // Create a confirmation modal with custom button text
-function createForkConfirmModal(title: string, body: string, confirmText: string, cancelText: string): HTMLElement {
+function createForkConfirmModal(title: string, body: string, body2: string, confirmText: string, cancelText: string): HTMLElement {
+  // Format bold text in body
+  const formattedBody = formatBoldText(body);
+  const formattedBody2 = formatBoldText(body2);
+
   return createElementFromHTML(html`
-    <div class="ui g-modal-confirm modal">
-      <div class="header">${title}</div>
-      <div class="content"><p>${body}</p></div>
+    <div class="ui g-modal-confirm modal fork-confirm-modal">
+      <div class="header">
+        ${htmlRaw(svg('octicon-alert', 24, 'fork-confirm-warning-icon'))}
+        <span>${title}</span>
+        <i class="close icon"></i>
+      </div>
+      <div class="content">
+        <p class="fork-confirm-text">${htmlRaw(formattedBody)}</p>
+        <p class="fork-confirm-text">${htmlRaw(formattedBody2)}</p>
+      </div>
       <div class="actions">
-        <button class="ui cancel button">${htmlRaw(svg('octicon-x'))} ${cancelText}</button>
-        <button class="ui primary ok button">${htmlRaw(svg('octicon-check'))} ${confirmText}</button>
+        <button class="ui primary ok button">${confirmText}</button>
+        <button class="ui cancel button">${cancelText}</button>
       </div>
     </div>
   `.trim());
 }
 
 // Show fork confirmation modal and return a promise that resolves to true if confirmed
-function showForkConfirmModal(title: string, body: string, confirmText: string, cancelText: string): Promise<boolean> {
-  const modal = createForkConfirmModal(title, body, confirmText, cancelText);
+function showForkConfirmModal(title: string, body: string, body2: string, confirmText: string, cancelText: string): Promise<boolean> {
+  const modal = createForkConfirmModal(title, body, body2, confirmText, cancelText);
   return new Promise((resolve) => {
     let approved = false;
     const $modal = fomanticQuery(modal);
@@ -63,9 +79,10 @@ export function initArticleEditor() {
         const body = forkArticleButton.getAttribute('data-fork-confirm-body') || 'Are you sure you want to fork this article?';
         const confirmText = forkArticleButton.getAttribute('data-fork-confirm-yes') || 'Yes, Fork';
         const cancelText = forkArticleButton.getAttribute('data-fork-confirm-cancel') || 'Cancel';
+        const body2 = forkArticleButton.getAttribute('data-fork-confirm-body2') || '';
 
         // Show confirmation modal
-        const confirmed = await showForkConfirmModal(title, body, confirmText, cancelText);
+        const confirmed = await showForkConfirmModal(title, body, body2, confirmText, cancelText);
         if (!confirmed) {
           return; // User cancelled, do nothing
         }
