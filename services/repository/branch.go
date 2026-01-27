@@ -490,6 +490,24 @@ var (
 	ErrBranchIsDefault = errors.New("branch is default")
 )
 
+// DeleteBranchOptions contains options for DeleteBranch.
+type DeleteBranchOptions struct {
+	// SkipPermissionCheck bypasses the CanDeleteBranch permission check.
+	// This should ONLY be used for internal cleanup operations where the
+	// branch was created programmatically (e.g., cleaning up orphaned
+	// submit-change-request branches when PR creation fails).
+	//
+	// This mirrors the InternalPush pattern used during branch creation:
+	// when a branch is created via InternalPush (which bypasses pre-receive
+	// hooks and permission checks), the corresponding cleanup must also
+	// bypass permission checks to avoid an asymmetry where non-collaborators
+	// can create branches but cannot delete them.
+	//
+	// WARNING: Using this bypasses permission checks! Only use for internal
+	// operations where the caller has already verified the operation is safe.
+	SkipPermissionCheck bool
+}
+
 func CanDeleteBranch(ctx context.Context, repo *repo_model.Repository, branchName string, doer *user_model.User) error {
 	if branchName == repo.DefaultBranch {
 		return ErrBranchIsDefault
@@ -513,15 +531,20 @@ func CanDeleteBranch(ctx context.Context, repo *repo_model.Repository, branchNam
 	return nil
 }
 
-// DeleteBranch delete branch
-func DeleteBranch(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, gitRepo *git.Repository, branchName string, pr *issues_model.PullRequest) error {
+// DeleteBranch deletes a branch from the repository.
+// If opts is nil or opts.SkipPermissionCheck is false, standard permission checks are enforced.
+// If opts.SkipPermissionCheck is true, permission checks are bypassed (use only for internal cleanup).
+func DeleteBranch(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, gitRepo *git.Repository, branchName string, pr *issues_model.PullRequest, opts *DeleteBranchOptions) error {
 	err := repo.MustNotBeArchived()
 	if err != nil {
 		return err
 	}
 
-	if err := CanDeleteBranch(ctx, repo, branchName, doer); err != nil {
-		return err
+	// Skip permission check only if explicitly requested via opts
+	if opts == nil || !opts.SkipPermissionCheck {
+		if err := CanDeleteBranch(ctx, repo, branchName, doer); err != nil {
+			return err
+		}
 	}
 
 	rawBranch, err := git_model.GetBranch(ctx, repo.ID, branchName)
