@@ -113,17 +113,22 @@
                                             </button>
                                             {{end}}
                                         {{else}}
-                                            {{/* Fallback - show disabled button */}}
-                                            <button type="button" class="ui primary button disabled">
-                                                {{svg "octicon-check" 16 "tw-mr-1"}}
-                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
-                                            </button>
+                                            {{/* Fallback - show disabled button with tooltip */}}
+                                            <span data-tooltip-content="{{ctx.Locale.Tr "repo.pulls.disabled"}}">
+                                                <button type="button" class="ui primary button disabled" aria-label="{{ctx.Locale.Tr "repo.editor.submit_changes"}} - {{ctx.Locale.Tr "repo.pulls.disabled"}}">
+                                                    {{svg "octicon-check" 16 "tw-mr-1"}}
+                                                    {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                                </button>
+                                            </span>
                                         {{end}}
                                     {{else}}
-                                        <button type="button" class="ui primary button disabled">
-                                            {{svg "octicon-check" 16 "tw-mr-1"}}
-                                            {{ctx.Locale.Tr "repo.editor.sign_in_to_edit"}}
-                                        </button>
+                                        {{/* User not signed in - show disabled button with sign-in tooltip */}}
+                                        <span data-tooltip-content="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit_tooltip"}}">
+                                            <button type="button" class="ui primary button disabled" aria-label="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit"}}">
+                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                                {{ctx.Locale.Tr "repo.editor.sign_in_to_edit"}}
+                                            </button>
+                                        </span>
                                     {{end}}
                                 </div>
                             </div>
