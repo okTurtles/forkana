@@ -426,6 +426,21 @@ lint-yaml: .venv ## lint yaml files
 watch: ## watch everything and continuously rebuild
 	@bash tools/watch.sh
 
+.PHONY: dlv-check
+dlv-check:
+	@if ! command -v dlv >/dev/null 2>&1; then \
+		echo "Error: dlv (Delve) is not installed. See contrib/ide/DELVE_DEBUGGING.md for installation instructions."; \
+		exit 1; \
+	fi
+
+.PHONY: watch-backend-debug
+watch-backend-debug: go-check dlv-check ## watch backend (debug) and continuously rebuild
+	GITEA_RUN_MODE=dev TAGS="$(TAGS)" $(GO) run $(AIR_PACKAGE) -c .air.debug.toml
+
+.PHONY: watch-debug
+watch-debug: ## watch frontend + backend, with backend in debug mode
+	@bash tools/watch_debug.sh
+
 .PHONY: watch-frontend
 watch-frontend: node-check node_modules ## watch frontend files and continuously rebuild
 	@rm -rf $(WEBPACK_DEST_ENTRIES)
