@@ -647,7 +647,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	// Verify user can actually submit change requests
 	if !perms.CanSubmitChangeRequest {
-		ctx.JSONError(ctx.Tr("repo.pulls.disabled"))
+		ctx.JSONError(ctx.Tr("repo.editor.no_change_request_permission"))
 		return nil
 	}
 
