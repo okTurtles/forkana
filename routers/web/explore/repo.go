@@ -855,8 +855,9 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["HasExistingFork"] = false
 	ctx.Data["ExistingFork"] = nil
 	ctx.Data["IsRepoOwner"] = false
-	ctx.Data["HasOwnRepoForSubject"] = false
+	ctx.Data["BlockedByOwnArticle"] = false
 	ctx.Data["OwnRepoForSubject"] = nil
+	ctx.Data["CanSubmitChangeRequest"] = false
 
 	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, ctx.Repo.Repository)
 	if err != nil {
@@ -866,9 +867,10 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 
 	// Map permissions to context data
 	ctx.Data["IsRepoOwner"] = perms.IsRepoOwner
-	ctx.Data["HasOwnRepoForSubject"] = perms.BlockedBySubject
+	ctx.Data["BlockedByOwnArticle"] = perms.BlockedBySubject
 	ctx.Data["OwnRepoForSubject"] = perms.OwnRepoForSubject
 	ctx.Data["HasExistingFork"] = perms.HasExistingFork
 	ctx.Data["ExistingFork"] = perms.ExistingFork
 	ctx.Data["NeedsFork"] = perms.NeedsFork
+	ctx.Data["CanSubmitChangeRequest"] = perms.CanSubmitChangeRequest
 }

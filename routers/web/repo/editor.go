@@ -625,6 +625,32 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	targetRepo := ctx.Repo.Repository
 
+	// Verify user has permission to submit change requests
+	// This checks: not repo owner, not blocked by subject ownership, etc.
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, targetRepo)
+	if err != nil {
+		ctx.ServerError("CheckForkOnEditPermissions", err)
+		return nil
+	}
+
+	// Prevent users from submitting change requests to their own repository
+	if perms.IsRepoOwner {
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_submit_change_request_to_own_repo"))
+		return nil
+	}
+
+	// Block users who own an independent article for this subject
+	if perms.BlockedBySubject {
+		ctx.JSONError(ctx.Tr("repo.fork.already_own_subject_repo"))
+		return nil
+	}
+
+	// Verify user can actually submit change requests
+	if !perms.CanSubmitChangeRequest {
+		ctx.JSONError(ctx.Tr("repo.editor.no_change_request_permission"))
+		return nil
+	}
+
 	// Check if the repository allows pull requests
 	if !targetRepo.AllowsPulls(ctx) {
 		ctx.JSONError(ctx.Tr("repo.pulls.disabled"))
@@ -649,7 +675,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// We use InternalPush to skip pre-receive hooks since this is a programmatic operation
 	// where we've already verified the user can submit change requests (via middleware)
 	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
-	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+	_, err = files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: form.LastCommit,
 		OldBranch:    targetRepo.DefaultBranch,
 		NewBranch:    branchName,
