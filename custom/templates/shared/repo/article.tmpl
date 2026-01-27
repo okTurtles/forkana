@@ -72,7 +72,7 @@
                                                 {{svg "octicon-check" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
-                                        {{else if .HasOwnRepoForSubject}}
+                                        {{else if .BlockedByOwnArticle}}
                                             {{/* User owns an independent article for this subject (not a fork of this repo) */}}
                                             {{/* They cannot submit change requests here - redirect to their own article */}}
                                             <a href="{{.OwnRepoForSubject.Link}}?view=article&mode=edit" class="ui primary button">
