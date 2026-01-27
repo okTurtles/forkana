@@ -116,17 +116,42 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 	//       - They cannot fork or submit change requests (one article per subject rule)
 
 	if ownRepo != nil && ownRepo.ID != repo.ID {
-		// User owns a repo for this subject - check if it's a fork of the current repo
+		// User owns a repo for this subject - check if it's part of the same fork tree
 		if existingFork != nil && ownRepo.ID == existingFork.ID {
-			// Case 2a: User's repo for the subject IS their fork of this repo
+			// Case 2a: User's repo for the subject IS their direct fork of this repo
 			// They can submit change requests to propose changes
 			perms.HasExistingFork = true
 			perms.ExistingFork = existingFork
 			perms.OwnRepoForSubject = ownRepo
 			perms.CanSubmitChangeRequest = true
+		} else if ownRepo.IsFork {
+			// ownRepo is a fork - check if it's an indirect fork (fork of a fork) in the same tree
+			// by comparing fork tree roots
+			ownRepoRoot, err := repo_model.FindForkTreeRoot(ctx, ownRepo.ID)
+			if err != nil {
+				return nil, err
+			}
+			repoRoot, err := repo_model.FindForkTreeRoot(ctx, repo.ID)
+			if err != nil {
+				return nil, err
+			}
+
+			if ownRepoRoot == repoRoot {
+				// Case 2a (indirect): User's repo is an indirect fork in the same fork tree
+				// They can submit change requests to propose changes
+				perms.HasExistingFork = true
+				perms.ExistingFork = ownRepo
+				perms.OwnRepoForSubject = ownRepo
+				perms.CanSubmitChangeRequest = true
+			} else {
+				// Case 2b: User has an independent article for this subject (not in the same fork tree)
+				// Block them from forking or editing - one article per subject rule
+				perms.BlockedBySubject = true
+				perms.OwnRepoForSubject = ownRepo
+			}
 		} else {
-			// Case 2b: User has an independent article for this subject (not a fork of this repo)
-			// Block them from forking or editing - one article per subject rule
+			// Case 2b: User owns the root article for this subject (not a fork)
+			// Block them from forking or editing - they should edit their own root
 			perms.BlockedBySubject = true
 			perms.OwnRepoForSubject = ownRepo
 		}
