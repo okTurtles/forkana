@@ -1021,6 +1021,13 @@ func MergePullRequest(ctx *context.Context) {
 	pr.Issue = issue
 	pr.Issue.Repo = ctx.Repo.Repository
 
+	// Only the repository owner can merge pull requests
+	// This check is based on the base repository (target of the PR)
+	if !ctx.IsSigned || ctx.Doer.ID != ctx.Repo.Repository.OwnerID {
+		ctx.JSONError(ctx.Tr("repo.pulls.only_owner_can_merge"))
+		return
+	}
+
 	manuallyMerged := repo_model.MergeStyle(form.Do) == repo_model.MergeStyleManuallyMerged
 
 	mergeCheckType := pull_service.MergeCheckTypeGeneral

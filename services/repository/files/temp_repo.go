@@ -355,8 +355,18 @@ func (t *TemporaryUploadRepository) CommitTree(ctx context.Context, opts *Commit
 
 // Push the provided commitHash to the repository branch by the provided user
 func (t *TemporaryUploadRepository) Push(ctx context.Context, doer *user_model.User, commitHash, branch string) error {
+	return t.PushWithOptions(ctx, doer, commitHash, branch, false)
+}
+
+// PushWithOptions pushes the provided commitHash to the repository branch with optional internal push
+func (t *TemporaryUploadRepository) PushWithOptions(ctx context.Context, doer *user_model.User, commitHash, branch string, useInternalEnv bool) error {
 	// Because calls hooks we need to pass in the environment
-	env := repo_module.PushingEnvironment(doer, t.repo)
+	var env []string
+	if useInternalEnv {
+		env = repo_module.InternalPushingEnvironment(doer, t.repo)
+	} else {
+		env = repo_module.PushingEnvironment(doer, t.repo)
+	}
 	if err := git.Push(ctx, t.basePath, git.PushOptions{
 		Remote: t.repo.RepoPath(),
 		Branch: strings.TrimSpace(commitHash) + ":" + git.BranchPrefix + strings.TrimSpace(branch),

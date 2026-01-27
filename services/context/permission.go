@@ -23,24 +23,24 @@ func RequireRepoAdmin() func(ctx *Context) {
 }
 
 // CanWriteToBranch checks if the user is allowed to write to the branch of the repo
-// If the request has fork_and_edit=true in the form data, the check is skipped
-// because the handler will create a fork and commit to that instead.
-// The fork_and_edit bypass is ONLY allowed for _edit and _new actions,
-// which properly handle the fork-and-edit workflow via handleForkAndEdit().
-// Other actions (delete, upload, diffpatch, cherrypick) do NOT support fork_and_edit
+// If the request has fork_and_edit=true or submit_change_request=true in the form data,
+// the check is skipped because the handler will create a fork/branch and commit to that instead.
+// The bypass is ONLY allowed for _edit and _new actions, which properly handle these workflows
+// via handleForkAndEdit() and handleSubmitChangeRequest() respectively.
+// Other actions (delete, upload, diffpatch, cherrypick) do NOT support these workflows
 // and must not allow this bypass.
 func CanWriteToBranch() func(ctx *Context) {
 	return func(ctx *Context) {
-		// Allow fork-and-edit workflow to bypass write permission check
-		// The handler will create a fork and commit to that instead
-		if ctx.Req.FormValue("fork_and_edit") == "true" {
-			// Only allow fork_and_edit bypass for _edit and _new actions
-			// These are the only handlers that properly implement the fork-and-edit workflow
+		// Allow fork-and-edit or submit-change-request workflow to bypass write permission check
+		// The handler will create a fork/branch and commit to that instead
+		if ctx.Req.FormValue("fork_and_edit") == "true" || ctx.Req.FormValue("submit_change_request") == "true" {
+			// Only allow bypass for _edit and _new actions
+			// These are the only handlers that properly implement the fork-and-edit and submit-change-request workflows
 			editorAction := ctx.PathParam("editor_action")
 			if editorAction == "_edit" || editorAction == "_new" {
 				return
 			}
-			// For other actions, ignore fork_and_edit and fall through to permission check
+			// For other actions, ignore the form values and fall through to permission check
 		}
 		if !ctx.Repo.CanWriteToBranch(ctx, ctx.Doer, ctx.Repo.BranchName) {
 			ctx.NotFound(nil)

@@ -60,6 +60,11 @@ type ChangeRepoFilesOptions struct {
 	Committer    *IdentityOptions
 	Dates        *CommitDateOptions
 	Signoff      bool
+	// InternalPush skips pre-receive and post-receive hooks when pushing.
+	// This should ONLY be used for internal/programmatic operations where
+	// permissions have already been verified (e.g., submit-change-request workflow).
+	// WARNING: Using this bypasses branch protection and other security checks!
+	InternalPush bool
 }
 
 type RepoFileOptions struct {
@@ -303,7 +308,8 @@ func ChangeRepoFiles(ctx context.Context, repo *repo_model.Repository, doer *use
 	}
 
 	// Then push this tree to NewBranch
-	if err := t.Push(ctx, doer, commitHash, opts.NewBranch); err != nil {
+	// Use internal pushing environment if explicitly requested (skips pre-receive hooks)
+	if err := t.PushWithOptions(ctx, doer, commitHash, opts.NewBranch, opts.InternalPush); err != nil {
 		log.Error("%T %v", err, err)
 		return nil, err
 	}
