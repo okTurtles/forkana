@@ -25,22 +25,38 @@ func RequireRepoAdmin() func(ctx *Context) {
 // CanWriteToBranch checks if the user is allowed to write to the branch of the repo
 // If the request has fork_and_edit=true or submit_change_request=true in the form data,
 // the check is skipped because the handler will create a fork/branch and commit to that instead.
-// The bypass is ONLY allowed for _edit and _new actions, which properly handle these workflows
-// via handleForkAndEdit() and handleSubmitChangeRequest() respectively.
+//
+// Workflow support by action:
+//   - fork_and_edit: supports both _edit and _new (creates a personal fork)
+//   - submit_change_request: supports only _edit (proposes changes to existing articles via in-repo PR)
+//
+// The submit_change_request workflow intentionally does NOT support _new because creating new files
+// in someone else's repository doesn't align with the Forkana model - users should create their own
+// repository for new articles rather than proposing to add files to another user's repository.
+//
 // Other actions (delete, upload, diffpatch, cherrypick) do NOT support these workflows
 // and must not allow this bypass.
 func CanWriteToBranch() func(ctx *Context) {
 	return func(ctx *Context) {
-		// Allow fork-and-edit or submit-change-request workflow to bypass write permission check
-		// The handler will create a fork/branch and commit to that instead
-		if ctx.Req.FormValue("fork_and_edit") == "true" || ctx.Req.FormValue("submit_change_request") == "true" {
-			// Only allow bypass for _edit and _new actions
-			// These are the only handlers that properly implement the fork-and-edit and submit-change-request workflows
-			editorAction := ctx.PathParam("editor_action")
+		editorAction := ctx.PathParam("editor_action")
+
+		// Allow fork-and-edit workflow to bypass write permission check for _edit and _new
+		// The handler will create a personal fork and commit to that instead
+		if ctx.Req.FormValue("fork_and_edit") == "true" {
 			if editorAction == "_edit" || editorAction == "_new" {
 				return
 			}
-			// For other actions, ignore the form values and fall through to permission check
+		}
+
+		// Allow submit-change-request workflow to bypass write permission check for _edit only
+		// This workflow creates an in-repo branch and PR to propose changes to existing articles
+		// It does NOT support _new - creating new files should be done in the user's own repository
+		if ctx.Req.FormValue("submit_change_request") == "true" {
+			if editorAction == "_edit" {
+				return
+			}
+			// For _new action with submit_change_request, fall through to permission check
+			// which will correctly deny access for non-collaborators
 		}
 		if !ctx.Repo.CanWriteToBranch(ctx, ctx.Doer, ctx.Repo.BranchName) {
 			ctx.NotFound(nil)
