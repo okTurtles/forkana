@@ -683,9 +683,11 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// where we've already verified the user can submit change requests (via middleware)
 	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
 	_, err = files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
-		// Use empty LastCommitID so ChangeRepoFiles uses the current HEAD of OldBranch.
-		// form.LastCommit may be stale or from a different branch, which would create
-		// a commit with a parent that doesn't match the tree content being committed.
+		// Use an empty LastCommitID so ChangeRepoFiles bases the new commit on the current
+		// HEAD of OldBranch. In this workflow we always create a new branch (NewBranch != OldBranch),
+		// so the file conflict detection that relies on LastCommitID is skipped anyway. This makes
+		// an empty LastCommitID the safest choice and avoids relying on a potentially stale or
+		// branch-mismatched client-side form.LastCommit value.
 		LastCommitID: "",
 		OldBranch:    targetRepo.DefaultBranch,
 		NewBranch:    branchName,
