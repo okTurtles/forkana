@@ -147,7 +147,8 @@ function clearMergeMessage() {
             </template>
           </span>
         </button>
-        <div class="ui dropdown icon button" @click.stop="showMergeStyleMenu = !showMergeStyleMenu">
+        <!-- Only show dropdown when there are multiple merge styles available -->
+        <div v-if="mergeStyleAllowedCount > 1" class="ui dropdown icon button" @click.stop="showMergeStyleMenu = !showMergeStyleMenu">
           <svg-icon name="octicon-triangle-down" :size="14"/>
           <div class="menu" :class="{'show':showMergeStyleMenu}">
             <template v-for="msd in mergeForm.mergeStyles">

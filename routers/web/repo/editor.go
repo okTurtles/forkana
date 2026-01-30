@@ -15,7 +15,7 @@ import (
 
 	"code.gitea.io/gitea/models/db"
 	git_model "code.gitea.io/gitea/models/git"
-	"code.gitea.io/gitea/models/issues"
+	issues_model "code.gitea.io/gitea/models/issues"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/charset"
@@ -31,6 +31,7 @@ import (
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/context/upload"
 	"code.gitea.io/gitea/services/forms"
+	pull_service "code.gitea.io/gitea/services/pull"
 	repo_service "code.gitea.io/gitea/services/repository"
 	files_service "code.gitea.io/gitea/services/repository/files"
 )
@@ -152,7 +153,7 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 		return nil
 	}
 
-	if !commitFormOptions.NeedFork && !issues.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
+	if !commitFormOptions.NeedFork && !issues_model.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
 		ctx.NotFound(nil)
 		return nil
 	}
@@ -364,9 +365,10 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
-	// Skip the NeedFork workflow if ForkAndEdit is true
+	// Skip the NeedFork workflow if ForkAndEdit or SubmitChangeRequest is true
 	// The ForkAndEdit workflow (handled later) will create the fork
-	if parsed.CommitFormOptions.NeedFork && !parsed.form.ForkAndEdit {
+	// The SubmitChangeRequest workflow creates a branch in the target repo directly (no fork)
+	if parsed.CommitFormOptions.NeedFork && !parsed.form.ForkAndEdit && !parsed.form.SubmitChangeRequest {
 		baseRepo := ctx.Repo.Repository
 		repoName := getUniqueRepositoryName(ctx, ctx.Doer.ID, baseRepo.Name)
 		if repoName == "" {
@@ -481,6 +483,24 @@ func EditFilePost(ctx *context.Context) {
 		return
 	}
 
+	// Validate mutually exclusive workflow flags
+	// Both cannot be true simultaneously - this is a security check in case JavaScript fails
+	if parsed.form.ForkAndEdit && parsed.form.SubmitChangeRequest {
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_use_both_fork_and_submit"))
+		return
+	}
+
+	// Handle submit-change-request workflow (fork + branch + commit + PR)
+	if parsed.form.SubmitChangeRequest {
+		pr := handleSubmitChangeRequest(ctx, parsed.form, parsed)
+		if ctx.Written() || pr == nil {
+			return
+		}
+		// Redirect to the created pull request
+		ctx.JSONRedirect(pr.Issue.Link())
+		return
+	}
+
 	// Determine target repository - either the original or a fork
 	targetRepo := ctx.Repo.Repository
 
@@ -578,6 +598,165 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 	}
 
 	return fork
+}
+
+// cleanupOrphanedBranch attempts to delete a branch that was created but is no longer needed
+// (e.g., when PR creation fails after the branch was already created).
+// It logs any errors but does not propagate them to the caller.
+func cleanupOrphanedBranch(ctx *context.Context, repo *repo_model.Repository, gitRepo *git.Repository, branchName string) {
+	if gitRepo == nil {
+		return
+	}
+	// Skip permission check because this branch was created programmatically via
+	// InternalPush (which bypasses pre-receive hooks and permission checks).
+	// Without this, non-collaborators who can submit change requests would be able
+	// to create branches but not delete them, leaving orphaned branches when PR
+	// creation fails.
+	if err := repo_service.DeleteBranch(ctx, ctx.Doer, repo, gitRepo, branchName, nil, &repo_service.DeleteBranchOptions{
+		SkipPermissionCheck: true,
+	}); err != nil {
+		log.Error("cleanupOrphanedBranch: failed to cleanup branch %s: %v", branchName, err)
+	}
+}
+
+// handleSubmitChangeRequest handles the submit-change-request workflow for article contributions.
+// It creates a unique branch in the target repository, commits the changes, and creates a change request
+// from that branch to the default branch (same-repo CR, no fork involved).
+// Returns the created change request, or nil if an error occurred.
+func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileForm, parsed *preparedEditorCommitForm[*forms.EditRepoFileForm]) *issues_model.PullRequest {
+	// Verify user is authenticated (defense-in-depth, middleware should already handle this)
+	if ctx.Doer == nil {
+		ctx.JSONError(ctx.Tr("error.not_found"))
+		return nil
+	}
+
+	targetRepo := ctx.Repo.Repository
+
+	// Check if the repository allows pull requests
+	if !targetRepo.AllowsPulls(ctx) {
+		ctx.JSONError(ctx.Tr("repo.pulls.disabled"))
+		return nil
+	}
+
+	// Generate a unique branch name for the change request
+	branchName := getUniquePatchBranchName(ctx, ctx.Doer.LowerName, targetRepo)
+	if branchName == "" {
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_create_branch"))
+		return nil
+	}
+
+	// Validate that content is provided and is not empty/whitespace-only
+	if !form.Content.Has() || strings.TrimSpace(form.Content.Value()) == "" {
+		ctx.JSONError(ctx.Tr("repo.editor.content_required"))
+		return nil
+	}
+
+	// Commit the changes to a new branch in the target repository
+	// The ChangeRepoFiles function will create the new branch from the default branch
+	// We use InternalPush to skip pre-receive hooks since this is a programmatic operation
+	// where we've already verified the user can submit change requests (via middleware)
+	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
+	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+		LastCommitID: form.LastCommit,
+		OldBranch:    targetRepo.DefaultBranch,
+		NewBranch:    branchName,
+		Message:      parsed.GetCommitMessage(defaultCommitMessage),
+		Files: []*files_service.ChangeRepoFile{
+			{
+				Operation:     "update",
+				FromTreePath:  ctx.Repo.TreePath,
+				TreePath:      form.TreePath,
+				ContentReader: strings.NewReader(strings.ReplaceAll(form.Content.Value(), "\r", "")),
+			},
+		},
+		Signoff:      form.Signoff,
+		Author:       parsed.GitCommitter,
+		Committer:    parsed.GitCommitter,
+		InternalPush: true,
+	})
+	if err != nil {
+		log.Error("handleSubmitChangeRequest: failed to commit changes: %v", err)
+		editorHandleFileOperationError(ctx, branchName, err)
+		return nil
+	}
+
+	// Get compare info for the pull request
+	gitRepo, err := gitrepo.OpenRepository(ctx, targetRepo)
+	if err != nil {
+		log.Error("handleSubmitChangeRequest: failed to open git repo: %v", err)
+		// Note: Branch cleanup not attempted as repository is inaccessible
+		ctx.ServerError("OpenRepository", err)
+		return nil
+	}
+	defer gitRepo.Close()
+
+	// Same-repo CR: both head and base are in the target repository
+	compareInfo, err := pull_service.GetCompareInfo(ctx, targetRepo, targetRepo, gitRepo,
+		git.BranchPrefix+targetRepo.DefaultBranch, git.BranchPrefix+branchName, false, false)
+	if err != nil {
+		log.Error("handleSubmitChangeRequest: failed to get compare info: %v", err)
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
+		ctx.ServerError("GetCompareInfo", err)
+		return nil
+	}
+
+	// Create the change request
+	// Use custom title if provided, otherwise generate a title based on the file being edited
+	prTitle := util.IfZero(strings.TrimSpace(form.ChangeRequestTitle), ctx.Locale.TrString("repo.editor.submit_changes_pr_title", path.Base(form.TreePath)))
+	// Enforce maximum PR title length (255 characters) to prevent excessively long titles.
+	// Use rune-based truncation to avoid corrupting multi-byte UTF-8 characters.
+	prTitle = util.TruncateRunes(prTitle, 255)
+	prContent := strings.TrimSpace(form.ChangeRequestDescription)
+	// Defense-in-depth: cap description length so downstream processing/storage isn't impacted by huge input.
+	// Note: this does not limit the incoming request size.
+	prContent = util.TruncateRunes(prContent, 65535)
+
+	pullIssue := &issues_model.Issue{
+		RepoID:   targetRepo.ID,
+		Repo:     targetRepo,
+		Title:    prTitle,
+		PosterID: ctx.Doer.ID,
+		Poster:   ctx.Doer,
+		IsPull:   true,
+		Content:  prContent,
+	}
+
+	// Same-repo CR: HeadRepo and BaseRepo are both the target repository
+	changeRequest := &issues_model.PullRequest{
+		HeadRepoID: targetRepo.ID,
+		BaseRepoID: targetRepo.ID,
+		HeadBranch: branchName,
+		BaseBranch: targetRepo.DefaultBranch,
+		HeadRepo:   targetRepo,
+		BaseRepo:   targetRepo,
+		MergeBase:  compareInfo.MergeBase,
+		Type:       issues_model.PullRequestGitea,
+	}
+
+	prOpts := &pull_service.NewPullRequestOptions{
+		Repo:        targetRepo,
+		Issue:       pullIssue,
+		PullRequest: changeRequest,
+		// AllowNonCollaborator: The user was already authorized to submit change requests
+		// by the CanSubmitChangeRequest middleware check. This bypasses the collaborator
+		// check since the user created the patch branch programmatically (not via git push).
+		AllowNonCollaborator: true,
+	}
+
+	if err := pull_service.NewPullRequest(ctx, prOpts); err != nil {
+		log.Error("handleSubmitChangeRequest: failed to create change request: %v", err)
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
+		ctx.ServerError("NewPullRequest", err)
+		return nil
+	}
+
+	log.Info("handleSubmitChangeRequest: created CR #%d from %s to %s in %s/%s",
+		changeRequest.Index,
+		branchName,
+		targetRepo.DefaultBranch,
+		targetRepo.OwnerName, targetRepo.Name)
+
+	return changeRequest
 }
 
 // DeleteFile render delete file page

@@ -45,6 +45,11 @@
   width: calc(100% - 316px);
 }
 
+.issue-content-left-pull-request {
+  margin: 0 !important;
+  width: 100%;
+}
+
 .issue-content-right {
   margin: 0 !important;
   width: 300px;

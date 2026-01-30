@@ -89,7 +89,7 @@
                                             </button>
                                         {{else if .NeedsFork}}
                                             {{/* User needs to create a fork - show fork-and-submit button */}}
-                                            <button type="button" id="submit-changes-button" class="ui secondary button"
+                                            <button type="button" id="fork-article-button" class="ui secondary button"
                                                 data-fork-and-edit="true"
                                                 data-tooltip-content="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
                                                 data-fork-confirm-title="{{ctx.Locale.Tr "repo.fork_article_confirm_title"}}"
@@ -99,9 +99,10 @@
                                                 {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.fork_article"}}
                                             </button>
-                                            {{/* Submit Change Request - not implemented yet, disabled for now */}}
-                                            <button type="button" class="ui primary button disabled">
-                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                            {{/* Submit Change Request - opens modal for title/description, then creates branch + commit + PR */}}
+                                            <button type="button" id="pre-submit-changes-button" class="ui primary button"
+                                                data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
+                                                {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
                                         {{else}}

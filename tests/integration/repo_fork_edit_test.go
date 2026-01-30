@@ -388,3 +388,178 @@ func TestForkAndEditSecurityBypass(t *testing.T) {
 			"fork_and_edit=true SHOULD bypass CanWriteToBranch for _new action")
 	})
 }
+
+// TestSubmitChangeRequestMiddlewareBypass tests that the CanWriteToBranch middleware
+// correctly bypasses permission checks when submit_change_request=true is set.
+// This is similar to fork_and_edit but for the in-repo change request workflow.
+func TestSubmitChangeRequestMiddlewareBypass(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+	sessionNonOwner := loginUser(t, nonOwner.Name)
+
+	t.Run("NonOwnerWithoutSubmitChangeRequestGetsDenied", func(t *testing.T) {
+		// Get the edit page to obtain CSRF token
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL)
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		// POST without submit_change_request should be denied (404)
+		form := map[string]string{
+			"_csrf":         htmlDoc.GetCSRF(),
+			"last_commit":   htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":     "README.md",
+			"content":       "Test content without submit_change_request",
+			"commit_choice": "direct",
+			// Note: submit_change_request is NOT set
+		}
+
+		req = NewRequestWithValues(t, "POST", editURL, form)
+		sessionNonOwner.MakeRequest(t, req, http.StatusNotFound)
+	})
+
+	t.Run("NonOwnerWithSubmitChangeRequestPassesMiddleware", func(t *testing.T) {
+		// Get the edit page with submit_change_request query param to obtain CSRF token
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		// POST with submit_change_request=true should NOT return 404
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               "Test content with submit_change_request",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+
+		req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		// The response should NOT be 404 (middleware passed)
+		assert.NotEqual(t, http.StatusNotFound, resp.Code,
+			"submit_change_request=true should bypass CanWriteToBranch middleware")
+	})
+
+	t.Run("SubmitChangeRequestOnlyAllowedForEdit", func(t *testing.T) {
+		// Security boundary test: submit_change_request=true should ONLY bypass
+		// permission checks for _edit action. All other actions (_new, _delete,
+		// _upload, _diffpatch, _cherrypick) must be blocked.
+		//
+		// This is intentional: the submit_change_request workflow is designed for
+		// proposing edits to existing articles via in-repo PRs. Creating new files
+		// should be done in the user's own repository, not proposed to another user's repo.
+
+		// Get CSRF token
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+		csrf := htmlDoc.GetCSRF()
+
+		// _delete should NOT allow submit_change_request bypass
+		deleteURL := path.Join(owner.Name, repo.Name, "_delete", repo.DefaultBranch, "README.md")
+		form := map[string]string{
+			"_csrf":                 csrf,
+			"tree_path":             "README.md",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+
+		req = NewRequestWithValues(t, "POST", deleteURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"submit_change_request=true should NOT bypass CanWriteToBranch for _delete action")
+
+		// _upload should NOT allow submit_change_request bypass
+		uploadURL := path.Join(owner.Name, repo.Name, "_upload", repo.DefaultBranch, "/")
+		form = map[string]string{
+			"_csrf":                 csrf,
+			"tree_path":             "",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+
+		req = NewRequestWithValues(t, "POST", uploadURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"submit_change_request=true should NOT bypass CanWriteToBranch for _upload action")
+
+		// _diffpatch should NOT allow submit_change_request bypass
+		diffpatchURL := path.Join(owner.Name, repo.Name, "_diffpatch", repo.DefaultBranch, "/")
+		form = map[string]string{
+			"_csrf":                 csrf,
+			"tree_path":             "",
+			"content":               "fake patch",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+
+		req = NewRequestWithValues(t, "POST", diffpatchURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"submit_change_request=true should NOT bypass CanWriteToBranch for _diffpatch action")
+	})
+
+	t.Run("EditEndpointAllowsSubmitChangeRequest", func(t *testing.T) {
+		// Verify that _edit allows submit_change_request=true
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               "Test content",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+
+		req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		assert.NotEqual(t, http.StatusNotFound, resp.Code,
+			"submit_change_request=true SHOULD bypass CanWriteToBranch for _edit action")
+	})
+
+	t.Run("NewEndpointBlocksSubmitChangeRequest", func(t *testing.T) {
+		// Security boundary: submit_change_request=true intentionally does NOT support _new.
+		// Creating new files in someone else's repository doesn't align with the Forkana model.
+		// Users should create their own repository for new articles rather than proposing
+		// to add files to another user's repository.
+		//
+		// This is different from fork_and_edit which DOES support _new (creates a personal fork).
+
+		// Get CSRF token from the edit page (since _new may redirect in Forkana model)
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+		csrf := htmlDoc.GetCSRF()
+
+		// POST to _new with submit_change_request=true should be blocked (404)
+		newURL := path.Join(owner.Name, repo.Name, "_new", repo.DefaultBranch, "newfile.md")
+		form := map[string]string{
+			"_csrf":                 csrf,
+			"tree_path":             "newfile.md",
+			"content":               "New file content",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+
+		req = NewRequestWithValues(t, "POST", newURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		// Expect 404 - permission denied because submit_change_request does NOT bypass for _new
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"submit_change_request=true should NOT bypass CanWriteToBranch for _new action")
+	})
+}

@@ -14,6 +14,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/git"
+	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/json"
 	"code.gitea.io/gitea/modules/log"
 	repo_module "code.gitea.io/gitea/modules/repository"
@@ -32,12 +33,19 @@ func getUniquePatchBranchName(ctx context.Context, prefixName string, repo *repo
 	prefix := prefixName + "-patch-"
 	for i := 1; i <= maxUniqueNameAttempts; i++ {
 		branchName := fmt.Sprintf("%s%d", prefix, i)
-		if exist, err := git_model.IsBranchExist(ctx, repo.ID, branchName); err != nil {
-			log.Error("getUniquePatchBranchName: %v", err)
+		// Check database first (fast path for most cases)
+		if existInDB, err := git_model.IsBranchExist(ctx, repo.ID, branchName); err != nil {
+			log.Error("getUniquePatchBranchName: database check failed: %v", err)
 			return ""
-		} else if !exist {
-			return branchName
+		} else if existInDB {
+			continue
 		}
+		// Also check the actual git repository, as branches can exist in git
+		// without being in the database (e.g., orphaned branches from failed operations)
+		if gitrepo.IsBranchExist(ctx, repo, branchName) {
+			continue
+		}
+		return branchName
 	}
 	return ""
 }

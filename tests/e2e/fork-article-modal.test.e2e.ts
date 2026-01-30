@@ -30,7 +30,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       // Verify we're on the article page
       await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
 
-      const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+      const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
 
       // Wait for the article edit form to be present (indicates we're on the edit page)
@@ -86,7 +86,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       // Verify we're on the article page
       await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
 
-      const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+      const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
 
       // Wait for the article edit form to be present (indicates we're on the edit page)
@@ -125,7 +125,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       // Verify we're on the article page
       await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
 
-      const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+      const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
 
       // Wait for the article edit form to be present (indicates we're on the edit page)
@@ -161,7 +161,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       // Verify we're on the article page
       await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
 
-      const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+      const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
 
       // Wait for the article edit form to be present (indicates we're on the edit page)
@@ -200,7 +200,7 @@ test.describe('Fork Button Tooltip', () => {
     await page.goto('/article/user2/example-subject?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 
-    const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+    const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     await expect(forkButton).toHaveAttribute('data-tooltip-content', /Forking creates a separate version/);
@@ -282,7 +282,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
 
       // Non-owner should see Fork button
-      const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+      const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
 
       // Button should contain "Fork" text
@@ -294,16 +294,23 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       await context.close();
     });
 
-    test('non-owner sees disabled Submit Changes button alongside Fork button', async ({browser}, workerInfo) => {
+    test('non-owner sees Submit Change Request button alongside Fork button', async ({browser}, workerInfo) => {
       const context = await load_logged_in_context(browser, workerInfo, 'user4');
       const page = await context.newPage();
 
       await page.goto('/article/user2/example-subject?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      // Non-owner should see disabled Submit Changes button
-      const disabledSubmitButton = page.locator('button.ui.primary.button.disabled:has-text("Submit Changes")');
-      await expect(disabledSubmitButton).toBeVisible({timeout: 10000});
+      // Non-owner should see both Fork button and Submit Change Request button
+      const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
+      await expect(forkButton).toBeVisible({timeout: 10000});
+
+      // Submit Change Request button (opens modal for PR creation)
+      const submitCRButton = page.locator('#pre-submit-changes-button');
+      await expect(submitCRButton).toBeVisible({timeout: 10000});
+
+      // Verify button text contains "Submit Changes"
+      await expect(submitCRButton).toContainText(/Submit Changes/i);
 
       await context.close();
     });
@@ -339,7 +346,7 @@ test.describe('Accessibility Tests', () => {
     await page.goto('/article/user2/example-subject?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 
-    const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+    const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
@@ -364,7 +371,7 @@ test.describe('Accessibility Tests', () => {
     await page.goto('/article/user2/example-subject?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 
-    const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+    const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
@@ -397,7 +404,7 @@ test.describe('Accessibility Tests', () => {
     await page.goto('/article/user2/example-subject?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 
-    const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+    const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized
@@ -428,7 +435,7 @@ test.describe('Accessibility Tests', () => {
     await page.goto('/article/user2/example-subject?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 
-    const forkButton = page.locator('#submit-changes-button[data-fork-and-edit="true"]');
+    const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
     await expect(forkButton).toBeVisible({timeout: 10000});
 
     // Wait for the Toast UI Editor to be initialized

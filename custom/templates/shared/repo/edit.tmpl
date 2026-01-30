@@ -74,6 +74,11 @@
             <input type="hidden" name="commit_message" value="">
             {{/* Fork-on-edit field - only true when user needs to create a new fork (not when they have an existing fork, as that case shows a link instead of a form) */}}
             <input type="hidden" id="fork_and_edit" name="fork_and_edit" value="{{if .NeedsFork}}true{{else}}false{{end}}">
+            {{/* Submit change request field - when true, creates fork + branch + commit + PR back to original */}}
+            <input type="hidden" id="submit_change_request" name="submit_change_request" value="false">
+            {{/* Change request title and description - optional custom values for the PR */}}
+            <input type="hidden" id="change_request_title" name="change_request_title" value="">
+            <input type="hidden" id="change_request_description" name="change_request_description" value="">
 
              <div class="field">
                  <div class="tw-p-0">
@@ -83,6 +88,36 @@
                  </div>
              </div>
         </form>
+
+        {{/* Submit Change Request Modal */}}
+        <div class="ui small modal" id="submit-change-request-modal">
+            <div class="header">
+                {{svg "octicon-git-pull-request" 16 "tw-mr-2"}}
+                {{ctx.Locale.Tr "repo.editor.submit_changes_modal_title"}}
+            </div>
+            <div class="content">
+                <div class="ui form">
+                    <div class="field">
+                        <label for="modal-cr-title">{{ctx.Locale.Tr "repo.editor.change_request_title_label"}}</label>
+                        <input type="text" id="modal-cr-title" name="modal-cr-title" placeholder="{{ctx.Locale.Tr "repo.editor.change_request_title_placeholder"}}" maxlength="255">
+                    </div>
+                    <div class="field">
+                        <label for="modal-cr-description">{{ctx.Locale.Tr "repo.editor.change_request_description_label"}}</label>
+                        <textarea id="modal-cr-description" name="modal-cr-description" rows="4" placeholder="{{ctx.Locale.Tr "repo.editor.change_request_description_placeholder"}}"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="actions">
+                <button class="ui cancel button">
+                    {{svg "octicon-x" 16 "tw-mr-1"}}
+                    {{ctx.Locale.Tr "cancel"}}
+                </button>
+                <button class="ui primary ok button" id="modal-submit-cr-button">
+                    {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
+                    {{ctx.Locale.Tr "repo.editor.submit_change_request"}}
+                </button>
+            </div>
+        </div>
     {{end}}
 </div>
 {{end}}

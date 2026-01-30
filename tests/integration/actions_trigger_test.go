@@ -23,7 +23,6 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 	actions_module "code.gitea.io/gitea/modules/actions"
 	"code.gitea.io/gitea/modules/commitstatus"
-	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/json"
 	"code.gitea.io/gitea/modules/setting"
@@ -439,7 +438,7 @@ jobs:
 		assert.NotNil(t, run)
 
 		// delete the branch
-		err = repo_service.DeleteBranch(t.Context(), user2, repo, gitRepo, "test-create-branch", nil)
+		err = repo_service.DeleteBranch(t.Context(), user2, repo, gitRepo, "test-create-branch", nil, nil)
 		assert.NoError(t, err)
 		run = unittest.AssertExistsAndLoadBean(t, &actions_model.ActionRun{
 			Title:      "add workflow",
@@ -531,8 +530,9 @@ jobs:
 
 		// create a new branch
 		testBranch := "test-branch"
-		gitRepo, err := git.OpenRepository(t.Context(), ".")
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), repo)
 		assert.NoError(t, err)
+		defer gitRepo.Close()
 		err = repo_service.CreateNewBranch(t.Context(), user2, repo, gitRepo, "main", testBranch)
 		assert.NoError(t, err)
 
@@ -645,7 +645,7 @@ jobs:
 				return true
 			}
 			return false
-		}, 1*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 
 		// milestoned
 		milestone := &issues_model.Milestone{

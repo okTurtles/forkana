@@ -50,6 +50,13 @@ type NewPullRequestOptions struct {
 	AssigneeIDs     []int64
 	Reviewers       []*user_model.User
 	TeamReviewers   []*organization.Team
+
+	// AllowNonCollaborator bypasses the collaborator/write-permission check for PR creation.
+	// This is used by the submit-change-request workflow where a non-collaborator user
+	// creates a same-repo PR from a patch branch they were allowed to create.
+	// Security: The caller must ensure the user was authorized to create the branch
+	// (e.g., via middleware checks) before setting this flag.
+	AllowNonCollaborator bool
 }
 
 // NewPullRequest creates new pull request with labels for repository.
@@ -64,7 +71,9 @@ func NewPullRequest(ctx context.Context, opts *NewPullRequestOptions) error {
 	}
 
 	// user should be a collaborator or a member of the organization for base repo
-	canCreate := issue.Poster.IsAdmin || pr.Flow == issues_model.PullRequestFlowAGit
+	// AllowNonCollaborator bypasses this check for workflows like submit-change-request
+	// where the user was already authorized to create the branch by middleware
+	canCreate := issue.Poster.IsAdmin || pr.Flow == issues_model.PullRequestFlowAGit || opts.AllowNonCollaborator
 	if !canCreate {
 		canCreate, err := repo_model.IsOwnerMemberCollaborator(ctx, repo, issue.Poster.ID)
 		if err != nil {
