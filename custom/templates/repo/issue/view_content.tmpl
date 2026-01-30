@@ -1,6 +1,6 @@
 <div class="issue-content">
 	{{$createdStr:= DateUtils.TimeSince .Issue.CreatedUnix}}
-	<div class="issue-content-left comment-list prevent-before-timeline">
+	<div class="issue-content-left{{if .Issue.IsPull}}-pull-request{{end}} comment-list prevent-before-timeline">
 		<div class="ui timeline">
 			<div id="{{.Issue.HashTag}}" class="timeline-item comment first">
 				{{if .Issue.OriginalAuthor}}

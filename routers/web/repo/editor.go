@@ -607,7 +607,14 @@ func cleanupOrphanedBranch(ctx *context.Context, repo *repo_model.Repository, gi
 	if gitRepo == nil {
 		return
 	}
-	if err := repo_service.DeleteBranch(ctx, ctx.Doer, repo, gitRepo, branchName, nil); err != nil {
+	// Skip permission check because this branch was created programmatically via
+	// InternalPush (which bypasses pre-receive hooks and permission checks).
+	// Without this, non-collaborators who can submit change requests would be able
+	// to create branches but not delete them, leaving orphaned branches when PR
+	// creation fails.
+	if err := repo_service.DeleteBranch(ctx, ctx.Doer, repo, gitRepo, branchName, nil, &repo_service.DeleteBranchOptions{
+		SkipPermissionCheck: true,
+	}); err != nil {
 		log.Error("cleanupOrphanedBranch: failed to cleanup branch %s: %v", branchName, err)
 	}
 }
@@ -675,8 +682,11 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// We use InternalPush to skip pre-receive hooks since this is a programmatic operation
 	// where we've already verified the user can submit change requests (via middleware)
 	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
-	_, err = files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
-		LastCommitID: form.LastCommit,
+	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+		// Use empty LastCommitID so ChangeRepoFiles uses the current HEAD of OldBranch.
+		// form.LastCommit may be stale or from a different branch, which would create
+		// a commit with a parent that doesn't match the tree content being committed.
+		LastCommitID: "",
 		OldBranch:    targetRepo.DefaultBranch,
 		NewBranch:    branchName,
 		Message:      parsed.GetCommitMessage(defaultCommitMessage),

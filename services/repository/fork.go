@@ -101,7 +101,7 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 	}
 
 	// Process the results to determine permissions.
-	// There are several cases to consider:
+	// Different scenarios:
 	//
 	// 1. User has no repo for this subject (ownRepo == nil):
 	//    - If they have a fork of this repo: HasExistingFork=true, CanSubmitChangeRequest=true

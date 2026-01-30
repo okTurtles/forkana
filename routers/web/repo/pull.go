@@ -1518,7 +1518,7 @@ func CleanUpPullRequest(ctx *context.Context) {
 func deleteBranch(ctx *context.Context, pr *issues_model.PullRequest, gitRepo *git.Repository) {
 	fullBranchName := pr.HeadRepo.FullName() + ":" + pr.HeadBranch
 
-	if err := repo_service.DeleteBranch(ctx, ctx.Doer, pr.HeadRepo, gitRepo, pr.HeadBranch, pr); err != nil {
+	if err := repo_service.DeleteBranch(ctx, ctx.Doer, pr.HeadRepo, gitRepo, pr.HeadBranch, pr, nil); err != nil {
 		switch {
 		case git.IsErrBranchNotExist(err):
 			ctx.Flash.Error(ctx.Tr("repo.branch.deletion_failed", fullBranchName))
