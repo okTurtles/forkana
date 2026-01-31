@@ -50,9 +50,9 @@ var (
 type processResult int
 
 const (
-	resultSuccess  processResult = iota // Article was successfully converted
-	resultSkipped                       // Article was skipped (redirect or empty)
-	resultError                         // Article processing failed with an error
+	resultSuccess processResult = iota // Article was successfully converted
+	resultSkipped                      // Article was skipped (redirect or empty)
+	resultError                        // Article processing failed with an error
 )
 
 // skipReason describes why an article was skipped
@@ -223,6 +223,9 @@ func processArticle(title, outputDir string, indexFile io.Writer) (processResult
 
 	// Normalize image URLs
 	md = normalizeImageURLs(md)
+
+	// Normalize internal Wikipedia links to subject-based URLs
+	md = normalizeInternalLinks(md)
 
 	// Add front matter
 	//nolint:nolintlint
@@ -431,6 +434,128 @@ func normalizeListMarkers(md string) string {
 }
 
 var imgEmbedRE = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+
+// internalLinkRE matches markdown links (not images) with Wikipedia internal link patterns.
+// It captures: 1=link text, 2=full URL (may include optional title in quotes)
+// The regex uses a negative lookbehind workaround by finding all matches and checking context.
+var internalLinkRE = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
+
+// linkTitleRE matches and strips optional title from markdown link URLs.
+// Markdown links can have titles like: [text](url "title") or [text](url 'title')
+var linkTitleRE = regexp.MustCompile(`^(.+?)\s+["'].*["']$`)
+
+// wikiLinkPatterns matches various forms of internal Wikipedia links
+var (
+	// Matches ./Article_Name or ./Article%20Name (relative links)
+	relativeWikiLinkRE = regexp.MustCompile(`^\.\/(.+)$`)
+	// Matches /wiki/Article_Name (absolute path)
+	absoluteWikiPathRE = regexp.MustCompile(`^\/wiki\/(.+)$`)
+	// Matches full Wikipedia URLs like https://en.wikipedia.org/wiki/Article
+	fullWikiURLRE = regexp.MustCompile(`^https?:\/\/[a-z]{2,3}\.wikipedia\.org\/wiki\/(.+)$`)
+)
+
+// normalizeInternalLinks transforms internal Wikipedia links to subject-based URLs.
+// It converts links like [Egypt](./Egypt) or [Egypt](/wiki/Egypt) to [Egypt](/subject/Egypt).
+func normalizeInternalLinks(md string) string {
+	// Find all matches with their positions
+	matches := internalLinkRE.FindAllStringSubmatchIndex(md, -1)
+	if len(matches) == 0 {
+		return md
+	}
+
+	// Build result by processing matches in reverse order to preserve positions
+	result := md
+	for i := len(matches) - 1; i >= 0; i-- {
+		matchIndices := matches[i]
+		matchStart := matchIndices[0]
+		matchEnd := matchIndices[1]
+
+		// Check if this is an image link (preceded by !)
+		if matchStart > 0 && result[matchStart-1] == '!' {
+			continue
+		}
+
+		// Extract link text and URL from the match
+		linkText := result[matchIndices[2]:matchIndices[3]]
+		linkURL := strings.TrimSpace(result[matchIndices[4]:matchIndices[5]])
+
+		// Strip optional title attribute from markdown link URL
+		// e.g., './Atlus "Atlus"' -> './Atlus'
+		linkURL = stripLinkTitle(linkURL)
+
+		// Try to extract article name from various Wikipedia link formats
+		articleName := extractWikiArticleName(linkURL)
+		if articleName == "" {
+			// Not a Wikipedia internal link, keep as-is
+			continue
+		}
+
+		// Handle anchor fragments (e.g., Article#Section)
+		var fragment string
+		if hashIdx := strings.Index(articleName, "#"); hashIdx != -1 {
+			fragment = articleName[hashIdx:]
+			articleName = articleName[:hashIdx]
+		}
+
+		// Decode URL encoding and normalize the article name
+		decodedName, err := url.PathUnescape(articleName)
+		if err != nil {
+			decodedName = articleName
+		}
+
+		// Replace underscores with spaces (Wikipedia convention)
+		decodedName = strings.ReplaceAll(decodedName, "_", " ")
+
+		// URL-encode the subject name for the new URL
+		encodedSubject := url.PathEscape(decodedName)
+
+		// Build the new subject URL with /:root/ prefix
+		// The /:root/ prefix tells Gitea's markdown renderer to resolve the link
+		// relative to the site root (AppSubURL) instead of the repository context.
+		// See modules/markup/render_helper.go LinkTypeRoot constant.
+		newURL := "/:root/subject/" + encodedSubject
+		if fragment != "" {
+			newURL += fragment
+		}
+
+		// Replace the match with the new link
+		newLink := fmt.Sprintf("[%s](%s)", linkText, newURL)
+		result = result[:matchStart] + newLink + result[matchEnd:]
+	}
+
+	return result
+}
+
+// extractWikiArticleName extracts the article name from various Wikipedia link formats.
+// Returns empty string if the link is not a Wikipedia internal link.
+func extractWikiArticleName(linkURL string) string {
+	// Check for relative links (./Article)
+	if matches := relativeWikiLinkRE.FindStringSubmatch(linkURL); len(matches) == 2 {
+		return matches[1]
+	}
+
+	// Check for absolute wiki paths (/wiki/Article)
+	if matches := absoluteWikiPathRE.FindStringSubmatch(linkURL); len(matches) == 2 {
+		return matches[1]
+	}
+
+	// Check for full Wikipedia URLs
+	if matches := fullWikiURLRE.FindStringSubmatch(linkURL); len(matches) == 2 {
+		return matches[1]
+	}
+
+	return ""
+}
+
+// stripLinkTitle removes the optional title attribute from a markdown link URL.
+// Markdown links can have titles like: [text](url "title") or [text](url 'title')
+// This function extracts just the URL part.
+func stripLinkTitle(linkURL string) string {
+	if matches := linkTitleRE.FindStringSubmatch(linkURL); len(matches) == 2 {
+		return strings.TrimSpace(matches[1])
+	}
+	return linkURL
+}
 
 func normalizeImageURLs(md string) string {
 	return imgEmbedRE.ReplaceAllStringFunc(md, func(match string) string {
