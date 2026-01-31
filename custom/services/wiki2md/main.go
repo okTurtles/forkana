@@ -218,6 +218,9 @@ func processArticle(title, outputDir string, indexFile io.Writer) (processResult
 		return resultError, "", fmt.Errorf("failed to convert to markdown: %w", err)
 	}
 
+	// Normalize list markers (replace hyphen-based markers with asterisks)
+	md = normalizeListMarkers(md)
+
 	// Normalize image URLs
 	md = normalizeImageURLs(md)
 
@@ -413,6 +416,18 @@ func htmlToMarkdown(htmlContent string) (string, error) {
 		return "", err
 	}
 	return md, nil
+}
+
+// listMarkerRE matches unordered list items that start with a hyphen.
+// It captures optional leading whitespace, the hyphen, and ensures it's followed by a space.
+// This pattern only matches at the start of a line to avoid affecting mid-sentence hyphens.
+var listMarkerRE = regexp.MustCompile(`(?m)^([ \t]*)-( )`)
+
+// normalizeListMarkers replaces hyphen-based unordered list markers with asterisks.
+// It preserves indentation for nested lists and only affects list markers at the
+// start of lines, not hyphens in other contexts (compound words, em-dashes, etc.).
+func normalizeListMarkers(md string) string {
+	return listMarkerRE.ReplaceAllString(md, "${1}*${2}")
 }
 
 var imgEmbedRE = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)

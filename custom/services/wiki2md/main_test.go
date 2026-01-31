@@ -466,6 +466,89 @@ func TestSkipReasonLoggable(t *testing.T) {
 	}
 }
 
+func TestNormalizeListMarkers(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple list item",
+			input:    "- item one",
+			expected: "* item one",
+		},
+		{
+			name:     "multiple list items",
+			input:    "- item one\n- item two\n- item three",
+			expected: "* item one\n* item two\n* item three",
+		},
+		{
+			name:     "nested list with spaces",
+			input:    "- item one\n  - nested item\n    - deeply nested",
+			expected: "* item one\n  * nested item\n    * deeply nested",
+		},
+		{
+			name:     "nested list with tabs",
+			input:    "- item one\n\t- nested item\n\t\t- deeply nested",
+			expected: "* item one\n\t* nested item\n\t\t* deeply nested",
+		},
+		{
+			name:     "hyphen in compound word not affected",
+			input:    "This is a well-known fact",
+			expected: "This is a well-known fact",
+		},
+		{
+			name:     "em-dash not affected",
+			input:    "This is important—very important",
+			expected: "This is important—very important",
+		},
+		{
+			name:     "hyphen mid-sentence not affected",
+			input:    "The value is -5 degrees",
+			expected: "The value is -5 degrees",
+		},
+		{
+			name:     "list item with hyphen in content",
+			input:    "- well-known fact",
+			expected: "* well-known fact",
+		},
+		{
+			name:     "mixed content with list and hyphens",
+			input:    "Some text with a-hyphen\n- list item\n  - nested\nMore text-here",
+			expected: "Some text with a-hyphen\n* list item\n  * nested\nMore text-here",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "no list items",
+			input:    "Just regular text\nwith multiple lines",
+			expected: "Just regular text\nwith multiple lines",
+		},
+		{
+			name:     "hyphen without space after not affected",
+			input:    "-not a list item",
+			expected: "-not a list item",
+		},
+		{
+			name:     "already asterisk markers unchanged",
+			input:    "* item one\n* item two",
+			expected: "* item one\n* item two",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeListMarkers(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizeListMarkers(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestNormalizeImageURLs(t *testing.T) {
 	tests := []struct {
 		name     string
