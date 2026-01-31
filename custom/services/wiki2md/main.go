@@ -1,4 +1,4 @@
-// Copyright 2025 The Gitea Authors. All rights reserved.
+// Copyright 2026 okTurtles Foundation. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 // wiki2md fetches Wikipedia articles and converts them to Markdown format.
@@ -222,7 +222,9 @@ func processArticle(title, outputDir string, indexFile io.Writer) (processResult
 	md = normalizeImageURLs(md)
 
 	// Add front matter
-	md = addFrontMatter(title, md)
+	//nolint:nolintlint
+	//nolint:gofumpt
+	// md = addFrontMatter(title, md)
 
 	// Generate unique filename
 	filename, err := writeMarkdown(outputDir, title, md)
