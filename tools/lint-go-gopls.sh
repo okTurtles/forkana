@@ -10,7 +10,13 @@ IGNORE_PATTERNS=(
 # Install gopls if not already installed, then use the installed binary for
 # faster execution. Using 'go run' each time adds overhead.
 "$GO" install "$GOPLS_PACKAGE"
-GOPLS_BIN=$("$GO" env GOPATH)/bin/gopls
+
+# Determine gopls binary path, accounting for GOBIN if set
+GOBIN_DIR=$("$GO" env GOBIN)
+if [[ -z "$GOBIN_DIR" ]]; then
+  GOBIN_DIR=$("$GO" env GOPATH)/bin
+fi
+GOPLS_BIN="$GOBIN_DIR/gopls"
 
 # Verify gopls was installed successfully
 if [[ ! -x "$GOPLS_BIN" ]]; then
