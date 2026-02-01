@@ -442,7 +442,8 @@ var internalLinkRE = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+)\)`)
 
 // linkTitleRE matches and strips optional title from markdown link URLs.
 // Markdown links can have titles like: [text](url "title") or [text](url 'title')
-var linkTitleRE = regexp.MustCompile(`^(.+?)\s+["'].*["']$`)
+// Uses alternation to ensure matching quote pairs (prevents "title' from matching).
+var linkTitleRE = regexp.MustCompile(`^(.+?)\s+(?:"[^"]*"|'[^']*')$`)
 
 // wikiLinkPatterns matches various forms of internal Wikipedia links
 var (
@@ -491,10 +492,16 @@ func normalizeInternalLinks(md string) string {
 		}
 
 		// Handle anchor fragments (e.g., Article#Section)
+		// Decode and re-encode fragments consistently with article names
 		var fragment string
 		if hashIdx := strings.Index(articleName, "#"); hashIdx != -1 {
-			fragment = articleName[hashIdx:]
+			rawFragment := articleName[hashIdx+1:] // exclude the #
 			articleName = articleName[:hashIdx]
+			if decodedFrag, err := url.PathUnescape(rawFragment); err == nil {
+				fragment = "#" + url.PathEscape(decodedFrag)
+			} else {
+				fragment = "#" + rawFragment
+			}
 		}
 
 		// Decode URL encoding and normalize the article name

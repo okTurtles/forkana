@@ -664,6 +664,11 @@ func TestNormalizeInternalLinks(t *testing.T) {
 			expected: "![Egypt](./Egypt.png)",
 		},
 		{
+			name:     "image with wiki-like path not affected",
+			input:    "![map](./Egypt)",
+			expected: "![map](./Egypt)",
+		},
+		{
 			name:     "mixed content with images and links",
 			input:    "See ![map](./map.png) and [Egypt](./Egypt) for details",
 			expected: "See ![map](./map.png) and [Egypt](/:root/subject/Egypt) for details",
