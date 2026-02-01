@@ -4,7 +4,7 @@
 // wiki2md fetches Wikipedia articles and converts them to Markdown format.
 //
 // This tool fetches articles from Wikipedia using the MediaWiki API,
-// converts them to Markdown, and saves them with YAML front matter.
+// converts them to Markdown, and saves them.
 // It supports both random article selection and category-based fetching.
 //
 // Usage:
@@ -226,11 +226,6 @@ func processArticle(title, outputDir string, indexFile io.Writer) (processResult
 
 	// Normalize internal Wikipedia links to subject-based URLs
 	md = normalizeInternalLinks(md)
-
-	// Add front matter
-	//nolint:nolintlint
-	//nolint:gofumpt
-	// md = addFrontMatter(title, md)
 
 	// Generate unique filename
 	filename, err := writeMarkdown(outputDir, title, md)
@@ -605,24 +600,6 @@ func escapeYAMLString(s string) string {
 	s = strings.ReplaceAll(s, "\r", `\r`)
 	s = strings.ReplaceAll(s, "\t", `\t`)
 	return s
-}
-
-func addFrontMatter(title, mdBody string) string {
-	safeTitle := escapeYAMLString(title)
-	sourceURL := fmt.Sprintf("https://en.wikipedia.org/wiki/%s", url.PathEscape(strings.ReplaceAll(title, " ", "_")))
-	fetchedAt := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-
-	frontMatter := fmt.Sprintf(`---
-title: "%s"
-source: "%s"
-license: CC BY-SA 4.0
-attribution: Wikipedia contributors
-fetched_at: %s
----
-
-`, safeTitle, sourceURL, fetchedAt)
-
-	return frontMatter + mdBody
 }
 
 // truncateToByteLimit truncates a string to fit within maxBytes while preserving
