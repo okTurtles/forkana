@@ -27,7 +27,17 @@ fi
 # Parallelism is configurable via GOPLS_PARALLEL env var.
 # Default to 1 (sequential) to avoid memory pressure on local machines.
 # CI can set a higher value if desired (e.g., GOPLS_PARALLEL=4).
-PARALLEL=${GOPLS_PARALLEL:-1}
+# In Devin's environment, default to (N-1) cores for better performance.
+if [[ -z "${GOPLS_PARALLEL:-}" ]]; then
+  if [[ -d "/opt/.devin" ]]; then
+    NPROC=$(nproc)
+    PARALLEL=$((NPROC > 1 ? NPROC - 1 : 1))
+  else
+    PARALLEL=1
+  fi
+else
+  PARALLEL=$GOPLS_PARALLEL
+fi
 
 # lint all go files with 'gopls check' and look for lines starting with the
 # current absolute path, indicating a error was found. This is necessary
