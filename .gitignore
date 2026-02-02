@@ -113,6 +113,9 @@ prime/
 # Manpage
 /man
 
+# Docker
+docker/forkana/.env
+
 # Ignore AI/LLM instruction files
 /.claude/
 /.cursorrules
