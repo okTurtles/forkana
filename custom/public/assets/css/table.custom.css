@@ -2,6 +2,10 @@
   padding: 0;
 }
 
+.timeline .ui.segment{
+  padding: 1rem;
+}
+
 .ui[class*="very basic"].table:not(.striped) > thead > tr:first-child > th {
   padding-top: 6px;
 }

@@ -1,0 +1,19 @@
+/**
+ * Forkana-specific repository page styles
+ *
+ * Put your custom repo styles here instead of modifying web_src/css/repo.css
+ * This file won't be affected by merges from upstream Gitea.
+ */
+
+/* Pull request layout - full width without sidebar */
+.issue-content-left-pull-request {
+  margin: 0 !important;
+  width: 100%;
+}
+
+/* Add your custom repo styles below this line */
+
+/* Padding for empty content placeholder in comments */
+.repository.view.issue .comment-list .comment .no-content {
+  padding: 1rem;
+}
