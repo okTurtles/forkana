@@ -1,4 +1,4 @@
-// Copyright 2025 The Gitea Authors. All rights reserved.
+// Copyright 2026 okTurtles Foundation. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 // article-creator automates repository creation and initialization on a Gitea/Forkana instance.
@@ -37,11 +37,11 @@ var (
 )
 
 type config struct {
-	giteaURL   string
-	apiToken   string
-	inputPath  string
-	private    bool
-	rateDelay  time.Duration
+	giteaURL  string
+	apiToken  string
+	inputPath string
+	private   bool
+	rateDelay time.Duration
 }
 
 type stats struct {
@@ -70,10 +70,16 @@ type createRepoRequest struct {
 	Readme      string `json:"readme"`
 }
 
+type commitDateOptions struct {
+	Author    string `json:"author"`
+	Committer string `json:"committer"`
+}
+
 type createFileRequest struct {
-	Message string `json:"message"`
-	Content string `json:"content"`
-	Branch  string `json:"branch"`
+	Message string            `json:"message"`
+	Content string            `json:"content"`
+	Branch  string            `json:"branch"`
+	Dates   commitDateOptions `json:"dates"`
 }
 
 type userInfo struct {
@@ -365,10 +371,17 @@ func (c *giteaClient) createRepository(repoName, description, subject string, pu
 func (c *giteaClient) createReadmeFile(username, repoName, content string) error {
 	contentB64 := base64.StdEncoding.EncodeToString([]byte(content))
 
+	// Set commit timestamp to current time in RFC3339 format
+	now := time.Now().Format(time.RFC3339)
+
 	reqData := createFileRequest{
-		Message: "Initial commit: Add README.md",
+		Message: "Import article from Wikipedia",
 		Content: contentB64,
 		Branch:  "main",
+		Dates: commitDateOptions{
+			Author:    now,
+			Committer: now,
+		},
 	}
 
 	jsonData, err := json.Marshal(reqData)
@@ -494,4 +507,3 @@ func createSlug(filename string) string {
 
 	return slug
 }
-

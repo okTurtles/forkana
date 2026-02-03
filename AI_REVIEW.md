@@ -7,7 +7,12 @@ Here's how to review PRs using AI.
 ````
 Attached are a set of changes to a Go project that uses Vuejs.
 
-Please have a look at these changes and thoroughly check it for any bugs or security issues. Also check if anything could be improved. When providing feedback, be specific and quote the concrete lines that are problematic, and then give your code improvement suggestions complete with actual code. When replying, always use Markdown and Markdown code fences to quote any lines. Avoid commenting on code that has nothing wrong with it.
+Please have a look at these changes and thoroughly check it for any bugs or security issues. Also check if anything could be improved through simplification. When providing feedback, be specific and quote the concrete lines that are problematic, and then give your code improvement suggestions complete with actual code. When replying, always use Markdown and Markdown code fences to quote any lines. Avoid commenting on code that has no issues (no "you did a good job here!" fluff).
+
+When referencing sections of code, always mention the specific lines being referenced in the following manner to make it easy for developers to know where to look:
+
+- `file.js:841`
+- `file.vue:50-70`
 
 Finally, if you have any questions about the changes or need to see any additional context or files to help with your review please let me know and I'll supply it.
 

@@ -447,7 +447,15 @@ func TestSubmitChangeRequestMiddlewareBypass(t *testing.T) {
 			"submit_change_request=true should bypass CanWriteToBranch middleware")
 	})
 
-	t.Run("SubmitChangeRequestOnlyAllowedForEditAndNew", func(t *testing.T) {
+	t.Run("SubmitChangeRequestOnlyAllowedForEdit", func(t *testing.T) {
+		// Security boundary test: submit_change_request=true should ONLY bypass
+		// permission checks for _edit action. All other actions (_new, _delete,
+		// _upload, _diffpatch, _cherrypick) must be blocked.
+		//
+		// This is intentional: the submit_change_request workflow is designed for
+		// proposing edits to existing articles via in-repo PRs. Creating new files
+		// should be done in the user's own repository, not proposed to another user's repo.
+
 		// Get CSRF token
 		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
 		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
@@ -522,18 +530,26 @@ func TestSubmitChangeRequestMiddlewareBypass(t *testing.T) {
 			"submit_change_request=true SHOULD bypass CanWriteToBranch for _edit action")
 	})
 
-	t.Run("NewEndpointAllowsSubmitChangeRequest", func(t *testing.T) {
-		// Verify that _new allows submit_change_request=true
-		// Note: When NeedFork is true and tree path is not README.md, the user is redirected to README.md
-		// So we use README.md as the tree path to test the submit_change_request bypass
-		newURL := path.Join(owner.Name, repo.Name, "_new", repo.DefaultBranch, "README.md")
-		req := NewRequest(t, "GET", newURL+"?submit_change_request=true")
+	t.Run("NewEndpointBlocksSubmitChangeRequest", func(t *testing.T) {
+		// Security boundary: submit_change_request=true intentionally does NOT support _new.
+		// Creating new files in someone else's repository doesn't align with the Forkana model.
+		// Users should create their own repository for new articles rather than proposing
+		// to add files to another user's repository.
+		//
+		// This is different from fork_and_edit which DOES support _new (creates a personal fork).
+
+		// Get CSRF token from the edit page (since _new may redirect in Forkana model)
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
 		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
+		csrf := htmlDoc.GetCSRF()
 
+		// POST to _new with submit_change_request=true should be blocked (404)
+		newURL := path.Join(owner.Name, repo.Name, "_new", repo.DefaultBranch, "newfile.md")
 		form := map[string]string{
-			"_csrf":                 htmlDoc.GetCSRF(),
-			"tree_path":             "README.md",
+			"_csrf":                 csrf,
+			"tree_path":             "newfile.md",
 			"content":               "New file content",
 			"commit_choice":         "direct",
 			"submit_change_request": "true",
@@ -542,7 +558,8 @@ func TestSubmitChangeRequestMiddlewareBypass(t *testing.T) {
 		req = NewRequestWithValues(t, "POST", newURL+"?submit_change_request=true", form)
 		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
 
-		assert.NotEqual(t, http.StatusNotFound, resp.Code,
-			"submit_change_request=true SHOULD bypass CanWriteToBranch for _new action")
+		// Expect 404 - permission denied because submit_change_request does NOT bypass for _new
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"submit_change_request=true should NOT bypass CanWriteToBranch for _new action")
 	})
 }
