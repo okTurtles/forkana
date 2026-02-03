@@ -309,6 +309,65 @@ td .commit-summary {
   display: inline-block;
 }
 
+/* PR repo header (shows head repo info above title) */
+.pr-repo-header {
+  margin-bottom: 1rem;
+}
+
+.pr-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  color: var(--color-primary);
+  font-size: 14px;
+  margin-bottom: 2.5rem;
+  margin-top: 2rem;
+
+}
+
+.pr-back-link:hover {
+  text-decoration: underline;
+}
+
+.pr-repo-title {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.pr-repo-title a {
+  color: var(--color-text);
+}
+
+.pr-repo-title a:hover {
+  text-decoration: underline;
+  color: var(--color-primary);
+}
+
+.fork-flag {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 14px;
+  color: var(--color-text-light-2);
+  margin-top: 0.25rem;
+}
+
+.fork-flag .svg {
+  color: var(--color-text-light-2);
+}
+
+.fork-flag a {
+  color: var(--color-primary);
+}
+
+.fork-flag a:hover {
+  text-decoration: underline;
+}
+
 /* issue title & meta & edit */
 .issue-title-header {
   width: 100%;
@@ -1719,6 +1778,19 @@ tbody.commit-list {
   background-color: var(--color-green);
   height: 100%;
 }
+
+/* Pill-shaped labels */
+.pill-label {
+  border-radius: 999px !important;
+  font-weight: 500 !important;
+}
+
+.pill-label.pill-green,
+.pill-green {
+  background-color: var(--color-green) !important;
+  color: white !important;
+}
+
 
 .ui.form .right .ui.button {
   margin-left: 0.25em;

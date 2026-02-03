@@ -27,5 +27,11 @@ gitea-theme-meta-info {
   --color-diff-removed-row-bg: #FFE7D1;
   --color-diff-added-linenum-bg: #E5E9FF;
   --color-diff-added-row-bg: #E5E9FF;
+
+  /* Green colors */
+  --color-green: #1F883D;
+  --color-green-light: #2DA44E;
+  --color-green-dark-1: #1A7F37;
+  --color-green-dark-2: #116329;
 }
 

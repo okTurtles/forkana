@@ -144,6 +144,21 @@ func getPullInfo(ctx *context.Context) (issue *issues_model.Issue, ok bool) {
 		ctx.ServerError("LoadHeadRepo", err)
 		return nil, false
 	}
+	// Load HeadRepo's Owner and BaseRepo if it's a fork (for PR header display)
+	if issue.PullRequest.HeadRepo != nil {
+		if err := issue.PullRequest.HeadRepo.LoadOwner(ctx); err != nil {
+			log.Error("LoadOwner for HeadRepo: %v", err)
+		}
+		if issue.PullRequest.HeadRepo.IsFork {
+			if err := issue.PullRequest.HeadRepo.GetBaseRepo(ctx); err != nil {
+				log.Error("GetBaseRepo for HeadRepo: %v", err)
+			} else if issue.PullRequest.HeadRepo.BaseRepo != nil {
+				if err := issue.PullRequest.HeadRepo.BaseRepo.LoadOwner(ctx); err != nil {
+					log.Error("LoadOwner for HeadRepo.BaseRepo: %v", err)
+				}
+			}
+		}
+	}
 
 	if ctx.IsSigned {
 		// Update issue-user.
