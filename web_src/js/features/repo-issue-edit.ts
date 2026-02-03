@@ -1,5 +1,6 @@
 import {handleReply} from './repo-issue.ts';
 import {getComboMarkdownEditor, initComboMarkdownEditor, ComboMarkdownEditor} from './comp/ComboMarkdownEditor.ts';
+import {getToastCommentEditor, initToastCommentEditor, ToastCommentEditor} from './comp/ToastCommentEditor.ts';
 import {POST} from '../modules/fetch.ts';
 import {showErrorToast} from '../modules/toast.ts';
 import {hideElem, querySingleVisibleElem, showElem, type DOMEvent} from '../utils/dom.ts';
@@ -18,13 +19,15 @@ async function tryOnEditContent(e: DOMEvent<MouseEvent>) {
   let renderContent = commentContent.querySelector('.render-content');
   const rawContent = commentContent.querySelector('.raw-content');
 
-  let comboMarkdownEditor : ComboMarkdownEditor;
+  // Support both Toast and Combo editors
+  type EditorType = ComboMarkdownEditor | ToastCommentEditor;
+  let editor: EditorType;
 
   const cancelAndReset = (e: Event) => {
     e.preventDefault();
     showElem(renderContent);
     hideElem(editContentZone);
-    comboMarkdownEditor.dropzoneReloadFiles();
+    editor.dropzoneReloadFiles();
   };
 
   const saveAndRefresh = async (e: Event) => {
@@ -37,11 +40,11 @@ async function tryOnEditContent(e: DOMEvent<MouseEvent>) {
     hideElem(editContentZone);
     try {
       const params = new URLSearchParams({
-        content: comboMarkdownEditor.value(),
+        content: editor.value(),
         context: editContentZone.getAttribute('data-context'),
         content_version: editContentZone.getAttribute('data-content-version'),
       });
-      for (const file of comboMarkdownEditor.dropzoneGetFiles() ?? []) {
+      for (const file of editor.dropzoneGetFiles() ?? []) {
         params.append('files[]', file);
       }
 
@@ -61,7 +64,7 @@ async function tryOnEditContent(e: DOMEvent<MouseEvent>) {
       renderContent.replaceWith(newRenderContent);
       renderContent = newRenderContent;
 
-      rawContent.textContent = comboMarkdownEditor.value();
+      rawContent.textContent = editor.value();
       const refIssues = renderContent.querySelectorAll<HTMLElement>('p .ref-issue');
       attachRefIssueContextPopup(refIssues);
 
@@ -74,7 +77,7 @@ async function tryOnEditContent(e: DOMEvent<MouseEvent>) {
       } else {
         commentContent.querySelector('.dropzone-attachments').outerHTML = data.attachments;
       }
-      comboMarkdownEditor.dropzoneSubmitReload();
+      editor.dropzoneSubmitReload();
     } catch (error) {
       showErrorToast(`Failed to save the content: ${error}`);
       console.error(error);
@@ -87,27 +90,45 @@ async function tryOnEditContent(e: DOMEvent<MouseEvent>) {
   showElem(editContentZone);
   hideElem(renderContent);
 
-  comboMarkdownEditor = getComboMarkdownEditor(editContentZone.querySelector('.combo-markdown-editor'));
-  if (!comboMarkdownEditor) {
+  // Try to get existing editor (Toast first, then Combo)
+  const existingToastEditor = getToastCommentEditor(editContentZone.querySelector('.toast-comment-editor'));
+  const existingComboEditor = getComboMarkdownEditor(editContentZone.querySelector('.combo-markdown-editor'));
+  editor = existingToastEditor || existingComboEditor;
+
+  if (!editor) {
     editContentZone.innerHTML = document.querySelector('#issue-comment-editor-template').innerHTML;
     const form = editContentZone.querySelector('form');
     applyAreYouSure(form);
     const saveButton = querySingleVisibleElem<HTMLButtonElement>(editContentZone, '.ui.primary.button');
     const cancelButton = querySingleVisibleElem<HTMLButtonElement>(editContentZone, '.ui.cancel.button');
-    comboMarkdownEditor = await initComboMarkdownEditor(editContentZone.querySelector('.combo-markdown-editor'));
-    const syncUiState = () => saveButton.disabled = comboMarkdownEditor.isUploading();
-    comboMarkdownEditor.container.addEventListener(ComboMarkdownEditor.EventUploadStateChanged, syncUiState);
+
+    // Check if template uses Toast editor or Combo editor
+    const toastEditorContainer = editContentZone.querySelector('.toast-comment-editor');
+    const comboEditorContainer = editContentZone.querySelector('.combo-markdown-editor');
+
+    if (toastEditorContainer) {
+      editor = await initToastCommentEditor(toastEditorContainer as HTMLElement);
+      const syncUiState = () => saveButton.disabled = editor.isUploading();
+      editor.container.addEventListener(ToastCommentEditor.EventUploadStateChanged, syncUiState);
+    } else if (comboEditorContainer) {
+      editor = await initComboMarkdownEditor(comboEditorContainer as HTMLElement);
+      const syncUiState = () => saveButton.disabled = editor.isUploading();
+      editor.container.addEventListener(ComboMarkdownEditor.EventUploadStateChanged, syncUiState);
+    } else {
+      throw new Error('No editor container found in template');
+    }
+
     cancelButton.addEventListener('click', cancelAndReset);
     form.addEventListener('submit', saveAndRefresh);
   }
 
   // FIXME: ideally here should reload content and attachment list from backend for existing editor, to avoid losing data
-  if (!comboMarkdownEditor.value()) {
-    comboMarkdownEditor.value(rawContent.textContent);
+  if (!editor.value()) {
+    editor.value(rawContent.textContent);
   }
-  comboMarkdownEditor.switchTabToEditor();
-  comboMarkdownEditor.focus();
-  triggerUploadStateChanged(comboMarkdownEditor.container);
+  editor.switchTabToEditor();
+  editor.focus();
+  triggerUploadStateChanged(editor.container);
 }
 
 function extractSelectedMarkdown(container: HTMLElement) {
@@ -141,8 +162,9 @@ async function tryOnQuoteReply(e: Event) {
     const replyBtn = clickTarget.closest('.comment-code-cloud').querySelector<HTMLElement>('button.comment-form-reply');
     editor = await handleReply(replyBtn);
   } else {
-    // for normal issue/comment page
-    editor = getComboMarkdownEditor(document.querySelector('#comment-form .combo-markdown-editor'));
+    // for normal issue/comment page - try Toast editor first, then Combo
+    editor = getToastCommentEditor(document.querySelector('#comment-form .toast-comment-editor')) ||
+      getComboMarkdownEditor(document.querySelector('#comment-form .combo-markdown-editor'));
   }
 
   if (editor.value()) {

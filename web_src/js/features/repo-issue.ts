@@ -11,6 +11,7 @@ import {
 } from '../utils/dom.ts';
 import {setFileFolding} from './file-fold.ts';
 import {ComboMarkdownEditor, getComboMarkdownEditor, initComboMarkdownEditor} from './comp/ComboMarkdownEditor.ts';
+import {ToastCommentEditor, getToastCommentEditor, initToastCommentEditor} from './comp/ToastCommentEditor.ts';
 import {parseIssuePageInfo, toAbsoluteUrl} from '../utils.ts';
 import {GET, POST} from '../modules/fetch.ts';
 import {showErrorToast} from '../modules/toast.ts';
@@ -250,7 +251,20 @@ export async function handleReply(el: HTMLElement) {
 
   hideElem(el);
   showElem(form);
-  const editor = getComboMarkdownEditor(textarea) ?? await initComboMarkdownEditor(form.querySelector('.combo-markdown-editor'));
+
+  // Try Toast editor first, then fall back to Combo editor
+  let editor: ComboMarkdownEditor | ToastCommentEditor;
+  const toastContainer = form.querySelector('.toast-comment-editor');
+  const comboContainer = form.querySelector('.combo-markdown-editor');
+
+  if (toastContainer) {
+    editor = getToastCommentEditor(toastContainer) ?? await initToastCommentEditor(toastContainer);
+  } else if (comboContainer) {
+    editor = getComboMarkdownEditor(textarea) ?? await initComboMarkdownEditor(comboContainer);
+  } else {
+    throw new Error('No editor container found');
+  }
+
   editor.focus();
   return editor;
 }
@@ -507,7 +521,22 @@ async function initSingleCommentEditor(commentForm: HTMLFormElement) {
   // pages:
   // * normal new issue/pr page: no status-button, no comment-button (there is only a normal submit button which can submit empty content)
   // * issue/pr view page: with comment form, has status-button and comment-button
-  const editor = await initComboMarkdownEditor(commentForm.querySelector('.combo-markdown-editor'));
+
+  // Support both Toast and Combo editors - check for Toast first
+  type EditorType = ComboMarkdownEditor | ToastCommentEditor;
+  let editor: EditorType;
+
+  const toastContainer = commentForm.querySelector<HTMLElement>('.toast-comment-editor');
+  const comboContainer = commentForm.querySelector<HTMLElement>('.combo-markdown-editor');
+
+  if (toastContainer) {
+    editor = await initToastCommentEditor(toastContainer);
+  } else if (comboContainer) {
+    editor = await initComboMarkdownEditor(comboContainer);
+  } else {
+    return; // No editor found
+  }
+
   const statusButton = document.querySelector<HTMLButtonElement>('#status-button');
   const commentButton = document.querySelector<HTMLButtonElement>('#comment-button');
   const syncUiState = () => {
@@ -520,8 +549,15 @@ async function initSingleCommentEditor(commentForm: HTMLFormElement) {
       commentButton.disabled = !editorText || isUploading;
     }
   };
-  editor.container.addEventListener(ComboMarkdownEditor.EventUploadStateChanged, syncUiState);
-  editor.container.addEventListener(ComboMarkdownEditor.EventEditorContentChanged, syncUiState);
+
+  // Use appropriate event names based on editor type
+  if (editor instanceof ToastCommentEditor) {
+    editor.container.addEventListener(ToastCommentEditor.EventUploadStateChanged, syncUiState);
+    editor.container.addEventListener(ToastCommentEditor.EventEditorContentChanged, syncUiState);
+  } else {
+    editor.container.addEventListener(ComboMarkdownEditor.EventUploadStateChanged, syncUiState);
+    editor.container.addEventListener(ComboMarkdownEditor.EventEditorContentChanged, syncUiState);
+  }
   syncUiState();
 }
 
@@ -571,7 +607,7 @@ export function initRepoCommentFormAndSidebar() {
   if (commentForm.querySelector('.field.combo-editor-dropzone')) {
     // at the moment, if a form has multiple combo-markdown-editors, it must be an issue template form
     initIssueTemplateCommentEditors(commentForm);
-  } else if (commentForm.querySelector('.combo-markdown-editor')) {
+  } else if (commentForm.querySelector('.toast-comment-editor') || commentForm.querySelector('.combo-markdown-editor')) {
     // it's quite unclear about the "comment form" elements, sometimes it's for issue comment, sometimes it's for file editor/uploader message
     initSingleCommentEditor(commentForm);
   }
