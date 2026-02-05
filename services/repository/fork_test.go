@@ -472,17 +472,21 @@ func TestCheckForkOnEditPermissions(t *testing.T) {
 		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), forkRepo, "subject_id", "is_fork", "fork_id"))
 
 		// Restore original values after test
-		defer func() {
+		t.Cleanup(func() {
 			rootRepo.SubjectID = originalRootSubjectID
 			rootRepo.IsFork = originalRootIsFork
 			rootRepo.ForkID = originalRootForkID
-			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id")
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for rootRepo: %v", err)
+			}
 
 			forkRepo.SubjectID = originalForkSubjectID
 			forkRepo.IsFork = originalForkIsFork
 			forkRepo.ForkID = originalForkForkID
-			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), forkRepo, "subject_id", "is_fork", "fork_id")
-		}()
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), forkRepo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for forkRepo: %v", err)
+			}
+		})
 
 		// Now test: userWithRoot tries to edit forkRepo
 		// userWithRoot owns rootRepo (same subject), but rootRepo is NOT a fork of forkRepo
@@ -555,22 +559,28 @@ func TestCheckForkOnEditPermissions(t *testing.T) {
 		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), fork2Repo, "subject_id", "is_fork", "fork_id"))
 
 		// Restore original values after test
-		defer func() {
+		t.Cleanup(func() {
 			rootRepo.SubjectID = originalRootSubjectID
 			rootRepo.IsFork = originalRootIsFork
 			rootRepo.ForkID = originalRootForkID
-			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id")
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for rootRepo: %v", err)
+			}
 
 			fork1Repo.SubjectID = originalFork1SubjectID
 			fork1Repo.IsFork = originalFork1IsFork
 			fork1Repo.ForkID = originalFork1ForkID
-			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), fork1Repo, "subject_id", "is_fork", "fork_id")
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), fork1Repo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for fork1Repo: %v", err)
+			}
 
 			fork2Repo.SubjectID = originalFork2SubjectID
 			fork2Repo.IsFork = originalFork2IsFork
 			fork2Repo.ForkID = originalFork2ForkID
-			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), fork2Repo, "subject_id", "is_fork", "fork_id")
-		}()
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), fork2Repo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for fork2Repo: %v", err)
+			}
+		})
 
 		// Now test: userC (who owns F2, a fork of F1) tries to edit rootRepo (R)
 		// userC should be allowed because F2 is in R's fork tree (indirect fork)
