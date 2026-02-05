@@ -113,9 +113,12 @@
                                             </button>
                                             {{end}}
                                         {{else}}
-                                            {{/* Fallback - show disabled button with tooltip */}}
-                                            <span data-tooltip-content="{{ctx.Locale.Tr "repo.pulls.disabled"}}">
-                                                <button type="button" class="ui primary button disabled" aria-label="{{ctx.Locale.Tr "repo.editor.submit_changes"}} - {{ctx.Locale.Tr "repo.pulls.disabled"}}">
+                                            {{/* Fallback - show disabled button with generic tooltip.
+                                                 This block is a safety net that should rarely be reached.
+                                                 It handles unexpected permission states where the user is signed in
+                                                 but none of the specific conditions (owner, blocked, has fork, needs fork) apply. */}}
+                                            <span data-tooltip-content="{{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
+                                                <button type="button" class="ui primary button disabled" aria-label="{{ctx.Locale.Tr "repo.editor.submit_changes"}} - {{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
                                                     {{svg "octicon-check" 16 "tw-mr-1"}}
                                                     {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                                 </button>
