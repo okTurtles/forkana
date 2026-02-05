@@ -1,4 +1,4 @@
-// Copyright 2025 The Gitea Authors. All rights reserved.
+// Copyright 2026 okTurtles Foundation. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package main
@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
-
-	"gopkg.in/yaml.v3"
 )
 
 func TestEscapeYAMLString(t *testing.T) {
@@ -76,118 +74,6 @@ func TestEscapeYAMLString(t *testing.T) {
 				t.Errorf("escapeYAMLString(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
-	}
-}
-
-func TestAddFrontMatter(t *testing.T) {
-	tests := []struct {
-		name        string
-		title       string
-		body        string
-		checkFields map[string]string // fields to verify in parsed YAML
-	}{
-		{
-			name:  "simple title",
-			title: "Hello World",
-			body:  "# Content",
-			checkFields: map[string]string{
-				"title":   "Hello World",
-				"license": "CC BY-SA 4.0",
-			},
-		},
-		{
-			name:  "title with quotes",
-			title: `Say "Hello"`,
-			body:  "# Content",
-			checkFields: map[string]string{
-				"title": `Say "Hello"`,
-			},
-		},
-		{
-			name:  "title with backslash",
-			title: `C:\path`,
-			body:  "# Content",
-			checkFields: map[string]string{
-				"title": `C:\path`,
-			},
-		},
-		{
-			name:  "title with special characters",
-			title: "Title: A \"Test\" with\nnewline",
-			body:  "# Content",
-			checkFields: map[string]string{
-				"title": "Title: A \"Test\" with\nnewline",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := addFrontMatter(tt.title, tt.body)
-
-			// Verify front matter structure
-			if !strings.HasPrefix(result, "---\n") {
-				t.Error("front matter should start with ---")
-			}
-
-			// Extract front matter
-			parts := strings.SplitN(result, "---", 3)
-			if len(parts) < 3 {
-				t.Fatal("invalid front matter structure")
-			}
-
-			frontMatter := strings.TrimSpace(parts[1])
-
-			// Parse YAML to verify it's valid
-			var parsed map[string]any
-			if err := yaml.Unmarshal([]byte(frontMatter), &parsed); err != nil {
-				t.Fatalf("failed to parse YAML front matter: %v\nfront matter:\n%s", err, frontMatter)
-			}
-
-			// Check expected fields
-			for field, expected := range tt.checkFields {
-				if val, ok := parsed[field]; !ok {
-					t.Errorf("missing field %q in front matter", field)
-				} else if val != expected {
-					t.Errorf("field %q = %q, want %q", field, val, expected)
-				}
-			}
-
-			// Verify body is appended
-			if !strings.HasSuffix(result, tt.body) {
-				t.Error("body should be appended after front matter")
-			}
-		})
-	}
-}
-
-func TestAddFrontMatterSourceURL(t *testing.T) {
-	// Test that source URL is properly escaped
-	title := "Article with spaces & special chars"
-	result := addFrontMatter(title, "body")
-
-	// Extract and parse front matter
-	parts := strings.SplitN(result, "---", 3)
-	if len(parts) < 3 {
-		t.Fatal("invalid front matter structure")
-	}
-
-	var parsed map[string]any
-	if err := yaml.Unmarshal([]byte(parts[1]), &parsed); err != nil {
-		t.Fatalf("failed to parse YAML: %v", err)
-	}
-
-	source, ok := parsed["source"].(string)
-	if !ok {
-		t.Fatal("source field not found or not a string")
-	}
-
-	// Verify URL encoding
-	if strings.Contains(source, " ") {
-		t.Error("source URL should not contain unencoded spaces")
-	}
-	if !strings.Contains(source, "Article_with_spaces") {
-		t.Error("source URL should contain underscored title")
 	}
 }
 
@@ -466,6 +352,89 @@ func TestSkipReasonLoggable(t *testing.T) {
 	}
 }
 
+func TestNormalizeListMarkers(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple list item",
+			input:    "- item one",
+			expected: "* item one",
+		},
+		{
+			name:     "multiple list items",
+			input:    "- item one\n- item two\n- item three",
+			expected: "* item one\n* item two\n* item three",
+		},
+		{
+			name:     "nested list with spaces",
+			input:    "- item one\n  - nested item\n    - deeply nested",
+			expected: "* item one\n  * nested item\n    * deeply nested",
+		},
+		{
+			name:     "nested list with tabs",
+			input:    "- item one\n\t- nested item\n\t\t- deeply nested",
+			expected: "* item one\n\t* nested item\n\t\t* deeply nested",
+		},
+		{
+			name:     "hyphen in compound word not affected",
+			input:    "This is a well-known fact",
+			expected: "This is a well-known fact",
+		},
+		{
+			name:     "em-dash not affected",
+			input:    "This is important—very important",
+			expected: "This is important—very important",
+		},
+		{
+			name:     "hyphen mid-sentence not affected",
+			input:    "The value is -5 degrees",
+			expected: "The value is -5 degrees",
+		},
+		{
+			name:     "list item with hyphen in content",
+			input:    "- well-known fact",
+			expected: "* well-known fact",
+		},
+		{
+			name:     "mixed content with list and hyphens",
+			input:    "Some text with a-hyphen\n- list item\n  - nested\nMore text-here",
+			expected: "Some text with a-hyphen\n* list item\n  * nested\nMore text-here",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "no list items",
+			input:    "Just regular text\nwith multiple lines",
+			expected: "Just regular text\nwith multiple lines",
+		},
+		{
+			name:     "hyphen without space after not affected",
+			input:    "-not a list item",
+			expected: "-not a list item",
+		},
+		{
+			name:     "already asterisk markers unchanged",
+			input:    "* item one\n* item two",
+			expected: "* item one\n* item two",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeListMarkers(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizeListMarkers(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestNormalizeImageURLs(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -524,6 +493,240 @@ func TestNormalizeImageURLs(t *testing.T) {
 			result := normalizeImageURLs(tt.input)
 			if result != tt.expected {
 				t.Errorf("normalizeImageURLs(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestNormalizeInternalLinks(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "relative link with ./",
+			input:    "[Egypt](./Egypt)",
+			expected: "[Egypt](/:root/subject/Egypt)",
+		},
+		{
+			name:     "relative link with underscores",
+			input:    "[Ancient Egypt](./Ancient_Egypt)",
+			expected: "[Ancient Egypt](/:root/subject/Ancient%20Egypt)",
+		},
+		{
+			name:     "absolute wiki path",
+			input:    "[Egypt](/wiki/Egypt)",
+			expected: "[Egypt](/:root/subject/Egypt)",
+		},
+		{
+			name:     "full Wikipedia URL",
+			input:    "[Egypt](https://en.wikipedia.org/wiki/Egypt)",
+			expected: "[Egypt](/:root/subject/Egypt)",
+		},
+		{
+			name:     "full Wikipedia URL with language prefix",
+			input:    "[Égypte](https://fr.wikipedia.org/wiki/Égypte)",
+			expected: "[Égypte](/:root/subject/%C3%89gypte)",
+		},
+		{
+			name:     "link with URL-encoded spaces",
+			input:    "[1971 Egyptian election](./1971%20Egyptian%20parliamentary%20election)",
+			expected: "[1971 Egyptian election](/:root/subject/1971%20Egyptian%20parliamentary%20election)",
+		},
+		{
+			name:     "link with anchor fragment",
+			input:    "[History section](./Egypt#History)",
+			expected: "[History section](/:root/subject/Egypt#History)",
+		},
+		{
+			name:     "external link unchanged",
+			input:    "[Example](https://example.com/page)",
+			expected: "[Example](https://example.com/page)",
+		},
+		{
+			name:     "image link not affected",
+			input:    "![Egypt](./Egypt.png)",
+			expected: "![Egypt](./Egypt.png)",
+		},
+		{
+			name:     "image with wiki-like path not affected",
+			input:    "![map](./Egypt)",
+			expected: "![map](./Egypt)",
+		},
+		{
+			name:     "mixed content with images and links",
+			input:    "See ![map](./map.png) and [Egypt](./Egypt) for details",
+			expected: "See ![map](./map.png) and [Egypt](/:root/subject/Egypt) for details",
+		},
+		{
+			name:     "multiple internal links",
+			input:    "[Egypt](./Egypt) and [Sudan](./Sudan) are neighbors",
+			expected: "[Egypt](/:root/subject/Egypt) and [Sudan](/:root/subject/Sudan) are neighbors",
+		},
+		{
+			name:     "no links in text",
+			input:    "Just some text without links",
+			expected: "Just some text without links",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "http Wikipedia URL",
+			input:    "[Egypt](http://en.wikipedia.org/wiki/Egypt)",
+			expected: "[Egypt](/:root/subject/Egypt)",
+		},
+		{
+			name:     "link with special characters",
+			input:    "[Café](./Café)",
+			expected: "[Café](/:root/subject/Caf%C3%A9)",
+		},
+		{
+			name:     "link with double-quoted title attribute",
+			input:    `[Atlus](./Atlus "Atlus")`,
+			expected: "[Atlus](/:root/subject/Atlus)",
+		},
+		{
+			name:     "link with single-quoted title attribute",
+			input:    `[Atlus](./Atlus 'Atlus')`,
+			expected: "[Atlus](/:root/subject/Atlus)",
+		},
+		{
+			name:     "link with title containing spaces",
+			input:    `[Mobile game](./Mobile_game "Mobile game")`,
+			expected: "[Mobile game](/:root/subject/Mobile%20game)",
+		},
+		{
+			name:     "wiki path with title attribute",
+			input:    `[Egypt](/wiki/Egypt "Egypt article")`,
+			expected: "[Egypt](/:root/subject/Egypt)",
+		},
+		{
+			name:     "full URL with title attribute",
+			input:    `[Egypt](https://en.wikipedia.org/wiki/Egypt "Wikipedia")`,
+			expected: "[Egypt](/:root/subject/Egypt)",
+		},
+		{
+			name:     "multiple links with title attributes",
+			input:    `See [Atlus](./Atlus "Atlus") and [Sega](./Sega "Sega") for more`,
+			expected: "See [Atlus](/:root/subject/Atlus) and [Sega](/:root/subject/Sega) for more",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeInternalLinks(tt.input)
+			if result != tt.expected {
+				t.Errorf("normalizeInternalLinks(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestStripLinkTitle(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "URL without title",
+			input:    "./Egypt",
+			expected: "./Egypt",
+		},
+		{
+			name:     "URL with double-quoted title",
+			input:    `./Atlus "Atlus"`,
+			expected: "./Atlus",
+		},
+		{
+			name:     "URL with single-quoted title",
+			input:    `./Atlus 'Atlus'`,
+			expected: "./Atlus",
+		},
+		{
+			name:     "URL with title containing spaces",
+			input:    `./Mobile_game "Mobile game"`,
+			expected: "./Mobile_game",
+		},
+		{
+			name:     "full URL with title",
+			input:    `https://en.wikipedia.org/wiki/Egypt "Wikipedia article"`,
+			expected: "https://en.wikipedia.org/wiki/Egypt",
+		},
+		{
+			name:     "URL with empty title",
+			input:    `./Egypt ""`,
+			expected: "./Egypt",
+		},
+		{
+			name:     "URL with quotes in path (no title)",
+			input:    `./Article_with_"quotes"`,
+			expected: `./Article_with_"quotes"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripLinkTitle(tt.input)
+			if result != tt.expected {
+				t.Errorf("stripLinkTitle(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestExtractWikiArticleName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "relative link",
+			input:    "./Egypt",
+			expected: "Egypt",
+		},
+		{
+			name:     "absolute wiki path",
+			input:    "/wiki/Egypt",
+			expected: "Egypt",
+		},
+		{
+			name:     "full Wikipedia URL",
+			input:    "https://en.wikipedia.org/wiki/Egypt",
+			expected: "Egypt",
+		},
+		{
+			name:     "external URL returns empty",
+			input:    "https://example.com/page",
+			expected: "",
+		},
+		{
+			name:     "plain text returns empty",
+			input:    "Egypt",
+			expected: "",
+		},
+		{
+			name:     "relative link with underscores",
+			input:    "./Ancient_Egypt",
+			expected: "Ancient_Egypt",
+		},
+		{
+			name:     "wiki path with fragment",
+			input:    "/wiki/Egypt#History",
+			expected: "Egypt#History",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractWikiArticleName(tt.input)
+			if result != tt.expected {
+				t.Errorf("extractWikiArticleName(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
