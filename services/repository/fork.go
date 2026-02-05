@@ -115,7 +115,7 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 	//       - BlockedBySubject=true
 	//       - They cannot fork or submit change requests (one article per subject rule)
 
-	if ownRepo != nil && ownRepo.ID != repo.ID {
+	if ownRepo != nil {
 		// User owns a repo for this subject - check if it's part of the same fork tree
 		if existingFork != nil && ownRepo.ID == existingFork.ID {
 			// Case 2a: User's repo for the subject IS their direct fork of this repo
