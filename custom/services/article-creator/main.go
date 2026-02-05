@@ -250,6 +250,14 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 
 	fmt.Printf("\nProcessing: %s\n", filepath.Base(filePath))
 
+	// Get file info for modification time
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		fmt.Printf("  ✗ Failed to stat file: %v\n", err)
+		c.stats.failed++
+		return false
+	}
+
 	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -273,6 +281,10 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 		fmt.Printf("  No YAML title found, using filename as description\n")
 	}
 
+	// Use file modification time as the commit timestamp.
+	// This reflects when the article was fetched/written to disk.
+	fileModTime := fileInfo.ModTime()
+
 	// Create repository slug
 	repoName := createSlug(filepath.Base(filePath))
 	fmt.Printf("  Repository name: %s\n", repoName)
@@ -292,8 +304,8 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 		return false
 	}
 
-	// Create README.md file
-	if err := c.createReadmeFile(username, repoName, string(content)); err != nil {
+	// Create README.md file with file modification time as commit timestamp
+	if err := c.createReadmeFile(username, repoName, contentStr, fileModTime); err != nil {
 		fmt.Printf("  ✗ Failed to create README.md: %v\n", err)
 		c.stats.failed++
 		return false
@@ -368,19 +380,20 @@ func (c *giteaClient) createRepository(repoName, description, subject string, pu
 	return repo.HTMLURL, nil
 }
 
-func (c *giteaClient) createReadmeFile(username, repoName, content string) error {
+// createReadmeFile creates the README.md file in the repository.
+// commitTime is the timestamp to use for the commit (typically the file's modification time).
+func (c *giteaClient) createReadmeFile(username, repoName, content string, commitTime time.Time) error {
 	contentB64 := base64.StdEncoding.EncodeToString([]byte(content))
 
-	// Set commit timestamp to current time in RFC3339 format
-	now := time.Now().Format(time.RFC3339)
+	commitTimeStr := commitTime.Format(time.RFC3339)
 
 	reqData := createFileRequest{
 		Message: "Import article from Wikipedia",
 		Content: contentB64,
 		Branch:  "main",
 		Dates: commitDateOptions{
-			Author:    now,
-			Committer: now,
+			Author:    commitTimeStr,
+			Committer: commitTimeStr,
 		},
 	}
 
