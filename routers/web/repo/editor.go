@@ -148,12 +148,18 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 	fromBaseBranch := ctx.FormString("from_base_branch")
 	commitToNewBranch := commonForm.CommitChoice == editorCommitChoiceNewBranch || fromBaseBranch != ""
 	targetBranchName := util.Iif(commitToNewBranch, commonForm.NewBranchName, ctx.Repo.BranchName)
-	if targetBranchName == ctx.Repo.BranchName && !commitFormOptions.CanCommitToBranch && !commitFormOptions.NeedFork {
+
+	// Check if this is a submit-change-request workflow by checking the form value
+	// Skip branch protection check for submit-change-request workflow since it creates a new branch internally
+	isSubmitChangeRequest := ctx.FormBool("submit_change_request")
+
+	if targetBranchName == ctx.Repo.BranchName && !commitFormOptions.CanCommitToBranch && !commitFormOptions.NeedFork && !isSubmitChangeRequest {
 		ctx.JSONError(ctx.Tr("repo.editor.cannot_commit_to_protected_branch", targetBranchName))
 		return nil
 	}
 
-	if !commitFormOptions.NeedFork && !issues_model.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
+	// Skip maintainer write check for submit-change-request workflow since it creates a PR instead of direct commit
+	if !commitFormOptions.NeedFork && !isSubmitChangeRequest && !issues_model.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
 		ctx.NotFound(nil)
 		return nil
 	}
