@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 	"testing"
 
 	"code.gitea.io/gitea/models/db"
@@ -219,31 +218,6 @@ func restoreOldDB(t *testing.T, version string) {
 
 		_, err = db.Exec(data)
 		assert.NoError(t, err)
-		db.Close()
-
-	case setting.Database.Type.IsMSSQL():
-		host, port := setting.ParseMSSQLHostPort(setting.Database.Host)
-		db, err := sql.Open("mssql", fmt.Sprintf("server=%s; port=%s; database=%s; user id=%s; password=%s;",
-			host, port, "master", setting.Database.User, setting.Database.Passwd))
-		assert.NoError(t, err)
-		defer db.Close()
-
-		_, err = db.Exec("DROP DATABASE IF EXISTS [gitea]")
-		assert.NoError(t, err)
-
-		statements := strings.Split(data, "\nGO\n")
-		for _, statement := range statements {
-			if len(statement) > 5 && statement[:5] == "USE [" {
-				dbname := statement[5 : len(statement)-1]
-				db.Close()
-				db, err = sql.Open("mssql", fmt.Sprintf("server=%s; port=%s; database=%s; user id=%s; password=%s;",
-					host, port, dbname, setting.Database.User, setting.Database.Passwd))
-				assert.NoError(t, err)
-				defer db.Close()
-			}
-			_, err = db.Exec(statement)
-			assert.NoError(t, err, "Failure whilst running: %s\nError: %v", statement, err)
-		}
 		db.Close()
 	}
 }

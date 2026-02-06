@@ -24,36 +24,6 @@ func SetDefaultPasswordToArgon2(x *xorm.Engine) error {
 	case setting.Database.Type.IsPostgreSQL():
 		_, err := x.Exec("ALTER TABLE `user` ALTER COLUMN passwd_hash_algo SET DEFAULT 'argon2';")
 		return err
-	case setting.Database.Type.IsMSSQL():
-		// need to find the constraint and drop it, then recreate it.
-		sess := x.NewSession()
-		defer sess.Close()
-		if err := sess.Begin(); err != nil {
-			return err
-		}
-		res, err := sess.QueryString("SELECT [name] FROM sys.default_constraints WHERE parent_object_id=OBJECT_ID(?) AND COL_NAME(parent_object_id, parent_column_id)=?;", "user", "passwd_hash_algo")
-		if err != nil {
-			return err
-		}
-		if len(res) > 0 {
-			constraintName := res[0]["name"]
-			log.Error("Results of select constraint: %s", constraintName)
-			_, err := sess.Exec("ALTER TABLE [user] DROP CONSTRAINT " + constraintName)
-			if err != nil {
-				return err
-			}
-			_, err = sess.Exec("ALTER TABLE [user] ADD CONSTRAINT " + constraintName + " DEFAULT 'argon2' FOR passwd_hash_algo")
-			if err != nil {
-				return err
-			}
-		} else {
-			_, err := sess.Exec("ALTER TABLE [user] ADD DEFAULT('argon2') FOR passwd_hash_algo")
-			if err != nil {
-				return err
-			}
-		}
-		return sess.Commit()
-
 	case setting.Database.Type.IsSQLite3():
 		// drop through
 	default:

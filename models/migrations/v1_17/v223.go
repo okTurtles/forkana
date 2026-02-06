@@ -64,16 +64,11 @@ func RenameCredentialIDBytes(x *xorm.Engine) error {
 			}
 		}
 
-		switch {
-		case setting.Database.Type.IsMySQL():
+		if setting.Database.Type.IsMySQL() {
 			if _, err := sess.Exec("ALTER TABLE `webauthn_credential` CHANGE credential_id_bytes credential_id VARBINARY(1024)"); err != nil {
 				return err
 			}
-		case setting.Database.Type.IsMSSQL():
-			if _, err := sess.Exec("sp_rename 'webauthn_credential.credential_id_bytes', 'credential_id', 'COLUMN'"); err != nil {
-				return err
-			}
-		default:
+		} else {
 			if _, err := sess.Exec("ALTER TABLE `webauthn_credential` RENAME COLUMN credential_id_bytes TO credential_id"); err != nil {
 				return err
 			}

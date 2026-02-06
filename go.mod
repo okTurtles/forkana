@@ -2,9 +2,6 @@ module code.gitea.io/gitea
 
 go 1.25.1
 
-// rfc5280 said: "The serial number is an integer assigned by the CA to each certificate."
-// But some CAs use negative serial number, just relax the check. related:
-// Default TLS cert uses negative serial number #895 https://github.com/microsoft/mssql-docker/issues/895
 godebug x509negativeserial=1
 
 require (
@@ -86,7 +83,6 @@ require (
 	github.com/meilisearch/meilisearch-go v0.33.2
 	github.com/mholt/archives v0.1.3
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/microsoft/go-mssqldb v1.9.3
 	github.com/minio/minio-go/v7 v7.0.95
 	github.com/msteinert/pam v1.2.0
 	github.com/nektos/act v0.2.63
@@ -202,8 +198,6 @@ require (
 	github.com/go-webauthn/x v0.1.24 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
-	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect

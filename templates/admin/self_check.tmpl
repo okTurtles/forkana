@@ -20,8 +20,6 @@
 		<div class="ui attached segment self-check-problem">
 			{{if .DatabaseType.IsMySQL}}
 				<div class="tw-p-2">{{ctx.Locale.Tr "admin.self_check.database_fix_mysql"}}</div>
-			{{else if .DatabaseType.IsMSSQL}}
-				<div class="tw-p-2">{{ctx.Locale.Tr "admin.self_check.database_fix_mssql"}}</div>
 			{{end}}
 			{{if .DatabaseCheckCollationMismatch}}
 				<div class="ui red message">{{ctx.Locale.Tr "admin.self_check.database_collation_mismatch" .DatabaseCheckResult.ExpectedCollation}}</div>
