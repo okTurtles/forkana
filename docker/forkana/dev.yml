@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: forkana-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: forkana
+      POSTGRES_USER: forkana
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - /opt/forkana/postgres:/var/lib/postgresql/data
+    networks:
+      - forkana-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forkana -d forkana"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  forkana:
+    image: forkana:latest
+    container_name: forkana
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Database configuration
+      DB_TYPE: postgres
+      DB_HOST: postgres:5432
+      DB_NAME: forkana
+      DB_USER: forkana
+      DB_PASSWD: ${POSTGRES_PASSWORD}
+      DB_SSL_MODE: disable
+
+      # Application configuration
+      APP_NAME: "Forkana"
+      RUN_MODE: prod
+      DOMAIN: ${FORKANA_DOMAIN}
+      ROOT_URL: http://${FORKANA_DOMAIN}/
+
+      # Security
+      SECRET_KEY: ${FORKANA_SECRET_KEY}
+      INSTALL_LOCK: "true"
+      DISABLE_REGISTRATION: "true"
+
+      # SSH (disabled for dev)
+      DISABLE_SSH: "true"
+    volumes:
+      - /opt/forkana/data:/var/lib/gitea
+      - /opt/forkana/config:/etc/gitea
+    networks:
+      - forkana-network
+
+networks:
+  forkana-network:
+    driver: bridge
