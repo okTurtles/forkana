@@ -38,7 +38,7 @@
             <h4>{{.NotEditableReason}}</h4>
             <p>{{ctx.Locale.Tr "repo.editor.file_not_editable_hint"}}</p>
         </div>
-    {{else if .HasOwnRepoForSubject}}
+    {{else if .BlockedByOwnArticle}}
         {{/* User already owns a different repository for this subject - show message instead of editor.
              SubjectRelation should always be loaded here (via LoadSubject in ArticleView),
              but we fall back to Repository.Name as a defensive measure. */}}

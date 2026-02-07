@@ -9,7 +9,7 @@ import (
 
 	"code.gitea.io/gitea/models/db"
 	user_model "code.gitea.io/gitea/models/user"
-	"code.gitea.io/gitea/modules/log"
+	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/util"
 
 	"xorm.io/builder"
@@ -128,36 +128,44 @@ func (err ErrForkTreeTooLarge) Unwrap() error {
 	return util.ErrPermissionDenied
 }
 
-// FindForkTreeRoot finds the root repository of a fork tree by traversing up the fork chain.
-// It includes cycle detection to prevent infinite loops in case of circular fork references.
+// FindForkTreeRoot finds the root repository of a fork tree by traversing up the fork chain
+// using a single recursive SQL query (Common Table Expression).
 func FindForkTreeRoot(ctx context.Context, repoID int64) (int64, error) {
-	repo, err := GetRepositoryByID(ctx, repoID)
+	// Use MaxForkTreeNodes as depth limit derived from MAX_FORK_TREE_NODES,
+	// defaulting to 300 if disabled or zero
+	depthLimit := setting.Repository.MaxForkTreeNodes
+	if depthLimit <= 0 {
+		depthLimit = 300
+	}
+
+	query := `
+		WITH RECURSIVE fork_ancestors AS (
+			-- Base case: start with the given repository
+			SELECT id, fork_id, is_fork, 1 as depth
+			FROM repository WHERE id = ?
+			UNION ALL
+			-- Recursive case: get the parent repository
+			SELECT r.id, r.fork_id, r.is_fork, fa.depth + 1
+			FROM repository r
+			INNER JOIN fork_ancestors fa ON r.id = fa.fork_id
+			WHERE fa.is_fork = ? AND fa.fork_id > 0 AND fa.depth < ?
+		)
+		-- Get the root: the topmost ancestor (highest depth) which should be the one
+		-- that is not a fork, or the last one we could reach before hitting the depth limit
+		SELECT id FROM fork_ancestors ORDER BY depth DESC LIMIT 1
+	`
+
+	var rootID int64
+	has, err := db.GetEngine(ctx).SQL(query, repoID, true, depthLimit).Get(&rootID)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to find fork tree root: %w", err)
+	}
+	if !has {
+		// Repository not found - this shouldn't happen if repoID is valid
+		return 0, fmt.Errorf("repository not found: %d", repoID)
 	}
 
-	// Traverse up to find root
-	current := repo
-	visited := make(map[int64]bool) // Prevent infinite loops from circular references
-
-	for current.IsFork && current.ForkID > 0 {
-		if visited[current.ID] {
-			// Cycle detected, use current as root
-			log.Warn("Circular fork reference detected in fork tree, repo_id=%d", current.ID)
-			break
-		}
-		visited[current.ID] = true
-
-		parent, err := GetRepositoryByID(ctx, current.ForkID)
-		if err != nil {
-			// Parent not found (may have been deleted), use current as root
-			log.Warn("Fork parent not found for repo_id=%d, fork_id=%d: %v", current.ID, current.ForkID, err)
-			break
-		}
-		current = parent
-	}
-
-	return current.ID, nil
+	return rootID, nil
 }
 
 // CountForkTreeNodes counts the total number of nodes (repositories) in a fork tree

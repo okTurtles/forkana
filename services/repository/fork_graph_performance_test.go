@@ -438,6 +438,56 @@ func TestFindForkTreeRoot(t *testing.T) {
 	}
 }
 
+// TestFindForkTreeRootEdgeCases tests edge cases for the CTE-based FindForkTreeRoot
+func TestFindForkTreeRootEdgeCases(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	ctx := context.Background()
+
+	t.Run("NonExistentRepository", func(t *testing.T) {
+		// Test with a non-existent repository ID
+		_, err := repo_model.FindForkTreeRoot(ctx, 999999)
+		assert.Error(t, err, "Should return error for non-existent repository")
+	})
+
+	t.Run("RootReturnsItself", func(t *testing.T) {
+		// Test that a root repository returns itself
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+		if !repo.IsFork {
+			rootID, err := repo_model.FindForkTreeRoot(ctx, repo.ID)
+			assert.NoError(t, err)
+			assert.Equal(t, repo.ID, rootID, "Root repository should return itself")
+		}
+	})
+
+	t.Run("ForkReturnsRoot", func(t *testing.T) {
+		// Find a fork and verify it returns the correct root
+		forks, err := repo_model.GetRepositoriesByForkID(ctx, 1)
+		assert.NoError(t, err)
+		if len(forks) > 0 {
+			fork := forks[0]
+			rootID, err := repo_model.FindForkTreeRoot(ctx, fork.ID)
+			assert.NoError(t, err)
+			assert.Equal(t, int64(1), rootID, "Fork should return root repository ID")
+		}
+	})
+}
+
+// BenchmarkFindForkTreeRoot benchmarks the CTE-based FindForkTreeRoot function
+func BenchmarkFindForkTreeRoot(b *testing.B) {
+	assert.NoError(b, unittest.PrepareTestDatabase())
+
+	ctx := context.Background()
+	repo := unittest.AssertExistsAndLoadBean(b, &repo_model.Repository{ID: 1})
+
+	for b.Loop() {
+		_, err := repo_model.FindForkTreeRoot(ctx, repo.ID)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // TestCheckForkTreeSizeLimit tests the checkForkTreeSizeLimit function
 func TestCheckForkTreeSizeLimit(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
