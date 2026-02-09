@@ -43,7 +43,7 @@ if [ ! -f ${GITEA_APP_INI} ]; then
     DOMAIN=${DOMAIN:-"localhost"} \
     SSH_DOMAIN=${SSH_DOMAIN:-"localhost"} \
     HTTP_PORT=${HTTP_PORT:-"3000"} \
-    ROOT_URL=${ROOT_URL:-""} \
+    ROOT_URL=${ROOT_URL:-"http://${DOMAIN:-localhost}:${HTTP_PORT:-3000}/"} \
     DISABLE_SSH=${DISABLE_SSH:-"true"} \
     SSH_PORT=${SSH_PORT:-"2222"} \
     SSH_LISTEN_PORT=${SSH_LISTEN_PORT:-$SSH_PORT} \
