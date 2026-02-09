@@ -25,6 +25,7 @@ jobs:
       - run: make lint-backend
         env:
           TAGS: bindata sqlite sqlite_unlock_notify
+          GOPLS_PARALLEL: 4
 
   lint-templates:
     if: needs.files-changed.outputs.templates == 'true'

@@ -45,7 +45,7 @@ func CherryPick(ctx *context.Context) {
 
 func CherryPickPost(ctx *context.Context) {
 	fromCommitID := ctx.PathParam("sha")
-	parsed := prepareEditorCommitSubmittedForm[*forms.CherryPickForm](ctx)
+	parsed := prepareEditorCommitSubmittedForm[*forms.CherryPickForm](ctx, false)
 	if ctx.Written() {
 		return
 	}
