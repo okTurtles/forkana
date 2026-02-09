@@ -250,16 +250,23 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 
 	fmt.Printf("\nProcessing: %s\n", filepath.Base(filePath))
 
-	// Get file info for modification time
-	fileInfo, err := os.Stat(filePath)
+	// Open file once to get both content and modification time atomically.
+	f, err := os.Open(filePath)
+	if err != nil {
+		fmt.Printf("  ✗ Failed to open file: %v\n", err)
+		c.stats.failed++
+		return false
+	}
+	defer f.Close()
+
+	fileInfo, err := f.Stat()
 	if err != nil {
 		fmt.Printf("  ✗ Failed to stat file: %v\n", err)
 		c.stats.failed++
 		return false
 	}
 
-	// Read file content
-	content, err := os.ReadFile(filePath)
+	content, err := io.ReadAll(f)
 	if err != nil {
 		fmt.Printf("  ✗ Failed to read file: %v\n", err)
 		c.stats.failed++
@@ -281,10 +288,6 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 		fmt.Printf("  No YAML title found, using filename as description\n")
 	}
 
-	// Use file modification time as the commit timestamp.
-	// This reflects when the article was fetched/written to disk.
-	fileModTime := fileInfo.ModTime()
-
 	// Create repository slug
 	repoName := createSlug(filepath.Base(filePath))
 	fmt.Printf("  Repository name: %s\n", repoName)
@@ -304,8 +307,9 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 		return false
 	}
 
-	// Create README.md file with file modification time as commit timestamp
-	if err := c.createReadmeFile(username, repoName, string(content), fileModTime); err != nil {
+	// Create README.md file with file modification time as commit timestamp.
+	// This reflects when the article was fetched/written to disk.
+	if err := c.createReadmeFile(username, repoName, string(content), fileInfo.ModTime()); err != nil {
 		fmt.Printf("  ✗ Failed to create README.md: %v\n", err)
 		c.stats.failed++
 		return false
