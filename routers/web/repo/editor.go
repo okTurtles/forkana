@@ -123,7 +123,7 @@ func (f *preparedEditorCommitForm[T]) GetCommitMessage(defaultCommitMessage stri
 	return commitMessage
 }
 
-func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *context.Context) *preparedEditorCommitForm[T] {
+func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *context.Context, allowSubmitChangeRequest bool) *preparedEditorCommitForm[T] {
 	form := web.GetForm(ctx).(T)
 	if ctx.HasError() {
 		ctx.JSONError(ctx.GetErrMsg())
@@ -148,12 +148,18 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 	fromBaseBranch := ctx.FormString("from_base_branch")
 	commitToNewBranch := commonForm.CommitChoice == editorCommitChoiceNewBranch || fromBaseBranch != ""
 	targetBranchName := util.Iif(commitToNewBranch, commonForm.NewBranchName, ctx.Repo.BranchName)
-	if targetBranchName == ctx.Repo.BranchName && !commitFormOptions.CanCommitToBranch && !commitFormOptions.NeedFork {
+
+	// Check if this is a submit-change-request workflow by checking the form value
+	// Skip branch protection check for submit-change-request workflow since it creates a new branch internally
+	isSubmitChangeRequest := allowSubmitChangeRequest && ctx.FormBool("submit_change_request")
+
+	if targetBranchName == ctx.Repo.BranchName && !commitFormOptions.CanCommitToBranch && !commitFormOptions.NeedFork && !isSubmitChangeRequest {
 		ctx.JSONError(ctx.Tr("repo.editor.cannot_commit_to_protected_branch", targetBranchName))
 		return nil
 	}
 
-	if !commitFormOptions.NeedFork && !issues_model.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
+	// Skip maintainer write check for submit-change-request workflow since it creates a PR instead of direct commit
+	if !commitFormOptions.NeedFork && !isSubmitChangeRequest && !issues_model.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
 		ctx.NotFound(nil)
 		return nil
 	}
@@ -360,7 +366,7 @@ func EditFile(ctx *context.Context) {
 func EditFilePost(ctx *context.Context) {
 	editorAction := ctx.PathParam("editor_action")
 	isNewFile := editorAction == "_new"
-	parsed := prepareEditorCommitSubmittedForm[*forms.EditRepoFileForm](ctx)
+	parsed := prepareEditorCommitSubmittedForm[*forms.EditRepoFileForm](ctx, true)
 	if ctx.Written() {
 		return
 	}
@@ -632,6 +638,32 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	targetRepo := ctx.Repo.Repository
 
+	// Verify user has permission to submit change requests
+	// This checks: not repo owner, not blocked by subject ownership, etc.
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, targetRepo)
+	if err != nil {
+		ctx.ServerError("CheckForkOnEditPermissions", err)
+		return nil
+	}
+
+	// Prevent users from submitting change requests to their own repository
+	if perms.IsRepoOwner {
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_submit_change_request_to_own_repo"))
+		return nil
+	}
+
+	// Block users who own an independent article for this subject
+	if perms.BlockedBySubject {
+		ctx.JSONError(ctx.Tr("repo.fork.already_own_subject_repo"))
+		return nil
+	}
+
+	// Verify user can actually submit change requests
+	if !perms.CanSubmitChangeRequest {
+		ctx.JSONError(ctx.Tr("repo.editor.no_change_request_permission"))
+		return nil
+	}
+
 	// Check if the repository allows pull requests
 	if !targetRepo.AllowsPulls(ctx) {
 		ctx.JSONError(ctx.Tr("repo.pulls.disabled"))
@@ -656,8 +688,13 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// We use InternalPush to skip pre-receive hooks since this is a programmatic operation
 	// where we've already verified the user can submit change requests (via middleware)
 	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
-	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
-		LastCommitID: form.LastCommit,
+	_, err = files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+		// Use an empty LastCommitID so ChangeRepoFiles bases the new commit on the current
+		// HEAD of OldBranch. In this workflow we always create a new branch (NewBranch != OldBranch),
+		// so the file conflict detection that relies on LastCommitID is skipped anyway. This makes
+		// an empty LastCommitID the safest choice and avoids relying on a potentially stale or
+		// branch-mismatched client-side form.LastCommit value.
+		LastCommitID: "",
 		OldBranch:    targetRepo.DefaultBranch,
 		NewBranch:    branchName,
 		Message:      parsed.GetCommitMessage(defaultCommitMessage),
@@ -771,7 +808,7 @@ func DeleteFile(ctx *context.Context) {
 
 // DeleteFilePost response for deleting file
 func DeleteFilePost(ctx *context.Context) {
-	parsed := prepareEditorCommitSubmittedForm[*forms.DeleteRepoFileForm](ctx)
+	parsed := prepareEditorCommitSubmittedForm[*forms.DeleteRepoFileForm](ctx, false)
 	if ctx.Written() {
 		return
 	}
@@ -815,7 +852,7 @@ func UploadFile(ctx *context.Context) {
 }
 
 func UploadFilePost(ctx *context.Context) {
-	parsed := prepareEditorCommitSubmittedForm[*forms.UploadRepoFileForm](ctx)
+	parsed := prepareEditorCommitSubmittedForm[*forms.UploadRepoFileForm](ctx, false)
 	if ctx.Written() {
 		return
 	}

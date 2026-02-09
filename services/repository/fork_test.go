@@ -360,3 +360,239 @@ func TestForkRepositoryTreeSizeLimit(t *testing.T) {
 		assert.NoError(t, err)
 	}
 }
+
+// TestCheckForkOnEditPermissions tests the CheckForkOnEditPermissions function
+// which determines how a user can edit a repository they don't own.
+func TestCheckForkOnEditPermissions(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	t.Run("RepoOwner", func(t *testing.T) {
+		// User owns the repository - should be able to edit directly
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		perms, err := CheckForkOnEditPermissions(t.Context(), user, repo)
+		assert.NoError(t, err)
+		assert.True(t, perms.IsRepoOwner)
+		assert.True(t, perms.CanEditDirectly)
+		assert.False(t, perms.NeedsFork)
+		assert.False(t, perms.HasExistingFork)
+		assert.False(t, perms.BlockedBySubject)
+		assert.False(t, perms.CanSubmitChangeRequest)
+	})
+
+	t.Run("NonOwnerNeedsFork", func(t *testing.T) {
+		// User doesn't own the repository and has no fork - should need to fork
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		perms, err := CheckForkOnEditPermissions(t.Context(), user, repo)
+		assert.NoError(t, err)
+		assert.False(t, perms.IsRepoOwner)
+		assert.False(t, perms.CanEditDirectly)
+		assert.True(t, perms.NeedsFork)
+		assert.False(t, perms.HasExistingFork)
+		assert.False(t, perms.BlockedBySubject)
+		assert.True(t, perms.CanSubmitChangeRequest)
+	})
+
+	t.Run("UserWithExistingFork", func(t *testing.T) {
+		// User has an existing fork of the repository
+		// repo11 is a fork of repo10 owned by user13
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 13})
+		baseRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+
+		perms, err := CheckForkOnEditPermissions(t.Context(), user, baseRepo)
+		assert.NoError(t, err)
+		assert.False(t, perms.IsRepoOwner)
+		assert.False(t, perms.CanEditDirectly)
+		assert.False(t, perms.NeedsFork)
+		assert.True(t, perms.HasExistingFork)
+		assert.False(t, perms.BlockedBySubject)
+		assert.True(t, perms.CanSubmitChangeRequest)
+		assert.NotNil(t, perms.ExistingFork)
+		assert.Equal(t, int64(11), perms.ExistingFork.ID)
+	})
+
+	t.Run("AnonymousUserNoPermissions", func(t *testing.T) {
+		// Anonymous user (nil doer) should have no permissions
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		perms, err := CheckForkOnEditPermissions(t.Context(), nil, repo)
+		assert.NoError(t, err)
+		assert.False(t, perms.IsRepoOwner)
+		assert.False(t, perms.CanEditDirectly)
+		assert.False(t, perms.NeedsFork)
+		assert.False(t, perms.HasExistingFork)
+		assert.False(t, perms.BlockedBySubject)
+		assert.False(t, perms.CanSubmitChangeRequest)
+	})
+
+	t.Run("BlockedBySubjectOwnership", func(t *testing.T) {
+		// User owns an independent article for the same subject (not a fork of the target repo).
+		// This tests the case where:
+		// - User A owns repo X with subject S (root article)
+		// - User B owns repo Y with subject S (fork of X)
+		// - User A tries to edit repo Y → should be blocked because they already have their own article
+
+		// Create a unique subject for this test
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), "BlockedBySubject Test Subject")
+		assert.NoError(t, err)
+
+		// Get user2 (will be the root article owner) and user5 (will own the fork)
+		userWithRoot := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		userWithFork := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+		// Use repo2 as the root article (owned by user2)
+		rootRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+		// Use repo4 as the fork (owned by user5, we'll set it up as a fork)
+		forkRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
+
+		// Verify ownership matches our expectations
+		assert.Equal(t, userWithRoot.ID, rootRepo.OwnerID)
+		assert.Equal(t, userWithFork.ID, forkRepo.OwnerID)
+
+		// Set up the subject relationship: both repos have the same subject
+		// rootRepo is the root (not a fork), forkRepo is a fork of rootRepo
+		originalRootSubjectID := rootRepo.SubjectID
+		originalRootIsFork := rootRepo.IsFork
+		originalRootForkID := rootRepo.ForkID
+		originalForkSubjectID := forkRepo.SubjectID
+		originalForkIsFork := forkRepo.IsFork
+		originalForkForkID := forkRepo.ForkID
+
+		rootRepo.SubjectID = subject.ID
+		rootRepo.IsFork = false
+		rootRepo.ForkID = 0
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id"))
+
+		forkRepo.SubjectID = subject.ID
+		forkRepo.IsFork = true
+		forkRepo.ForkID = rootRepo.ID
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), forkRepo, "subject_id", "is_fork", "fork_id"))
+
+		// Restore original values after test
+		t.Cleanup(func() {
+			rootRepo.SubjectID = originalRootSubjectID
+			rootRepo.IsFork = originalRootIsFork
+			rootRepo.ForkID = originalRootForkID
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for rootRepo: %v", err)
+			}
+
+			forkRepo.SubjectID = originalForkSubjectID
+			forkRepo.IsFork = originalForkIsFork
+			forkRepo.ForkID = originalForkForkID
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), forkRepo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for forkRepo: %v", err)
+			}
+		})
+
+		// Now test: userWithRoot tries to edit forkRepo
+		// userWithRoot owns rootRepo (same subject), but rootRepo is NOT a fork of forkRepo
+		// So userWithRoot should be blocked
+		perms, err := CheckForkOnEditPermissions(t.Context(), userWithRoot, forkRepo)
+		assert.NoError(t, err)
+		assert.False(t, perms.IsRepoOwner, "User should not be the owner of the fork repo")
+		assert.False(t, perms.CanEditDirectly, "User should not be able to edit directly")
+		assert.False(t, perms.NeedsFork, "User should not need a fork (they're blocked)")
+		assert.False(t, perms.HasExistingFork, "User should not have an existing fork of this repo")
+		assert.True(t, perms.BlockedBySubject, "User should be blocked because they own an independent article for this subject")
+		assert.False(t, perms.CanSubmitChangeRequest, "User should not be able to submit change requests")
+		assert.NotNil(t, perms.OwnRepoForSubject, "OwnRepoForSubject should be set")
+		assert.Equal(t, rootRepo.ID, perms.OwnRepoForSubject.ID, "OwnRepoForSubject should be the user's root article")
+	})
+
+	t.Run("IndirectForkCanSubmitChangeRequest", func(t *testing.T) {
+		// User owns a fork-of-fork (indirect fork) and tries to submit a change request to the root.
+		// This tests the case where:
+		// - User A owns repo R (root article) with subject S
+		// - User B owns repo F1 (fork of R) with subject S
+		// - User C owns repo F2 (fork of F1) with subject S
+		// - User C tries to edit repo R → should be allowed because F2 is in R's fork tree
+
+		// Create a unique subject for this test
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), "IndirectFork Test Subject")
+		assert.NoError(t, err)
+
+		// Get users for this test
+		// Using repo10 (user12), repo11 (user13, already fork of repo10), repo12 (user14)
+		userA := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 12}) // Root owner
+		userB := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 13}) // F1 owner
+		userC := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 14}) // F2 owner (fork of fork)
+
+		// Use existing repos and set up the fork chain
+		rootRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})  // R - owned by userA (user12)
+		fork1Repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 11}) // F1 - owned by userB (user13)
+		fork2Repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 12}) // F2 - owned by userC (user14)
+
+		// Verify ownership matches our expectations
+		assert.Equal(t, userA.ID, rootRepo.OwnerID)
+		assert.Equal(t, userB.ID, fork1Repo.OwnerID)
+		assert.Equal(t, userC.ID, fork2Repo.OwnerID)
+
+		// Save original values for cleanup
+		originalRootSubjectID := rootRepo.SubjectID
+		originalRootIsFork := rootRepo.IsFork
+		originalRootForkID := rootRepo.ForkID
+		originalFork1SubjectID := fork1Repo.SubjectID
+		originalFork1IsFork := fork1Repo.IsFork
+		originalFork1ForkID := fork1Repo.ForkID
+		originalFork2SubjectID := fork2Repo.SubjectID
+		originalFork2IsFork := fork2Repo.IsFork
+		originalFork2ForkID := fork2Repo.ForkID
+
+		// Set up the fork tree: R <- F1 <- F2
+		rootRepo.SubjectID = subject.ID
+		rootRepo.IsFork = false
+		rootRepo.ForkID = 0
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id"))
+
+		fork1Repo.SubjectID = subject.ID
+		fork1Repo.IsFork = true
+		fork1Repo.ForkID = rootRepo.ID // F1 is a fork of R
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), fork1Repo, "subject_id", "is_fork", "fork_id"))
+
+		fork2Repo.SubjectID = subject.ID
+		fork2Repo.IsFork = true
+		fork2Repo.ForkID = fork1Repo.ID // F2 is a fork of F1 (indirect fork of R)
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), fork2Repo, "subject_id", "is_fork", "fork_id"))
+
+		// Restore original values after test
+		t.Cleanup(func() {
+			rootRepo.SubjectID = originalRootSubjectID
+			rootRepo.IsFork = originalRootIsFork
+			rootRepo.ForkID = originalRootForkID
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for rootRepo: %v", err)
+			}
+
+			fork1Repo.SubjectID = originalFork1SubjectID
+			fork1Repo.IsFork = originalFork1IsFork
+			fork1Repo.ForkID = originalFork1ForkID
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), fork1Repo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for fork1Repo: %v", err)
+			}
+
+			fork2Repo.SubjectID = originalFork2SubjectID
+			fork2Repo.IsFork = originalFork2IsFork
+			fork2Repo.ForkID = originalFork2ForkID
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), fork2Repo, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for fork2Repo: %v", err)
+			}
+		})
+
+		// Now test: userC (who owns F2, a fork of F1) tries to edit rootRepo (R)
+		// userC should be allowed because F2 is in R's fork tree (indirect fork)
+		perms, err := CheckForkOnEditPermissions(t.Context(), userC, rootRepo)
+		assert.NoError(t, err)
+		assert.False(t, perms.IsRepoOwner, "User should not be the owner of the root repo")
+		assert.False(t, perms.CanEditDirectly, "User should not be able to edit directly")
+		assert.False(t, perms.NeedsFork, "User should not need a fork (they have one)")
+		assert.True(t, perms.HasExistingFork, "User should have an existing fork (indirect)")
+		assert.False(t, perms.BlockedBySubject, "User should NOT be blocked - their fork is in the same tree")
+		assert.True(t, perms.CanSubmitChangeRequest, "User should be able to submit change requests")
+		assert.NotNil(t, perms.ExistingFork, "ExistingFork should be set")
+		assert.Equal(t, fork2Repo.ID, perms.ExistingFork.ID, "ExistingFork should be the user's indirect fork")
+	})
+}
