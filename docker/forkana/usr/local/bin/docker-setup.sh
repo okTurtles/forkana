@@ -9,6 +9,15 @@ if [ ! -w ${HOME} ]; then echo "${HOME} is not writable"; exit 1; fi
 # Prepare custom folder
 mkdir -p ${GITEA_CUSTOM} && chmod 0700 ${GITEA_CUSTOM}
 
+# Sync baked-in custom defaults (options, services, templates) into GITEA_CUSTOM.
+# The defaults live outside the volume paths so they survive volume mounts.
+# Uses cp -rn so existing user-modified files are never overwritten.
+CUSTOM_DEFAULTS="/usr/local/share/gitea/custom-defaults"
+if [ -d "${CUSTOM_DEFAULTS}" ]; then
+    # Use glob instead of "/." — BusyBox cp -rn silently fails with the dot syntax.
+    cp -rn "${CUSTOM_DEFAULTS}"/* "${GITEA_CUSTOM}/"
+fi
+
 # Prepare temp folder
 mkdir -p ${GITEA_TEMP} && chmod 0700 ${GITEA_TEMP}
 if [ ! -w ${GITEA_TEMP} ]; then echo "${GITEA_TEMP} is not writable"; exit 1; fi

@@ -35,6 +35,15 @@ RUN go build contrib/environment-to-ini/environment-to-ini.go
 # Copy local files (Forkana-specific scripts and templates)
 COPY docker/forkana /tmp/local
 
+# Stage Forkana custom overrides (options, public, services, templates) for the
+# runtime image. Uses conditional copies so the build succeeds even if a
+# directory is missing from the build context (e.g. excluded by .dockerignore).
+RUN mkdir -p /tmp/custom-defaults \
+ && cd /go/src/code.gitea.io/gitea/custom \
+ && for dir in options services templates; do \
+      [ -d "$dir" ] && cp -r "$dir" /tmp/custom-defaults/ || true; \
+    done
+
 # Set permissions
 RUN chmod 755 /tmp/local/usr/local/bin/docker-entrypoint.sh \
               /tmp/local/usr/local/bin/docker-setup.sh \
@@ -80,6 +89,11 @@ RUN chown git:git /var/lib/gitea /etc/gitea
 COPY --from=build-env /tmp/local /
 COPY --from=build-env --chown=root:root /go/src/code.gitea.io/gitea/gitea /app/gitea/gitea
 COPY --from=build-env --chown=root:root /go/src/code.gitea.io/gitea/environment-to-ini /usr/local/bin/environment-to-ini
+
+# Bake Forkana custom overrides (options, public, services, templates) into the image.
+# Placed outside both VOLUME paths (/var/lib/gitea, /etc/gitea) so they survive
+# volume mounts. docker-setup.sh syncs them into GITEA_CUSTOM on every startup.
+COPY --from=build-env --chown=1000:1000 /tmp/custom-defaults/ /usr/local/share/gitea/custom-defaults/
 
 # Run as non-root user (git:git)
 USER 1000:1000
