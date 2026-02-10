@@ -11,7 +11,7 @@
 ></div>
 {{if and .Issue.IsPull .Issue.PullRequest.HeadRepo}}
 <div class="pr-repo-header">
-	<a href="javascript:history.back()" class="pr-back-link">{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "back"}}</a>
+	<a href="javascript:history.back()" class="pr-back-link">{{svg "octicon-chevron-left" 14}} Back</a>
 	<div class="pr-repo-title">
 		<a href="{{AppSubUrl}}/{{.Issue.PullRequest.HeadRepo.OwnerName}}">{{.Issue.PullRequest.HeadRepo.OwnerName}}</a>
 		/
@@ -102,11 +102,11 @@
 					{{end}}
 				{{else}}
 					{{if .Issue.OriginalAuthor}}
-						<span id="pull-desc-display" class="pull-desc">{{.Issue.OriginalAuthor}} {{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits $headHref $baseHref}}</span>
+						<span id="pull-desc-display" class="pull-desc">{{.Issue.OriginalAuthor}} {{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits (print .Repository.OwnerName "/" .Repository.Name)}}</span>
 					{{else}}
 						<span id="pull-desc-display" class="pull-desc">
 							<a {{if gt .Issue.Poster.ID 0}}href="{{.Issue.Poster.HomeLink}}"{{end}}>{{.Issue.Poster.GetDisplayName}}</a>
-							{{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits $headHref $baseHref}}
+							{{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits (print .Repository.OwnerName "/" .Repository.Name)}}
 						</span>
 					{{end}}
 					<span id="pull-desc-editor" class="tw-hidden flex-text-block" data-target-update-url="{{$.RepoLink}}/pull/{{.Issue.Index}}/target_branch">

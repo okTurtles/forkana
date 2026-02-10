@@ -11,16 +11,150 @@
   width: 100%;
 }
 
-/* Add your custom repo styles below this line */
+/* Hide secondary-nav (Bubble/Table/Article view bar) on PR pages */
+.repository.view.issue .secondary-nav {
+  display: none !important;
+}
 
 /* Padding for empty content placeholder in comments */
 .repository.view.issue .comment-list .comment .no-content {
   padding: 1rem;
 }
 
-/* Split diff column headers */
+/* Issue title font size and weight */
+.issue-title h1 {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+}
+
+/* More padding on diff detail box */
+.diff-detail-box {
+  padding: 12px 16px !important;
+}
+
+/* #1 — "Change request" navbar pill style */
+.navbar-pill-active {
+  background: #818B9826 !important;
+  border-radius: 6px;
+  padding: 4px 12px !important;
+  font-weight: 500;
+}
+
+.navbar-view-modes {
+  color: #656d76;
+  font-weight: 400;
+  cursor: default;
+  padding-right: 4px !important;
+}
+
+/* #4 — Article reference pill in merge info */
+.article-ref-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 0.85em;
+  background: #E9E7FF;
+  color: #4E40FA;
+  vertical-align: middle;
+}
+
+/* #5 — Tab count: plain inline number instead of badge circle */
+.issue-content .tabular.menu .item .ui.label {
+  background: transparent !important;
+  color: inherit !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 0 0 4px !important;
+  font-weight: 400;
+  font-size: inherit;
+  min-width: unset;
+  min-height: unset;
+}
+
+/* #6 — Info banner: "Click a paragraph to add a comment" */
+.diff-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin: 0 0 12px 0;
+  background: #f0ecff;
+  border: 1px solid #d8d0f0;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #3d2e7c;
+}
+
+.diff-info-banner .info-icon {
+  flex-shrink: 0;
+}
+
+.diff-info-banner .info-text {
+  flex: 1;
+}
+
+.diff-info-banner .info-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #3d2e7c;
+  font-size: 1.1rem;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.diff-info-banner .info-dismiss:hover {
+  background: rgba(61, 46, 124, 0.1);
+}
+
+/* #7b — Submit review button in changes bar */
+.diff-submit-review-btn {
+  background: #5b4bbe !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 6px 16px !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.diff-submit-review-btn:hover {
+  background: #4a3da8 !important;
+}
+
+/* Collapse all button */
+.diff-collapse-all-btn {
+  background: none;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #656d76;
+  display: inline-flex;
+  align-items: center;
+}
+
+.diff-collapse-all-btn:hover {
+  background: #f6f8fa;
+}
+
+/* #8 — Split diff column headers: neutral gray instead of purple */
 .diff-split-header {
-  background: #f3f0ff;
+  background: #f6f8fa;
+}
+
+.diff-split-header tr:first-child th:first-child {
+  border-top-left-radius: 8px;
+}
+
+.diff-split-header tr:first-child th:last-child {
+  border-top-right-radius: 8px;
 }
 
 .diff-split-header th {
@@ -28,7 +162,7 @@
   font-weight: 500;
   font-size: 0.875rem;
   text-align: center;
-  color: #5c4d8e;
+  color: #1f2328;
 }
 
 .diff-split-header-left {
@@ -36,7 +170,7 @@
 }
 
 .diff-split-header-right {
-  background: #ebe6fa;
+  background: #f0f0f0;
 }
 
 /* Hide the collapsible file header for changes */
@@ -44,22 +178,64 @@
   display: none !important;
 }
 
-/* Change deleted/old lines from red/orange to purple */
+/* Make the diff file box border visible with rounded corners */
+.diff-file-box {
+  border: 1px solid #d0d7de !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+/* Remove inner borders to prevent double-border */
+.diff-file-box .ui.attached.table,
+.diff-file-box .ui.attached.header,
+.diff-file-box .file-body.file-code {
+  border: none !important;
+}
+
+
+/* #9 — Hide hunk header rows (@@ ... @@) */
+.code-diff-split tr[data-line-type="tag"],
+.code-diff-unified tr[data-line-type="tag"] {
+  display: none !important;
+}
+
+/* #10 — Deletion lines: white background per design */
 .code-diff-unified .del-code,
 .code-diff-unified .del-code td,
 .code-diff-split .del-code .lines-num-old,
 .code-diff-split .del-code .lines-escape-old,
 .code-diff-split .del-code .lines-code-old {
-  background: #f3f0ff !important;
-  border-color: #d8d0f0 !important;
+  background: #fff !important;
+  border-color: #eee !important;
 }
 
 .code-diff-unified .del-code .lines-num,
 .code-diff-split .del-code .lines-num {
-  background: #ebe6fa !important;
+  background: #f6f8fa !important;
 }
 
-/* Change removed word highlighting to purple */
+/* Addition lines: light lavender background per design */
+.code-diff-unified .add-code,
+.code-diff-unified .add-code td,
+.code-diff-split .add-code .lines-num-new,
+.code-diff-split .add-code .lines-escape-new,
+.code-diff-split .add-code .lines-code-new {
+  background: #E5E9FF !important;
+  border-color: #d8d0f0 !important;
+}
+
+.code-diff-unified .add-code .lines-num,
+.code-diff-split .add-code .lines-num {
+  background: #dce0f5 !important;
+}
+
+/* #11 — Removed/added word highlighting */
 .removed-code {
-  background: #d8d0f0 !important;
+  background: #ffd7d5 !important;
+  font-weight: bold;
+}
+
+.added-code {
+  background: #E5E9FF !important;
+  font-weight: bold;
 }
