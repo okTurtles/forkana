@@ -33,7 +33,8 @@ func SetDiffViewStyle(ctx *context.Context) {
 	queryStyle := ctx.FormString("style")
 
 	if !ctx.IsSigned {
-		ctx.Data["IsSplitStyle"] = queryStyle == "split"
+		// Default to split view for non-signed users
+		ctx.Data["IsSplitStyle"] = queryStyle != "unified"
 		return
 	}
 
@@ -47,7 +48,7 @@ func SetDiffViewStyle(ctx *context.Context) {
 	} else if userStyle == "unified" || userStyle == "split" {
 		style = userStyle
 	} else {
-		style = "unified"
+		style = "split"
 	}
 
 	ctx.Data["IsSplitStyle"] = style == "split"

@@ -10,6 +10,12 @@
 	<col width="10">
 	<col>
 </colgroup>
+<thead class="diff-split-header">
+	<tr>
+		<th colspan="4" class="diff-split-header-left">Current article</th>
+		<th colspan="4" class="diff-split-header-right">Change requested</th>
+	</tr>
+</thead>
 {{range $j, $section := $file.Sections}}
 	{{range $k, $line := $section.Lines}}
 		{{$hasmatch := ne $line.Match -1}}
