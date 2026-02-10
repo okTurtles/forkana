@@ -1,5 +1,5 @@
 <div id="review-box" {{if $.Repository.IsArchived}}data-tooltip-content="{{ctx.Locale.Tr "repo.archive.pull.nocomment"}}"{{end}}>
-	<button class="ui tiny primary button tw-pr-1 js-btn-review {{if not $.IsShowingAllCommits}}disabled{{end}}"
+	<button class="ui tiny primary button js-btn-review diff-submit-review-btn {{if not $.IsShowingAllCommits}}disabled{{end}}"
 		{{if not $.IsShowingAllCommits}}data-tooltip-content="{{ctx.Locale.Tr "repo.pulls.review_only_possible_for_full_diff"}}"{{end}}
 		{{if $.Repository.IsArchived}}disabled{{end}}
 	>
@@ -9,51 +9,100 @@
 	</button>
 </div>
 {{if $.IsShowingAllCommits}}
-<div class="review-box-panel tippy-target">
-	<div class="ui segment">
+<div class="review-modal-overlay" id="review-modal-overlay" style="display:none">
+	<div class="review-modal" id="review-modal">
 		<form class="ui form form-fetch-action" action="{{.Link}}/reviews/submit" method="post">
 			{{.CsrfTokenHtml}}
 			<input type="hidden" name="commit_id" value="{{.AfterCommitID}}">
-			<div class="field tw-flex tw-items-center">
-				<div class="tw-flex-1">{{ctx.Locale.Tr "repo.diff.review.header"}}</div>
-				<a class="muted close">{{svg "octicon-x" 16}}</a>
+			<div class="review-modal-header">
+				<span class="review-modal-title">You have <span class="review-comments-counter-modal" data-pending-comment-number="{{.PendingCodeCommentNumber}}">{{.PendingCodeCommentNumber}}</span> draft comment(s)</span>
+				<button type="button" class="review-modal-close" id="review-modal-close" aria-label="Close">&times;</button>
 			</div>
-			<div class="field">
-				{{template "shared/combomarkdowneditor" (dict
-					"MarkdownPreviewInRepo" $.Repository
-					"MarkdownPreviewMode" "comment"
-					"TextareaName" "content"
-					"TextareaPlaceholder" (ctx.Locale.Tr "repo.diff.review.placeholder")
-					"DropzoneParentContainer" "form"
-				)}}
-			</div>
-			{{if .IsAttachmentEnabled}}
+			<div class="review-modal-body">
 				<div class="field">
-					{{template "repo/upload" .}}
+					<label class="review-field-label">Add a title</label>
+					<input type="text" name="title" class="review-title-input" placeholder="">
 				</div>
-			{{end}}
-			<div class="divider"></div>
-			{{$showSelfTooltip := (and $.IsSigned ($.Issue.IsPoster $.SignedUser.ID))}}
-			{{if not $.Issue.IsClosed}}
-				{{if $showSelfTooltip}}
-					<span class="tw-inline-block" data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_approve"}}">
-						<button type="submit" name="type" value="approve" disabled class="ui submit primary tiny button btn-submit">{{ctx.Locale.Tr "repo.diff.review.approve"}}</button>
-					</span>
-				{{else}}
-					<button type="submit" name="type" value="approve" class="ui submit primary tiny button btn-submit">{{ctx.Locale.Tr "repo.diff.review.approve"}}</button>
+				<div class="field">
+					<label class="review-field-label">Review summary</label>
+					{{template "shared/combomarkdowneditor" (dict
+						"MarkdownPreviewInRepo" $.Repository
+						"MarkdownPreviewMode" "comment"
+						"TextareaName" "content"
+						"TextareaPlaceholder" (ctx.Locale.Tr "repo.diff.review.placeholder")
+						"DropzoneParentContainer" "form"
+					)}}
+				</div>
+				{{if .IsAttachmentEnabled}}
+					<div class="field">
+						{{template "repo/upload" .}}
+					</div>
 				{{end}}
-			{{end}}
-			<button type="submit" name="type" value="comment" class="ui submit tiny basic button btn-submit">{{ctx.Locale.Tr "repo.diff.review.comment"}}</button>
-			{{if not $.Issue.IsClosed}}
-				{{if $showSelfTooltip}}
-					<span class="tw-inline-block" data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_reject"}}">
-						<button type="submit" name="type" value="reject" disabled class="ui submit red tiny button btn-submit">{{ctx.Locale.Tr "repo.diff.review.reject"}}</button>
-					</span>
-				{{else}}
-					<button type="submit" name="type" value="reject" class="ui submit red tiny button btn-submit">{{ctx.Locale.Tr "repo.diff.review.reject"}}</button>
-				{{end}}
-			{{end}}
+				<div class="review-radio-options">
+					{{$showSelfTooltip := (and $.IsSigned ($.Issue.IsPoster $.SignedUser.ID))}}
+					<label class="review-radio-option">
+						<input type="radio" name="type" value="comment" checked>
+						<div class="review-radio-content">
+							<span class="review-radio-label">Comment</span>
+							<span class="review-radio-desc">Submit general feedback without explicit approval.</span>
+						</div>
+					</label>
+					{{if not $.Issue.IsClosed}}
+						<label class="review-radio-option" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_approve"}}"{{end}}>
+							<input type="radio" name="type" value="approve" {{if $showSelfTooltip}}disabled{{end}}>
+							<div class="review-radio-content">
+								<span class="review-radio-label">Approve</span>
+								<span class="review-radio-desc">Submit feedback and approve changes.</span>
+							</div>
+						</label>
+					{{end}}
+					{{if not $.Issue.IsClosed}}
+						<label class="review-radio-option" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_reject"}}"{{end}}>
+							<input type="radio" name="type" value="reject" {{if $showSelfTooltip}}disabled{{end}}>
+							<div class="review-radio-content">
+								<span class="review-radio-label">Request changes</span>
+								<span class="review-radio-desc">Submit feedback that must be addressed before approving.</span>
+							</div>
+						</label>
+					{{end}}
+					<label class="review-radio-option">
+						<input type="radio" name="type" value="close">
+						<div class="review-radio-content">
+							<span class="review-radio-label">Close</span>
+							<span class="review-radio-desc">Submit feedback and close the change request without approving.</span>
+						</div>
+					</label>
+				</div>
+			</div>
+			<div class="review-modal-footer">
+				<button type="submit" class="ui primary button btn-submit review-submit-btn">Submit review</button>
+			</div>
 		</form>
 	</div>
 </div>
+<script>
+(function() {
+	const btn = document.querySelector('.js-btn-review');
+	const overlay = document.getElementById('review-modal-overlay');
+	const closeBtn = document.getElementById('review-modal-close');
+	if (!btn || !overlay) return;
+
+	btn.addEventListener('click', function(e) {
+		e.preventDefault();
+		e.stopPropagation();
+		overlay.style.display = 'flex';
+	});
+
+	closeBtn.addEventListener('click', function(e) {
+		e.preventDefault();
+		overlay.style.display = 'none';
+	});
+
+	overlay.addEventListener('click', function(e) {
+		if (e.target === overlay) {
+			overlay.style.display = 'none';
+		}
+	});
+})();
+</script>
 {{end}}

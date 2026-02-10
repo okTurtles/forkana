@@ -239,3 +239,141 @@
   background: #E5E9FF !important;
   font-weight: bold;
 }
+
+/* Review Modal Styles */
+.review-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.review-modal {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 600px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.review-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #d0d7de;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.review-modal-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: #1f2328;
+}
+
+.review-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #656d76;
+  line-height: 1;
+  padding: 0;
+}
+
+.review-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.review-field-label {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #1f2328;
+}
+
+.review-modal-body .field {
+  margin-bottom: 16px;
+}
+
+.review-title-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.review-radio-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.review-radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.review-radio-option input[type="radio"] {
+  margin-top: 4px;
+  accent-color: #5b4bbe;
+  transform: scale(1.2);
+}
+
+.review-radio-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.review-radio-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1f2328;
+}
+
+.review-radio-desc {
+  font-size: 13px;
+  color: #656d76;
+  margin-top: 2px;
+}
+
+.review-modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #d0d7de;
+  display: flex;
+  justify-content: flex-end;
+  background: #f6f8fa;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.review-submit-btn {
+  background: #5b4bbe !important;
+  color: #fff !important;
+  border-radius: 6px !important;
+  padding: 8px 16px !important;
+  font-weight: 600 !important;
+}
+
+.review-submit-btn:hover {
+  background: #4a3da8 !important;
+}
+
+.review-comments-counter-modal {
+  font-weight: bold;
+}
