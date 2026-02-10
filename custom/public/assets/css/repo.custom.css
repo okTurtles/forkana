@@ -113,7 +113,6 @@
 
 /* #7b — Submit review button in changes bar */
 .diff-submit-review-btn {
-  background: #5b4bbe !important;
   color: #fff !important;
   border: none !important;
   border-radius: 8px !important;
@@ -122,10 +121,6 @@
   font-size: 0.85rem !important;
   cursor: pointer;
   white-space: nowrap;
-}
-
-.diff-submit-review-btn:hover {
-  background: #4a3da8 !important;
 }
 
 /* Collapse all button */
@@ -258,7 +253,7 @@
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  width: 600px;
+  width: 800px;
   max-width: 90vw;
   max-height: 90vh;
   display: flex;
@@ -331,7 +326,6 @@
 
 .review-radio-option input[type="radio"] {
   margin-top: 4px;
-  accent-color: #5b4bbe;
   transform: scale(1.2);
 }
 
@@ -363,17 +357,64 @@
 }
 
 .review-submit-btn {
-  background: #5b4bbe !important;
   color: #fff !important;
   border-radius: 6px !important;
   padding: 8px 16px !important;
   font-weight: 600 !important;
 }
 
-.review-submit-btn:hover {
-  background: #4a3da8 !important;
+/* Align markdown toolbar with tabs on larger containers */
+.combo-markdown-editor {
+  container-type: inline-size;
+  position: relative;
 }
 
-.review-comments-counter-modal {
-  font-weight: bold;
+@container (max-width: 639px) {
+  .combo-markdown-editor markdown-toolbar {
+    border-right: 1px solid #d1d7dd;
+    border-left: 1px solid #d1d7dd;
+    padding: 0.5rem .5rem 0 .5rem;
+  }
+}
+
+@container (min-width: 640px) {
+  /* Make room for the toolbar in the header */
+  .combo-markdown-editor .ui.top.tabular.menu {
+    padding-right: 400px;
+  }
+
+  /* Position toolbar in top right */
+  .combo-markdown-editor markdown-toolbar {
+    position: absolute;
+    top: 1rem; /* Align with tabs */
+    right: 0;
+    margin: 0 !important;
+    padding: 0 10px !important;
+    background: transparent !important;
+    border: none !important;
+    z-index: 10;
+  }
+
+  /* Adjust spacing for the editor content */
+  .combo-markdown-editor .ui.tab[data-tab-panel="markdown-writer"] {
+    margin-top: 0;
+  }
+}
+
+.combo-markdown-editor .ui.top.tabular.menu {
+  background: #F6F8FA;
+  border: 1px solid #d1d7dd;
+  padding-left: .5rem;
+  padding-top: .5rem;
+  border-radius: .5rem .5rem 0 0;
+  min-height: 40px;
+  margin-bottom: 0 !important; /* Remove gap */
+}
+
+.combo-markdown-editor text-expander {
+  padding: 0.5rem;
+  border: 1px solid #d1d7dd;
+  border-top: 0;
+  border-radius: 0 0 .5rem .5rem;
+  display: block; /* Ensure it behaves like a block for borders/padding */
 }
