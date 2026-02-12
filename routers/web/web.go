@@ -1317,6 +1317,52 @@ func registerWebRoutes(m *web.Router) {
 	}, optSignIn, context.RepoAssignment, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests, unit.TypeExternalTracker))
 	// end "/{username}/{reponame}": issue list, issue view (pull-request redirection), external tracker
 
+	addIssuesPullsUpdateRoutes := func() {
+		// for "/{username}/{reponame}/issues", "/{username}/{reponame}/pulls",
+		// or "/article/{username}/{subjectname}/pulls"
+		m.Group("/{index}", func() {
+			m.Post("/title", repo.UpdateIssueTitle)
+			m.Post("/content", repo.UpdateIssueContent)
+			m.Post("/deadline", repo.UpdateIssueDeadline)
+			m.Post("/watch", repo.IssueWatch)
+			m.Post("/ref", repo.UpdateIssueRef)
+			m.Post("/pin", reqRepoAdmin, repo.IssuePinOrUnpin)
+			m.Post("/viewed-files", repo.UpdateViewedFiles)
+			m.Group("/dependency", func() {
+				m.Post("/add", repo.AddDependency)
+				m.Post("/delete", repo.RemoveDependency)
+			})
+			m.Combo("/comments").Post(repo.MustAllowUserComment, web.Bind(forms.CreateCommentForm{}), repo.NewComment)
+			m.Group("/times", func() {
+				m.Post("/add", web.Bind(forms.AddTimeManuallyForm{}), repo.AddTimeManually)
+				m.Post("/{timeid}/delete", repo.DeleteTime)
+				m.Group("/stopwatch", func() {
+					m.Post("/start", repo.IssueStartStopwatch)
+					m.Post("/stop", repo.IssueStopStopwatch)
+					m.Post("/cancel", repo.CancelStopwatch)
+				})
+			})
+			m.Post("/time_estimate", repo.UpdateIssueTimeEstimate)
+			m.Post("/reactions/{action}", web.Bind(forms.ReactionForm{}), repo.ChangeIssueReaction)
+			m.Post("/lock", reqRepoIssuesOrPullsWriter, web.Bind(forms.IssueLockForm{}), repo.LockIssue)
+			m.Post("/unlock", reqRepoIssuesOrPullsWriter, repo.UnlockIssue)
+			m.Post("/delete", reqRepoAdmin, repo.DeleteIssue)
+			m.Post("/content-history/soft-delete", repo.SoftDeleteContentHistory)
+		})
+
+		m.Post("/attachments", repo.UploadIssueAttachment)
+		m.Post("/attachments/remove", repo.DeleteAttachment)
+
+		m.Post("/labels", reqRepoIssuesOrPullsWriter, repo.UpdateIssueLabel)
+		m.Post("/milestone", reqRepoIssuesOrPullsWriter, repo.UpdateIssueMilestone)
+		m.Post("/projects", reqRepoIssuesOrPullsWriter, reqRepoProjectsReader, repo.UpdateIssueProject)
+		m.Post("/assignee", reqRepoIssuesOrPullsWriter, repo.UpdateIssueAssignee)
+		m.Post("/status", reqRepoIssuesOrPullsWriter, repo.UpdateIssueStatus)
+		m.Post("/delete", reqRepoAdmin, repo.BatchDeleteIssues)
+		m.Delete("/unpin/{index}", reqRepoAdmin, repo.IssueUnpin)
+		m.Post("/move_pin", reqRepoAdmin, repo.IssuePinMove)
+	}
+
 	m.Group("/{username}/{reponame}", func() { // edit issues, pulls, labels, milestones, etc
 		m.Group("/issues", func() {
 			m.Group("/new", func() {
@@ -1327,50 +1373,6 @@ func registerWebRoutes(m *web.Router) {
 			m.Get("/search", repo.SearchRepoIssuesJSON)
 		}, reqUnitIssuesReader)
 
-		addIssuesPullsUpdateRoutes := func() {
-			// for "/{username}/{reponame}/issues" or "/{username}/{reponame}/pulls"
-			m.Group("/{index}", func() {
-				m.Post("/title", repo.UpdateIssueTitle)
-				m.Post("/content", repo.UpdateIssueContent)
-				m.Post("/deadline", repo.UpdateIssueDeadline)
-				m.Post("/watch", repo.IssueWatch)
-				m.Post("/ref", repo.UpdateIssueRef)
-				m.Post("/pin", reqRepoAdmin, repo.IssuePinOrUnpin)
-				m.Post("/viewed-files", repo.UpdateViewedFiles)
-				m.Group("/dependency", func() {
-					m.Post("/add", repo.AddDependency)
-					m.Post("/delete", repo.RemoveDependency)
-				})
-				m.Combo("/comments").Post(repo.MustAllowUserComment, web.Bind(forms.CreateCommentForm{}), repo.NewComment)
-				m.Group("/times", func() {
-					m.Post("/add", web.Bind(forms.AddTimeManuallyForm{}), repo.AddTimeManually)
-					m.Post("/{timeid}/delete", repo.DeleteTime)
-					m.Group("/stopwatch", func() {
-						m.Post("/start", repo.IssueStartStopwatch)
-						m.Post("/stop", repo.IssueStopStopwatch)
-						m.Post("/cancel", repo.CancelStopwatch)
-					})
-				})
-				m.Post("/time_estimate", repo.UpdateIssueTimeEstimate)
-				m.Post("/reactions/{action}", web.Bind(forms.ReactionForm{}), repo.ChangeIssueReaction)
-				m.Post("/lock", reqRepoIssuesOrPullsWriter, web.Bind(forms.IssueLockForm{}), repo.LockIssue)
-				m.Post("/unlock", reqRepoIssuesOrPullsWriter, repo.UnlockIssue)
-				m.Post("/delete", reqRepoAdmin, repo.DeleteIssue)
-				m.Post("/content-history/soft-delete", repo.SoftDeleteContentHistory)
-			})
-
-			m.Post("/attachments", repo.UploadIssueAttachment)
-			m.Post("/attachments/remove", repo.DeleteAttachment)
-
-			m.Post("/labels", reqRepoIssuesOrPullsWriter, repo.UpdateIssueLabel)
-			m.Post("/milestone", reqRepoIssuesOrPullsWriter, repo.UpdateIssueMilestone)
-			m.Post("/projects", reqRepoIssuesOrPullsWriter, reqRepoProjectsReader, repo.UpdateIssueProject)
-			m.Post("/assignee", reqRepoIssuesOrPullsWriter, repo.UpdateIssueAssignee)
-			m.Post("/status", reqRepoIssuesOrPullsWriter, repo.UpdateIssueStatus)
-			m.Post("/delete", reqRepoAdmin, repo.BatchDeleteIssues)
-			m.Delete("/unpin/{index}", reqRepoAdmin, repo.IssueUnpin)
-			m.Post("/move_pin", reqRepoAdmin, repo.IssuePinMove)
-		}
 		// FIXME: many "pulls" requests are sent to "issues" endpoints incorrectly, so the issue endpoints have to tolerate pull request permissions at the moment
 		m.Group("/{type:issues}", addIssuesPullsUpdateRoutes, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests), context.RepoMustNotBeArchived())
 		m.Group("/{type:pulls}", addIssuesPullsUpdateRoutes, reqUnitPullsReader, context.RepoMustNotBeArchived())
@@ -1406,6 +1408,28 @@ func registerWebRoutes(m *web.Router) {
 		m.Post("/pull/{index}/target_branch", reqUnitPullsReader, repo.UpdatePullRequestTarget)
 	}, reqSignIn, context.RepoAssignment, context.RepoMustNotBeArchived())
 	// end "/{username}/{reponame}": create or edit issues, pulls, labels, milestones
+
+	// Article-based pull request view routes (info, attachments, content-history)
+	m.Group("/article/{username}/{subjectname}/{type:pulls}", addIssuesPullsViewRoutes, optSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitPullsReader)
+
+	// Article-based pull request update routes (comments, reactions, title, content, etc.)
+	m.Group("/article/{username}/{subjectname}", func() {
+		m.Group("/{type:pulls}", addIssuesPullsUpdateRoutes, reqUnitPullsReader, context.RepoMustNotBeArchived())
+
+		m.Group("/comments/{id}", func() {
+			m.Post("", repo.UpdateCommentContent)
+			m.Post("/delete", repo.DeleteComment)
+			m.Post("/reactions/{action}", web.Bind(forms.ReactionForm{}), repo.ChangeCommentReaction)
+		}, reqRepoIssuesOrPullsReader)
+
+		// Pull-specific routes that use /issues path in standard routes
+		m.Group("/issues", func() {
+			m.Post("/request_review", repo.UpdatePullReviewRequest)
+			m.Post("/dismiss_review", reqRepoAdmin, web.Bind(forms.DismissReviewForm{}), repo.DismissReview)
+			m.Post("/resolve_conversation", repo.SetShowOutdatedComments, repo.UpdateResolveConversation)
+		}, reqUnitPullsReader)
+	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, context.RepoMustNotBeArchived())
+	// end "/article/{username}/{subjectname}": article pull request updates
 
 	m.Group("/{username}/{reponame}", func() { // repo code (at least "code reader")
 		registerRepoFileEditorRoutes(m, reqRepoCodeWriter)
