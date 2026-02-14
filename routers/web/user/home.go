@@ -139,13 +139,7 @@ func Dashboard(ctx *context.Context) {
 
 	if ctx.Doer != nil {
 		feeds = slices.DeleteFunc(feeds, func(a *activities_model.Action) bool {
-			if a.GetRepoUserName(ctx) == ctx.Doer.Name {
-				return true
-			}
-			if a.OpType == activities_model.ActionCommitRepo && a.GetActUserName(ctx) == a.GetRepoUserName(ctx) && !templates.IsArticleReadmeUpdate(a) {
-				return true
-			}
-			return false
+			return a.GetRepoUserName(ctx) == ctx.Doer.Name
 		})
 	}
 
