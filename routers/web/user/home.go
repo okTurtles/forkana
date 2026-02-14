@@ -137,6 +137,18 @@ func Dashboard(ctx *context.Context) {
 		return
 	}
 
+	if ctx.Doer != nil {
+		feeds = slices.DeleteFunc(feeds, func(a *activities_model.Action) bool {
+			if a.OpType != activities_model.ActionCommitRepo || a.Content == "" || a.ActUserID != ctx.Doer.ID {
+				return false
+			}
+			if a.GetRepoUserName(ctx) != ctx.Doer.Name {
+				return false
+			}
+			return templates.IsArticleReadmeUpdate(a)
+		})
+	}
+
 	pager := context.NewPagination(count, setting.UI.FeedPagingNum, page, 5).WithCurRows(len(feeds))
 	pager.AddParamFromRequest(ctx.Req)
 	ctx.Data["Page"] = pager

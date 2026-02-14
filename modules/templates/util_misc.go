@@ -107,6 +107,22 @@ func actionIcon(opType activities_model.ActionType) string {
 	}
 }
 
+func IsArticleReadmeUpdate(act Actioner) bool {
+	if act == nil || act.GetContent() == "" {
+		return false
+	}
+	push := ActionContent2Commits(act)
+	if len(push.Commits) == 0 {
+		return false
+	}
+	for _, c := range push.Commits {
+		if !strings.Contains(c.Message, "README.md") {
+			return false
+		}
+	}
+	return true
+}
+
 // ActionContent2Commits converts action content to push commits
 func ActionContent2Commits(act Actioner) *repository.PushCommits {
 	push := repository.NewPushCommits()
