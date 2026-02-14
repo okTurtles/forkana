@@ -107,7 +107,7 @@ func actionIcon(opType activities_model.ActionType) string {
 	}
 }
 
-func IsOwnArticleUpdate(ctx context.Context, act Actioner) bool {
+func IsArticleOwnerUpdate(ctx context.Context, act Actioner) bool {
 	if act == nil || act.GetContent() == "" {
 		return false
 	}
