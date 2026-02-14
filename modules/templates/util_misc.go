@@ -123,7 +123,7 @@ func IsArticleReadmeUpdate(act Actioner) bool {
 	return true
 }
 
-func IsOwnArticleUpdate(act Actioner, ctx context.Context) bool {
+func IsOwnArticleUpdate(ctx context.Context, act Actioner) bool {
 	if act == nil {
 		return false
 	}
