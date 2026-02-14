@@ -153,6 +153,7 @@ func NewFuncMap() template.FuncMap {
 		"ShortSha":                 base.ShortSha,
 		"ActionContent2Commits":    ActionContent2Commits,
 		"IsArticleReadmeUpdate":    IsArticleReadmeUpdate,
+		"IsOwnArticleUpdate":       IsOwnArticleUpdate,
 		"IsMultilineCommitMessage": isMultilineCommitMessage,
 		"CommentMustAsDiff":        gitdiff.CommentMustAsDiff,
 		"MirrorRemoteAddress":      mirrorRemoteAddress,

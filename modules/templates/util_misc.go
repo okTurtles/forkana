@@ -123,6 +123,19 @@ func IsArticleReadmeUpdate(act Actioner) bool {
 	return true
 }
 
+func IsOwnArticleUpdate(act Actioner, ctx context.Context) bool {
+	if act == nil {
+		return false
+	}
+	if act.GetOpType() != activities_model.ActionCommitRepo {
+		return false
+	}
+	if act.GetActUserName(ctx) != act.GetRepoUserName(ctx) {
+		return false
+	}
+	return IsArticleReadmeUpdate(act)
+}
+
 // ActionContent2Commits converts action content to push commits
 func ActionContent2Commits(act Actioner) *repository.PushCommits {
 	push := repository.NewPushCommits()

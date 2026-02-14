@@ -15,8 +15,8 @@
 						{{ctx.Locale.Tr "action.create_repo" (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
 					{{else if .GetOpType.InActions "rename_repo"}}
 						{{ctx.Locale.Tr "action.rename_repo" .GetContent (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
-					{{else if and (.GetOpType.InActions "commit_repo") .Content (IsArticleReadmeUpdate .) (eq (.GetActUserName ctx) (.GetRepoUserName ctx))}}
-						made changes to their article <a href="{{.GetRepoLink ctx}}">{{.ShortRepoPath ctx}}</a>
+					{{else if IsOwnArticleUpdate . ctx}}
+						{{ctx.Locale.Tr "action.update_article" (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
 					{{else if .GetOpType.InActions "commit_repo"}}
 						{{if .Content}}
 							{{ctx.Locale.Tr "action.commit_repo" (.GetRepoLink ctx) (.GetRefLink ctx) .GetBranch (.ShortRepoPath ctx)}}
@@ -85,8 +85,7 @@
 					{{end}}
 					{{DateUtils.TimeSince .GetCreate}}
 				</div>
-				{{if and (.GetOpType.InActions "commit_repo") .Content (IsArticleReadmeUpdate .) (eq (.GetActUserName ctx) (.GetRepoUserName ctx))}}
-			{{else if .GetOpType.InActions "commit_repo" "mirror_sync_push"}}
+				{{if and (.GetOpType.InActions "commit_repo" "mirror_sync_push") (not (IsOwnArticleUpdate . ctx))}}
 					{{$push := ActionContent2Commits .}}
 					{{$repoLink := (.GetRepoLink ctx)}}
 					{{$repo := .Repo}}
