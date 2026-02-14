@@ -445,15 +445,16 @@ func (a *Action) GetIssueContent(ctx context.Context) string {
 // GetFeedsOptions options for retrieving feeds
 type GetFeedsOptions struct {
 	db.ListOptions
-	RequestedUser   *user_model.User       // the user we want activity for
-	RequestedTeam   *organization.Team     // the team we want activity for
-	RequestedRepo   *repo_model.Repository // the repo we want activity for
-	Actor           *user_model.User       // the user viewing the activity
-	IncludePrivate  bool                   // include private actions
-	OnlyPerformedBy bool                   // only actions performed by requested user
-	IncludeDeleted  bool                   // include deleted actions
-	Date            string                 // the day we want activity for: YYYY-MM-DD
-	DontCount       bool                   // do counting in GetFeeds
+	RequestedUser      *user_model.User       // the user we want activity for
+	RequestedTeam      *organization.Team     // the team we want activity for
+	RequestedRepo      *repo_model.Repository // the repo we want activity for
+	Actor              *user_model.User       // the user viewing the activity
+	IncludePrivate     bool                   // include private actions
+	OnlyPerformedBy    bool                   // only actions performed by requested user
+	IncludeDeleted     bool                   // include deleted actions
+	Date               string                 // the day we want activity for: YYYY-MM-DD
+	DontCount          bool                   // do counting in GetFeeds
+	ExcludeRepoOwnerID int64
 }
 
 // ActivityReadable return whether doer can read activities of user
@@ -551,6 +552,14 @@ func ActivityQueryCondition(ctx context.Context, opts GetFeedsOptions) (builder.
 		if opts.OnlyPerformedBy {
 			cond = cond.And(builder.Eq{"act_user_id": opts.RequestedUser.ID})
 		}
+	}
+
+	if opts.ExcludeRepoOwnerID > 0 {
+		cond = cond.And(builder.NotIn("`action`.repo_id",
+			builder.Select("id").From("repository").Where(
+				builder.Eq{"owner_id": opts.ExcludeRepoOwnerID},
+			),
+		))
 	}
 
 	if !opts.IncludePrivate {

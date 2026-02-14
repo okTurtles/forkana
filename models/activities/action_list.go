@@ -229,6 +229,13 @@ func GetFeeds(ctx context.Context, opts GetFeedsOptions) (ActionList, int64, err
 		if opts.OnlyPerformedBy {
 			cond = cond.And(builder.Eq{"act_user_id": opts.RequestedUser.ID})
 		}
+		if opts.ExcludeRepoOwnerID > 0 {
+			cond = cond.And(builder.NotIn("`action`.repo_id",
+				builder.Select("id").From("repository").Where(
+					builder.Eq{"owner_id": opts.ExcludeRepoOwnerID},
+				),
+			))
+		}
 	} else {
 		cond, err = ActivityQueryCondition(ctx, opts)
 		if err != nil {

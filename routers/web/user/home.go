@@ -120,13 +120,14 @@ func Dashboard(ctx *context.Context) {
 	}
 
 	feeds, count, err := feed_service.GetFeedsForDashboard(ctx, activities_model.GetFeedsOptions{
-		RequestedUser:   ctxUser,
-		RequestedTeam:   ctx.Org.Team,
-		Actor:           ctx.Doer,
-		IncludePrivate:  true,
-		OnlyPerformedBy: false,
-		IncludeDeleted:  false,
-		Date:            ctx.FormString("date"),
+		RequestedUser:      ctxUser,
+		RequestedTeam:      ctx.Org.Team,
+		Actor:              ctx.Doer,
+		IncludePrivate:     true,
+		OnlyPerformedBy:    false,
+		IncludeDeleted:     false,
+		Date:               ctx.FormString("date"),
+		ExcludeRepoOwnerID: ctx.Doer.ID,
 		ListOptions: db.ListOptions{
 			Page:     page,
 			PageSize: setting.UI.FeedPagingNum,
@@ -135,12 +136,6 @@ func Dashboard(ctx *context.Context) {
 	if err != nil {
 		ctx.ServerError("GetFeeds", err)
 		return
-	}
-
-	if ctx.Doer != nil {
-		feeds = slices.DeleteFunc(feeds, func(a *activities_model.Action) bool {
-			return a.GetRepoUserName(ctx) == ctx.Doer.Name
-		})
 	}
 
 	pager := context.NewPagination(count, setting.UI.FeedPagingNum, page, 5).WithCurRows(len(feeds))
