@@ -27,9 +27,10 @@
   font-weight: 700 !important;
 }
 
-/* More padding on diff detail box */
+/* More padding on diff detail box and ensure high z-index for sticky header and contained modal */
 .diff-detail-box {
   padding: 12px 16px !important;
+  z-index: 105 !important;
 }
 
 /* #1 — "Change request" navbar pill style */
