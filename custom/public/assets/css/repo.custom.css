@@ -363,6 +363,10 @@
   font-weight: 600 !important;
 }
 
+.content.comment-container .ui.attached.segment {
+  padding: 1rem;
+}
+
 /* Align markdown toolbar with tabs on larger containers */
 .combo-markdown-editor {
   container-type: inline-size;
