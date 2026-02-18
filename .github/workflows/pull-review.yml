@@ -267,14 +267,41 @@ jobs:
         if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         run: curl -fsSL https://opencode.ai/install | bash
 
+      - name: Configure opencode for OpenRouter
+        if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
+        run: |
+          mkdir -p ~/.config/opencode
+          cat > ~/.config/opencode/opencode.json << 'OCEOF'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "provider": {
+              "openrouter": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "OpenRouter",
+                "options": {
+                  "baseURL": "https://openrouter.ai/api/v1"
+                },
+                "models": {
+                  "stepfun/step-3.5-flash": {
+                    "name": "StepFun Step 3.5 Flash"
+                  }
+                }
+              }
+            }
+          }
+          OCEOF
+
+          mkdir -p ~/.local/share/opencode
+          jq -n --arg key "$OPENROUTER_API_KEY" \
+            '{ openrouter: { type: "api", key: $key } }' \
+            > ~/.local/share/opencode/auth.json
+
       - name: Run agentic review
         if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          OPENAI_API_BASE: https://openrouter.ai/api/v1
           OPENCODE_PERMISSION: '{ "edit": "deny", "write": "deny", "patch": "deny", "multiedit": "deny", "bash": "deny", "read": "allow", "grep": "allow", "glob": "allow", "list": "allow" }'
         run: |
-          opencode run -m "$REVIEW_MODEL" < /tmp/agentic_prompt.txt > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
+          opencode run -m "openrouter/$REVIEW_MODEL" < /tmp/agentic_prompt.txt > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
             echo "::warning::Agentic review via opencode failed"
             cat /tmp/opencode_stderr.txt >&2
             echo "Agentic review unavailable (opencode encountered an error)." > /tmp/agentic_review.txt
