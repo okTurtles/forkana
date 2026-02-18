@@ -1,25 +1,22 @@
 name: PR Review
 
 on:
-  pull_request:
-    types: [opened, synchronize]
   issue_comment:
     types: [created]
 
 concurrency:
-  group: pr-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: pr-review-${{ github.event.issue.number }}
   cancel-in-progress: true
 
 jobs:
   review:
     name: Automated PR Review
     if: >-
-      github.event_name == 'pull_request' ||
-      (github.event.issue.pull_request &&
+      github.event.issue.pull_request &&
       startsWith(github.event.comment.body, '/review') &&
       (github.event.comment.author_association == 'MEMBER' ||
       github.event.comment.author_association == 'OWNER' ||
-      github.event.comment.author_association == 'COLLABORATOR'))
+      github.event.comment.author_association == 'COLLABORATOR')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -35,11 +32,7 @@ jobs:
       - name: Get PR number
         id: pr-info
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
 
       - name: Get PR details
         id: pr-details
