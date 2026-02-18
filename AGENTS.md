@@ -138,9 +138,10 @@ The linter forbids these packages:
 
 - `encoding/json` → Use `code.gitea.io/gitea/modules/json`
 - `io/ioutil` → Use `io` or `os` directly
-- `golang.org/x/net/context` → Use `context` from stdlib
-- `gopkg.in/fsnotify.v1` → Use `github.com/fsnotify/fsnotify`
-- `gopkg.in/macaron.v1` → Not allowed
+- `golang.org/x/exp` → Experimental and unreliable; avoid in production code
+- `code.gitea.io/gitea/modules/git/internal` → Use public `AddXxx` helper functions instead
+- `gopkg.in/ini.v1` → Use Forkana’s/Gitea’s built-in configuration system instead
+- `gitea.com/go-chi/cache` → Use Forkana’s built-in cache system instead
 
 ### Error Handling
 
