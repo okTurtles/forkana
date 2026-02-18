@@ -141,8 +141,6 @@ The linter forbids these packages:
 - `golang.org/x/net/context` → Use `context` from stdlib
 - `gopkg.in/fsnotify.v1` → Use `github.com/fsnotify/fsnotify`
 - `gopkg.in/macaron.v1` → Not allowed
-- `github.com/unknwon/com` → Not allowed
-- `github.com/unknwon/i18n` → Not allowed
 
 ### Error Handling
 
