@@ -341,7 +341,7 @@ jobs:
           2. Sort all issues by priority: 🔴 (high importance & high confidence) first, then 🟡 (medium), then ⚪️ (low)
           3. Keep the rating and checkbox format for each issue
           4. Preserve specific code references (file:line) and code suggestions
-          5. Do not place a header lke `# Combined Code Review` at the top of the review, just immediate output the issues (if there are any)
+          5. Do not place a header lke `# Combined Code Review` at the top of the review, just immediately output the issues (if there are any)
           6. If there are no issues, state that and do nothing else.
 
           Output ONLY the combined review in Markdown. No preamble about the combining process.
