@@ -261,7 +261,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_API_BASE: https://openrouter.ai/api/v1
-          OPENCODE_PERMISSION: '{ "bash": { "*": "deny", "rg*": "allow", "ls*": "allow", "head*": "allow", "find*": "allow" } }'
+          OPENCODE_PERMISSION: '{ "edit": "deny", "write": "deny", "patch": "deny", "multiedit": "deny", "bash": { "*": "deny", "rg*": "allow", "ls*": "allow", "head*": "allow" }, "read": "allow", "grep": "allow", "glob": "allow", "list": "allow" }'
         run: |
           opencode run -m "openai/$REVIEW_MODEL" < /tmp/agentic_prompt.txt > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
             echo "::warning::Agentic review via opencode failed"
