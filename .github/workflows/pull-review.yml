@@ -310,10 +310,12 @@ jobs:
         if: steps.check-issue.outputs.has_issue == 'true'
         run: |
           {
-            printf '## Automated PR Review\n\n'
+            echo "## Automated PR Review"
+            echo ""
             cat /tmp/final_review.txt
-            printf '\n\n---\n'
-            printf '*Review generated using `%s` via [OpenRouter](https://openrouter.ai). Comment `/review` to re-run.*\n' "${REVIEW_MODEL}"
+            echo ""
+            echo "---"
+            echo "*Review generated using \`${REVIEW_MODEL}\` via [OpenRouter](https://openrouter.ai). Comment \`/review\` to re-run.*"
           } > /tmp/review_comment.txt
 
           gh pr comment "${{ steps.pr-info.outputs.number }}" \
