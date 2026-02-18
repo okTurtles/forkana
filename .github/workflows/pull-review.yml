@@ -25,11 +25,11 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # ── Provider configuration ─────────────────────────────
-      # To switch providers, change REVIEW_PROVIDER and REVIEW_MODEL:
-      #   openrouter  →  stepfun/step-3.5-flash
-      #   zai-coding-plan  →  glm-5
-      REVIEW_PROVIDER: openrouter
-      REVIEW_MODEL: stepfun/step-3.5-flash
+      # Set via Settings → Secrets and variables → Actions → Variables:
+      #   REVIEW_PROVIDER: openrouter | zai-coding-plan
+      #   REVIEW_MODEL:    stepfun/step-3.5-flash | glm-5
+      REVIEW_PROVIDER: ${{ vars.REVIEW_PROVIDER || 'openrouter' }}
+      REVIEW_MODEL: ${{ vars.REVIEW_MODEL || 'stepfun/step-3.5-flash' }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
 
