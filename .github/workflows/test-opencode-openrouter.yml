@@ -27,25 +27,49 @@ jobs:
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
-      - name: Test opencode run with stepfun model via stdin
+      - name: "Test 1: openai/$REVIEW_MODEL (with openai/ prefix)"
+        id: test-with-prefix
         run: |
-          echo "Reply with exactly: OPENCODE_TEST_OK" | opencode run -m "$REVIEW_MODEL" > /tmp/opencode_output.txt 2>/tmp/opencode_stderr.txt
+          echo "Reply with exactly: OPENCODE_TEST_OK" | opencode run -m "openai/$REVIEW_MODEL" > /tmp/oc_prefix_out.txt 2>/tmp/oc_prefix_err.txt
           EXIT_CODE=$?
 
-          echo "=== opencode exit code: $EXIT_CODE ==="
+          echo "=== exit code: $EXIT_CODE ==="
           echo "=== stdout ==="
-          cat /tmp/opencode_output.txt
+          cat /tmp/oc_prefix_out.txt
           echo "=== stderr ==="
-          cat /tmp/opencode_stderr.txt
+          cat /tmp/oc_prefix_err.txt
 
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            echo "::error::opencode exited with code $EXIT_CODE"
-            exit 1
+          if [ "$EXIT_CODE" -ne 0 ] || [ ! -s /tmp/oc_prefix_out.txt ]; then
+            echo "result=FAIL" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=PASS" >> "$GITHUB_OUTPUT"
           fi
 
-          if [ ! -s /tmp/opencode_output.txt ]; then
-            echo "::error::opencode produced no output"
-            exit 1
+      - name: "Test 2: $REVIEW_MODEL (without prefix, as in PR 142)"
+        id: test-without-prefix
+        run: |
+          echo "Reply with exactly: OPENCODE_TEST_OK" | opencode run -m "$REVIEW_MODEL" > /tmp/oc_bare_out.txt 2>/tmp/oc_bare_err.txt
+          EXIT_CODE=$?
+
+          echo "=== exit code: $EXIT_CODE ==="
+          echo "=== stdout ==="
+          cat /tmp/oc_bare_out.txt
+          echo "=== stderr ==="
+          cat /tmp/oc_bare_err.txt
+
+          if [ "$EXIT_CODE" -ne 0 ] || [ ! -s /tmp/oc_bare_out.txt ]; then
+            echo "result=FAIL" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=PASS" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "opencode successfully produced output using $REVIEW_MODEL via OpenRouter"
+      - name: Summary
+        run: |
+          echo "## Results"
+          echo "- openai/$REVIEW_MODEL (with prefix): ${{ steps.test-with-prefix.outputs.result }}"
+          echo "- $REVIEW_MODEL (bare, as PR 142): ${{ steps.test-without-prefix.outputs.result }}"
+
+          if [ "${{ steps.test-with-prefix.outputs.result }}" = "FAIL" ] && [ "${{ steps.test-without-prefix.outputs.result }}" = "FAIL" ]; then
+            echo "::error::Both model formats failed"
+            exit 1
+          fi
