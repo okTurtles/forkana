@@ -84,10 +84,11 @@ jobs:
 
       - name: Merge master into PR branch
         if: steps.check-issue.outputs.has_issue == 'true'
+        env:
+          BASE_REF: ${{ steps.pr-details.outputs.base_ref }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          BASE_REF="${{ steps.pr-details.outputs.base_ref }}"
           git fetch origin "$BASE_REF"
           git merge "origin/$BASE_REF" --no-edit -m "Merge $BASE_REF for review" || {
             echo "::warning::Merge conflict detected, reviewing PR branch as-is"
@@ -96,8 +97,9 @@ jobs:
 
       - name: Generate diff
         if: steps.check-issue.outputs.has_issue == 'true'
+        env:
+          BASE_REF: ${{ steps.pr-details.outputs.base_ref }}
         run: |
-          BASE_REF="${{ steps.pr-details.outputs.base_ref }}"
           git diff "origin/$BASE_REF" -U15 \
             -- . \
             ':!package-lock.json' ':!**/package-lock.json' \
