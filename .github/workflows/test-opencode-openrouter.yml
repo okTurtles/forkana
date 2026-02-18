@@ -11,65 +11,71 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      OPENAI_API_BASE: https://openrouter.ai/api/v1
-      REVIEW_MODEL: stepfun/step-3.5-flash
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
     steps:
       - name: Check secret is set
         run: |
-          if [ -z "$OPENAI_API_KEY" ]; then
+          if [ -z "$OPENROUTER_API_KEY" ]; then
             echo "::error::OPENROUTER_API_KEY secret is not set"
             exit 1
           fi
-          echo "OPENROUTER_API_KEY secret is available (length: ${#OPENAI_API_KEY})"
+          echo "OPENROUTER_API_KEY secret is available (length: ${#OPENROUTER_API_KEY})"
 
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
-      - name: "Test 1: openai/$REVIEW_MODEL (with openai/ prefix)"
-        id: test-with-prefix
+      - name: Configure opencode for OpenRouter
         run: |
-          echo "Reply with exactly: OPENCODE_TEST_OK" | opencode run -m "openai/$REVIEW_MODEL" > /tmp/oc_prefix_out.txt 2>/tmp/oc_prefix_err.txt
+          mkdir -p ~/.config/opencode
+          cat > ~/.config/opencode/opencode.json << 'EOF'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "provider": {
+              "openrouter": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "OpenRouter",
+                "options": {
+                  "baseURL": "https://openrouter.ai/api/v1"
+                },
+                "models": {
+                  "stepfun/step-3.5-flash": {
+                    "name": "StepFun Step 3.5 Flash"
+                  }
+                }
+              }
+            }
+          }
+          EOF
+
+          mkdir -p ~/.local/share/opencode
+          jq -n --arg key "$OPENROUTER_API_KEY" \
+            '{ openrouter: { type: "api", key: $key } }' \
+            > ~/.local/share/opencode/auth.json
+
+          echo "Config written:"
+          cat ~/.config/opencode/opencode.json
+          echo "Auth configured for openrouter provider"
+
+      - name: Test opencode with custom provider config
+        run: |
+          echo "Reply with exactly: OPENCODE_TEST_OK" | opencode run -m "openrouter/stepfun/step-3.5-flash" > /tmp/oc_out.txt 2>/tmp/oc_err.txt
           EXIT_CODE=$?
 
-          echo "=== exit code: $EXIT_CODE ==="
+          echo "=== opencode exit code: $EXIT_CODE ==="
           echo "=== stdout ==="
-          cat /tmp/oc_prefix_out.txt
+          cat /tmp/oc_out.txt
           echo "=== stderr ==="
-          cat /tmp/oc_prefix_err.txt
+          cat /tmp/oc_err.txt
 
-          if [ "$EXIT_CODE" -ne 0 ] || [ ! -s /tmp/oc_prefix_out.txt ]; then
-            echo "result=FAIL" >> "$GITHUB_OUTPUT"
-          else
-            echo "result=PASS" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: "Test 2: $REVIEW_MODEL (without prefix, as in PR 142)"
-        id: test-without-prefix
-        run: |
-          echo "Reply with exactly: OPENCODE_TEST_OK" | opencode run -m "$REVIEW_MODEL" > /tmp/oc_bare_out.txt 2>/tmp/oc_bare_err.txt
-          EXIT_CODE=$?
-
-          echo "=== exit code: $EXIT_CODE ==="
-          echo "=== stdout ==="
-          cat /tmp/oc_bare_out.txt
-          echo "=== stderr ==="
-          cat /tmp/oc_bare_err.txt
-
-          if [ "$EXIT_CODE" -ne 0 ] || [ ! -s /tmp/oc_bare_out.txt ]; then
-            echo "result=FAIL" >> "$GITHUB_OUTPUT"
-          else
-            echo "result=PASS" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Summary
-        run: |
-          echo "## Results"
-          echo "- openai/$REVIEW_MODEL (with prefix): ${{ steps.test-with-prefix.outputs.result }}"
-          echo "- $REVIEW_MODEL (bare, as PR 142): ${{ steps.test-without-prefix.outputs.result }}"
-
-          if [ "${{ steps.test-with-prefix.outputs.result }}" = "FAIL" ] && [ "${{ steps.test-without-prefix.outputs.result }}" = "FAIL" ]; then
-            echo "::error::Both model formats failed"
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::error::opencode exited with code $EXIT_CODE"
             exit 1
           fi
+
+          if [ ! -s /tmp/oc_out.txt ]; then
+            echo "::error::opencode produced no output"
+            exit 1
+          fi
+
+          echo "opencode successfully produced output using openrouter/stepfun/step-3.5-flash"
