@@ -196,8 +196,34 @@ jobs:
             printf '\n```\n'
           } >> /tmp/agentic_prompt.txt
 
-      - name: Run raw review
+      - name: Check prompt size
         if: steps.check-issue.outputs.has_issue == 'true'
+        id: size-check
+        run: |
+          MAX_TOKEN_CHARS=260000
+          PROMPT_SIZE=$(wc -c < /tmp/raw_prompt.txt)
+          echo "Prompt size: $PROMPT_SIZE chars (~$((PROMPT_SIZE / 4)) tokens)"
+          if [ "$PROMPT_SIZE" -gt "$MAX_TOKEN_CHARS" ]; then
+            echo "too_large=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "too_large=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post size limit comment
+        if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'true'
+        run: |
+          PROMPT_SIZE=$(wc -c < /tmp/raw_prompt.txt)
+          TOKEN_EST=$((PROMPT_SIZE / 4))
+          gh pr comment "${{ steps.pr-info.outputs.number }}" \
+            --repo "${{ github.repository }}" \
+            --body "**Automated Review Notice**
+
+          This PR exceeds the 65k token limit (~${TOKEN_EST} tokens estimated). The review cannot be performed automatically.
+
+          Please break the PR into smaller pieces, or request a manual review."
+
+      - name: Run raw review
+        if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         run: |
           jq -n \
             --arg model "$REVIEW_MODEL" \
@@ -227,18 +253,17 @@ jobs:
           echo "Raw review complete ($(wc -c < /tmp/raw_review.txt) bytes)"
 
       - name: Install opencode
-        if: steps.check-issue.outputs.has_issue == 'true'
+        if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         run: curl -fsSL https://opencode.ai/install | bash
 
       - name: Run agentic review
-        if: steps.check-issue.outputs.has_issue == 'true'
+        if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_API_BASE: https://openrouter.ai/api/v1
           OPENCODE_PERMISSION: '{ "bash": { "*": "deny", "rg*": "allow", "ls*": "allow", "head*": "allow", "find*": "allow" } }'
         run: |
-          PROMPT=$(cat /tmp/agentic_prompt.txt)
-          opencode run -m "openai/$REVIEW_MODEL" "$PROMPT" > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
+          cat /tmp/agentic_prompt.txt | opencode run -m "openai/$REVIEW_MODEL" > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
             echo "::warning::Agentic review via opencode failed"
             cat /tmp/opencode_stderr.txt >&2
             echo "Agentic review unavailable (opencode encountered an error)." > /tmp/agentic_review.txt
@@ -247,7 +272,7 @@ jobs:
           echo "Agentic review complete ($(wc -c < /tmp/agentic_review.txt) bytes)"
 
       - name: Combine reviews
-        if: steps.check-issue.outputs.has_issue == 'true'
+        if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         run: |
           cat > /tmp/combine_prompt.txt << 'COMBINE_HEADER'
           You are given two code reviews of the same PR. Combine them into a single comprehensive review:
@@ -303,7 +328,7 @@ jobs:
           fi
 
       - name: Post review comment
-        if: steps.check-issue.outputs.has_issue == 'true'
+        if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         run: |
           {
             echo "## Automated PR Review"
