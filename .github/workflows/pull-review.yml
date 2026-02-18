@@ -413,6 +413,7 @@ jobs:
             echo "- Model: ${REVIEW_MODEL}"
             echo ""
             echo "<details>"
+            echo "<summary>Click to expand review</summary>"
             echo ""
             cat /tmp/final_review.txt
             echo ""
