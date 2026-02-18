@@ -17,7 +17,7 @@ jobs:
     concurrency:
       group: pr-review-${{ github.event.issue.number }}
       cancel-in-progress: true
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
       pull-requests: write
