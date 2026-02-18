@@ -45,15 +45,13 @@ jobs:
           gh api "/repos/${{ github.repository }}/pulls/${{ steps.pr-info.outputs.number }}" > pr_data.json
           echo "head_ref=$(jq -r '.head.ref' pr_data.json)" >> "$GITHUB_OUTPUT"
           echo "head_sha=$(jq -r '.head.sha' pr_data.json)" >> "$GITHUB_OUTPUT"
+          echo "base_ref=$(jq -r '.base.ref' pr_data.json)" >> "$GITHUB_OUTPUT"
           jq -r '.body // ""' pr_data.json > /tmp/pr_body.txt
 
       - name: Check for linked issue
         id: check-issue
         run: |
           ISSUE_NUM=$(grep -oiP '(?:fix(?:es)?|close[sd]?|resolve[sd]?|ref(?:erences?)?|see)\s*#(\d+)' /tmp/pr_body.txt | grep -oP '\d+' | head -1 || true)
-          if [ -z "$ISSUE_NUM" ]; then
-            ISSUE_NUM=$(grep -oP '#(\d+)' /tmp/pr_body.txt | grep -oP '\d+' | head -1 || true)
-          fi
           if [ -z "$ISSUE_NUM" ]; then
             echo "has_issue=false" >> "$GITHUB_OUTPUT"
           else
@@ -87,8 +85,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin master
-          git merge origin/master --no-edit -m "Merge master for review" || {
+          BASE_REF="${{ steps.pr-details.outputs.base_ref }}"
+          git fetch origin "$BASE_REF"
+          git merge "origin/$BASE_REF" --no-edit -m "Merge $BASE_REF for review" || {
             echo "::warning::Merge conflict detected, reviewing PR branch as-is"
             git merge --abort
           }
@@ -96,7 +95,8 @@ jobs:
       - name: Generate diff
         if: steps.check-issue.outputs.has_issue == 'true'
         run: |
-          git diff origin/master -U15 \
+          BASE_REF="${{ steps.pr-details.outputs.base_ref }}"
+          git diff "origin/$BASE_REF" -U15 \
             -- . \
             ':!package-lock.json' ':!**/package-lock.json' \
             ':!pnpm-lock.yaml' ':!**/pnpm-lock.yaml' \
@@ -119,12 +119,16 @@ jobs:
       - name: Fetch issue contents
         if: steps.check-issue.outputs.has_issue == 'true'
         run: |
-          gh api "/repos/${{ github.repository }}/issues/${{ steps.check-issue.outputs.issue_number }}" > issue_data.json
-          {
-            echo "## Issue #${{ steps.check-issue.outputs.issue_number }}: $(jq -r '.title // ""' issue_data.json)"
-            echo ""
-            jq -r '.body // ""' issue_data.json
-          } > /tmp/issue_context.txt
+          if ! gh api "/repos/${{ github.repository }}/issues/${{ steps.check-issue.outputs.issue_number }}" > issue_data.json 2>/dev/null; then
+            echo "::warning::Could not fetch issue #${{ steps.check-issue.outputs.issue_number }}"
+            echo "Issue context unavailable." > /tmp/issue_context.txt
+          else
+            {
+              echo "## Issue #${{ steps.check-issue.outputs.issue_number }}: $(jq -r '.title // ""' issue_data.json)"
+              echo ""
+              jq -r '.body // ""' issue_data.json
+            } > /tmp/issue_context.txt
+          fi
 
       - name: Build review prompts
         if: steps.check-issue.outputs.has_issue == 'true'
