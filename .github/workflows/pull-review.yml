@@ -29,6 +29,11 @@ jobs:
       REVIEW_MODEL: stepfun/step-3.5-flash
 
     steps:
+      - name: React to comment
+        run: |
+          gh api "/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content='eyes'
+
       - name: Get PR number
         id: pr-info
         run: |
@@ -261,9 +266,9 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_API_BASE: https://openrouter.ai/api/v1
-          OPENCODE_PERMISSION: '{ "edit": "deny", "write": "deny", "patch": "deny", "multiedit": "deny", "bash": { "*": "deny", "rg*": "allow", "ls*": "allow", "head*": "allow" }, "read": "allow", "grep": "allow", "glob": "allow", "list": "allow" }'
+          OPENCODE_PERMISSION: '{ "edit": "deny", "write": "deny", "patch": "deny", "multiedit": "deny", "bash": { "*": "deny", "rg*": "allow", "ls*": "allow", "head*": "allow", "cat*": "allow", "grep*": "allow", "tree*": "allow" }, "read": "allow", "grep": "allow", "glob": "allow", "list": "allow" }'
         run: |
-          opencode run -m "openai/$REVIEW_MODEL" < /tmp/agentic_prompt.txt > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
+          opencode run -m "$REVIEW_MODEL" < /tmp/agentic_prompt.txt > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
             echo "::warning::Agentic review via opencode failed"
             cat /tmp/opencode_stderr.txt >&2
             echo "Agentic review unavailable (opencode encountered an error)." > /tmp/agentic_review.txt
