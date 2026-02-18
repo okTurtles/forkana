@@ -1,0 +1,51 @@
+name: Test opencode + OpenRouter
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/test-opencode-openrouter.yml'
+
+jobs:
+  test-opencode:
+    name: Verify opencode with stepfun/step-3.5-flash via OpenRouter
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENAI_API_BASE: https://openrouter.ai/api/v1
+      REVIEW_MODEL: stepfun/step-3.5-flash
+
+    steps:
+      - name: Check secret is set
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENROUTER_API_KEY secret is not set"
+            exit 1
+          fi
+          echo "OPENROUTER_API_KEY secret is available (length: ${#OPENAI_API_KEY})"
+
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Test opencode run with stepfun model via stdin
+        run: |
+          echo "Reply with exactly: OPENCODE_TEST_OK" | opencode run -m "$REVIEW_MODEL" > /tmp/opencode_output.txt 2>/tmp/opencode_stderr.txt
+          EXIT_CODE=$?
+
+          echo "=== opencode exit code: $EXIT_CODE ==="
+          echo "=== stdout ==="
+          cat /tmp/opencode_output.txt
+          echo "=== stderr ==="
+          cat /tmp/opencode_stderr.txt
+
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::error::opencode exited with code $EXIT_CODE"
+            exit 1
+          fi
+
+          if [ ! -s /tmp/opencode_output.txt ]; then
+            echo "::error::opencode produced no output"
+            exit 1
+          fi
+
+          echo "opencode successfully produced output using $REVIEW_MODEL via OpenRouter"
