@@ -16,7 +16,10 @@ jobs:
     if: >-
       github.event_name == 'pull_request' ||
       (github.event.issue.pull_request &&
-       startsWith(github.event.comment.body, '/review'))
+      startsWith(github.event.comment.body, '/review') &&
+      (github.event.comment.author_association == 'MEMBER' ||
+      github.event.comment.author_association == 'OWNER' ||
+      github.event.comment.author_association == 'COLLABORATOR'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -239,7 +242,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_API_BASE: https://openrouter.ai/api/v1
-          OPENCODE_PERMISSION: '{ "bash": { "*": "deny", "rg*": "allow", "cat*": "allow", "ls*": "allow", "head*": "allow", "find*": "allow" } }'
+          OPENCODE_PERMISSION: '{ "bash": { "*": "deny", "rg*": "allow", "ls*": "allow", "head*": "allow", "find*": "allow" } }'
         run: |
           PROMPT=$(cat /tmp/agentic_prompt.txt)
           opencode run -m "openai/$REVIEW_MODEL" "$PROMPT" > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
