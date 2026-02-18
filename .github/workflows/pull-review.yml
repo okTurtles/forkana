@@ -24,14 +24,47 @@ jobs:
       issues: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      # ── Provider configuration ─────────────────────────────
+      # To switch providers, change REVIEW_PROVIDER and REVIEW_MODEL:
+      #   openrouter  →  stepfun/step-3.5-flash
+      #   zai-coding-plan  →  glm-5
+      REVIEW_PROVIDER: openrouter
       REVIEW_MODEL: stepfun/step-3.5-flash
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
 
     steps:
       - name: React to comment
         run: |
           gh api "/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
             -f content='eyes'
+
+      - name: Resolve provider settings
+        run: |
+          case "$REVIEW_PROVIDER" in
+            openrouter)
+              {
+                echo "PROVIDER_API_URL=https://openrouter.ai/api/v1/chat/completions"
+                echo "PROVIDER_API_KEY=$OPENROUTER_API_KEY"
+                echo "OPENCODE_MODEL=openrouter/$REVIEW_MODEL"
+                echo "PROVIDER_DISPLAY=OpenRouter"
+                echo "PROVIDER_API_KEY_REF={env:OPENROUTER_API_KEY}"
+              } >> "$GITHUB_ENV"
+              ;;
+            zai-coding-plan)
+              {
+                echo "PROVIDER_API_URL=https://api.z.ai/api/paas/v4/chat/completions"
+                echo "PROVIDER_API_KEY=$ZAI_API_KEY"
+                echo "OPENCODE_MODEL=zai-coding-plan/$REVIEW_MODEL"
+                echo "PROVIDER_DISPLAY=Z.AI"
+                echo "PROVIDER_API_KEY_REF={env:ZAI_API_KEY}"
+              } >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "::error::Unknown REVIEW_PROVIDER '$REVIEW_PROVIDER' (supported: openrouter, zai-coding-plan)"
+              exit 1
+              ;;
+          esac
 
       - name: Get PR number
         id: pr-info
@@ -247,8 +280,8 @@ jobs:
             }' > /tmp/raw_payload.json
 
           HTTP_CODE=$(curl -s -w '%{http_code}' \
-            "https://openrouter.ai/api/v1/chat/completions" \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            "$PROVIDER_API_URL" \
+            -H "Authorization: Bearer $PROVIDER_API_KEY" \
             -H "Content-Type: application/json" \
             -d @/tmp/raw_payload.json \
             -o /tmp/raw_response.json)
@@ -269,37 +302,30 @@ jobs:
         if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         run: curl -fsSL https://opencode.ai/install | bash
 
-      - name: Configure opencode for OpenRouter
+      - name: Configure opencode
         if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         run: |
           mkdir -p ~/.config/opencode
-          cat > ~/.config/opencode/opencode.json << 'OCEOF'
-          {
-            "$schema": "https://opencode.ai/config.json",
-            "provider": {
-              "openrouter": {
-                "npm": "@ai-sdk/openai-compatible",
-                "name": "OpenRouter",
-                "options": {
-                  "baseURL": "https://openrouter.ai/api/v1",
-                  "apiKey": "{env:OPENROUTER_API_KEY}"
-                },
-                "models": {
-                  "stepfun/step-3.5-flash": {
-                    "name": "StepFun Step 3.5 Flash"
-                  }
+          jq -n \
+            --arg provider "$REVIEW_PROVIDER" \
+            --arg model "$REVIEW_MODEL" \
+            --arg api_key_ref "$PROVIDER_API_KEY_REF" \
+            '{
+              "$schema": "https://opencode.ai/config.json",
+              "provider": {
+                ($provider): {
+                  "options": { "apiKey": $api_key_ref },
+                  "models": { ($model): {} }
                 }
               }
-            }
-          }
-          OCEOF
+            }' > ~/.config/opencode/opencode.json
 
       - name: Run agentic review
         if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         env:
           OPENCODE_PERMISSION: '{ "edit": "deny", "write": "deny", "patch": "deny", "multiedit": "deny", "bash": "deny", "read": "allow", "grep": "allow", "glob": "allow", "list": "allow" }'
         run: |
-          opencode run -m "openrouter/$REVIEW_MODEL" < /tmp/agentic_prompt.txt > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
+          opencode run -m "$OPENCODE_MODEL" < /tmp/agentic_prompt.txt > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
             echo "::warning::Agentic review via opencode failed"
             cat /tmp/opencode_stderr.txt >&2
             echo "Agentic review unavailable (opencode encountered an error)." > /tmp/agentic_review.txt
@@ -347,8 +373,8 @@ jobs:
             }' > /tmp/combine_payload.json
 
           HTTP_CODE=$(curl -s -w '%{http_code}' \
-            "https://openrouter.ai/api/v1/chat/completions" \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            "$PROVIDER_API_URL" \
+            -H "Authorization: Bearer $PROVIDER_API_KEY" \
             -H "Content-Type: application/json" \
             -d @/tmp/combine_payload.json \
             -o /tmp/combine_response.json)
@@ -372,7 +398,7 @@ jobs:
             cat /tmp/final_review.txt
             echo ""
             echo "---"
-            echo "*Review generated using \`${REVIEW_MODEL}\` via [OpenRouter](https://openrouter.ai). Comment \`/review\` to re-run.*"
+            echo "*Review generated using \`${REVIEW_MODEL}\` via ${PROVIDER_DISPLAY}. Comment \`/review\` to re-run.*"
           } > /tmp/review_comment.txt
 
           gh pr comment "${{ steps.pr-info.outputs.number }}" \
