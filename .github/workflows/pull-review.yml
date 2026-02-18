@@ -279,7 +279,8 @@ jobs:
                 "npm": "@ai-sdk/openai-compatible",
                 "name": "OpenRouter",
                 "options": {
-                  "baseURL": "https://openrouter.ai/api/v1"
+                  "baseURL": "https://openrouter.ai/api/v1",
+                  "apiKey": "{env:OPENROUTER_API_KEY}"
                 },
                 "models": {
                   "stepfun/step-3.5-flash": {
@@ -290,11 +291,6 @@ jobs:
             }
           }
           OCEOF
-
-          mkdir -p ~/.local/share/opencode
-          jq -n --arg key "$OPENROUTER_API_KEY" \
-            '{ openrouter: { type: "api", key: $key } }' \
-            > ~/.local/share/opencode/auth.json
 
       - name: Run agentic review
         if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
