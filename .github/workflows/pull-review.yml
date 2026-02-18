@@ -53,7 +53,7 @@ jobs:
               ;;
             zai-coding-plan)
               {
-                echo "PROVIDER_API_URL=https://api.z.ai/api/paas/v4/chat/completions"
+                echo "PROVIDER_API_URL=https://api.z.ai/api/coding/paas/v4/chat/completions"
                 echo "PROVIDER_API_KEY=$ZAI_API_KEY"
                 echo "OPENCODE_MODEL=zai-coding-plan/$REVIEW_MODEL"
                 echo "PROVIDER_DISPLAY=Z.AI"
@@ -308,14 +308,12 @@ jobs:
           mkdir -p ~/.config/opencode
           jq -n \
             --arg provider "$REVIEW_PROVIDER" \
-            --arg model "$REVIEW_MODEL" \
             --arg api_key_ref "$PROVIDER_API_KEY_REF" \
             '{
               "$schema": "https://opencode.ai/config.json",
               "provider": {
                 ($provider): {
-                  "options": { "apiKey": $api_key_ref },
-                  "models": { ($model): {} }
+                  "options": { "apiKey": $api_key_ref }
                 }
               }
             }' > ~/.config/opencode/opencode.json
