@@ -286,17 +286,20 @@ jobs:
             -d @/tmp/raw_payload.json \
             -o /tmp/raw_response.json)
 
+          RAW_OK=false
           if [ "$HTTP_CODE" -ne 200 ]; then
             echo "::warning::Raw review API call failed with HTTP $HTTP_CODE"
             echo "Raw review unavailable (API returned HTTP $HTTP_CODE)." > /tmp/raw_review.txt
           elif jq -e '.choices[0].message.content' /tmp/raw_response.json > /dev/null 2>&1; then
             jq -r '.choices[0].message.content' /tmp/raw_response.json > /tmp/raw_review.txt
+            RAW_OK=true
           else
             echo "::warning::Raw review returned unexpected response"
             echo "Raw review unavailable (unexpected API response)." > /tmp/raw_review.txt
           fi
 
           echo "Raw review complete ($(wc -c < /tmp/raw_review.txt) bytes)"
+          echo "RAW_REVIEW_OK=${RAW_OK:-false}" >> "$GITHUB_ENV"
 
       - name: Install opencode
         if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
@@ -382,20 +385,38 @@ jobs:
           if [ "$HTTP_CODE" -ne 200 ]; then
             echo "::warning::Combine step failed with HTTP $HTTP_CODE, falling back to raw review"
             cp /tmp/raw_review.txt /tmp/final_review.txt
+            if [ "$RAW_REVIEW_OK" = "true" ]; then
+              echo "REVIEW_TYPE=Raw" >> "$GITHUB_ENV"
+            else
+              echo "REVIEW_TYPE=Error" >> "$GITHUB_ENV"
+            fi
           elif jq -e '.choices[0].message.content' /tmp/combine_response.json > /dev/null 2>&1; then
             jq -r '.choices[0].message.content' /tmp/combine_response.json > /tmp/final_review.txt
+            echo "REVIEW_TYPE=Combined" >> "$GITHUB_ENV"
           else
             echo "::warning::Combine step returned unexpected response, falling back to raw review"
             cp /tmp/raw_review.txt /tmp/final_review.txt
+            if [ "$RAW_REVIEW_OK" = "true" ]; then
+              echo "REVIEW_TYPE=Raw" >> "$GITHUB_ENV"
+            else
+              echo "REVIEW_TYPE=Error" >> "$GITHUB_ENV"
+            fi
           fi
 
       - name: Post review comment
         if: steps.check-issue.outputs.has_issue == 'true' && steps.size-check.outputs.too_large == 'false'
         run: |
           {
-            echo "## Automated PR Review"
+            echo "## Advanced AI Review"
+            echo ""
+            echo "- Type: ${REVIEW_TYPE}"
+            echo "- Model: ${REVIEW_MODEL}"
+            echo ""
+            echo "<details>"
             echo ""
             cat /tmp/final_review.txt
+            echo ""
+            echo "</details>"
             echo ""
             echo "---"
             echo "*Review generated using \`${REVIEW_MODEL}\` via ${PROVIDER_DISPLAY}. Comment \`/review\` to re-run.*"
