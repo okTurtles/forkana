@@ -52,7 +52,8 @@ jobs:
       - name: Check for linked issue
         id: check-issue
         run: |
-          ISSUE_NUM=$(grep -oiP '(?:fix(?:es)?|close[sd]?|resolve[sd]?|ref(?:erences?)?|see)\s*#(\d+)' /tmp/pr_body.txt | grep -oP '\d+' | head -1 || true)
+          ISSUE_NUM=$(grep -oiP '(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?|ref(?:erences?)?|see)\s*#(\d+)' /tmp/pr_body.txt | grep -oP '\d+' | head -1 || true)
+
           if [ -z "$ISSUE_NUM" ]; then
             echo "has_issue=false" >> "$GITHUB_OUTPUT"
           else
