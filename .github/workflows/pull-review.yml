@@ -79,7 +79,7 @@ jobs:
         if: steps.check-issue.outputs.has_issue == 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.pr-details.outputs.head_ref }}
+          ref: ${{ steps.pr-details.outputs.head_sha }}
           fetch-depth: 0
 
       - name: Merge master into PR branch
