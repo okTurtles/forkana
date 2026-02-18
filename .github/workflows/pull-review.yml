@@ -128,9 +128,6 @@ jobs:
       - name: Build review prompts
         if: steps.check-issue.outputs.has_issue == 'true'
         run: |
-          ISSUE_CONTEXT=$(cat /tmp/issue_context.txt)
-          DIFF=$(cat /tmp/pr_diff.txt)
-
           cat > /tmp/raw_prompt.txt << 'PROMPT_END'
           Attached are a set of changes to a Go project that uses Vuejs. It is based on Gitea and has been modified into a type of online encyclopedia, where each subject can have multiple articles, and each article is represented by a git repository with a primary markdown file that contains the article. Articles can be forked, forming a tree of articles under the subject.
 
@@ -154,17 +151,17 @@ jobs:
 
           PROMPT_END
 
-          cat /tmp/issue_context.txt >> /tmp/raw_prompt.txt
-
-          cat >> /tmp/raw_prompt.txt << 'SECTION_END'
+          {
+            cat /tmp/issue_context.txt
+            cat << 'SECTION_END'
 
           ### Changes to Review
 
           ```diff
           SECTION_END
-
-          cat /tmp/pr_diff.txt >> /tmp/raw_prompt.txt
-          printf '\n```\n' >> /tmp/raw_prompt.txt
+            cat /tmp/pr_diff.txt
+            printf '\n```\n'
+          } >> /tmp/raw_prompt.txt
 
           cat > /tmp/agentic_prompt.txt << 'PROMPT_END'
           Attached are a set of changes to a Go project that uses Vuejs. It is based on Gitea and has been modified into a type of online encyclopedia, where each subject can have multiple articles, and each article is represented by a git repository with a primary markdown file that contains the article. Articles can be forked, forming a tree of articles under the subject.
@@ -191,17 +188,17 @@ jobs:
 
           PROMPT_END
 
-          cat /tmp/issue_context.txt >> /tmp/agentic_prompt.txt
-
-          cat >> /tmp/agentic_prompt.txt << 'SECTION_END'
+          {
+            cat /tmp/issue_context.txt
+            cat << 'SECTION_END'
 
           ### Changes to Review
 
           ```diff
           SECTION_END
-
-          cat /tmp/pr_diff.txt >> /tmp/agentic_prompt.txt
-          printf '\n```\n' >> /tmp/agentic_prompt.txt
+            cat /tmp/pr_diff.txt
+            printf '\n```\n'
+          } >> /tmp/agentic_prompt.txt
 
       - name: Run raw review
         if: steps.check-issue.outputs.has_issue == 'true'
@@ -272,17 +269,17 @@ jobs:
 
           COMBINE_HEADER
 
-          cat /tmp/raw_review.txt >> /tmp/combine_prompt.txt
-
-          cat >> /tmp/combine_prompt.txt << 'COMBINE_SEPARATOR'
+          {
+            cat /tmp/raw_review.txt
+            cat << 'COMBINE_SEPARATOR'
 
           ---
 
           ## Agentic Review
 
           COMBINE_SEPARATOR
-
-          cat /tmp/agentic_review.txt >> /tmp/combine_prompt.txt
+            cat /tmp/agentic_review.txt
+          } >> /tmp/combine_prompt.txt
 
           jq -n \
             --arg model "$REVIEW_MODEL" \
@@ -316,7 +313,7 @@ jobs:
             printf '## Automated PR Review\n\n'
             cat /tmp/final_review.txt
             printf '\n\n---\n'
-            printf '*Review generated using `%s` via [OpenRouter](https://openrouter.ai). Comment `/review` to re-run.*\n' "$REVIEW_MODEL"
+            printf '*Review generated using `%s` via [OpenRouter](https://openrouter.ai). Comment `/review` to re-run.*\n' "${REVIEW_MODEL}"
           } > /tmp/review_comment.txt
 
           gh pr comment "${{ steps.pr-info.outputs.number }}" \
