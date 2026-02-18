@@ -263,7 +263,7 @@ jobs:
           OPENAI_API_BASE: https://openrouter.ai/api/v1
           OPENCODE_PERMISSION: '{ "bash": { "*": "deny", "rg*": "allow", "ls*": "allow", "head*": "allow", "find*": "allow" } }'
         run: |
-          cat /tmp/agentic_prompt.txt | opencode run -m "openai/$REVIEW_MODEL" > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
+          opencode run -m "openai/$REVIEW_MODEL" < /tmp/agentic_prompt.txt > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
             echo "::warning::Agentic review via opencode failed"
             cat /tmp/opencode_stderr.txt >&2
             echo "Agentic review unavailable (opencode encountered an error)." > /tmp/agentic_review.txt
