@@ -4,10 +4,6 @@ on:
   issue_comment:
     types: [created]
 
-concurrency:
-  group: pr-review-${{ github.event.issue.number }}
-  cancel-in-progress: true
-
 jobs:
   review:
     name: Automated PR Review
@@ -18,6 +14,9 @@ jobs:
       github.event.comment.author_association == 'OWNER' ||
       github.event.comment.author_association == 'COLLABORATOR')
     runs-on: ubuntu-latest
+    concurrency:
+      group: pr-review-${{ github.event.issue.number }}
+      cancel-in-progress: true
     timeout-minutes: 15
     permissions:
       contents: read
@@ -272,7 +271,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_API_BASE: https://openrouter.ai/api/v1
-          OPENCODE_PERMISSION: '{ "edit": "deny", "write": "deny", "patch": "deny", "multiedit": "deny", "bash": { "*": "deny", "rg*": "allow", "ls*": "allow", "head*": "allow", "cat*": "allow", "grep*": "allow", "tree*": "allow" }, "read": "allow", "grep": "allow", "glob": "allow", "list": "allow" }'
+          OPENCODE_PERMISSION: '{ "edit": "deny", "write": "deny", "patch": "deny", "multiedit": "deny", "bash": "deny", "read": "allow", "grep": "allow", "glob": "allow", "list": "allow" }'
         run: |
           opencode run -m "$REVIEW_MODEL" < /tmp/agentic_prompt.txt > /tmp/agentic_review.txt 2>/tmp/opencode_stderr.txt || {
             echo "::warning::Agentic review via opencode failed"
