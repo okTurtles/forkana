@@ -36,7 +36,8 @@ jobs:
                 "npm": "@ai-sdk/openai-compatible",
                 "name": "OpenRouter",
                 "options": {
-                  "baseURL": "https://openrouter.ai/api/v1"
+                  "baseURL": "https://openrouter.ai/api/v1",
+                  "apiKey": "{env:OPENROUTER_API_KEY}"
                 },
                 "models": {
                   "stepfun/step-3.5-flash": {
@@ -48,14 +49,8 @@ jobs:
           }
           EOF
 
-          mkdir -p ~/.local/share/opencode
-          jq -n --arg key "$OPENROUTER_API_KEY" \
-            '{ openrouter: { type: "api", key: $key } }' \
-            > ~/.local/share/opencode/auth.json
-
           echo "Config written:"
           cat ~/.config/opencode/opencode.json
-          echo "Auth configured for openrouter provider"
 
       - name: Test opencode with custom provider config
         run: |
