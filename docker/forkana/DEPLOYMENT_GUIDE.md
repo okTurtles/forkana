@@ -6,7 +6,7 @@ This guide covers deploying Forkana to a single Linux VM for private dev instanc
 
 1. [Prerequisites](#prerequisites)
 2. [Server Preparation](#server-preparation)
-3. [Pulling the Docker Image](#pulling-the-docker-image)
+3. [Server Setup (CI/CD)](#server-setup-cicd)
 4. [Environment Configuration](#environment-configuration)
 5. [Running Forkana](#running-forkana)
 6. [Reverse Proxy Setup](#reverse-proxy-setup)
@@ -64,25 +64,133 @@ docker compose version
 
 ### 3. Create Directory Structure
 
+> **CI/CD note:** If you are using the CI/CD deployment model (next section),
+> skip this step — the deploy user's directories are created there instead.
+
 ```bash
-# Create Forkana directories
-sudo mkdir -p /opt/forkana/{data,config,postgres}
-sudo chown -R 1000:1000 /opt/forkana/data /opt/forkana/config
-sudo chown -R 999:999 /opt/forkana/postgres
+mkdir -p ~/forkana/{data,data/git,data/custom,config,postgres,compose}
+chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/data/custom ~/forkana/config
 ```
 
 </details>
 
 ---
 
-## Pulling the Docker Image
+## Server Setup (CI/CD)
 
-Pull the pre-built image from Docker Hub:
+This section configures the VM for the **build-on-server** deployment model.
+GitHub Actions triggers a deploy via SSH; the VM builds the image from source,
+pushes it to a local Docker registry, and deploys with a digest-pinned compose
+override.
+
+<details>
+
+### 1. Create a Dedicated Deploy User
+
+The deploy user **must** have UID 1000 so that directories it creates are
+automatically owned by the container user (git:git, also UID 1000).
 
 ```bash
-docker pull okturtles/forkana:latest
-docker tag okturtles/forkana:latest forkana:latest
+sudo adduser --system --group --shell /bin/bash --uid 1000 forkana-deploy
+sudo usermod -aG docker forkana-deploy
 ```
+
+### 2. Set Up the Deploy Directory and Git Repository
+
+All paths live under the deploy user's home directory — no root-owned
+directories and no `sudo` required during deployments.
+
+```bash
+# Run these as the forkana-deploy user (or sudo -u forkana-deploy)
+sudo -u forkana-deploy bash -c '
+  mkdir -p ~/forkana/{repo,compose,data,data/git,data/custom,config,postgres}
+  chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/data/custom ~/forkana/config
+  git clone https://github.com/okTurtles/forkana.git ~/forkana/repo
+'
+```
+
+### 3. Install the Deploy Script
+
+```bash
+sudo -u forkana-deploy cp ~/forkana/repo/docker/forkana/deploy.sh ~/forkana/deploy.sh
+sudo -u forkana-deploy chmod 755 ~/forkana/deploy.sh
+```
+
+> **Note:** The deploy script is also updated automatically during each
+> deployment (it copies `dev.yml` from the checked-out commit). To update
+> `deploy.sh` itself, pull the latest version from the repo.
+
+### 4. Configure `authorized_keys` with Forced-Command Restrictions
+
+Create `~forkana-deploy/.ssh/authorized_keys` with the GitHub Actions public
+key. The `command=` directive restricts the key to running the deploy script
+only:
+
+```bash
+sudo -u forkana-deploy mkdir -p ~forkana-deploy/.ssh
+sudo chmod 700 ~forkana-deploy/.ssh
+```
+
+Add the following single line (replace `ssh-ed25519 AAAA...` with the actual
+public key):
+
+```
+command="~/forkana/deploy.sh",restrict ssh-ed25519 AAAA... github-actions-deploy
+```
+
+```bash
+sudo chmod 600 ~forkana-deploy/.ssh/authorized_keys
+sudo chown -R forkana-deploy:forkana-deploy ~forkana-deploy/.ssh
+```
+
+**Security notes:**
+- `command=` forces every SSH session with this key to execute `deploy.sh`.
+  The commit SHA is available to the script via `$SSH_ORIGINAL_COMMAND`.
+- `no-port-forwarding,no-pty,no-agent-forwarding,no-X11-forwarding` prevent
+  tunnelling, interactive shells, and agent hijacking.
+
+### 5. Start the Local Docker Registry
+
+The registry is managed by `docker compose` via `dev.yml`. For the initial
+bootstrap (before the first deploy), start it manually:
+
+```bash
+docker compose -f ~/forkana/repo/docker/forkana/dev.yml up -d registry
+```
+
+Verify it is running:
+
+```bash
+curl -sf http://127.0.0.1:5000/v2/ && echo "Registry OK"
+```
+
+The registry binds to `127.0.0.1:5000` only and is **not** publicly
+accessible. Data persists in the `registry-data` Docker volume.
+
+### 6. Obtain the SSH Host Key for GitHub
+
+Pin the VM's SSH host key in the GitHub Actions workflow to prevent MITM
+attacks. Run on the VM:
+
+```bash
+# Print the host key entry (use the key type matching your server, usually ed25519)
+ssh-keyscan -t ed25519 <VM_IP_OR_HOSTNAME> 2>/dev/null
+```
+
+Copy the output and store it as the `DEPLOY_SSH_KNOWN_HOSTS` secret in the
+GitHub repository settings. The workflow uses `StrictHostKeyChecking=yes` with
+this value — **never** use `StrictHostKeyChecking=no`.
+
+### 7. Required GitHub Secrets
+
+| Secret | Description |
+|---|---|
+| `DEPLOY_HOST` | VM IP address or hostname |
+| `DEPLOY_USER` | `forkana-deploy` |
+| `DEPLOY_SSH_KEY` | Private key (ed25519 recommended) for the deploy user |
+| `DEPLOY_SSH_KNOWN_HOSTS` | Output of `ssh-keyscan` from step 6 |
+
+</details>
 
 ---
 
@@ -90,51 +198,55 @@ docker tag okturtles/forkana:latest forkana:latest
 
 ### Create Environment File
 
-Create `/opt/forkana/.env`:
+Create `~/forkana/compose/.env` with the commands below. Compose reads `.env`
+from the project directory automatically.
+
+The file requires three variables:
+
+| Variable | Description |
+|----------|-------------|
+| `POSTGRES_PASSWORD` | PostgreSQL password (random, never reused) |
+| `FORKANA_DOMAIN` | Your domain without `https://` prefix |
+| `FORKANA_SECRET_KEY` | 64-char hex key for session encryption |
+
+Generate the file (replace `dev.forkana.org` with your actual domain):
 
 ```bash
-# PostgreSQL password (generate a strong random password)
-POSTGRES_PASSWORD=your-secure-postgres-password-here
+# Create .env with generated secrets (overwrites any existing file)
+echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)"  >  ~/forkana/compose/.env
+echo "FORKANA_DOMAIN=dev.forkana.org"                 >> ~/forkana/compose/.env
+echo "FORKANA_SECRET_KEY=$(openssl rand -hex 32)"     >> ~/forkana/compose/.env
 
-# Forkana domain (without https://)
-FORKANA_DOMAIN=dev.forkana.org
-
-# Secret key for session encryption (generate with: openssl rand -hex 32)
-FORKANA_SECRET_KEY=your-64-character-hex-secret-key-here
+# Lock down permissions — only the deploy user should read this file
+chmod 600 ~/forkana/compose/.env
 ```
 
-### Generate Secure Secrets
+Verify the result:
 
 ```bash
-# Generate PostgreSQL password
-echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)" >> /opt/forkana/.env
-
-# Generate Forkana secret key
-echo "FORKANA_SECRET_KEY=$(openssl rand -hex 32)" >> /opt/forkana/.env
-```
-
-### Secure the Environment File
-
-```bash
-chmod 600 /opt/forkana/.env
+cat ~/forkana/compose/.env
 ```
 
 ---
 
 ## Running Forkana
 
+Automated deployments are handled by `deploy.sh` (triggered via GitHub Actions).
+For manual operations, use the compose files in `~/forkana/compose/`:
+
 ### Start the Services
 
 ```bash
-cd /opt/forkana
-docker compose -f docker/forkana/local.yml up -d
+cd ~/forkana/compose
+docker compose -f dev.yml -f compose.override.yml up -d
 ```
 
 ### Verify Services Are Running
 
 ```bash
-docker compose -f docker/forkana/local.yml ps
-docker compose -f docker/forkana/local.yml logs -f forkana
+cd ~/forkana/compose
+docker compose -f dev.yml -f compose.override.yml ps
+docker compose -f dev.yml -f compose.override.yml logs -f forkana
 ```
 
 ### Initialize the Database (First Run Only)
@@ -147,13 +259,15 @@ On first startup, Forkana will automatically:
 Watch the logs to ensure initialization completes:
 
 ```bash
-docker compose -f docker/forkana/local.yml logs -f forkana | grep -i "starting"
+cd ~/forkana/compose
+docker compose -f dev.yml -f compose.override.yml logs -f forkana | grep -i "starting"
 ```
 
 #### Create admin user
 
 ```bash
-docker compose -f docker/forkana/local.yml exec forkana gitea admin user create \
+cd ~/forkana/compose
+docker compose -f dev.yml -f compose.override.yml exec forkana gitea admin user create \
   --username admin --password your-password-here --email admin@forkana.org --admin
 ```
 
@@ -216,23 +330,26 @@ curl -f https://your-domain.example/api/healthz
 ### Verify Database Connection
 
 ```bash
+cd ~/forkana/compose
+
 # Check PostgreSQL is accessible
-docker compose -f docker/forkana/local.yml exec postgres pg_isready -U forkana -d forkana
+docker compose -f dev.yml -f compose.override.yml exec postgres pg_isready -U forkana -d forkana
 
 # Check Forkana can connect
-docker compose -f docker/forkana/local.yml logs forkana | grep -i database
+docker compose -f dev.yml -f compose.override.yml logs forkana | grep -i database
 ```
 
 ### Verify All Services
 
 ```bash
-# Check container status
-docker compose -f docker/forkana/local.yml ps
+cd ~/forkana/compose
+docker compose -f dev.yml -f compose.override.yml ps
 
 # Expected output:
-# NAME              STATUS                   PORTS
-# forkana           Up (healthy)             127.0.0.1:3000->3000/tcp
-# forkana-postgres  Up (healthy)             5432/tcp
+# NAME               STATUS                   PORTS
+# forkana            Up (healthy)             127.0.0.1:3000->3000/tcp
+# forkana-postgres   Up (healthy)             5432/tcp
+# forkana-registry   Up (healthy)             127.0.0.1:5000->5000/tcp
 ```
 
 ### Test Web Access
@@ -251,18 +368,20 @@ docker compose -f docker/forkana/local.yml ps
 
 ### View Logs
 
+All compose commands below assume `cd ~/forkana/compose` first.
+
 ```bash
 # All services
-docker compose -f docker/forkana/local.yml logs -f
+docker compose -f dev.yml -f compose.override.yml logs -f
 
 # Forkana only
-docker compose -f docker/forkana/local.yml logs -f forkana
+docker compose -f dev.yml -f compose.override.yml logs -f forkana
 
 # PostgreSQL only
-docker compose -f docker/forkana/local.yml logs -f postgres
+docker compose -f dev.yml -f compose.override.yml logs -f postgres
 
 # Last 100 lines
-docker compose -f docker/forkana/local.yml logs --tail=100 forkana
+docker compose -f dev.yml -f compose.override.yml logs --tail=100 forkana
 ```
 
 ### Common Issues
@@ -270,35 +389,31 @@ docker compose -f docker/forkana/local.yml logs --tail=100 forkana
 #### Container Won't Start
 
 ```bash
-# Check for errors
-docker compose -f docker/forkana/local.yml logs forkana | tail -50
+docker compose -f dev.yml -f compose.override.yml logs forkana | tail -50
 
-# Verify permissions
-ls -la /opt/forkana/data
-ls -la /opt/forkana/config
+# Verify permissions (all bind-mount dirs must be owned by UID 1000)
+ls -la ~/forkana/data
+ls -la ~/forkana/config
+ls -la ~/forkana/postgres
 
-# Fix permissions if needed
-sudo chown -R 1000:1000 /opt/forkana/data /opt/forkana/config
+# Fix permissions if needed (deploy user must be UID 1000)
+chown -R 1000:1000 ~/forkana/data ~/forkana/config ~/forkana/postgres
 ```
 
 #### Database Connection Failed
 
 ```bash
-# Verify PostgreSQL is running
-docker compose -f docker/forkana/local.yml ps postgres
-
-# Check PostgreSQL logs
-docker compose -f docker/forkana/local.yml logs postgres
+docker compose -f dev.yml -f compose.override.yml ps postgres
+docker compose -f dev.yml -f compose.override.yml logs postgres
 
 # Test connection manually
-docker compose -f docker/forkana/local.yml exec postgres psql -U forkana -d forkana -c "SELECT 1;"
+docker compose -f dev.yml -f compose.override.yml exec postgres psql -U forkana -d forkana -c "SELECT 1;"
 ```
 
 #### 502 Bad Gateway from Nginx
 
 ```bash
-# Verify Forkana is running and healthy
-docker compose -f docker/forkana/local.yml ps forkana
+docker compose -f dev.yml -f compose.override.yml ps forkana
 curl http://localhost:3000/api/healthz
 
 # Check Nginx error logs
@@ -308,24 +423,23 @@ sudo tail -f /var/log/nginx/error.log
 #### SSL Certificate Issues
 
 ```bash
-# Renew certificate manually
 sudo certbot renew --dry-run
-
-# Check certificate status
 sudo certbot certificates
 ```
 
 ### Reset and Rebuild
 
 ```bash
+cd ~/forkana/compose
+
 # Stop all services
-docker compose -f docker/forkana/local.yml down
+docker compose -f dev.yml -f compose.override.yml down
 
 # Remove data (CAUTION: destroys all data)
-sudo rm -rf /opt/forkana/data/* /opt/forkana/config/*
+rm -rf ~/forkana/data/* ~/forkana/config/* ~/forkana/postgres/*
 
 # Rebuild and restart
-docker compose -f docker/forkana/local.yml up -d
+docker compose -f dev.yml -f compose.override.yml up -d
 ```
 
 </details>
@@ -337,51 +451,61 @@ docker compose -f docker/forkana/local.yml up -d
 
 ### Updating Forkana
 
+Deployments are automated via GitHub Actions. To deploy manually:
+
 ```bash
-cd /opt/forkana
+# Run the deploy script with a specific commit SHA
+~/forkana/deploy.sh <commit-sha>
 
-# Pull latest image from Docker Hub
-docker pull okturtles/forkana:latest
-docker tag okturtles/forkana:latest forkana:latest
-
-# Restart with new image
-docker compose -f docker/forkana/local.yml up -d --remove-orphans
+# Or re-run a previous GitHub Actions workflow from the Actions tab.
 
 # Clean up old images
 docker image prune -f
 ```
 
+**Local testing:** When run from inside a git checkout of the repository,
+`deploy.sh` automatically detects the repo root and skips the git
+fetch/checkout step, building directly from the working tree:
+
+```bash
+./docker/forkana/deploy.sh "$(git rev-parse HEAD)"
+```
+
 ### Backup
 
 ```bash
+cd ~/forkana/compose
+
 # Stop Forkana (optional, for consistent backup)
-docker compose -f docker/forkana/local.yml stop forkana
+docker compose -f dev.yml -f compose.override.yml stop forkana
 
 # Backup PostgreSQL
-docker compose -f docker/forkana/local.yml exec postgres pg_dump -U forkana forkana > backup-$(date +%Y%m%d).sql
+docker compose -f dev.yml -f compose.override.yml exec -T postgres pg_dump -U forkana forkana > backup-$(date +%Y%m%d).sql
 
 # Backup data directory
-sudo tar -czf forkana-data-$(date +%Y%m%d).tar.gz /opt/forkana/data
+tar -czf forkana-data-$(date +%Y%m%d).tar.gz -C ~/forkana data
 
 # Restart Forkana
-docker compose -f docker/forkana/local.yml start forkana
+docker compose -f dev.yml -f compose.override.yml start forkana
 ```
 
 ### Restore from Backup
 
 ```bash
+cd ~/forkana/compose
+
 # Stop services
-docker compose -f docker/forkana/local.yml down
+docker compose -f dev.yml -f compose.override.yml down
 
 # Restore PostgreSQL
-docker compose -f docker/forkana/local.yml up -d postgres
-cat backup-YYYYMMDD.sql | docker compose -f docker/forkana/local.yml exec -T postgres psql -U forkana forkana
+docker compose -f dev.yml -f compose.override.yml up -d postgres
+cat backup-YYYYMMDD.sql | docker compose -f dev.yml -f compose.override.yml exec -T postgres psql -U forkana forkana
 
 # Restore data directory
-sudo tar -xzf forkana-data-YYYYMMDD.tar.gz -C /
+tar -xzf forkana-data-YYYYMMDD.tar.gz -C ~/forkana
 
 # Start Forkana
-docker compose -f docker/forkana/local.yml up -d
+docker compose -f dev.yml -f compose.override.yml up -d
 ```
 
 ### Systemd Service (Optional)
@@ -397,9 +521,11 @@ After=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/forkana
-ExecStart=/usr/bin/docker compose -f docker/forkana/local.yml up -d
-ExecStop=/usr/bin/docker compose -f docker/forkana/local.yml down
+User=forkana-deploy
+Group=forkana-deploy
+WorkingDirectory=~/forkana/compose
+ExecStart=/usr/bin/docker compose -f dev.yml -f compose.override.yml up -d
+ExecStop=/usr/bin/docker compose -f dev.yml -f compose.override.yml down
 TimeoutStartSec=0
 
 [Install]
@@ -443,7 +569,7 @@ GITEA__oauth2__JWT_SECRET=your-jwt-secret
 
 ### Enabling SSH Access
 
-To enable SSH for Git operations, update `docker/forkana/local.yml`:
+To enable SSH for Git operations, update `docker/forkana/dev.yml`:
 
 ```yaml
 services:
@@ -470,4 +596,6 @@ services:
 - [ ] Regular backups scheduled
 - [ ] `DISABLE_REGISTRATION` set to true (invite-only access)
 - [ ] Nginx reverse proxy security headers configured (see `docker/forkana/nginx.conf`)
-- [ ] Docker images pulled from Docker Hub (`okturtles/forkana`) are verified
+- [ ] Deploy SSH key restricted with `command=` and `no-port-forwarding,no-pty,no-agent-forwarding`
+- [ ] SSH host key pinned in GitHub secrets (`DEPLOY_SSH_KNOWN_HOSTS`)
+- [ ] Local registry bound to `127.0.0.1:5000` only (not publicly accessible)

@@ -1,4 +1,28 @@
+name: forkana
+
 services:
+  registry:
+    # Pinned by manifest digest so the tag can never be swapped.
+    image: registry:3.0.0@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e
+    container_name: forkana-registry
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      # Registry 3.0.0 enables OpenTelemetry tracing by default and tries to
+      # export to localhost:4318.  Disable it since we don't run a collector.
+      OTEL_TRACES_EXPORTER: none
+    volumes:
+      - registry-data:/var/lib/registry
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/v2/"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - forkana-network
+
   postgres:
     image: postgres:14-alpine
     container_name: forkana-postgres
@@ -8,7 +32,7 @@ services:
       POSTGRES_USER: forkana
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - /opt/forkana/postgres:/var/lib/postgresql/data
+      - ${HOME}/forkana/postgres:/var/lib/postgresql/data
     networks:
       - forkana-network
     healthcheck:
@@ -18,12 +42,16 @@ services:
       retries: 5
 
   forkana:
-    image: forkana:latest
+    # Human-friendly default; deploy.sh generates compose.override.yml to pin
+    # the exact digest built from each commit.
+    image: localhost:5000/forkana:latest
     container_name: forkana
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      registry:
+        condition: service_started
     ports:
       - "127.0.0.1:3000:3000"
     environment:
@@ -39,7 +67,7 @@ services:
       APP_NAME: "Forkana"
       RUN_MODE: prod
       DOMAIN: ${FORKANA_DOMAIN}
-      ROOT_URL: http://${FORKANA_DOMAIN}/
+      ROOT_URL: https://${FORKANA_DOMAIN}/
 
       # Security
       SECRET_KEY: ${FORKANA_SECRET_KEY}
@@ -48,11 +76,22 @@ services:
 
       # SSH (disabled for dev)
       DISABLE_SSH: "true"
+
+      # GITEA__-prefixed overrides are applied by environment-to-ini on EVERY
+      # container startup, even when app.ini already exists on the volume.
+      # Plain vars above (INSTALL_LOCK, etc.) only take effect during the
+      # initial envsubst run, so we duplicate critical settings here to ensure
+      # they are always enforced.
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__security__SECRET_KEY: ${FORKANA_SECRET_KEY}
     volumes:
-      - /opt/forkana/data:/var/lib/gitea
-      - /opt/forkana/config:/etc/gitea
+      - ${HOME}/forkana/data:/var/lib/gitea
+      - ${HOME}/forkana/config:/etc/gitea
     networks:
       - forkana-network
+
+volumes:
+  registry-data:
 
 networks:
   forkana-network:
