@@ -457,10 +457,11 @@ type GetFeedsOptions struct {
 	ExcludeRepoOwnerID int64
 }
 
+func (opts GetFeedsOptions) shouldExcludeRepoOwner() bool {
+	return opts.ExcludeRepoOwnerID > 0
+}
+
 func (opts GetFeedsOptions) excludeRepoOwnerCond() builder.Cond {
-	if opts.ExcludeRepoOwnerID <= 0 {
-		return builder.NewCond()
-	}
 	return builder.NotIn("`action`.repo_id",
 		builder.Select("id").From("repository").Where(
 			builder.Eq{"owner_id": opts.ExcludeRepoOwnerID},
@@ -565,7 +566,9 @@ func ActivityQueryCondition(ctx context.Context, opts GetFeedsOptions) (builder.
 		}
 	}
 
-	cond = cond.And(opts.excludeRepoOwnerCond())
+	if opts.shouldExcludeRepoOwner() {
+		cond = cond.And(opts.excludeRepoOwnerCond())
+	}
 
 	if !opts.IncludePrivate {
 		cond = cond.And(builder.Eq{"`action`.is_private": false})
