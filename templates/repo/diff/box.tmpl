@@ -37,7 +37,7 @@
 			{{end}}
 			{{template "repo/diff/options_dropdown" .}}
 			{{if and .PageIsPullFiles .IsShowingAllCommits (not $.Repository.IsArchived)}}
-				{{template "repo/diff/new_review" .}}
+				{{template "repo/diff/review_submit" .}}
 			{{end}}
 		</div>
 	</div>
