@@ -24,7 +24,7 @@
 /* Issue title font size and weight */
 .issue-title h1 {
   font-size: 20px !important;
-  font-weight: 700 !important;
+  font-weight: var(--font-weight-bold) !important;
 }
 
 /* More padding on diff detail box and ensure high z-index for sticky header and contained modal */
@@ -35,15 +35,15 @@
 
 /* #1 — "Change request" navbar pill style */
 .navbar-pill-active {
-  background: #818B9826 !important;
+  background: var(--color-navbar-pill-bg) !important;
   border-radius: 6px;
   padding: 4px 12px !important;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .navbar-view-modes {
-  color: #656d76;
-  font-weight: 400;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
   cursor: default;
   padding-right: 4px !important;
 }
@@ -54,10 +54,10 @@
   padding: 2px 10px;
   border: none;
   border-radius: 6px;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   font-size: 0.85em;
-  background: #E9E7FF;
-  color: #4E40FA;
+  background: var(--color-diff-added-row-bg);
+  color: var(--color-primary);
   vertical-align: middle;
 }
 
@@ -68,7 +68,7 @@
   border: none !important;
   box-shadow: none !important;
   padding: 0 0 0 4px !important;
-  font-weight: 400;
+  font-weight: var(--font-weight-normal);
   font-size: inherit;
   min-width: unset;
   min-height: unset;
@@ -81,11 +81,11 @@
   gap: 8px;
   padding: 10px 16px;
   margin: 0 0 12px 0;
-  background: #f0ecff;
-  border: 1px solid #d8d0f0;
+  background: var(--color-banner-bg);
+  border: 1px solid var(--color-banner-border);
   border-radius: 8px;
   font-size: 0.875rem;
-  color: #3d2e7c;
+  color: var(--color-banner-text);
 }
 
 .diff-info-banner .info-icon {
@@ -101,7 +101,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #3d2e7c;
+  color: var(--color-banner-text);
   font-size: 1.1rem;
   padding: 2px 6px;
   line-height: 1;
@@ -109,16 +109,16 @@
 }
 
 .diff-info-banner .info-dismiss:hover {
-  background: rgba(61, 46, 124, 0.1);
+  background: var(--color-banner-hover);
 }
 
 /* #7b — Submit review button in changes bar */
 .diff-submit-review-btn {
-  color: #fff !important;
+  color: var(--color-surface) !important;
   border: none !important;
   border-radius: 8px !important;
   padding: 6px 16px !important;
-  font-weight: 600 !important;
+  font-weight: var(--font-weight-semibold) !important;
   font-size: 0.85rem !important;
   cursor: pointer;
   white-space: nowrap;
@@ -127,22 +127,22 @@
 /* Collapse all button */
 .diff-collapse-all-btn {
   background: none;
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 4px 8px;
   cursor: pointer;
-  color: #656d76;
+  color: var(--color-text-secondary);
   display: inline-flex;
   align-items: center;
 }
 
 .diff-collapse-all-btn:hover {
-  background: #f6f8fa;
+  background: var(--color-surface-muted);
 }
 
 /* #8 — Split diff column headers: neutral gray instead of purple */
 .diff-split-header {
-  background: #f6f8fa;
+  background: var(--color-surface-muted);
 }
 
 .diff-split-header tr:first-child th:first-child {
@@ -155,18 +155,18 @@
 
 .diff-split-header th {
   padding: 0.75rem 1rem;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   font-size: 0.875rem;
   text-align: center;
-  color: #1f2328;
+  color: var(--color-text-primary);
 }
 
 .diff-split-header-left {
-  border-right: 1px solid #d1d9e0;
+  border-right: 1px solid var(--color-border-light);
 }
 
 .diff-split-header-right {
-  background: #f0f0f0;
+  background: var(--color-surface-subtle);
 }
 
 /* Hide the collapsible file header for changes */
@@ -176,7 +176,7 @@
 
 /* Make the diff file box border visible with rounded corners */
 .diff-file-box {
-  border: 1px solid #d0d7de !important;
+  border: 1px solid var(--color-border) !important;
   border-radius: 8px !important;
   overflow: hidden;
 }
@@ -201,13 +201,13 @@
 .code-diff-split .del-code .lines-num-old,
 .code-diff-split .del-code .lines-escape-old,
 .code-diff-split .del-code .lines-code-old {
-  background: #fff !important;
-  border-color: #eee !important;
+  background: var(--color-surface) !important;
+  border-color: var(--color-border-muted) !important;
 }
 
 .code-diff-unified .del-code .lines-num,
 .code-diff-split .del-code .lines-num {
-  background: #f6f8fa !important;
+  background: var(--color-surface-muted) !important;
 }
 
 /* Addition lines: light lavender background per design */
@@ -216,24 +216,24 @@
 .code-diff-split .add-code .lines-num-new,
 .code-diff-split .add-code .lines-escape-new,
 .code-diff-split .add-code .lines-code-new {
-  background: #E5E9FF !important;
-  border-color: #d8d0f0 !important;
+  background: var(--color-diff-added-row-bg) !important;
+  border-color: var(--color-banner-border) !important;
 }
 
 .code-diff-unified .add-code .lines-num,
 .code-diff-split .add-code .lines-num {
-  background: #dce0f5 !important;
+  background: var(--color-diff-add-num-bg) !important;
 }
 
 /* #11 — Removed/added word highlighting */
 .removed-code {
-  background: #ffd7d5 !important;
-  font-weight: bold;
+  background: var(--color-diff-del-word-bg) !important;
+  font-weight: var(--font-weight-bold);
 }
 
 .added-code {
-  background: #E5E9FF !important;
-  font-weight: bold;
+  background: var(--color-diff-added-row-bg) !important;
+  font-weight: var(--font-weight-bold);
 }
 
 /* Review Modal Styles */
@@ -243,7 +243,7 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-overlay-backdrop);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -251,9 +251,9 @@
 }
 
 .review-modal {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px var(--color-shadow-medium);
   width: 800px;
   max-width: 90vw;
   max-height: 90vh;
@@ -263,16 +263,16 @@
 
 .review-modal-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #d0d7de;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
 .review-modal-title {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   font-size: 16px;
-  color: #1f2328;
+  color: var(--color-text-primary);
 }
 
 .review-modal-close {
@@ -280,7 +280,7 @@
   border: none;
   font-size: 24px;
   cursor: pointer;
-  color: #656d76;
+  color: var(--color-text-secondary);
   line-height: 1;
   padding: 0;
 }
@@ -293,10 +293,10 @@
 
 .review-field-label {
   display: block;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   font-size: 14px;
   margin-bottom: 8px;
-  color: #1f2328;
+  color: var(--color-text-primary);
 }
 
 .review-modal-body .field {
@@ -306,7 +306,7 @@
 .review-title-input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 14px;
 }
@@ -336,32 +336,32 @@
 }
 
 .review-radio-label {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   font-size: 14px;
-  color: #1f2328;
+  color: var(--color-text-primary);
 }
 
 .review-radio-desc {
   font-size: 13px;
-  color: #656d76;
+  color: var(--color-text-secondary);
   margin-top: 2px;
 }
 
 .review-modal-footer {
   padding: 16px 20px;
-  border-top: 1px solid #d0d7de;
+  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: flex-end;
-  background: #f6f8fa;
+  background: var(--color-surface-muted);
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
 }
 
 .review-submit-btn {
-  color: #fff !important;
+  color: var(--color-surface) !important;
   border-radius: 6px !important;
   padding: 8px 16px !important;
-  font-weight: 600 !important;
+  font-weight: var(--font-weight-semibold) !important;
 }
 
 .content.comment-container .ui.attached.segment {
@@ -376,8 +376,8 @@
 
 @container (max-width: 639px) {
   .combo-markdown-editor markdown-toolbar {
-    border-right: 1px solid #d1d7dd;
-    border-left: 1px solid #d1d7dd;
+    border-right: 1px solid var(--color-border-input);
+    border-left: 1px solid var(--color-border-input);
     padding: 0.5rem .5rem 0 .5rem;
   }
 }
@@ -407,8 +407,8 @@
 }
 
 .combo-markdown-editor .ui.top.tabular.menu {
-  background: #F6F8FA;
-  border: 1px solid #d1d7dd;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border-input);
   padding-left: .5rem;
   padding-top: .5rem;
   border-radius: .5rem .5rem 0 0;
@@ -418,7 +418,7 @@
 
 .combo-markdown-editor text-expander {
   padding: 0.5rem;
-  border: 1px solid #d1d7dd;
+  border: 1px solid var(--color-border-input);
   border-top: 0;
   border-radius: 0 0 .5rem .5rem;
   display: block; /* Ensure it behaves like a block for borders/padding */

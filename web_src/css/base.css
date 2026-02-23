@@ -39,6 +39,18 @@
 
   --gap-inline: 0.25rem; /* gap for inline texts and elements, for example: the spaces for sentence with labels, button text, etc */
   --gap-block: 0.5rem; /* gap for element blocks, for example: spaces between buttons, menu image & title, header icon & title etc */
+
+  /* Forkana custom theme properties — overridden by colors.custom.css */
+  --color-warning-theme-bg: #fef9e7;
+  --color-warning-theme-text: #92600e;
+  --color-warning-theme-border: #f5d887;
+  --color-warning-icon: #c9880d;
+  --color-fork-text: #4a5568;
+  --color-fork-btn-primary: #6366f1;
+  --color-fork-btn-primary-hover: #4f46e5;
+  --color-fork-btn-cancel-bg: #f3f4f6;
+  --color-fork-btn-cancel-text: #374151;
+  --color-fork-btn-cancel-border: #e5e7eb;
 }
 
 @media (min-width: 768px) and (max-width: 1200px) {
