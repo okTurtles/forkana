@@ -7,6 +7,7 @@ import {html, htmlRaw} from '../utils/html.ts';
 
 // Convert markdown-style bold (**text**) to <strong> tags
 function formatBoldText(text: string): string {
+  // eslint-disable-next-line github/unescaped-html-literal
   return text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 }
 

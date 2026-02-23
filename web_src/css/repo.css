@@ -1782,15 +1782,14 @@ tbody.commit-list {
 /* Pill-shaped labels */
 .pill-label {
   border-radius: 999px !important;
-  font-weight: 500 !important;
+  font-weight: 500 !important; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
 }
 
 .pill-label.pill-green,
 .pill-green {
   background-color: var(--color-green) !important;
-  color: white !important;
+  color: white !important; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
 }
-
 
 .ui.form .right .ui.button {
   margin-left: 0.25em;

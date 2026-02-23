@@ -254,8 +254,8 @@ export async function handleReply(el: HTMLElement) {
 
   // Try Toast editor first, then fall back to Combo editor
   let editor: ComboMarkdownEditor | ToastCommentEditor;
-  const toastContainer = form.querySelector('.toast-comment-editor');
-  const comboContainer = form.querySelector('.combo-markdown-editor');
+  const toastContainer = form.querySelector<HTMLElement>('.toast-comment-editor');
+  const comboContainer = form.querySelector<HTMLElement>('.combo-markdown-editor');
 
   if (toastContainer) {
     editor = getToastCommentEditor(toastContainer) ?? await initToastCommentEditor(toastContainer);

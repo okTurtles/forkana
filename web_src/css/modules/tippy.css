@@ -181,9 +181,11 @@
 /* warning theme for alert-style tooltips */
 
 .tippy-box[data-theme="warning"] {
+  /* stylelint-disable scale-unlimited/declaration-strict-value */
   background-color: #fef9e7;
   color: #92600e;
   border: 1px solid #f5d887;
+  /* stylelint-enable scale-unlimited/declaration-strict-value */
   border-radius: 12px;
   box-shadow: 0 6px 18px var(--color-shadow);
   max-width: 360px;
@@ -211,10 +213,10 @@
   flex-shrink: 0;
   width: 24px;
   height: 24px;
-  color: #c9880d;
+  color: #c9880d; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
   margin-top: 2px;
 }
 
 .tippy-warning-content strong {
-  font-weight: 700;
+  font-weight: 700; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
 }

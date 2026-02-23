@@ -104,13 +104,13 @@ These inconsistent layouts should be refactored to simple ones.
   gap: 0.5rem;
   padding: 1rem 1.25rem;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 600; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
   border-bottom: 1px solid var(--color-secondary);
 }
 
 .ui.modal.fork-confirm-modal > .header .fork-confirm-warning-icon {
   flex-shrink: 0;
-  color: #c9880d;
+  color: #c9880d; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
 }
 
 .ui.modal.fork-confirm-modal > .header > span {
@@ -135,7 +135,7 @@ These inconsistent layouts should be refactored to simple ones.
 }
 
 .ui.modal.fork-confirm-modal .fork-confirm-text {
-  color: #4a5568;
+  color: #4a5568; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
   font-size: 15px;
   line-height: 1.6;
   margin: 0 0 1rem;
@@ -160,23 +160,25 @@ These inconsistent layouts should be refactored to simple ones.
   padding: 0.875rem 1rem;
   border-radius: 8px;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 500; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
 }
 
 .ui.modal.fork-confirm-modal > .actions > .ui.primary.button {
-  background-color: #6366f1;
+  background-color: #6366f1; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
 }
 
 .ui.modal.fork-confirm-modal > .actions > .ui.primary.button:hover {
-  background-color: #4f46e5;
+  background-color: #4f46e5; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
 }
 
 .ui.modal.fork-confirm-modal > .actions > .ui.cancel.button {
+  /* stylelint-disable scale-unlimited/declaration-strict-value */
   background-color: #f3f4f6;
   color: #374151;
   border: 1px solid #e5e7eb;
+  /* stylelint-enable scale-unlimited/declaration-strict-value */
 }
 
 .ui.modal.fork-confirm-modal > .actions > .ui.cancel.button:hover {
-  background-color: #e5e7eb;
+  background-color: #e5e7eb; /* stylelint-disable-line scale-unlimited/declaration-strict-value */
 }

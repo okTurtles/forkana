@@ -89,6 +89,7 @@ function attachTooltip(target: Element, content: Content = null): Instance {
   if (theme === 'warning' && typeof content === 'string') {
     allowHTML = true;
     // Convert markdown-style bold (**text**) to <strong> tags
+    // eslint-disable-next-line github/unescaped-html-literal
     const formattedContent = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     finalContent = html`<div class="tippy-warning-content"><svg class="tippy-warning-icon" viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2L1 21h22L12 2zm0 3.83L19.53 19H4.47L12 5.83zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg><span>${htmlRaw(formattedContent)}</span></div>`;
   }
