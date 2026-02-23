@@ -191,6 +191,10 @@ export class ToastCommentEditor {
     }
   }
 
+  async switchToUserPreference(): Promise<void> {
+    // Toast UI Editor manages its own mode state, no action needed
+  }
+
   switchTabToEditor(): void {
     // Toast UI Editor doesn't have the same tab concept, but we can focus
     this.focus();

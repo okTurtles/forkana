@@ -1,5 +1,5 @@
 import {html, htmlEscape} from '../utils/html.ts';
-import {createTippy, showTemporaryTooltip} from '../modules/tippy.ts';
+import {showTemporaryTooltip} from '../modules/tippy.ts';
 import {
   addDelegatedEventListener,
   createElementFromHTML,
@@ -320,18 +320,23 @@ export function initRepoPullRequestReview() {
   if (!document.querySelector('.repository.pull.diff')) return;
 
   const elReviewBtn = document.querySelector('.js-btn-review');
-  const elReviewPanel = document.querySelector('.review-box-panel.tippy-target');
-  if (elReviewBtn && elReviewPanel) {
-    const tippy = createTippy(elReviewBtn, {
-      content: elReviewPanel,
-      theme: 'default',
-      placement: 'bottom',
-      trigger: 'click',
-      maxWidth: 'none',
-      interactive: true,
-      hideOnClick: true,
+  const elReviewOverlay = document.querySelector<HTMLElement>('#review-modal-overlay');
+  const elReviewClose = document.querySelector<HTMLElement>('#review-modal-close');
+  if (elReviewBtn && elReviewOverlay) {
+    elReviewBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      elReviewOverlay.style.display = 'flex';
     });
-    elReviewPanel.querySelector('.close').addEventListener('click', () => tippy.hide());
+    elReviewClose?.addEventListener('click', (e) => {
+      e.preventDefault();
+      elReviewOverlay.style.display = 'none';
+    });
+    elReviewOverlay.addEventListener('click', (e) => {
+      if (e.target === elReviewOverlay) {
+        elReviewOverlay.style.display = 'none';
+      }
+    });
   }
 
   addDelegatedEventListener(document, 'click', '.add-code-comment', async (el, e) => {
