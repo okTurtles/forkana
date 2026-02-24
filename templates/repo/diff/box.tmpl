@@ -35,7 +35,7 @@
 		</div>
 		<div class="diff-detail-actions tw-flex tw-items-center tw-gap-2">
 			{{if and .PageIsPullFiles .IsShowingAllCommits}}
-				<button class="ui tiny basic button diff-toggle-mirror-btn" title="Toggle split/unified view" onclick="const url = new URL(window.location); const isSplit = url.searchParams.get('style') !== 'unified'; url.searchParams.set('style', isSplit ? 'unified' : 'split'); window.location = url.toString()">{{svg "octicon-mirror" 16}}</button>
+				<a class="ui tiny basic button diff-toggle-mirror-btn" href="?style={{if $.IsSplitStyle}}unified{{else}}split{{end}}&whitespace={{$.WhitespaceBehavior}}&show-outdated={{$.ShowOutdatedComments}}" title="Toggle split/unified view">{{svg "octicon-mirror" 16}}</a>
 			{{end}}
 			{{template "repo/diff/options_dropdown" .}}
 			{{if and .PageIsPullFiles .IsShowingAllCommits (not $.Repository.IsArchived)}}
@@ -43,6 +43,16 @@
 			{{end}}
 		</div>
 	</div>
+	<script>
+		// Default to unified view on mobile if no explicit style param is set
+		(function() {
+			var params = new URLSearchParams(window.location.search);
+			if (!params.has('style') && window.innerWidth <= 768) {
+				params.set('style', 'unified');
+				window.location.search = params.toString();
+			}
+		})();
+	</script>
 	{{if not .DiffNotAvailable}}
 		{{if and .IsShowingOnlySingleCommit .PageIsPullFiles}}
 			<div class="ui info message">
