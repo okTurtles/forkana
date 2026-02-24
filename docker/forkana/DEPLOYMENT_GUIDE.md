@@ -22,7 +22,7 @@ This guide covers deploying Forkana to a single Linux VM for private dev instanc
 
 ### Server Requirements
 
-- **OS:** Ubuntu 22.04 LTS or Debian 12 (recommended)
+- **OS:** Ubuntu 22.04 LTS, Debian 12, or Fedora 39+ (recommended)
 - **CPU:** 2+ cores
 - **RAM:** 4GB minimum (8GB recommended)
 - **Disk:** 40GB+ SSD
@@ -34,6 +34,11 @@ This guide covers deploying Forkana to a single Linux VM for private dev instanc
 - Git (for cloning the repository)
 - A domain name pointing to your server's IP
 
+> **Note:** The deployment script (`deploy.sh`) auto-detects the host OS
+> via `/etc/os-release` and delegates to the appropriate OS-specific script.
+> After initial server setup, deployments work identically on all supported
+> platforms.
+
 </details>
 
 ---
@@ -44,11 +49,21 @@ This guide covers deploying Forkana to a single Linux VM for private dev instanc
 
 ### 1. Update System Packages
 
+#### Debian/Ubuntu
+
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
 
+#### Fedora
+
+```bash
+sudo dnf upgrade --refresh -y
+```
+
 ### 2. Install Docker
+
+#### Debian/Ubuntu
 
 ```bash
 # Install Docker using the official script
@@ -62,7 +77,39 @@ docker --version
 docker compose version
 ```
 
-### 3. Create Directory Structure
+#### Fedora
+
+```bash
+# Install Docker from Fedora repos (or use the official Docker repo)
+sudo dnf install -y docker docker-compose-plugin
+
+# Start and enable Docker
+sudo systemctl start docker
+sudo systemctl enable docker
+
+# Add your user to the docker group
+sudo usermod -aG docker $USER
+
+# Log out and back in, then verify
+docker --version
+docker compose version
+```
+
+### 3. Install Additional Dependencies
+
+#### Debian/Ubuntu
+
+```bash
+sudo apt install -y git jq curl
+```
+
+#### Fedora
+
+```bash
+sudo dnf install -y git jq curl
+```
+
+### 4. Create Directory Structure
 
 > **CI/CD note:** If you are using the CI/CD deployment model (next section),
 > skip this step — the deploy user's directories are created there instead.
@@ -90,8 +137,17 @@ override.
 The deploy user **must** have UID 1000 so that directories it creates are
 automatically owned by the container user (git:git, also UID 1000).
 
+#### Debian/Ubuntu
+
 ```bash
 sudo adduser --system --group --shell /bin/bash --uid 1000 forkana-deploy
+sudo usermod -aG docker forkana-deploy
+```
+
+#### Fedora
+
+```bash
+sudo useradd --system --create-home --shell /bin/bash --uid 1000 forkana-deploy
 sudo usermod -aG docker forkana-deploy
 ```
 
@@ -277,8 +333,16 @@ docker compose -f dev.yml -f compose.override.yml exec forkana gitea admin user 
 
 ### Install Nginx and Certbot
 
+#### Debian/Ubuntu
+
 ```bash
 sudo apt install -y nginx certbot python3-certbot-nginx
+```
+
+#### Fedora
+
+```bash
+sudo dnf install -y nginx certbot python3-certbot-nginx
 ```
 
 ### Deploy the Nginx Configuration
@@ -286,20 +350,34 @@ sudo apt install -y nginx certbot python3-certbot-nginx
 The repository includes a ready-made Nginx configuration at [`docker/forkana/nginx.conf`](nginx.conf).
 Copy it to your server and update the `server_name` and SSL paths to match your domain:
 
+#### Debian/Ubuntu
+
 ```bash
-# Copy the config (adjust the source path to where you cloned the repo)
+# Copy the config
 sudo cp docker/forkana/nginx.conf /etc/nginx/sites-available/forkana
 
 # Edit the config to replace dev.forkana.example with your actual domain
 sudo sed -i 's/dev.forkana.example/your-domain.example/g' /etc/nginx/sites-available/forkana
+
+# Enable the site
+sudo ln -s /etc/nginx/sites-available/forkana /etc/nginx/sites-enabled/
+```
+
+#### Fedora
+
+Fedora uses `/etc/nginx/conf.d/` instead of `sites-available/sites-enabled`:
+
+```bash
+# Copy the config
+sudo cp docker/forkana/nginx.conf /etc/nginx/conf.d/forkana.conf
+
+# Edit the config to replace dev.forkana.example with your actual domain
+sudo sed -i 's/dev.forkana.example/your-domain.example/g' /etc/nginx/conf.d/forkana.conf
 ```
 
 ### Enable the Site and Obtain SSL Certificate
 
 ```bash
-# Enable the site
-sudo ln -s /etc/nginx/sites-available/forkana /etc/nginx/sites-enabled/
-
 # Test configuration
 sudo nginx -t
 
