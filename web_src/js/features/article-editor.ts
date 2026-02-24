@@ -29,8 +29,8 @@ function createForkConfirmModal(title: string, body: string, body2: string, conf
         <p class="fork-confirm-text">${htmlRaw(formattedBody2)}</p>
       </div>
       <div class="actions">
-        <button class="ui primary ok button">${confirmText}</button>
-        <button class="ui cancel button">${cancelText}</button>
+        <button class="ui primary ok button">${htmlRaw(svg('octicon-check', 16))} ${confirmText}</button>
+        <button class="ui cancel button">${htmlRaw(svg('octicon-x', 16))} ${cancelText}</button>
       </div>
     </div>
   `.trim());

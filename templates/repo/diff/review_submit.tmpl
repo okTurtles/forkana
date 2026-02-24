@@ -15,7 +15,9 @@
 			<input type="hidden" name="commit_id" value="{{.AfterCommitID}}">
 			<div class="review-modal-header">
 				<span class="review-modal-title">{{ctx.Locale.Tr "repo.diff.review.draft_count" .PendingCodeCommentNumber}}</span>
-				<button type="button" class="review-modal-close" id="review-modal-close" aria-label="Close">&times;</button>
+				<button type="button" class="review-modal-close" id="review-modal-close" aria-label="Close">
+					{{svg "octicon-x" 24}}
+				</button>
 			</div>
 			<div class="review-modal-body">
 				<div class="field">
