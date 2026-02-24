@@ -9,7 +9,7 @@ if [ ! -w ${HOME} ]; then echo "${HOME} is not writable"; exit 1; fi
 # Prepare custom folder
 mkdir -p ${GITEA_CUSTOM} && chmod 0700 ${GITEA_CUSTOM}
 
-# Sync baked-in custom defaults (options, services, templates) into GITEA_CUSTOM.
+# Sync baked-in custom defaults (options, public, services, templates) into GITEA_CUSTOM.
 # The defaults live outside the volume paths so they survive volume mounts.
 # Uses cp -rn so existing user-modified files are never overwritten.
 CUSTOM_DEFAULTS="/usr/local/share/gitea/custom-defaults"

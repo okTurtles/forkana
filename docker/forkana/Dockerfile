@@ -40,7 +40,7 @@ COPY docker/forkana /tmp/local
 # directory is missing from the build context (e.g. excluded by .dockerignore).
 RUN mkdir -p /tmp/custom-defaults \
  && cd /go/src/code.gitea.io/gitea/custom \
- && for dir in options services templates; do \
+ && for dir in options public services templates; do \
       [ -d "$dir" ] && cp -r "$dir" /tmp/custom-defaults/ || true; \
     done
 
@@ -91,6 +91,7 @@ COPY --from=build-env --chown=root:root /go/src/code.gitea.io/gitea/gitea /app/g
 COPY --from=build-env --chown=root:root /go/src/code.gitea.io/gitea/environment-to-ini /usr/local/bin/environment-to-ini
 
 # Bake Forkana custom overrides (options, public, services, templates) into the image.
+# public/ carries custom CSS (content.custom.css, navbar.custom.css, etc.) and images.
 # Placed outside both VOLUME paths (/var/lib/gitea, /etc/gitea) so they survive
 # volume mounts. docker-setup.sh syncs them into GITEA_CUSTOM on every startup.
 COPY --from=build-env --chown=1000:1000 /tmp/custom-defaults/ /usr/local/share/gitea/custom-defaults/
