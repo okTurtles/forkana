@@ -1250,7 +1250,7 @@ func registerWebRoutes(m *web.Router) {
 				m.Get("/{shaFrom:[a-f0-9]{7,64}}..{shaTo:[a-f0-9]{7,64}}", repo.SetEditorconfigIfExists, repo.SetDiffViewStyle, repo.SetWhitespaceBehavior, repo.SetShowOutdatedComments, repo.ViewPullFilesForRange)
 				m.Group("/reviews", func() {
 					m.Get("/new_comment", repo.RenderNewCodeCommentForm)
-					m.Post("/comments", web.Bind(forms.CodeCommentForm{}), repo.CreateCodeComment)
+					m.Post("/comments", web.Bind(forms.CodeCommentForm{}), repo.SetShowOutdatedComments, repo.CreateCodeComment)
 					m.Post("/submit", web.Bind(forms.SubmitReviewForm{}), repo.SubmitReview)
 				}, context.RepoMustNotBeArchived())
 			})
