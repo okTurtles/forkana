@@ -33,6 +33,7 @@ import (
 	issue_template "code.gitea.io/gitea/modules/issue/template"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/optional"
+	repo_module "code.gitea.io/gitea/modules/repository"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/templates"
 	"code.gitea.io/gitea/modules/util"
@@ -821,6 +822,15 @@ func SubmitPullEditPost(ctx *context.Context) {
 	commitMessage := commitSummary
 	if commitMessage == "" {
 		commitMessage = "Update " + treePath
+	}
+
+	// Ensure the head branch is synced to the database. Branches created via
+	// InternalPush (e.g. the submit-change-request workflow) bypass the
+	// post-receive hook, so they may exist in git but not in the branch table.
+	// ChangeRepoFiles checks the DB for branch existence and would fail without this.
+	if _, err = repo_module.SyncRepoBranches(ctx, pull.HeadRepo.ID, 0); err != nil {
+		ctx.ServerError("SyncRepoBranches", err)
+		return
 	}
 
 	// Commit changes to the PR head branch
