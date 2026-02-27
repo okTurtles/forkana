@@ -860,6 +860,17 @@ func SubmitPullEditPost(ctx *context.Context) {
 		return
 	}
 
+	// Update refs/pull/N/head to point at the new commit.  ChangeRepoFiles used
+	// InternalPush which skips the post-receive hook (and therefore
+	// UpdatePullsRefs / PushToBaseRepo).  Without this, prepareViewPullInfo
+	// reads a stale ref, treats the PR as broken, and shows the wrong commit
+	// count and diff.
+	if err := pull_service.PushToBaseRepo(ctx, pull); err != nil {
+		log.Error("SubmitPullEditPost: PushToBaseRepo: %v", err)
+		// Non-fatal: the edit was saved; the diff and commit count will be
+		// stale until the ref is corrected by the next PR interaction.
+	}
+
 	// Record a "pushed N commits" timeline entry on the PR, mirroring what a
 	// regular git push would produce via AddTestPullRequestTask.
 	if filesResponse != nil && filesResponse.Commit != nil {
@@ -1075,6 +1086,7 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 
 	ctx.Data["Diff"] = diff
 	ctx.Data["DiffNotAvailable"] = diffShortStat.NumFiles == 0
+	ctx.Data["NumCommits"] = len(prInfo.Commits)
 
 	if ctx.IsSigned && ctx.Doer != nil {
 		if ctx.Data["CanMarkConversation"], err = issues_model.CanMarkConversation(ctx, issue, ctx.Doer); err != nil {

@@ -20,6 +20,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/tests"
 
@@ -566,5 +567,112 @@ func TestSubmitChangeRequestConcurrentBranchCollision(t *testing.T) {
 		// Verify branch names are unique
 		assert.NotEqual(t, user4PR.HeadBranch, user5PR.HeadBranch,
 			"Users should have unique branch names")
+	})
+}
+
+// TestSubmitPullEditPostSyncsHeadRef verifies that SubmitPullEditPost correctly
+// updates refs/pull/N/head after committing a revision in response to a review.
+// Before the fix, InternalPush bypassed the post-receive hook so the ref
+// remained stale, causing prepareViewPullInfo to show the wrong commit count
+// and diff range.
+func TestSubmitPullEditPostSyncsHeadRef(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		sessionOwner := loginUser(t, owner.Name)
+		sessionNonOwner := loginUser(t, nonOwner.Name)
+
+		// Step 1: Non-owner creates a PR via submit-change-request (first commit).
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		firstContent := "# First revision\n\nInitial change request content.\n"
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               firstContent,
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+		req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		redirectURL := test.RedirectURL(resp)
+		require.Contains(t, redirectURL, "/pulls/", "Should redirect to a pull request page")
+
+		// Extract PR index from redirect URL (e.g., /user2/repo1/pulls/3).
+		parts := strings.Split(redirectURL, "/pulls/")
+		require.Len(t, parts, 2)
+		prIndex, err := strconv.ParseInt(strings.TrimSuffix(parts[1], "/"), 10, 64)
+		require.NoError(t, err, "Should parse PR index from redirect URL")
+
+		pr, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, prIndex)
+		require.NoError(t, err)
+		require.NoError(t, pr.LoadBaseRepo(t.Context()))
+		require.NoError(t, pr.LoadHeadRepo(t.Context()))
+		pr.Issue = unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: pr.IssueID})
+
+		// Step 2: Owner submits a "Request Changes" review via the API.
+		ownerToken := getUserToken(t, owner.Name,
+			auth_model.AccessTokenScopeWriteRepository,
+			auth_model.AccessTokenScopeWriteIssue)
+
+		// Fetch the current head commit SHA so the review can be tied to it.
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), pr.HeadRepo)
+		require.NoError(t, err)
+		defer gitRepo.Close()
+
+		firstCommitSHA, err := gitRepo.GetBranchCommitID(pr.HeadBranch)
+		require.NoError(t, err, "Should get initial head branch SHA")
+
+		reviewURL := fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews",
+			owner.Name, repo.Name, prIndex)
+		reviewBody := fmt.Sprintf(`{"body":"Please revise.","commit_id":%q,"event":"REQUEST_CHANGES"}`, firstCommitSHA)
+		req = NewRequestWithBody(t, "POST", reviewURL, strings.NewReader(reviewBody)).
+			AddTokenAuth(ownerToken)
+		req.Header.Set("Content-Type", "application/json")
+		sessionOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Step 3: Non-owner edits the PR via SubmitPullEditPost (second commit).
+		pullEditURL := path.Join(owner.Name, repo.Name, "pulls", strconv.FormatInt(prIndex, 10), "edit")
+		req = NewRequest(t, "GET", pullEditURL)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc = NewHTMLParser(t, resp.Body)
+
+		secondContent := "# Second revision\n\nRevised content addressing reviewer feedback.\n"
+		editForm := map[string]string{
+			"_csrf":       htmlDoc.GetCSRF(),
+			"last_commit": firstCommitSHA,
+			"tree_path":   "README.md",
+			"content":     secondContent,
+		}
+		req = NewRequestWithValues(t, "POST", pullEditURL, editForm)
+		sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Step 4: Verify refs/pull/N/head matches the new head branch commit.
+		// If PushToBaseRepo was not called, the ref would still point to firstCommitSHA.
+		headRefName := pr.GetGitHeadRefName() // "refs/pull/N/head"
+
+		// Re-open the git repo to pick up any updates.
+		gitRepo2, err := gitrepo.OpenRepository(t.Context(), pr.BaseRepo)
+		require.NoError(t, err)
+		defer gitRepo2.Close()
+
+		headBranchSHA, err := gitRepo2.GetBranchCommitID(pr.HeadBranch)
+		require.NoError(t, err, "Should get updated head branch SHA")
+
+		pullRefSHA, err := gitRepo2.GetRefCommitID(headRefName)
+		require.NoError(t, err, "refs/pull/N/head should exist after SubmitPullEditPost")
+
+		assert.Equal(t, headBranchSHA, pullRefSHA,
+			"refs/pull/N/head must point at the latest head branch commit; "+
+				"stale ref means InternalPush hook bypass was not corrected")
+		assert.NotEqual(t, firstCommitSHA, pullRefSHA,
+			"refs/pull/N/head must have advanced beyond the first commit")
 	})
 }

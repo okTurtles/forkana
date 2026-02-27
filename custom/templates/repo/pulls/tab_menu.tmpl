@@ -14,7 +14,7 @@
 		<a class="item {{if .PageIsPullFiles}}active{{end}}" href="{{.Issue.Link}}/files">
 			{{svg "octicon-diff"}}
 			{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_files")}}
-			<span class="ui small label pill-label">{{if .NumFiles}}{{.NumFiles}}{{else}}-{{end}}</span>
+			<span class="ui small label pill-label">{{.NumCommits}}</span>
 		</a>
 	</div>
 	<div class="ui tabs divider"></div>
