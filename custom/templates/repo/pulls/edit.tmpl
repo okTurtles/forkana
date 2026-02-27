@@ -1,0 +1,53 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository view issue pull">
+	{{template "repo/header" .}}
+	<div class="ui container">
+		{{template "repo/issue/view_title" .}}
+		{{template "repo/pulls/tab_menu" .}}
+		<div class="ui bottom attached">
+			<form class="ui edit form" id="article-edit-form" method="post" action="{{.Issue.Link}}/edit"
+				data-can-edit-directly="true"
+				data-has-existing-fork="false"
+				data-needs-fork="false">
+				{{.CsrfTokenHtml}}
+				<input type="hidden" name="last_commit" value="{{.LastCommitID}}">
+				<input type="hidden" name="tree_path" value="{{.ReadmeTreePath}}">
+				<input type="hidden" name="commit_choice" value="direct">
+
+				<div class="field">
+					<div class="tw-p-0">
+						<textarea id="edit_area" name="content" class="tw-hidden" data-id="repo-{{.Repository.Name}}-{{.ReadmeTreePath}}">{{.FileContent}}</textarea>
+						<div class="editor-loading is-loading"></div>
+						<div id="toast-editor-container" style="min-height: 500px;"></div>
+					</div>
+				</div>
+
+				{{/* Commit form */}}
+				<div class="tw-mt-4 tw-p-4" style="border-top: 1px solid var(--color-secondary);">
+					<div class="ui form">
+						<div class="field">
+							<label for="commit_summary">{{ctx.Locale.Tr "repo.diff.review.add_title"}}</label>
+							<input type="text" id="commit_summary" name="commit_summary" maxlength="100">
+						</div>
+						<div class="field">
+							<label for="review_comment">{{ctx.Locale.Tr "repo.diff.review.summary"}}</label>
+							<textarea id="review_comment" name="review_comment" rows="4" placeholder="{{ctx.Locale.Tr "repo.diff.review.placeholder"}}"></textarea>
+						</div>
+						<div class="tw-mt-4 tw-flex tw-justify-end tw-gap-2">
+							<a class="ui button" href="{{.Issue.Link}}">
+								{{svg "octicon-x" 16 "tw-mr-1"}}
+								{{ctx.Locale.Tr "cancel"}}
+							</a>
+							<button type="button" class="ui primary button" id="submit-changes-button">
+								{{svg "octicon-check" 16 "tw-mr-1"}}
+								{{ctx.Locale.Tr "repo.editor.submit_changes"}}
+							</button>
+						</div>
+					</div>
+				</div>
+			</form>
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}
+

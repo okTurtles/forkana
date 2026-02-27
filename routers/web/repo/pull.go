@@ -45,9 +45,11 @@ import (
 	"code.gitea.io/gitea/services/context/upload"
 	"code.gitea.io/gitea/services/forms"
 	"code.gitea.io/gitea/services/gitdiff"
+	issue_service "code.gitea.io/gitea/services/issue"
 	notify_service "code.gitea.io/gitea/services/notify"
 	pull_service "code.gitea.io/gitea/services/pull"
 	repo_service "code.gitea.io/gitea/services/repository"
+	files_service "code.gitea.io/gitea/services/repository/files"
 	user_service "code.gitea.io/gitea/services/user"
 )
 
@@ -755,6 +757,108 @@ func ViewPullEdit(ctx *context.Context) {
 	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
 
 	ctx.HTML(http.StatusOK, tplPullEdit)
+}
+
+// SubmitPullEditPost handles form submission from the PR edit page.
+// It commits changes to the PR head branch, optionally creates a comment,
+// and marks existing reviews as stale to restart the review cycle.
+func SubmitPullEditPost(ctx *context.Context) {
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+	pull := issue.PullRequest
+
+	// Gate access: must be signed in and be the issue poster
+	if !ctx.IsSigned || !issue.IsPoster(ctx.Doer.ID) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// PR must be open (not closed, not merged)
+	if issue.IsClosed || pull.HasMerged {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Check for non-dismissed ReviewTypeReject reviews (changes requested)
+	reviews, err := issues_model.FindReviews(ctx, issues_model.FindReviewOptions{
+		IssueID:   issue.ID,
+		Types:     []issues_model.ReviewType{issues_model.ReviewTypeReject},
+		Dismissed: optional.Some(false),
+	})
+	if err != nil {
+		ctx.ServerError("FindReviews", err)
+		return
+	}
+	if len(reviews) == 0 {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Load head repo
+	if err := pull.LoadHeadRepo(ctx); err != nil {
+		ctx.ServerError("LoadHeadRepo", err)
+		return
+	}
+	if pull.HeadRepo == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Read form data
+	content := ctx.Req.FormValue("content")
+	treePath := ctx.Req.FormValue("tree_path")
+	lastCommitID := ctx.Req.FormValue("last_commit")
+	commitSummary := ctx.Req.FormValue("commit_summary")
+	reviewComment := ctx.Req.FormValue("review_comment")
+
+	if treePath == "" {
+		treePath = "@README.md"
+	}
+
+	// Build commit message
+	commitMessage := commitSummary
+	if commitMessage == "" {
+		commitMessage = "Update " + treePath
+	}
+
+	// Commit changes to the PR head branch
+	_, err = files_service.ChangeRepoFiles(ctx, pull.HeadRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+		LastCommitID: lastCommitID,
+		OldBranch:    pull.HeadBranch,
+		NewBranch:    pull.HeadBranch,
+		Message:      commitMessage,
+		Files: []*files_service.ChangeRepoFile{
+			{
+				Operation:     "update",
+				TreePath:      treePath,
+				ContentReader: strings.NewReader(content),
+			},
+		},
+		InternalPush: true,
+	})
+	if err != nil {
+		ctx.ServerError("ChangeRepoFiles", err)
+		return
+	}
+
+	// Create a comment on the PR if review summary was provided
+	if reviewComment != "" {
+		_, err = issue_service.CreateIssueComment(ctx, ctx.Doer, ctx.Repo.Repository, issue, reviewComment, nil)
+		if err != nil {
+			log.Error("CreateIssueComment: %v", err)
+			// Don't fail the whole operation if comment creation fails
+		}
+	}
+
+	// Mark existing reviews as stale to restart the review cycle
+	if err := issues_model.MarkReviewsAsStale(ctx, issue.ID); err != nil {
+		log.Error("MarkReviewsAsStale: %v", err)
+	}
+
+	// Redirect back to the PR conversation page
+	ctx.JSONRedirect(issue.Link())
 }
 
 func indexCommit(commits []*git.Commit, commitID string) *git.Commit {
