@@ -1130,26 +1130,39 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 	ctx.Data["CanBlockUser"] = func(blocker, blockee *user_model.User) bool {
 		return user_service.CanBlockUser(ctx, ctx.Doer, blocker, blockee)
 	}
-	if isShowAllCommits && pull.Flow == issues_model.PullRequestFlowGithub {
+	// Show "Edit this file" only when the viewing user is the PR poster,
+	// the PR is still open, we are viewing all commits (cumulative diff), and
+	// there is at least one non-dismissed ReviewTypeReject review whose
+	// CommitID matches the current head (i.e. no new commits were pushed
+	// after the reviewer requested changes).  This mirrors the gate in
+	// SubmitPullEditPost so the button is only shown when the action will
+	// actually be permitted.
+	if isShowAllCommits && pull.Flow == issues_model.PullRequestFlowGithub &&
+		!pull.HasMerged && !issue.IsClosed &&
+		ctx.IsSigned && issue.IsPoster(ctx.Doer.ID) {
 		if err := pull.LoadHeadRepo(ctx); err != nil {
 			ctx.ServerError("LoadHeadRepo", err)
 			return
 		}
 
 		if pull.HeadRepo != nil {
-			if !pull.HasMerged && ctx.Doer != nil {
-				perm, err := access_model.GetUserRepoPermission(ctx, pull.HeadRepo, ctx.Doer)
-				if err != nil {
-					ctx.ServerError("GetUserRepoPermission", err)
-					return
-				}
-
-				if perm.CanWrite(unit.TypeCode) || issues_model.CanMaintainerWriteToBranch(ctx, perm, pull.HeadBranch, ctx.Doer) {
+			rejectReviews, err := issues_model.FindReviews(ctx, issues_model.FindReviewOptions{
+				IssueID:   issue.ID,
+				Types:     []issues_model.ReviewType{issues_model.ReviewTypeReject},
+				Dismissed: optional.Some(false),
+			})
+			if err != nil {
+				ctx.ServerError("FindReviews", err)
+				return
+			}
+			for _, r := range rejectReviews {
+				if r.CommitID == headCommitID {
 					ctx.Data["CanEditFile"] = true
 					ctx.Data["EditFileTooltip"] = ctx.Tr("repo.editor.edit_this_file")
 					ctx.Data["HeadRepoLink"] = pull.HeadRepo.Link()
 					ctx.Data["HeadBranchName"] = pull.HeadBranch
 					ctx.Data["BackToLink"] = setting.AppSubURL + ctx.Req.URL.RequestURI()
+					break
 				}
 			}
 		}
