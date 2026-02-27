@@ -32,6 +32,7 @@ import (
 	"code.gitea.io/gitea/modules/graceful"
 	issue_template "code.gitea.io/gitea/modules/issue/template"
 	"code.gitea.io/gitea/modules/log"
+	"code.gitea.io/gitea/modules/optional"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/templates"
 	"code.gitea.io/gitea/modules/util"
@@ -54,6 +55,7 @@ const (
 	tplCompareDiff templates.TplName = "repo/diff/compare"
 	tplPullCommits templates.TplName = "repo/pulls/commits"
 	tplPullFiles   templates.TplName = "repo/pulls/files"
+	tplPullEdit    templates.TplName = "repo/pulls/edit"
 
 	pullRequestTemplateKey = "PullRequestTemplate"
 )
@@ -656,6 +658,103 @@ func ViewPullCommits(ctx *context.Context) {
 	}
 	getBranchData(ctx, issue)
 	ctx.HTML(http.StatusOK, tplPullCommits)
+}
+
+// ViewPullEdit renders the article editor for revising a PR's content.
+// Only accessible to the PR poster when the PR is open and has received a "Request Changes" review.
+func ViewPullEdit(ctx *context.Context) {
+	ctx.Data["PageIsPullList"] = true
+	ctx.Data["PageIsPullEdit"] = true
+
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+	pull := issue.PullRequest
+
+	// Gate access: must be signed in and be the issue poster
+	if !ctx.IsSigned || !issue.IsPoster(ctx.Doer.ID) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// PR must be open (not closed, not merged)
+	if issue.IsClosed || pull.HasMerged {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Check for non-dismissed ReviewTypeReject reviews (changes requested)
+	reviews, err := issues_model.FindReviews(ctx, issues_model.FindReviewOptions{
+		IssueID:   issue.ID,
+		Types:     []issues_model.ReviewType{issues_model.ReviewTypeReject},
+		Dismissed: optional.Some(false),
+	})
+	if err != nil {
+		ctx.ServerError("FindReviews", err)
+		return
+	}
+	if len(reviews) == 0 {
+		ctx.NotFound(nil)
+		return
+	}
+	ctx.Data["HasChangesRequested"] = true
+
+	// Load head repo
+	if err := pull.LoadHeadRepo(ctx); err != nil {
+		ctx.ServerError("LoadHeadRepo", err)
+		return
+	}
+	if pull.HeadRepo == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Open the head repo's git repository
+	headGitRepo, err := gitrepo.OpenRepository(ctx, pull.HeadRepo)
+	if err != nil {
+		ctx.ServerError("OpenRepository", err)
+		return
+	}
+	defer headGitRepo.Close()
+
+	// Verify head branch exists
+	if !headGitRepo.IsBranchExist(pull.HeadBranch) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Get the head branch commit
+	commit, err := headGitRepo.GetBranchCommit(pull.HeadBranch)
+	if err != nil {
+		ctx.ServerError("GetBranchCommit", err)
+		return
+	}
+
+	// Read @README.md content from head branch
+	readmeTreePath := "@README.md"
+	fileContent, err := commit.GetFileContent(readmeTreePath, int(setting.UI.MaxDisplayFileSize))
+	if err != nil {
+		// Try without @ prefix
+		readmeTreePath = "README.md"
+		fileContent, err = commit.GetFileContent(readmeTreePath, int(setting.UI.MaxDisplayFileSize))
+		if err != nil {
+			ctx.ServerError("GetFileContent", err)
+			return
+		}
+	}
+
+	// Set context data for the editor template
+	ctx.Data["FileContent"] = fileContent
+	ctx.Data["BranchName"] = pull.HeadBranch
+	ctx.Data["ReadmeTreePath"] = readmeTreePath
+	ctx.Data["LastCommitID"] = commit.ID.String()
+	ctx.Data["RepoOperationsLink"] = pull.HeadRepo.OperationsLink()
+
+	ctx.Data["IsIssuePoster"] = true
+	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
+
+	ctx.HTML(http.StatusOK, tplPullEdit)
 }
 
 func indexCommit(commits []*git.Commit, commitID string) *git.Commit {

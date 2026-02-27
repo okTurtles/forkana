@@ -10,6 +10,12 @@
 			{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_files")}}
 			<span class="ui small label pill-label">{{if .NumFiles}}{{.NumFiles}}{{else}}-{{end}}</span>
 		</a>
+		{{if and .IsIssuePoster (not .Issue.IsClosed) (not .Issue.PullRequest.HasMerged) .HasChangesRequested}}
+		<a class="item {{if .PageIsPullEdit}}active{{end}}" href="{{.Issue.Link}}/edit">
+			{{svg "octicon-pencil"}}
+			{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.editor.edit_file")}}
+		</a>
+		{{end}}
 	</div>
 	<div class="ui tabs divider"></div>
 </div>
