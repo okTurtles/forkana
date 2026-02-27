@@ -797,7 +797,8 @@ func SubmitPullEditPost(ctx *context.Context) {
 		return
 	}
 
-	// Load head repo
+	// Load head and base repos. BaseRepo is required by CreatePushPullComment,
+	// which opens its git repo to enumerate the new commits.
 	if err := pull.LoadHeadRepo(ctx); err != nil {
 		ctx.ServerError("LoadHeadRepo", err)
 		return
@@ -806,6 +807,12 @@ func SubmitPullEditPost(ctx *context.Context) {
 		ctx.NotFound(nil)
 		return
 	}
+	if err := pull.LoadBaseRepo(ctx); err != nil {
+		ctx.ServerError("LoadBaseRepo", err)
+		return
+	}
+	// CreatePushPullComment reads pr.Issue to attach the timeline comment.
+	pull.Issue = issue
 
 	// Read form data
 	content := ctx.Req.FormValue("content")
@@ -834,7 +841,7 @@ func SubmitPullEditPost(ctx *context.Context) {
 	}
 
 	// Commit changes to the PR head branch
-	_, err = files_service.ChangeRepoFiles(ctx, pull.HeadRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+	filesResponse, err := files_service.ChangeRepoFiles(ctx, pull.HeadRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: lastCommitID,
 		OldBranch:    pull.HeadBranch,
 		NewBranch:    pull.HeadBranch,
@@ -851,6 +858,18 @@ func SubmitPullEditPost(ctx *context.Context) {
 	if err != nil {
 		ctx.ServerError("ChangeRepoFiles", err)
 		return
+	}
+
+	// Record a "pushed N commits" timeline entry on the PR, mirroring what a
+	// regular git push would produce via AddTestPullRequestTask.
+	if filesResponse != nil && filesResponse.Commit != nil {
+		newCommitID := filesResponse.Commit.SHA
+		pushComment, err := pull_service.CreatePushPullComment(ctx, ctx.Doer, pull, lastCommitID, newCommitID, false)
+		if err != nil {
+			log.Error("SubmitPullEditPost: CreatePushPullComment: %v", err)
+		} else if pushComment != nil {
+			notify_service.PullRequestPushCommits(ctx, ctx.Doer, pull, pushComment)
+		}
 	}
 
 	// Create a comment on the PR if review summary was provided
