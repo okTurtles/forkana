@@ -4,11 +4,12 @@
 	<div class="diff-info-banner" id="diff-info-banner">
 		<span class="info-icon">{{svg "octicon-info" 16}}</span>
 		<span class="info-text">Click a paragraph to add a comment.</span>
-		<button class="info-dismiss" onclick="this.parentElement.style.display='none'; try{localStorage.setItem('diff_info_dismissed','1')}catch(e){}" aria-label="Dismiss">
+		<button class="info-dismiss" id="diff-info-dismiss" aria-label="Dismiss">
 			{{svg "octicon-x" 16}}
 		</button>
 	</div>
-	<script>try{if(localStorage.getItem('diff_info_dismissed')==='1'){document.getElementById('diff-info-banner').style.display='none';}}catch(e){}</script>
+	<script>try{if(localStorage.getItem('diff_info_dismissed')==='1'){document.getElementById('diff-info-banner').style.display='none';}}catch(e){}
+	document.getElementById('diff-info-dismiss')?.addEventListener('click',function(){this.parentElement.style.display='none';try{localStorage.setItem('diff_info_dismissed','1')}catch(e){}});</script>
 	{{end}}
 	<div class="diff-detail-box">
 		<div class="tw-flex tw-items-center tw-flex-wrap tw-gap-2 tw-ml-0.5">
