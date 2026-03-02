@@ -38,7 +38,7 @@
 				<a class="ui tiny basic button diff-toggle-mirror-btn" href="?style={{if $.IsSplitStyle}}unified{{else}}split{{end}}&whitespace={{$.WhitespaceBehavior}}&show-outdated={{$.ShowOutdatedComments}}" title="Toggle split/unified view">{{svg "octicon-mirror" 16}}</a>
 			{{end}}
 			{{template "repo/diff/options_dropdown" .}}
-			{{if and .PageIsPullFiles .IsShowingAllCommits (not $.Repository.IsArchived)}}
+			{{if and .PageIsPullFiles .IsShowingAllCommits (not $.Repository.IsArchived) $.SignedUserID}}
 				{{template "repo/diff/review_submit" .}}
 			{{end}}
 		</div>
