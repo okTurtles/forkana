@@ -304,13 +304,6 @@
   margin-bottom: 16px;
 }
 
-.review-title-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  font-size: 14px;
-}
 
 .review-radio-options {
   display: flex;

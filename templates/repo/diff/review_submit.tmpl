@@ -21,10 +21,6 @@
 			</div>
 			<div class="review-modal-body">
 				<div class="field">
-					<label class="review-field-label">{{ctx.Locale.Tr "repo.diff.review.add_title"}}</label>
-					<input type="text" name="title" class="review-title-input" placeholder="">
-				</div>
-				<div class="field">
 					<label class="review-field-label">{{ctx.Locale.Tr "repo.diff.review.summary"}}</label>
 					{{template "shared/combomarkdowneditor" (dict
 						"MarkdownPreviewInRepo" $.Repository
