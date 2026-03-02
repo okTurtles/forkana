@@ -3,7 +3,7 @@
 	{{if and .PageIsPullFiles (not .DiffNotAvailable)}}
 	<div class="diff-info-banner" id="diff-info-banner">
 		<span class="info-icon">{{svg "octicon-info" 16}}</span>
-		<span class="info-text">Click a paragraph to add a comment.</span>
+		<span class="info-text">{{ctx.Locale.Tr "repo.diff.info_banner_text"}}</span>
 		<button class="info-dismiss" id="diff-info-dismiss" aria-label="Dismiss">
 			{{svg "octicon-x" 16}}
 		</button>
