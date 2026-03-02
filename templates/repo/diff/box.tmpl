@@ -49,8 +49,11 @@
 		(function() {
 			var params = new URLSearchParams(window.location.search);
 			if (!params.has('style') && window.innerWidth <= 768) {
-				params.set('style', 'unified');
-				window.location.search = params.toString();
+				if (!sessionStorage.getItem('mobile_diff_redirected')) {
+					sessionStorage.setItem('mobile_diff_redirected', '1');
+					params.set('style', 'unified');
+					window.location.search = params.toString();
+				}
 			}
 		})();
 	</script>
