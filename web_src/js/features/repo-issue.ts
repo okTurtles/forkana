@@ -337,6 +337,11 @@ export function initRepoPullRequestReview() {
         elReviewOverlay.style.display = 'none';
       }
     });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && elReviewOverlay.style.display === 'flex') {
+        elReviewOverlay.style.display = 'none';
+      }
+    });
   }
 
   addDelegatedEventListener(document, 'click', '.add-code-comment', async (el, e) => {

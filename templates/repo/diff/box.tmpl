@@ -3,12 +3,13 @@
 	{{if and .PageIsPullFiles (not .DiffNotAvailable)}}
 	<div class="diff-info-banner" id="diff-info-banner">
 		<span class="info-icon">{{svg "octicon-info" 16}}</span>
-		<span class="info-text">Click a paragraph to add a comment.</span>
-		<button class="info-dismiss" onclick="this.parentElement.style.display='none'; try{localStorage.setItem('diff_info_dismissed','1')}catch(e){}" aria-label="Dismiss">
+		<span class="info-text">{{ctx.Locale.Tr "repo.diff.info_banner_text"}}</span>
+		<button class="info-dismiss" id="diff-info-dismiss" aria-label="Dismiss">
 			{{svg "octicon-x" 16}}
 		</button>
 	</div>
-	<script>try{if(localStorage.getItem('diff_info_dismissed')==='1'){document.getElementById('diff-info-banner').style.display='none';}}catch(e){}</script>
+	<script>try{if(localStorage.getItem('diff_info_dismissed')==='1'){document.getElementById('diff-info-banner').style.display='none';}}catch(e){}
+	document.getElementById('diff-info-dismiss')?.addEventListener('click',function(){this.parentElement.style.display='none';try{localStorage.setItem('diff_info_dismissed','1')}catch(e){}});</script>
 	{{end}}
 	<div class="diff-detail-box">
 		<div class="tw-flex tw-items-center tw-flex-wrap tw-gap-2 tw-ml-0.5">
@@ -38,7 +39,7 @@
 				<a class="ui tiny basic button diff-toggle-mirror-btn" href="?style={{if $.IsSplitStyle}}unified{{else}}split{{end}}&whitespace={{$.WhitespaceBehavior}}&show-outdated={{$.ShowOutdatedComments}}" title="Toggle split/unified view">{{svg "octicon-mirror" 16}}</a>
 			{{end}}
 			{{template "repo/diff/options_dropdown" .}}
-			{{if and .PageIsPullFiles (not $.Repository.IsArchived)}}
+			{{if and .PageIsPullFiles (not $.Repository.IsArchived) $.SignedUserID}}
 				{{template "repo/diff/review_submit" .}}
 			{{end}}
 		</div>
@@ -48,8 +49,11 @@
 		(function() {
 			var params = new URLSearchParams(window.location.search);
 			if (!params.has('style') && window.innerWidth <= 768) {
-				params.set('style', 'unified');
-				window.location.search = params.toString();
+				if (!sessionStorage.getItem('mobile_diff_redirected')) {
+					sessionStorage.setItem('mobile_diff_redirected', '1');
+					params.set('style', 'unified');
+					window.location.search = params.toString();
+				}
 			}
 		})();
 	</script>

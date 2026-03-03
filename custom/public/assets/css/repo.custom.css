@@ -304,13 +304,6 @@
   margin-bottom: 16px;
 }
 
-.review-title-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  font-size: 14px;
-}
 
 .review-radio-options {
   display: flex;
@@ -363,6 +356,30 @@
   border-radius: 6px !important;
   padding: 8px 16px !important;
   font-weight: var(--font-weight-semibold) !important;
+}
+
+/* Remove comment border/bg overrides inside conversation-holder (PR diff inline comments) */
+.conversation-holder .comment .comment-container {
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.conversation-holder .comment-header {
+  background: transparent !important;
+  border-bottom: none !important;
+}
+
+/* Remove the left-pointing arrow on comment bubbles */
+.avatar-content-left-arrow::before,
+.avatar-content-left-arrow::after {
+  display: none !important;
+}
+
+/* PR diff file comment styling */
+.pull.files.diff .comment {
+  border: 1px solid var(--color-secondary);
+  padding: 0rem .4rem;
+  border-radius: .5rem;
 }
 
 .content.comment-container .ui.attached.segment {
