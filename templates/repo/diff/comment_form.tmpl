@@ -36,11 +36,11 @@
 					<input type="hidden" name="reply" value="{{$.reply}}">
 					<input type="hidden" name="single_review" value="true">
 				{{else}}
-					<button name="single_review" value="true" type="submit" class="ui submit tiny basic button btn-add-single">Post immediately</button>
+					<button name="single_review" value="true" type="submit" class="ui submit tiny basic button btn-add-single">{{ctx.Locale.Tr "repo.diff.comment.post_immediately"}}</button>
 					{{if $.root.CurrentReview}}
-						<button name="pending_review" type="submit" class="ui submit primary tiny button btn-add-comment">Save draft</button>
+						<button name="pending_review" type="submit" class="ui submit primary tiny button btn-add-comment">{{ctx.Locale.Tr "repo.diff.comment.save_draft"}}</button>
 					{{else}}
-						<button name="pending_review" type="submit" class="ui submit primary tiny button btn-start-review">Save draft</button>
+						<button name="pending_review" type="submit" class="ui submit primary tiny button btn-start-review">{{ctx.Locale.Tr "repo.diff.comment.save_draft"}}</button>
 					{{end}}
 				{{end}}
 			</div>
