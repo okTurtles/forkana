@@ -1,5 +1,16 @@
 {{$showFileTree := (and (not .DiffNotAvailable) (gt .DiffShortStat.NumFiles 1))}}
 <div>
+	{{if and .PageIsPullFiles (not .DiffNotAvailable)}}
+	<div class="diff-info-banner" id="diff-info-banner">
+		<span class="info-icon">{{svg "octicon-info" 16}}</span>
+		<span class="info-text">{{ctx.Locale.Tr "repo.diff.info_banner_text"}}</span>
+		<button class="info-dismiss" id="diff-info-dismiss" aria-label="Dismiss">
+			{{svg "octicon-x" 16}}
+		</button>
+	</div>
+	<script>try{if(localStorage.getItem('diff_info_dismissed')==='1'){document.getElementById('diff-info-banner').style.display='none';}}catch(e){}
+	document.getElementById('diff-info-dismiss')?.addEventListener('click',function(){this.parentElement.style.display='none';try{localStorage.setItem('diff_info_dismissed','1')}catch(e){}});</script>
+	{{end}}
 	<div class="diff-detail-box">
 		<div class="tw-flex tw-items-center tw-flex-wrap tw-gap-2 tw-ml-0.5">
 			{{if $showFileTree}}
@@ -19,34 +30,33 @@
 			{{end}}
 			{{if not .DiffNotAvailable}}
 				<div class="diff-detail-stats tw-flex tw-items-center tw-flex-wrap">
-					{{svg "octicon-diff" 16 "tw-mr-1"}}{{ctx.Locale.Tr "repo.diff.stats_desc" .DiffShortStat.NumFiles .DiffShortStat.TotalAddition .DiffShortStat.TotalDeletion}}
+					{{ctx.Locale.Tr "repo.diff.stats_desc" (Eval .DiffShortStat.TotalAddition "+" .DiffShortStat.TotalDeletion)}}
 				</div>
 			{{end}}
 		</div>
-		<div class="diff-detail-actions">
-			{{if and .PageIsPullFiles $.SignedUserID (not .DiffNotAvailable)}}
-				<div class="not-mobile tw-flex tw-items-center tw-flex-col tw-whitespace-nowrap tw-mr-1">
-					<label for="viewed-files-summary" id="viewed-files-summary-label" data-text-changed-template="{{ctx.Locale.Tr "repo.pulls.viewed_files_label"}}">
-						{{ctx.Locale.Tr "repo.pulls.viewed_files_label" .Diff.NumViewedFiles .DiffShortStat.NumFiles}}
-					</label>
-					<progress id="viewed-files-summary" value="{{.Diff.NumViewedFiles}}" max="{{.DiffShortStat.NumFiles}}"></progress>
-				</div>
+		<div class="diff-detail-actions tw-flex tw-items-center tw-gap-2">
+			{{if and .PageIsPullFiles .IsShowingAllCommits}}
+				<a class="ui tiny basic button diff-toggle-mirror-btn" href="?style={{if $.IsSplitStyle}}unified{{else}}split{{end}}&whitespace={{$.WhitespaceBehavior}}&show-outdated={{$.ShowOutdatedComments}}" title="Toggle split/unified view">{{svg "octicon-mirror" 16}}</a>
 			{{end}}
-			{{template "repo/diff/whitespace_dropdown" .}}
 			{{template "repo/diff/options_dropdown" .}}
-			{{if .PageIsPullFiles}}
-				<div id="diff-commit-select" data-merge-base="{{.MergeBase}}" data-issuelink="{{$.Issue.Link}}" data-queryparams="?style={{if $.IsSplitStyle}}split{{else}}unified{{end}}&whitespace={{$.WhitespaceBehavior}}&show-outdated={{$.ShowOutdatedComments}}" data-filter_changes_by_commit="{{ctx.Locale.Tr "repo.pulls.filter_changes_by_commit"}}">
-					{{/* the following will be replaced by vue component, but this avoids any loading artifacts till the vue component is initialized */}}
-					<div class="ui jump dropdown tiny basic button custom">
-						{{svg "octicon-git-commit"}}
-					</div>
-				</div>
-			{{end}}
-			{{if and .PageIsPullFiles $.SignedUserID}}
-				{{template "repo/diff/new_review" .}}
+			{{if and .PageIsPullFiles (not $.Repository.IsArchived) $.SignedUserID}}
+				{{template "repo/diff/review_submit" .}}
 			{{end}}
 		</div>
 	</div>
+	<script>
+		// Default to unified view on mobile if no explicit style param is set
+		(function() {
+			var params = new URLSearchParams(window.location.search);
+			if (!params.has('style') && window.innerWidth <= 768) {
+				if (!sessionStorage.getItem('mobile_diff_redirected')) {
+					sessionStorage.setItem('mobile_diff_redirected', '1');
+					params.set('style', 'unified');
+					window.location.search = params.toString();
+				}
+			}
+		})();
+	</script>
 	{{if not .DiffNotAvailable}}
 		{{if and .IsShowingOnlySingleCommit .PageIsPullFiles}}
 			<div class="ui info message">

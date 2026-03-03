@@ -1,0 +1,443 @@
+/**
+ * Forkana-specific repository page styles
+ *
+ * Put your custom repo styles here instead of modifying web_src/css/repo.css
+ * This file won't be affected by merges from upstream Gitea.
+ */
+
+/* Pull request layout - full width without sidebar */
+.issue-content-left-pull-request {
+  margin: 0 !important;
+  width: 100%;
+}
+
+/* Hide secondary-nav (Bubble/Table/Article view bar) on PR pages */
+.repository.view.issue .secondary-nav {
+  display: none !important;
+}
+
+/* Padding for empty content placeholder in comments */
+.repository.view.issue .comment-list .comment .no-content {
+  padding: 1rem;
+}
+
+/* Issue title font size and weight */
+.issue-title h1 {
+  font-size: 20px !important;
+  font-weight: var(--font-weight-bold) !important;
+}
+
+/* More padding on diff detail box and ensure high z-index for sticky header and contained modal */
+.diff-detail-box {
+  padding: .8rem .4rem .8rem .4rem !important;
+  z-index: 105 !important;
+  margin-bottom: .5rem !important;
+}
+
+/* #1 — "Change request" navbar pill style */
+.navbar-pill-active {
+  background: var(--color-navbar-pill-bg) !important;
+  border-radius: 6px;
+  padding: 4px 12px !important;
+  font-weight: var(--font-weight-medium);
+}
+
+.navbar-view-modes {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
+  cursor: default;
+  padding-right: 4px !important;
+}
+
+/* #4 — Article reference pill in merge info */
+.article-ref-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border: none;
+  border-radius: 6px;
+  font-weight: var(--font-weight-medium);
+  font-size: 0.85em;
+  background: var(--color-diff-added-row-bg);
+  color: var(--color-primary);
+  vertical-align: middle;
+}
+
+/* #5 — Tab count: plain inline number instead of badge circle */
+.issue-content .tabular.menu .item .ui.label {
+  background: transparent !important;
+  color: inherit !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 0 0 4px !important;
+  font-weight: var(--font-weight-normal);
+  font-size: inherit;
+  min-width: unset;
+  min-height: unset;
+}
+
+/* #6 — Info banner: "Click a paragraph to add a comment" */
+.diff-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin: 0 0 12px 0;
+  background: var(--color-banner-bg);
+  border: 1px solid var(--color-banner-border);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: var(--color-banner-text);
+}
+
+.diff-info-banner .info-icon {
+  flex-shrink: 0;
+}
+
+.diff-info-banner .info-text {
+  flex: 1;
+}
+
+.diff-info-banner .info-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-banner-text);
+  font-size: 1.1rem;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.diff-info-banner .info-dismiss:hover {
+  background: var(--color-banner-hover);
+}
+
+/* #7b — Submit review button in changes bar */
+.diff-submit-review-btn {
+  color: var(--color-surface) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 6px 16px !important;
+  font-weight: var(--font-weight-semibold) !important;
+  font-size: 0.85rem !important;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Collapse all button */
+.diff-collapse-all-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+}
+
+.diff-collapse-all-btn:hover {
+  background: var(--color-surface-muted);
+}
+
+/* #8 — Split diff column headers: neutral gray instead of purple */
+.diff-split-header {
+  background: var(--color-surface-muted);
+}
+
+.diff-split-header tr:first-child th:first-child {
+  border-top-left-radius: 8px;
+}
+
+.diff-split-header tr:first-child th:last-child {
+  border-top-right-radius: 8px;
+}
+
+.diff-split-header th {
+  padding: 0.75rem 1rem;
+  font-weight: var(--font-weight-medium);
+  font-size: 0.875rem;
+  text-align: center;
+  color: var(--color-text-primary);
+}
+
+.diff-split-header-left {
+  border-right: 1px solid var(--color-border-light);
+}
+
+.diff-split-header-right {
+  background: var(--color-surface-subtle);
+}
+
+/* Hide the collapsible file header for changes */
+.diff-file-header {
+  display: none !important;
+}
+
+/* Make the diff file box border visible with rounded corners */
+.diff-file-box {
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+/* Remove inner borders to prevent double-border */
+.diff-file-box .ui.attached.table,
+.diff-file-box .ui.attached.header,
+.diff-file-box .file-body.file-code {
+  border: none !important;
+}
+
+
+/* #9 — Hide hunk header rows (@@ ... @@) */
+.code-diff-split tr[data-line-type="tag"],
+.code-diff-unified tr[data-line-type="tag"] {
+  display: none !important;
+}
+
+/* #10 — Deletion lines: white background per design */
+.code-diff-unified .del-code,
+.code-diff-unified .del-code td,
+.code-diff-split .del-code .lines-num-old,
+.code-diff-split .del-code .lines-escape-old,
+.code-diff-split .del-code .lines-code-old {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border-muted) !important;
+}
+
+.code-diff-unified .del-code .lines-num,
+.code-diff-split .del-code .lines-num {
+  background: var(--color-surface-muted) !important;
+}
+
+/* Addition lines: light lavender background per design */
+.code-diff-unified .add-code,
+.code-diff-unified .add-code td,
+.code-diff-split .add-code .lines-num-new,
+.code-diff-split .add-code .lines-escape-new,
+.code-diff-split .add-code .lines-code-new {
+  background: var(--color-diff-added-row-bg) !important;
+  border-color: var(--color-banner-border) !important;
+}
+
+.code-diff-unified .add-code .lines-num,
+.code-diff-split .add-code .lines-num {
+  background: var(--color-diff-add-num-bg) !important;
+}
+
+/* #11 — Removed/added word highlighting */
+.removed-code {
+  background: var(--color-diff-del-word-bg) !important;
+  font-weight: var(--font-weight-bold);
+}
+
+.added-code {
+  background: var(--color-diff-added-row-bg) !important;
+  font-weight: var(--font-weight-bold);
+}
+
+/* Review Modal Styles */
+.review-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: var(--color-overlay-backdrop);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.review-modal {
+  background: var(--color-surface);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px var(--color-shadow-medium);
+  width: 800px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.review-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.review-modal-title {
+  font-weight: var(--font-weight-semibold);
+  font-size: 16px;
+  color: var(--color-text-primary);
+}
+
+.review-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  line-height: 1;
+  padding: 0;
+}
+
+.review-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.review-field-label {
+  display: block;
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--color-text-primary);
+}
+
+.review-modal-body .field {
+  margin-bottom: 16px;
+}
+
+
+.review-radio-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.review-radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.review-radio-option input[type="radio"] {
+  margin-top: 4px;
+  transform: scale(1.2);
+}
+
+.review-radio-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.review-radio-label {
+  font-weight: var(--font-weight-semibold);
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+.review-radio-desc {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.review-modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  background: var(--color-surface-muted);
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.review-submit-btn {
+  color: var(--color-surface) !important;
+  border-radius: 6px !important;
+  padding: 8px 16px !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+/* Remove comment border/bg overrides inside conversation-holder (PR diff inline comments) */
+.conversation-holder .comment .comment-container {
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.conversation-holder .comment-header {
+  background: transparent !important;
+  border-bottom: none !important;
+}
+
+/* Remove the left-pointing arrow on comment bubbles */
+.avatar-content-left-arrow::before,
+.avatar-content-left-arrow::after {
+  display: none !important;
+}
+
+/* PR diff file comment styling */
+.pull.files.diff .comment {
+  border: 1px solid var(--color-secondary);
+  padding: 0rem .4rem;
+  border-radius: .5rem;
+}
+
+.content.comment-container .ui.attached.segment {
+  padding: 1rem;
+}
+
+/* Align markdown toolbar with tabs on larger containers */
+.combo-markdown-editor {
+  container-type: inline-size;
+  position: relative;
+}
+
+@container (max-width: 639px) {
+  .combo-markdown-editor markdown-toolbar {
+    border-right: 1px solid var(--color-border-input);
+    border-left: 1px solid var(--color-border-input);
+    padding: 0.5rem .5rem 0 .5rem;
+  }
+}
+
+@container (min-width: 640px) {
+  /* Make room for the toolbar in the header */
+  .combo-markdown-editor .ui.top.tabular.menu {
+    padding-right: 400px;
+  }
+
+  /* Position toolbar in top right */
+  .combo-markdown-editor markdown-toolbar {
+    position: absolute;
+    top: 1rem; /* Align with tabs */
+    right: 0;
+    margin: 0 !important;
+    padding: 0 10px !important;
+    background: transparent !important;
+    border: none !important;
+    z-index: 10;
+  }
+
+  /* Adjust spacing for the editor content */
+  .combo-markdown-editor .ui.tab[data-tab-panel="markdown-writer"] {
+    margin-top: 0;
+  }
+}
+
+.combo-markdown-editor .ui.top.tabular.menu {
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border-input);
+  padding-left: .5rem;
+  padding-top: .5rem;
+  border-radius: .5rem .5rem 0 0;
+  min-height: 40px;
+  margin-bottom: 0 !important; /* Remove gap */
+}
+
+.combo-markdown-editor text-expander {
+  padding: 0.5rem;
+  border: 1px solid var(--color-border-input);
+  border-top: 0;
+  border-radius: 0 0 .5rem .5rem;
+  display: block; /* Ensure it behaves like a block for borders/padding */
+}

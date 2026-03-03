@@ -1,0 +1,20 @@
+{{/* Template for Toast UI Editor in comment/issue forms
+* TextareaName: name attribute for the textarea
+* TextareaContent: initial content for the textarea
+* TextareaPlaceholder: placeholder text for the textarea
+* DropzoneParentContainer: CSS selector for the parent container with dropzone
+* PreviewUrl: URL for markdown preview (optional)
+* PreviewContext: context path for preview (optional)
+*/}}
+
+<div class="toast-comment-editor"
+    {{if .DropzoneParentContainer}}data-dropzone-parent-container="{{.DropzoneParentContainer}}"{{end}}
+    {{if .PreviewUrl}}data-preview-url="{{.PreviewUrl}}"{{end}}
+    {{if .PreviewContext}}data-preview-context="{{.PreviewContext}}"{{end}}>
+    <div class="editor-loading is-loading"></div>
+    <textarea class="toast-editor-textarea tw-hidden"
+        {{if .TextareaName}}name="{{.TextareaName}}"{{end}}
+        {{if .TextareaPlaceholder}}placeholder="{{.TextareaPlaceholder}}"{{end}}
+    >{{.TextareaContent}}</textarea>
+    <div class="toast-editor-wrapper" style="min-height: 200px;"></div>
+</div>

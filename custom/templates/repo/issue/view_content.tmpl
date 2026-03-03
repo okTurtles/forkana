@@ -144,13 +144,12 @@
 <template id="issue-comment-editor-template">
 	<form class="ui form comment">
 		<div class="field">
-			{{template "shared/combomarkdowneditor" (dict
-				"CustomInit" true
-				"MarkdownPreviewInRepo" $.Repository
-				"MarkdownPreviewMode" "comment"
-				"TextareaName" "content"
-				"DropzoneParentContainer" ".ui.form"
-			)}}
+			{{template "shared/toasteditor" (dict
+			"TextareaName" "content"
+			"DropzoneParentContainer" ".ui.form"
+			"PreviewUrl" (print $.Repository.Link "/markup")
+			"PreviewContext" $.Repository.Link
+		)}}
 		</div>
 
 		{{if .IsAttachmentEnabled}}
