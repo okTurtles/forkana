@@ -858,6 +858,16 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 				}
 				canWriteToHeadRepo = true
 			}
+			// Load HeadRepo's BaseRepo if it's a fork (for "Fork of:" display)
+			if pull.HeadRepo.IsFork {
+				if err := pull.HeadRepo.GetBaseRepo(ctx); err != nil {
+					log.Error("GetBaseRepo for HeadRepo: %v", err)
+				} else if pull.HeadRepo.BaseRepo != nil {
+					if err := pull.HeadRepo.BaseRepo.LoadOwner(ctx); err != nil {
+						log.Error("LoadOwner for HeadRepo.BaseRepo: %v", err)
+					}
+				}
+			}
 		}
 
 		if err := pull.LoadBaseRepo(ctx); err != nil {

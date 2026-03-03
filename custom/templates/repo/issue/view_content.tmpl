@@ -1,5 +1,6 @@
 <div class="issue-content">
 	{{$createdStr:= DateUtils.TimeSince .Issue.CreatedUnix}}
+	{{$issueTypePath := "issues"}}{{if .Issue.IsPull}}{{$issueTypePath = "pulls"}}{{end}}
 	<div class="issue-content-left{{if .Issue.IsPull}}-pull-request{{end}} comment-list prevent-before-timeline">
 		<div class="ui timeline">
 			<div id="{{.Issue.HashTag}}" class="timeline-item comment first">
@@ -39,7 +40,7 @@
 						<div class="comment-header-right">
 							{{template "repo/issue/view_content/show_role" dict "ShowRole" .Issue.ShowRole "IgnorePoster" true}}
 							{{if not $.Repository.IsArchived}}
-								{{template "repo/issue/view_content/add_reaction" dict "ActionURL" (printf "%s/issues/%d/reactions" $.RepoLink .Issue.Index)}}
+								{{template "repo/issue/view_content/add_reaction" dict "ActionURL" (printf "%s/%s/%d/reactions" $.RepoLink $issueTypePath .Issue.Index)}}
 							{{end}}
 							{{template "repo/issue/view_content/context_menu" dict "item" .Issue "delete" false "issue" true "diff" false "IsCommentPoster" $.IsIssuePoster}}
 						</div>
@@ -53,14 +54,14 @@
 							{{end}}
 						</div>
 						<div id="issue-{{.Issue.ID}}-raw" class="raw-content tw-hidden">{{.Issue.Content}}</div>
-						<div class="edit-content-zone tw-hidden" data-update-url="{{$.RepoLink}}/issues/{{.Issue.Index}}/content" data-content-version="{{.Issue.ContentVersion}}" data-context="{{.RepoLink}}" data-attachment-url="{{$.RepoLink}}/issues/{{.Issue.Index}}/attachments" data-view-attachment-url="{{$.RepoLink}}/issues/{{.Issue.Index}}/view-attachments"></div>
+						<div class="edit-content-zone tw-hidden" data-update-url="{{$.RepoLink}}/{{$issueTypePath}}/{{.Issue.Index}}/content" data-content-version="{{.Issue.ContentVersion}}" data-context="{{.RepoLink}}" data-attachment-url="{{$.RepoLink}}/{{$issueTypePath}}/{{.Issue.Index}}/attachments" data-view-attachment-url="{{$.RepoLink}}/{{$issueTypePath}}/{{.Issue.Index}}/view-attachments"></div>
 						{{if .Issue.Attachments}}
 							{{template "repo/issue/view_content/attachments" dict "Attachments" .Issue.Attachments "RenderedContent" .Issue.RenderedContent}}
 						{{end}}
 					</div>
 					{{$reactions := .Issue.Reactions.GroupByType}}
 					{{if $reactions}}
-						{{template "repo/issue/view_content/reactions" dict "ActionURL" (printf "%s/issues/%d/reactions" $.RepoLink .Issue.Index) "Reactions" $reactions}}
+						{{template "repo/issue/view_content/reactions" dict "ActionURL" (printf "%s/%s/%d/reactions" $.RepoLink $issueTypePath .Issue.Index) "Reactions" $reactions}}
 					{{end}}
 				</div>
 			</div>
@@ -79,7 +80,7 @@
 					</a>
 					<div class="content">
 						<div class="ui segment avatar-content-left-arrow">
-							<form class="ui form form-fetch-action" id="comment-form" action="{{$.RepoLink}}/issues/{{.Issue.Index}}/comments" method="post">
+							<form class="ui form form-fetch-action" id="comment-form" action="{{$.RepoLink}}/{{$issueTypePath}}/{{.Issue.Index}}/comments" method="post">
 								{{template "repo/issue/comment_tab" .}}
 								{{.CsrfTokenHtml}}
 								<div class="field footer">
@@ -143,13 +144,12 @@
 <template id="issue-comment-editor-template">
 	<form class="ui form comment">
 		<div class="field">
-			{{template "shared/combomarkdowneditor" (dict
-				"CustomInit" true
-				"MarkdownPreviewInRepo" $.Repository
-				"MarkdownPreviewMode" "comment"
-				"TextareaName" "content"
-				"DropzoneParentContainer" ".ui.form"
-			)}}
+			{{template "shared/toasteditor" (dict
+			"TextareaName" "content"
+			"DropzoneParentContainer" ".ui.form"
+			"PreviewUrl" (print $.Repository.Link "/markup")
+			"PreviewContext" $.Repository.Link
+		)}}
 		</div>
 
 		{{if .IsAttachmentEnabled}}

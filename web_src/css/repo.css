@@ -27,77 +27,8 @@
 .repository .unicode-escaped .ambiguous-code-point {
   border: 1px var(--color-yellow) solid;
 }
-
-.issue-content {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-@media (max-width: 767.98px) {
-  .issue-content {
-    flex-direction: column;
-  }
-}
-
-.issue-content-left {
-  margin: 0 !important;
-  width: calc(100% - 316px);
-}
-
-.issue-content-left-pull-request {
-  margin: 0 !important;
-  width: 100%;
-}
-
-.issue-content-right {
-  margin: 0 !important;
-  width: 300px;
-}
-
-.issue-content-right .ui.dropdown.full-width {
-  width: 100%;
-}
-
-.issue-content-right .ui.dropdown.full-width > .fixed-text {
-  display: flex;
-  flex-grow: 1;
-  justify-content: space-between;
-}
-
-.issue-content-right .ui.dropdown > .menu {
-  max-width: 270px;
-  min-width: 0;
-  max-height: 500px;
-  overflow-x: auto;
-}
-
-.issue-content-right .ui.dropdown > .menu .item-secondary-info small {
-  display: block;
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-
-.issue-content-right .ui.list {
-  margin: 0.5em 0;
-  max-width: 100%;
-}
-
 .issue-sidebar-combo > .ui.dropdown .item:not(.checked) .item-check-mark {
   visibility: hidden;
-}
-
-.issue-content-right .ui.list.labels-list {
-  display: flex;
-  gap: var(--gap-inline);
-  flex-wrap: wrap;
-}
-
-@media (max-width: 767.98px) {
-  .issue-content-left,
-  .issue-content-right {
-    width: 100%;
-  }
 }
 
 /* make all issue filter dropdown menus popup leftward, to avoid go out the viewport (right side) */
@@ -307,6 +238,65 @@ td .commit-summary {
 
 .repository.view.issue .instruct-toggle {
   display: inline-block;
+}
+
+/* PR repo header (shows head repo info above title) */
+.pr-repo-header {
+  margin-bottom: 1rem;
+}
+
+.pr-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  color: var(--color-primary);
+  font-size: 14px;
+  margin-bottom: 2.5rem;
+  margin-top: 2rem;
+
+}
+
+.pr-back-link:hover {
+  text-decoration: underline;
+}
+
+.pr-repo-title {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.pr-repo-title a {
+  color: var(--color-text);
+}
+
+.pr-repo-title a:hover {
+  text-decoration: underline;
+  color: var(--color-primary);
+}
+
+.fork-flag {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 14px;
+  color: var(--color-text-light-2);
+  margin-top: 0.25rem;
+}
+
+.fork-flag .svg {
+  color: var(--color-text-light-2);
+}
+
+.fork-flag a {
+  color: var(--color-primary);
+}
+
+.fork-flag a:hover {
+  text-decoration: underline;
 }
 
 /* issue title & meta & edit */
@@ -1718,6 +1708,18 @@ tbody.commit-list {
 .diff-stats-bar .diff-stats-add-bar {
   background-color: var(--color-green);
   height: 100%;
+}
+
+/* Pill-shaped labels */
+.pill-label {
+  border-radius: 999px !important;
+  font-weight: var(--font-weight-medium) !important;
+}
+
+.pill-label.pill-green,
+.pill-green {
+  background-color: var(--color-green) !important;
+  color: var(--color-primary-contrast) !important;
 }
 
 .ui.form .right .ui.button {

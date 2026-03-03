@@ -9,6 +9,26 @@
 	data-issue-repo-link="{{$.RepoLink}}"
 	data-issue-repo-id="{{$.Repository.ID}}"
 ></div>
+{{if and .Issue.IsPull .Issue.PullRequest.HeadRepo}}
+<div class="pr-repo-header">
+	<a href="#" id="pr-back-link" class="pr-back-link">{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "repo.pulls.back"}}</a>
+	<script>document.getElementById('pr-back-link')?.addEventListener('click',function(e){e.preventDefault();history.back()});</script>
+	<div class="pr-repo-title">
+		<a href="{{AppSubUrl}}/{{.Issue.PullRequest.HeadRepo.OwnerName}}">{{.Issue.PullRequest.HeadRepo.OwnerName}}</a>
+		/
+		<a href="{{.Issue.PullRequest.HeadRepo.Link}}"><strong>{{.Issue.PullRequest.HeadRepo.Name}}</strong></a>
+	</div>
+	{{if and .Issue.PullRequest.HeadRepo.IsFork .Issue.PullRequest.HeadRepo.BaseRepo}}
+	<div class="fork-flag">
+		{{svg "octicon-repo-forked" 14}}
+		{{ctx.Locale.Tr "repo.fork"}}:
+		<a href="{{AppSubUrl}}/{{.Issue.PullRequest.HeadRepo.BaseRepo.OwnerName}}">{{.Issue.PullRequest.HeadRepo.BaseRepo.OwnerName}}</a>
+		/
+		<a href="{{.Issue.PullRequest.HeadRepo.BaseRepo.Link}}">{{.Issue.PullRequest.HeadRepo.BaseRepo.Name}}</a>
+	</div>
+	{{end}}
+</div>
+{{end}}
 <div class="issue-title-header">
 	{{$canEditIssueTitle := and (or .HasIssuesOrPullsWritePermission .IsIssuePoster) (not .Repository.IsArchived)}}
 	<div class="issue-title" id="issue-title-display">
@@ -83,11 +103,11 @@
 					{{end}}
 				{{else}}
 					{{if .Issue.OriginalAuthor}}
-						<span id="pull-desc-display" class="pull-desc">{{.Issue.OriginalAuthor}} {{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits $headHref $baseHref}}</span>
+						<span id="pull-desc-display" class="pull-desc">{{.Issue.OriginalAuthor}} {{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits (print .Repository.OwnerName "/" .Repository.Name)}}</span>
 					{{else}}
 						<span id="pull-desc-display" class="pull-desc">
 							<a {{if gt .Issue.Poster.ID 0}}href="{{.Issue.Poster.HomeLink}}"{{end}}>{{.Issue.Poster.GetDisplayName}}</a>
-							{{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits $headHref $baseHref}}
+							{{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits (print .Repository.OwnerName "/" .Repository.Name)}}
 						</span>
 					{{end}}
 					<span id="pull-desc-editor" class="tw-hidden flex-text-block" data-target-update-url="{{$.RepoLink}}/pull/{{.Issue.Index}}/target_branch">

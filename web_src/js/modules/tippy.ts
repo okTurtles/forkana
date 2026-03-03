@@ -2,11 +2,11 @@ import tippy, {followCursor} from 'tippy.js';
 import {isDocumentFragmentOrElementNode} from '../utils/dom.ts';
 import {formatDatetime} from '../utils/time.ts';
 import type {Content, Instance, Placement, Props} from 'tippy.js';
-import {html} from '../utils/html.ts';
+import {html, htmlRaw} from '../utils/html.ts';
 
 type TippyOpts = {
   role?: string,
-  theme?: 'default' | 'tooltip' | 'menu' | 'box-with-header' | 'bare',
+  theme?: 'default' | 'tooltip' | 'menu' | 'box-with-header' | 'bare' | 'warning',
 } & Partial<Props>;
 
 const visibleInstances = new Set<Instance>();
@@ -80,12 +80,27 @@ function attachTooltip(target: Element, content: Content = null): Instance {
   const hasClipboardTarget = target.hasAttribute('data-clipboard-target');
   const hideOnClick = !hasClipboardTarget;
 
+  // Support custom theme via data-tooltip-theme attribute (e.g., 'warning' for alert-style tooltips)
+  const theme = target.getAttribute('data-tooltip-theme') as TippyOpts['theme'] || 'tooltip';
+
+  // For warning theme, wrap content with warning icon and allow HTML
+  let finalContent: Content = content;
+  let allowHTML = false;
+  if (theme === 'warning' && typeof content === 'string') {
+    allowHTML = true;
+    // Convert markdown-style bold (**text**) to <strong> tags
+    // eslint-disable-next-line github/unescaped-html-literal
+    const formattedContent = content.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    finalContent = html`<div class="tippy-warning-content"><svg class="tippy-warning-icon" viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2L1 21h22L12 2zm0 3.83L19.53 19H4.47L12 5.83zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg><span>${htmlRaw(formattedContent)}</span></div>`;
+  }
+
   const props: TippyOpts = {
-    content,
+    content: finalContent,
     delay: 100,
     role: 'tooltip',
-    theme: 'tooltip',
+    theme,
     hideOnClick,
+    allowHTML,
     placement: target.getAttribute('data-tooltip-placement') as Placement || 'top-start',
     followCursor: target.getAttribute('data-tooltip-follow-cursor') as Props['followCursor'] || false,
     ...(target.getAttribute('data-tooltip-interactive') === 'true' ? {interactive: true, aria: {content: 'describedby', expanded: false}} : {}),

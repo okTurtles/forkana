@@ -5,15 +5,10 @@
 			{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_conversation")}}
 			<span class="ui small label">{{.Issue.NumComments}}</span>
 		</a>
-		<a class="item {{if .PageIsPullCommits}}active{{end}}" {{if .NumCommits}}href="{{.Issue.Link}}/commits"{{end}}>
-			{{svg "octicon-git-commit"}}
-			{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_commits")}}
-			<span class="ui small label">{{if .NumCommits}}{{.NumCommits}}{{else}}-{{end}}</span>
-		</a>
 		<a class="item {{if .PageIsPullFiles}}active{{end}}" href="{{.Issue.Link}}/files">
 			{{svg "octicon-diff"}}
 			{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_files")}}
-			<span class="ui small label">{{if .NumFiles}}{{.NumFiles}}{{else}}-{{end}}</span>
+			<span class="ui small label pill-label">{{if .NumFiles}}{{.NumFiles}}{{else}}-{{end}}</span>
 		</a>
 		{{if or .DiffShortStat.TotalAddition .DiffShortStat.TotalDeletion}}
 		<span class="tw-ml-auto tw-pl-3 tw-whitespace-nowrap tw-pr-0 tw-font-bold tw-flex tw-items-center tw-gap-2">
