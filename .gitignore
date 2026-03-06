@@ -114,6 +114,7 @@ prime/
 /man
 
 # Ignore AI/LLM instruction files
+/.agents/
 /.claude/
 /.cursorrules
 /.cursor/
