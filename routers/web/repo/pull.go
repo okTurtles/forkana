@@ -1014,9 +1014,15 @@ func indexCommit(commits []*git.Commit, commitID string) *git.Commit {
 
 // preparePullEditTabVisibility queries for non-dismissed "Request Changes" reviews
 // and sets ctx.Data["HasChangesRequested"] so that every handler rendering
-// tab_menu.tmpl shows the Edit tab consistently. It returns the review list so
-// callers can reuse it without a second DB round-trip. Returns nil without error
-// when the PR is already closed or merged.
+// tab_menu.tmpl shows the Edit tab consistently. It returns the full review list
+// so callers can reuse it without a second DB round-trip. Returns nil without
+// error when the PR is already closed or merged.
+//
+// HasChangesRequested is only set to true when at least one review's CommitID
+// matches ctx.Data["PullHeadCommitID"] (set by preparePullViewPullInfo), so
+// stale "request changes" reviews (where new commits were pushed after the
+// review) do not make the Edit tab visible. This mirrors the CommitID check in
+// viewPullFiles / ViewPullEdit / SubmitPullEditPost.
 func preparePullEditTabVisibility(ctx *context.Context, issue *issues_model.Issue) issues_model.ReviewList {
 	if !issue.IsPull || issue.PullRequest == nil || issue.IsClosed || issue.PullRequest.HasMerged {
 		return nil
@@ -1030,7 +1036,21 @@ func preparePullEditTabVisibility(ctx *context.Context, issue *issues_model.Issu
 		ctx.ServerError("FindReviews", err)
 		return nil
 	}
-	ctx.Data["HasChangesRequested"] = len(reviews) > 0
+
+	// Only count reviews that apply to the current head commit. A review is
+	// stale when new commits were pushed after it was submitted; in that case
+	// the edit button in the Files tab hides itself (r.CommitID == headCommitID),
+	// ViewPullEdit and SubmitPullEditPost reject the request, so the Edit tab
+	// itself should likewise not appear.
+	headCommitID, _ := ctx.Data["PullHeadCommitID"].(string)
+	hasCurrentReview := false
+	for _, r := range reviews {
+		if headCommitID != "" && r.CommitID == headCommitID {
+			hasCurrentReview = true
+			break
+		}
+	}
+	ctx.Data["HasChangesRequested"] = hasCurrentReview
 	return reviews
 }
 
