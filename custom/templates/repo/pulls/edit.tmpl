@@ -5,10 +5,7 @@
 		{{template "repo/issue/view_title" .}}
 		{{template "repo/pulls/tab_menu" .}}
 		<div class="ui bottom attached">
-			<form class="ui edit form" id="article-edit-form" method="post" action="{{.Issue.Link}}/edit"
-				data-can-edit-directly="true"
-				data-has-existing-fork="false"
-				data-needs-fork="false">
+			<form class="ui edit form" id="article-edit-form" method="post" action="{{.Issue.Link}}/edit">
 				{{.CsrfTokenHtml}}
 				<input type="hidden" name="last_commit" value="{{.LastCommitID}}">
 				<input type="hidden" name="tree_path" value="{{.ReadmeTreePath}}">
