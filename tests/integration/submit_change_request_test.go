@@ -676,3 +676,102 @@ func TestSubmitPullEditPostSyncsHeadRef(t *testing.T) {
 			"refs/pull/N/head must have advanced beyond the first commit")
 	})
 }
+
+// TestViewPullEditCommitIDGate verifies that ViewPullEdit (GET /pulls/:index/edit)
+// enforces the same CommitID constraint as SubmitPullEditPost:
+//   - returns 200 when a non-dismissed REQUEST_CHANGES review exists whose
+//     CommitID matches the current head branch commit, and
+//   - returns 404 when all such reviews are stale (targeted at an older commit).
+//
+// This prevents showing an edit form that can never be successfully submitted.
+func TestViewPullEditCommitIDGate(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		sessionOwner := loginUser(t, owner.Name)
+		sessionNonOwner := loginUser(t, nonOwner.Name)
+
+		// Step 1: Non-owner creates a PR via submit-change-request.
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               "# Gate test\n\nFirst revision.\n",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+		req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		redirectURL := test.RedirectURL(resp)
+		require.Contains(t, redirectURL, "/pulls/", "should redirect to the new PR")
+
+		parts := strings.Split(redirectURL, "/pulls/")
+		require.Len(t, parts, 2)
+		prIndex, err := strconv.ParseInt(strings.TrimSuffix(parts[1], "/"), 10, 64)
+		require.NoError(t, err)
+
+		pr, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, prIndex)
+		require.NoError(t, err)
+		require.NoError(t, pr.LoadHeadRepo(t.Context()))
+		require.NoError(t, pr.LoadBaseRepo(t.Context()))
+		pr.Issue = unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: pr.IssueID})
+
+		pullEditURL := path.Join(owner.Name, repo.Name, "pulls", strconv.FormatInt(prIndex, 10), "edit")
+
+		// Step 2: Before any review exists the edit page must be inaccessible.
+		req = NewRequest(t, "GET", pullEditURL)
+		sessionNonOwner.MakeRequest(t, req, http.StatusNotFound)
+
+		// Step 3: Owner submits a REQUEST_CHANGES review tied to the current head.
+		ownerToken := getUserToken(t, owner.Name,
+			auth_model.AccessTokenScopeWriteRepository,
+			auth_model.AccessTokenScopeWriteIssue)
+
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), pr.HeadRepo)
+		require.NoError(t, err)
+		defer gitRepo.Close()
+
+		firstCommitSHA, err := gitRepo.GetBranchCommitID(pr.HeadBranch)
+		require.NoError(t, err)
+
+		reviewURL := fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews",
+			owner.Name, repo.Name, prIndex)
+		reviewBody := fmt.Sprintf(`{"body":"Please revise.","commit_id":%q,"event":"REQUEST_CHANGES"}`, firstCommitSHA)
+		req = NewRequestWithBody(t, "POST", reviewURL, strings.NewReader(reviewBody)).
+			AddTokenAuth(ownerToken)
+		req.Header.Set("Content-Type", "application/json")
+		sessionOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Step 4: Review now matches the head commit → GET /edit must return 200.
+		req = NewRequest(t, "GET", pullEditURL)
+		sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Step 5: Non-owner pushes a second commit via the edit form,
+		// advancing the head beyond the reviewed commit.
+		req = NewRequest(t, "GET", pullEditURL)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc = NewHTMLParser(t, resp.Body)
+
+		editForm := map[string]string{
+			"_csrf":       htmlDoc.GetCSRF(),
+			"last_commit": firstCommitSHA,
+			"tree_path":   "README.md",
+			"content":     "# Gate test\n\nSecond revision (new commit, stales review).\n",
+		}
+		req = NewRequestWithValues(t, "POST", pullEditURL, editForm)
+		sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Step 6: The review is now stale (CommitID points at the old commit).
+		// GET /edit must return 404 because no matching review exists anymore.
+		req = NewRequest(t, "GET", pullEditURL)
+		sessionNonOwner.MakeRequest(t, req, http.StatusNotFound)
+	})
+}

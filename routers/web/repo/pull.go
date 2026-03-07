@@ -738,6 +738,25 @@ func ViewPullEdit(ctx *context.Context) {
 		ctx.ServerError("GetBranchCommit", err)
 		return
 	}
+	headCommitID := commit.ID.String()
+
+	// Require that at least one non-dismissed "Request Changes" review targets
+	// the current head commit.  This mirrors the gate in SubmitPullEditPost
+	// (and the "Edit this file" button in viewPullFiles) so that the edit form
+	// is only reachable when the POST will actually be accepted.  Without this
+	// check a user who pushed new commits after a review could load the GET
+	// page even though the review is now stale and the POST would 404.
+	hasMatchingReview := false
+	for _, r := range reviews {
+		if r.CommitID == headCommitID {
+			hasMatchingReview = true
+			break
+		}
+	}
+	if !hasMatchingReview {
+		ctx.NotFound(nil)
+		return
+	}
 
 	// Read @README.md content from head branch
 	readmeTreePath := "@README.md"
@@ -756,7 +775,7 @@ func ViewPullEdit(ctx *context.Context) {
 	ctx.Data["FileContent"] = fileContent
 	ctx.Data["BranchName"] = pull.HeadBranch
 	ctx.Data["ReadmeTreePath"] = readmeTreePath
-	ctx.Data["LastCommitID"] = commit.ID.String()
+	ctx.Data["LastCommitID"] = headCommitID
 	ctx.Data["RepoOperationsLink"] = pull.HeadRepo.OperationsLink()
 
 	ctx.Data["IsIssuePoster"] = true
