@@ -30,7 +30,6 @@ import (
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/markup"
 	"code.gitea.io/gitea/modules/markup/markdown"
-	"code.gitea.io/gitea/modules/optional"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/templates"
 	"code.gitea.io/gitea/modules/templates/vars"
@@ -418,18 +417,10 @@ func ViewIssue(ctx *context.Context) {
 	ctx.Data["LockReasons"] = setting.Repository.Issue.LockReasons
 	ctx.Data["RefEndName"] = git.RefName(issue.Ref).ShortName()
 
-	// Check if the PR has non-dismissed "Request Changes" reviews (for showing the Edit tab)
-	if issue.IsPull && issue.PullRequest != nil && !issue.IsClosed && !issue.PullRequest.HasMerged {
-		changesRequestedReviews, err := issues_model.FindReviews(ctx, issues_model.FindReviewOptions{
-			IssueID:   issue.ID,
-			Types:     []issues_model.ReviewType{issues_model.ReviewTypeReject},
-			Dismissed: optional.Some(false),
-		})
-		if err != nil {
-			ctx.ServerError("FindReviews", err)
-			return
-		}
-		ctx.Data["HasChangesRequested"] = len(changesRequestedReviews) > 0
+	// Set HasChangesRequested for the Edit tab in the PR tab menu.
+	preparePullEditTabVisibility(ctx, issue)
+	if ctx.Written() {
+		return
 	}
 
 	tags, err := repo_model.GetTagNamesByRepoID(ctx, ctx.Repo.Repository.ID)

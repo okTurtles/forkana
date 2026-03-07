@@ -654,6 +654,11 @@ func ViewPullCommits(ctx *context.Context) {
 	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
 	ctx.Data["IsIssuePoster"] = ctx.IsSigned && issue.IsPoster(ctx.Doer.ID)
 
+	preparePullEditTabVisibility(ctx, issue)
+	if ctx.Written() {
+		return
+	}
+
 	// For PR commits page
 	PrepareBranchList(ctx)
 	if ctx.Written() {
@@ -956,6 +961,28 @@ func indexCommit(commits []*git.Commit, commitID string) *git.Commit {
 	return nil
 }
 
+// preparePullEditTabVisibility queries for non-dismissed "Request Changes" reviews
+// and sets ctx.Data["HasChangesRequested"] so that every handler rendering
+// tab_menu.tmpl shows the Edit tab consistently. It returns the review list so
+// callers can reuse it without a second DB round-trip. Returns nil without error
+// when the PR is already closed or merged.
+func preparePullEditTabVisibility(ctx *context.Context, issue *issues_model.Issue) issues_model.ReviewList {
+	if !issue.IsPull || issue.PullRequest == nil || issue.IsClosed || issue.PullRequest.HasMerged {
+		return nil
+	}
+	reviews, err := issues_model.FindReviews(ctx, issues_model.FindReviewOptions{
+		IssueID:   issue.ID,
+		Types:     []issues_model.ReviewType{issues_model.ReviewTypeReject},
+		Dismissed: optional.Some(false),
+	})
+	if err != nil {
+		ctx.ServerError("FindReviews", err)
+		return nil
+	}
+	ctx.Data["HasChangesRequested"] = len(reviews) > 0
+	return reviews
+}
+
 // ViewPullFiles render pull request changed files list page
 func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 	ctx.Data["PageIsPullList"] = true
@@ -1188,6 +1215,15 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 	ctx.Data["CanBlockUser"] = func(blocker, blockee *user_model.User) bool {
 		return user_service.CanBlockUser(ctx, ctx.Doer, blocker, blockee)
 	}
+
+	// Set HasChangesRequested for the tab menu (needed for all viewers, not
+	// just the poster). The returned slice is reused below for CanEditFile to
+	// avoid a second DB round-trip.
+	rejectReviews := preparePullEditTabVisibility(ctx, issue)
+	if ctx.Written() {
+		return
+	}
+
 	// Show "Edit this file" only when the viewing user is the PR poster,
 	// the PR is still open, we are viewing all commits (cumulative diff), and
 	// there is at least one non-dismissed ReviewTypeReject review whose
@@ -1204,15 +1240,6 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 		}
 
 		if pull.HeadRepo != nil {
-			rejectReviews, err := issues_model.FindReviews(ctx, issues_model.FindReviewOptions{
-				IssueID:   issue.ID,
-				Types:     []issues_model.ReviewType{issues_model.ReviewTypeReject},
-				Dismissed: optional.Some(false),
-			})
-			if err != nil {
-				ctx.ServerError("FindReviews", err)
-				return
-			}
 			for _, r := range rejectReviews {
 				if r.CommitID == headCommitID {
 					ctx.Data["CanEditFile"] = true
