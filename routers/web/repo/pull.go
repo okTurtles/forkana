@@ -904,8 +904,9 @@ func SubmitPullEditPost(ctx *context.Context) {
 	// count and diff.
 	if err := pull_service.PushToBaseRepo(ctx, pull); err != nil {
 		log.Error("SubmitPullEditPost: PushToBaseRepo: %v", err)
-		// Non-fatal: the edit was saved; the diff and commit count will be
-		// stale until the ref is corrected by the next PR interaction.
+		// Non-fatal: the edit was saved; warn the user so they know to reload
+		// once the ref is corrected by the next PR interaction.
+		ctx.Flash.Warning(ctx.Locale.Tr("repo.pulls.edit.ref_update_failed"))
 	}
 
 	// Record a "pushed N commits" timeline entry on the PR, mirroring what a
@@ -932,6 +933,9 @@ func SubmitPullEditPost(ctx *context.Context) {
 	// Mark existing reviews as stale to restart the review cycle
 	if err := issues_model.MarkReviewsAsStale(ctx, issue.ID); err != nil {
 		log.Error("MarkReviewsAsStale: %v", err)
+		// Non-fatal: the edit was saved; warn the user so they are aware
+		// reviews may not visually reflect the new state until next activity.
+		ctx.Flash.Warning(ctx.Locale.Tr("repo.pulls.edit.reviews_stale_failed"))
 	}
 
 	// Redirect back to the PR conversation page
