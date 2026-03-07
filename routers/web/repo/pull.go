@@ -853,6 +853,10 @@ func SubmitPullEditPost(ctx *context.Context) {
 
 	// Read form data
 	content := ctx.Req.FormValue("content")
+	if strings.TrimSpace(content) == "" {
+		ctx.JSONError(ctx.Tr("repo.editor.content_required"))
+		return
+	}
 	treePath := ctx.Req.FormValue("tree_path")
 	lastCommitID := ctx.Req.FormValue("last_commit")
 	commitSummary := ctx.Req.FormValue("commit_summary")
