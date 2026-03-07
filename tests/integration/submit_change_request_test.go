@@ -775,3 +775,106 @@ func TestViewPullEditCommitIDGate(t *testing.T) {
 		sessionNonOwner.MakeRequest(t, req, http.StatusNotFound)
 	})
 }
+
+// TestSubmitPullEditPostTreePathRestriction verifies that SubmitPullEditPost ignores
+// the client-provided "tree_path" form field and resolves the target file path
+// server-side instead. A malicious PR poster must not be able to write arbitrary
+// files into the PR head branch by tampering with the hidden tree_path input
+// (e.g. via browser DevTools).
+func TestSubmitPullEditPostTreePathRestriction(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		sessionOwner := loginUser(t, owner.Name)
+		sessionNonOwner := loginUser(t, nonOwner.Name)
+
+		// Step 1: Non-owner creates a PR via submit-change-request.
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               "# Initial\n\nContent.\n",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+		req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		redirectURL := test.RedirectURL(resp)
+		require.Contains(t, redirectURL, "/pulls/")
+		parts := strings.Split(redirectURL, "/pulls/")
+		require.Len(t, parts, 2)
+		prIndex, err := strconv.ParseInt(strings.TrimSuffix(parts[1], "/"), 10, 64)
+		require.NoError(t, err)
+
+		pr, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, prIndex)
+		require.NoError(t, err)
+		require.NoError(t, pr.LoadHeadRepo(t.Context()))
+		pr.Issue = unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: pr.IssueID})
+
+		// Step 2: Owner submits a "Request Changes" review on the current head commit.
+		ownerToken := getUserToken(t, owner.Name,
+			auth_model.AccessTokenScopeWriteRepository,
+			auth_model.AccessTokenScopeWriteIssue)
+
+		headGitRepo, err := gitrepo.OpenRepository(t.Context(), pr.HeadRepo)
+		require.NoError(t, err)
+		defer headGitRepo.Close()
+
+		firstCommitSHA, err := headGitRepo.GetBranchCommitID(pr.HeadBranch)
+		require.NoError(t, err)
+
+		reviewURL := fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews",
+			owner.Name, repo.Name, prIndex)
+		reviewBody := fmt.Sprintf(`{"body":"Revise.","commit_id":%q,"event":"REQUEST_CHANGES"}`, firstCommitSHA)
+		req = NewRequestWithBody(t, "POST", reviewURL, strings.NewReader(reviewBody)).
+			AddTokenAuth(ownerToken)
+		req.Header.Set("Content-Type", "application/json")
+		sessionOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Step 3: Non-owner submits a PR edit with a tampered tree_path pointing at
+		// an arbitrary file outside the article README.
+		pullEditURL := path.Join(owner.Name, repo.Name, "pulls", strconv.FormatInt(prIndex, 10), "edit")
+		req = NewRequest(t, "GET", pullEditURL)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc = NewHTMLParser(t, resp.Body)
+
+		evilContent := "# Malicious\n\nEvil content injected via tampered tree_path.\n"
+		editForm := map[string]string{
+			"_csrf":       htmlDoc.GetCSRF(),
+			"last_commit": firstCommitSHA,
+			"tree_path":   ".gitea/workflows/evil.yml", // tampered — must be ignored
+			"content":     evilContent,
+		}
+		req = NewRequestWithValues(t, "POST", pullEditURL, editForm)
+		sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Step 4: Verify the evil file does NOT exist in the PR head branch,
+		// and the README was correctly updated with the submitted content.
+		newCommitSHA, err := headGitRepo.GetBranchCommitID(pr.HeadBranch)
+		require.NoError(t, err)
+		require.NotEqual(t, firstCommitSHA, newCommitSHA,
+			"A new commit should have been made despite the tampered tree_path")
+
+		newCommit, err := headGitRepo.GetCommit(newCommitSHA)
+		require.NoError(t, err)
+
+		// The tampered path must not have been created.
+		_, evilErr := newCommit.GetTreeEntryByPath(".gitea/workflows/evil.yml")
+		assert.Error(t, evilErr,
+			"tampered tree_path must be ignored; .gitea/workflows/evil.yml must not exist")
+
+		// The server-resolved README must carry the submitted content.
+		readmeContent, readmeErr := newCommit.GetFileContent("README.md", 1<<20)
+		require.NoError(t, readmeErr)
+		assert.Equal(t, evilContent, readmeContent,
+			"README.md should be updated with the submitted content (server-resolved path)")
+	})
+}

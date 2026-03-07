@@ -898,13 +898,29 @@ func SubmitPullEditPost(ctx *context.Context) {
 		ctx.JSONError(ctx.Tr("repo.editor.content_required"))
 		return
 	}
-	treePath := ctx.Req.FormValue("tree_path")
 	lastCommitID := ctx.Req.FormValue("last_commit")
 	commitSummary := ctx.Req.FormValue("commit_summary")
 	reviewComment := ctx.Req.FormValue("review_comment")
 
+	// Resolve the article README path server-side.
+	// Do NOT trust the client-provided "tree_path" form field: a malicious PR poster
+	// could modify the hidden input via browser DevTools to overwrite arbitrary files
+	// in the PR head branch (path traversal / unauthorized file modification).
+	headCommit, err := headGitRepo.GetCommit(headBranchCommitID)
+	if err != nil {
+		ctx.ServerError("GetCommit", err)
+		return
+	}
+	treePath := ""
+	for _, candidate := range []string{"@README.md", "README.md"} {
+		if _, fileErr := headCommit.GetFileContent(candidate, 1); fileErr == nil {
+			treePath = candidate
+			break
+		}
+	}
 	if treePath == "" {
-		treePath = "@README.md"
+		ctx.JSONError(ctx.Tr("repo.editor.file_not_found"))
+		return
 	}
 
 	// Build commit message
