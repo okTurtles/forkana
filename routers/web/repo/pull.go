@@ -807,6 +807,43 @@ func SubmitPullEditPost(ctx *context.Context) {
 		ctx.NotFound(nil)
 		return
 	}
+
+	// Check that at least one "Request Changes" review applies to the current
+	// head commit.  This mirrors the gate in viewPullFiles: the edit button is
+	// only shown when review.CommitID == headCommitID, so SubmitPullEditPost
+	// must enforce the same constraint server-side.  Without this a user could
+	// push new commits after receiving a review, making it stale, and still
+	// POST to /edit because the UI gate and the server gate were inconsistent.
+	headGitRepo, err := gitrepo.OpenRepository(ctx, pull.HeadRepo)
+	if err != nil {
+		ctx.ServerError("OpenRepository", err)
+		return
+	}
+	defer headGitRepo.Close()
+
+	if !headGitRepo.IsBranchExist(pull.HeadBranch) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	headBranchCommitID, err := headGitRepo.GetBranchCommitID(pull.HeadBranch)
+	if err != nil {
+		ctx.ServerError("GetBranchCommitID", err)
+		return
+	}
+
+	hasMatchingReview := false
+	for _, r := range reviews {
+		if r.CommitID == headBranchCommitID {
+			hasMatchingReview = true
+			break
+		}
+	}
+	if !hasMatchingReview {
+		ctx.NotFound(nil)
+		return
+	}
+
 	if err := pull.LoadBaseRepo(ctx); err != nil {
 		ctx.ServerError("LoadBaseRepo", err)
 		return
@@ -1146,9 +1183,9 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 	// the PR is still open, we are viewing all commits (cumulative diff), and
 	// there is at least one non-dismissed ReviewTypeReject review whose
 	// CommitID matches the current head (i.e. no new commits were pushed
-	// after the reviewer requested changes).  This mirrors the gate in
-	// SubmitPullEditPost so the button is only shown when the action will
-	// actually be permitted.
+	// after the reviewer requested changes).  SubmitPullEditPost enforces the
+	// same CommitID constraint server-side, so the button is only shown when
+	// the POST will actually be permitted.
 	if isShowAllCommits && pull.Flow == issues_model.PullRequestFlowGithub &&
 		!pull.HasMerged && !issue.IsClosed &&
 		ctx.IsSigned && issue.IsPoster(ctx.Doer.ID) {
