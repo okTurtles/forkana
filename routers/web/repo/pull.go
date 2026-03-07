@@ -756,6 +756,7 @@ func ViewPullEdit(ctx *context.Context) {
 
 	ctx.Data["IsIssuePoster"] = true
 	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
+	ctx.Data["NumCommits"] = 0
 
 	ctx.HTML(http.StatusOK, tplPullEdit)
 }
