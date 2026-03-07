@@ -761,7 +761,23 @@ func ViewPullEdit(ctx *context.Context) {
 
 	ctx.Data["IsIssuePoster"] = true
 	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
-	ctx.Data["NumCommits"] = 0
+
+	// Populate PR header metadata (HeadTarget, BaseTarget, NumCommits, branch links, etc.)
+	// required by view_title and tab_menu templates.  Without this the PR description
+	// line shows empty branch names and the files-tab commit count stays at zero.
+	prInfo := preparePullViewPullInfo(ctx, issue)
+	if ctx.Written() {
+		return
+	} else if prInfo == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	PrepareBranchList(ctx)
+	if ctx.Written() {
+		return
+	}
+	getBranchData(ctx, issue)
 
 	ctx.HTML(http.StatusOK, tplPullEdit)
 }
