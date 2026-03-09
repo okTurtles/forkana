@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -921,10 +922,10 @@ func TestSubmitChangeRequestWhitespaceOnlyCommitSummary(t *testing.T) {
 
 		// Load the PR and verify the commit message is the default, not empty
 		pr := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: prIndex})
-		require.NoError(t, pr.LoadPullRequest(nil))
+		require.NoError(t, pr.LoadPullRequest(context.TODO()))
 
 		// Get the head commit to verify the commit message
-		headGitRepo, err := gitrepo.OpenRepository(nil, pr.PullRequest.HeadRepo)
+		headGitRepo, err := gitrepo.OpenRepository(context.TODO(), pr.PullRequest.HeadRepo)
 		require.NoError(t, err)
 		defer headGitRepo.Close()
 
@@ -937,5 +938,118 @@ func TestSubmitChangeRequestWhitespaceOnlyCommitSummary(t *testing.T) {
 			"Commit message should not be empty when commit_summary is whitespace-only")
 		assert.Contains(t, commitMessage, "Update README.md",
 			"Commit message should use the default format when commit_summary is whitespace-only")
+	})
+}
+
+// TestSubmitPullEditPostStaleCommitID verifies that SubmitPullEditPost returns a
+// user-friendly JSONError (not HTTP 500) when the last_commit form field is stale
+// (i.e., the file was modified by someone else since the user loaded the edit page).
+func TestSubmitPullEditPostStaleCommitID(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		sessionOwner := loginUser(t, owner.Name)
+		sessionNonOwner := loginUser(t, nonOwner.Name)
+
+		// Step 1: Non-owner creates a PR via submit-change-request
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		firstContent := "# Initial content\n"
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               firstContent,
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+		req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		redirectURL := test.RedirectURL(resp)
+		require.Contains(t, redirectURL, "/pulls/", "Should redirect to a pull request page")
+
+		// Extract PR index
+		parts := strings.Split(redirectURL, "/pulls/")
+		require.Len(t, parts, 2)
+		prIndex, err := strconv.ParseInt(strings.TrimSuffix(parts[1], "/"), 10, 64)
+		require.NoError(t, err)
+
+		pr, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, prIndex)
+		require.NoError(t, err)
+		require.NoError(t, pr.LoadBaseRepo(t.Context()))
+		require.NoError(t, pr.LoadHeadRepo(t.Context()))
+		pr.Issue = unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: pr.IssueID})
+
+		// Step 2: Owner submits a "Request Changes" review
+		ownerToken := getUserToken(t, owner.Name,
+			auth_model.AccessTokenScopeWriteRepository,
+			auth_model.AccessTokenScopeWriteIssue)
+
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), pr.HeadRepo)
+		require.NoError(t, err)
+		defer gitRepo.Close()
+
+		firstCommitSHA, err := gitRepo.GetBranchCommitID(pr.HeadBranch)
+		require.NoError(t, err)
+
+		reviewURL := fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/reviews",
+			owner.Name, repo.Name, prIndex)
+		reviewBody := fmt.Sprintf(`{"body":"Please revise.","commit_id":%q,"event":"REQUEST_CHANGES"}`, firstCommitSHA)
+		req = NewRequestWithBody(t, "POST", reviewURL, strings.NewReader(reviewBody)).
+			AddTokenAuth(ownerToken)
+		req.Header.Set("Content-Type", "application/json")
+		sessionOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Step 3: Owner modifies the PR head branch directly (simulating concurrent edit)
+		// This makes the last_commit value stale
+		headGitRepo, err := gitrepo.OpenRepository(t.Context(), pr.HeadRepo)
+		require.NoError(t, err)
+		defer headGitRepo.Close()
+
+		// Use the API to make a direct commit to the head branch
+		ownerEditURL := path.Join(owner.Name, repo.Name, "_edit", pr.HeadBranch, "README.md")
+		req = NewRequest(t, "GET", ownerEditURL)
+		resp = sessionOwner.MakeRequest(t, req, http.StatusOK)
+		ownerHTMLDoc := NewHTMLParser(t, resp.Body)
+
+		ownerEditForm := map[string]string{
+			"_csrf":       ownerHTMLDoc.GetCSRF(),
+			"last_commit": ownerHTMLDoc.GetInputValueByName("last_commit"),
+			"tree_path":   "README.md",
+			"content":     "# Modified by owner\n",
+		}
+		req = NewRequestWithValues(t, "POST", ownerEditURL, ownerEditForm)
+		sessionOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Step 4: Non-owner tries to edit the PR with the stale last_commit
+		// This should return a JSONError, not HTTP 500
+		pullEditURL := path.Join(owner.Name, repo.Name, "pulls", strconv.FormatInt(prIndex, 10), "edit")
+		req = NewRequest(t, "GET", pullEditURL)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc = NewHTMLParser(t, resp.Body)
+
+		// Use the stale commit ID from the first edit
+		staleEditForm := map[string]string{
+			"_csrf":       htmlDoc.GetCSRF(),
+			"last_commit": firstCommitSHA, // This is now stale
+			"content":     "# Non-owner revision\n",
+		}
+		req = NewRequestWithValues(t, "POST", pullEditURL, staleEditForm)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Verify we get a JSONError (not HTTP 500)
+		assert.Equal(t, http.StatusOK, resp.Code,
+			"Should return HTTP 200 with JSONError, not HTTP 500")
+
+		// Verify the response contains the error message
+		respBody := resp.Body.String()
+		assert.Contains(t, respBody, "already_changed",
+			"Error response should contain 'already_changed' locale key or message")
 	})
 }

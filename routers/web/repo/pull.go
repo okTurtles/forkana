@@ -954,6 +954,21 @@ func SubmitPullEditPost(ctx *context.Context) {
 		InternalPush: true,
 	})
 	if err != nil {
+		// Handle user-facing errors with appropriate error messages
+		if files_service.IsErrCommitIDDoesNotMatch(err) || git.IsErrPushOutOfDate(err) {
+			// Stale commit ID or concurrent push — user should refresh and retry
+			ctx.JSONError(ctx.Tr("repo.pulls.edit.already_changed"))
+			return
+		}
+		if files_service.IsErrRepoFileDoesNotExist(err) {
+			ctx.JSONError(ctx.Tr("repo.editor.file_modifying_no_longer_exists", treePath))
+			return
+		}
+		if git.IsErrNotExist(err) {
+			ctx.JSONError(ctx.Tr("repo.editor.file_modifying_no_longer_exists", treePath))
+			return
+		}
+		// All other errors are treated as server errors
 		ctx.ServerError("ChangeRepoFiles", err)
 		return
 	}
