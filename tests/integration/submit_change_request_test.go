@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -1007,25 +1008,26 @@ func TestSubmitPullEditPostStaleCommitID(t *testing.T) {
 		sessionOwner.MakeRequest(t, req, http.StatusOK)
 
 		// Step 3: Owner modifies the PR head branch directly (simulating concurrent edit)
-		// This makes the last_commit value stale
+		// This makes the last_commit value stale.
+		// Use the API to make a direct commit to the head branch.
 		headGitRepo, err := gitrepo.OpenRepository(t.Context(), pr.HeadRepo)
 		require.NoError(t, err)
 		defer headGitRepo.Close()
 
-		// Use the API to make a direct commit to the head branch
-		ownerEditURL := path.Join(owner.Name, repo.Name, "_edit", pr.HeadBranch, "README.md")
-		req = NewRequest(t, "GET", ownerEditURL)
-		resp = sessionOwner.MakeRequest(t, req, http.StatusOK)
-		ownerHTMLDoc := NewHTMLParser(t, resp.Body)
+		headCommit, err := headGitRepo.GetBranchCommit(pr.HeadBranch)
+		require.NoError(t, err)
+		entry, err := headCommit.GetTreeEntryByPath("README.md")
+		require.NoError(t, err)
+		fileSHA := entry.ID.String()
 
-		ownerEditForm := map[string]string{
-			"_csrf":         ownerHTMLDoc.GetCSRF(),
-			"last_commit":   ownerHTMLDoc.GetInputValueByName("last_commit"),
-			"tree_path":     "README.md",
-			"content":       "# Modified by owner\n",
-			"commit_choice": "direct",
-		}
-		req = NewRequestWithValues(t, "POST", ownerEditURL, ownerEditForm)
+		updateFileURL := fmt.Sprintf("/api/v1/repos/%s/%s/contents/README.md", owner.Name, repo.Name)
+		updateBody := fmt.Sprintf(`{"message":"owner concurrent edit","content":%q,"sha":%q,"branch":%q}`,
+			base64.StdEncoding.EncodeToString([]byte("# Modified by owner\n")),
+			fileSHA,
+			pr.HeadBranch)
+		req = NewRequestWithBody(t, "PUT", updateFileURL, strings.NewReader(updateBody)).
+			AddTokenAuth(ownerToken)
+		req.Header.Set("Content-Type", "application/json")
 		sessionOwner.MakeRequest(t, req, http.StatusOK)
 
 		// Step 4: Non-owner tries to edit the PR with the stale last_commit
