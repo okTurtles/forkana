@@ -878,3 +878,64 @@ func TestSubmitPullEditPostTreePathRestriction(t *testing.T) {
 			"README.md should be updated with the submitted content (server-resolved path)")
 	})
 }
+
+// TestSubmitChangeRequestWhitespaceOnlyCommitSummary tests that submitting a
+// whitespace-only commit_summary field results in the default commit message
+// being used instead of an empty message (issue: whitespace-only commit message).
+func TestSubmitChangeRequestWhitespaceOnlyCommitSummary(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		sessionNonOwner := loginUser(t, nonOwner.Name)
+
+		// Get the edit page
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		// Submit with whitespace-only commit_summary
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               "# Updated content\n\nThis is a test.\n",
+			"commit_summary":        "   \t\n  ", // Whitespace-only summary
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+
+		req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		redirectURL := test.RedirectURL(resp)
+		require.Contains(t, redirectURL, "/pulls/", "Should redirect to a pull request page")
+
+		// Extract PR index from redirect URL
+		parts := strings.Split(redirectURL, "/pulls/")
+		require.Len(t, parts, 2)
+		prIndex, err := strconv.ParseInt(strings.TrimSuffix(parts[1], "/"), 10, 64)
+		require.NoError(t, err, "Should parse PR index from redirect URL")
+
+		// Load the PR and verify the commit message is the default, not empty
+		pr := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: prIndex})
+		require.NoError(t, pr.LoadPullRequest(nil))
+
+		// Get the head commit to verify the commit message
+		headGitRepo, err := gitrepo.OpenRepository(nil, pr.PullRequest.HeadRepo)
+		require.NoError(t, err)
+		defer headGitRepo.Close()
+
+		headCommit, err := headGitRepo.GetCommit(pr.PullRequest.HeadBranch)
+		require.NoError(t, err)
+
+		// The commit message should be the default "Update README.md", not empty
+		commitMessage := headCommit.CommitMessage
+		assert.NotEmpty(t, strings.TrimSpace(commitMessage),
+			"Commit message should not be empty when commit_summary is whitespace-only")
+		assert.Contains(t, commitMessage, "Update README.md",
+			"Commit message should use the default format when commit_summary is whitespace-only")
+	})
+}

@@ -899,7 +899,7 @@ func SubmitPullEditPost(ctx *context.Context) {
 		return
 	}
 	lastCommitID := ctx.Req.FormValue("last_commit")
-	commitSummary := ctx.Req.FormValue("commit_summary")
+	commitSummary := strings.TrimSpace(ctx.Req.FormValue("commit_summary"))
 	reviewComment := ctx.Req.FormValue("review_comment")
 
 	// Resolve the article README path server-side.
