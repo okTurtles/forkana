@@ -4,7 +4,6 @@
 package integration
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -921,15 +920,16 @@ func TestSubmitChangeRequestWhitespaceOnlyCommitSummary(t *testing.T) {
 		require.NoError(t, err, "Should parse PR index from redirect URL")
 
 		// Load the PR and verify the commit message is the default, not empty
-		pr := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: prIndex})
-		require.NoError(t, pr.LoadPullRequest(context.TODO()))
+		pr, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, prIndex)
+		require.NoError(t, err)
+		require.NoError(t, pr.LoadHeadRepo(t.Context()))
 
 		// Get the head commit to verify the commit message
-		headGitRepo, err := gitrepo.OpenRepository(context.TODO(), pr.PullRequest.HeadRepo)
+		headGitRepo, err := gitrepo.OpenRepository(t.Context(), pr.HeadRepo)
 		require.NoError(t, err)
 		defer headGitRepo.Close()
 
-		headCommit, err := headGitRepo.GetCommit(pr.PullRequest.HeadBranch)
+		headCommit, err := headGitRepo.GetCommit(pr.HeadBranch)
 		require.NoError(t, err)
 
 		// The commit message should be the default "Update README.md", not empty
