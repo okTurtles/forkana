@@ -687,7 +687,12 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// The ChangeRepoFiles function will create the new branch from the default branch
 	// We use InternalPush to skip pre-receive hooks since this is a programmatic operation
 	// where we've already verified the user can submit change requests (via middleware)
-	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
+	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update_article")
+	commitMessage := parsed.GetCommitMessage(defaultCommitMessage)
+	if strings.TrimSpace(commitMessage) == "" {
+		ctx.JSONError(ctx.Tr("repo.editor.commit_message_required"))
+		return nil
+	}
 	_, err = files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		// Use an empty LastCommitID so ChangeRepoFiles bases the new commit on the current
 		// HEAD of OldBranch. In this workflow we always create a new branch (NewBranch != OldBranch),
@@ -697,7 +702,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		LastCommitID: "",
 		OldBranch:    targetRepo.DefaultBranch,
 		NewBranch:    branchName,
-		Message:      parsed.GetCommitMessage(defaultCommitMessage),
+		Message:      commitMessage,
 		Files: []*files_service.ChangeRepoFile{
 			{
 				Operation:     "update",
