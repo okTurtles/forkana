@@ -758,11 +758,18 @@ func ViewPullEdit(ctx *context.Context) {
 		return
 	}
 
-	// Read @README.md content from head branch
+	// Read @README.md content from head branch, falling back to README.md only
+	// when the file genuinely does not exist. Any other error (I/O failure, git
+	// object corruption, …) is surfaced immediately so we never silently load
+	// the wrong file's content.
 	readmeTreePath := "@README.md"
 	fileContent, err := commit.GetFileContent(readmeTreePath, int(setting.UI.MaxDisplayFileSize))
 	if err != nil {
-		// Try without @ prefix
+		if !git.IsErrNotExist(err) {
+			ctx.ServerError("GetFileContent", err)
+			return
+		}
+		// @README.md does not exist — try the plain name
 		readmeTreePath = "README.md"
 		fileContent, err = commit.GetFileContent(readmeTreePath, int(setting.UI.MaxDisplayFileSize))
 		if err != nil {
@@ -911,11 +918,20 @@ func SubmitPullEditPost(ctx *context.Context) {
 		ctx.ServerError("GetCommit", err)
 		return
 	}
+	// Probe candidates in priority order. Only skip to the next candidate when
+	// the file genuinely does not exist; any other error (I/O failure, git
+	// object corruption, …) is surfaced immediately so we never silently
+	// commit to the wrong path.
 	treePath := ""
 	for _, candidate := range []string{"@README.md", "README.md"} {
-		if _, fileErr := headCommit.GetFileContent(candidate, 1); fileErr == nil {
+		_, fileErr := headCommit.GetFileContent(candidate, 1)
+		if fileErr == nil {
 			treePath = candidate
 			break
+		}
+		if !git.IsErrNotExist(fileErr) {
+			ctx.ServerError("GetFileContent", fileErr)
+			return
 		}
 	}
 	if treePath == "" {
