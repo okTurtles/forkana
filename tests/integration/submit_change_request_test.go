@@ -1019,10 +1019,11 @@ func TestSubmitPullEditPostStaleCommitID(t *testing.T) {
 		ownerHTMLDoc := NewHTMLParser(t, resp.Body)
 
 		ownerEditForm := map[string]string{
-			"_csrf":       ownerHTMLDoc.GetCSRF(),
-			"last_commit": ownerHTMLDoc.GetInputValueByName("last_commit"),
-			"tree_path":   "README.md",
-			"content":     "# Modified by owner\n",
+			"_csrf":         ownerHTMLDoc.GetCSRF(),
+			"last_commit":   ownerHTMLDoc.GetInputValueByName("last_commit"),
+			"tree_path":     "README.md",
+			"content":       "# Modified by owner\n",
+			"commit_choice": "direct",
 		}
 		req = NewRequestWithValues(t, "POST", ownerEditURL, ownerEditForm)
 		sessionOwner.MakeRequest(t, req, http.StatusOK)
