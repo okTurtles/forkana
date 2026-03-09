@@ -990,7 +990,16 @@ func SubmitPullEditPost(ctx *context.Context) {
 		}
 	}
 
-	// Mark existing reviews as stale to restart the review cycle
+	// Mark existing reviews as stale to restart the review cycle.
+	//
+	// Unlike the normal push flow (services/pull/pull.go, services/agit/agit.go)
+	// we do NOT follow up with MarkReviewsAsNotStale here.  In those flows the
+	// new commit SHA may already have been seen by a reviewer who submitted a
+	// review concurrently, so restoring non-stale status for that SHA is
+	// meaningful.  Here the commit was just created by ChangeRepoFiles in this
+	// same request — no review can target it yet, so MarkReviewsAsNotStale
+	// would always match zero rows.  Edit access is gated on CommitID matching
+	// (not the stale flag), so blanket staling is safe and correct.
 	if err := issues_model.MarkReviewsAsStale(ctx, issue.ID); err != nil {
 		log.Error("MarkReviewsAsStale: %v", err)
 		// Non-fatal: the edit was saved; warn the user so they are aware
