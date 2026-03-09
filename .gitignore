@@ -114,6 +114,7 @@ prime/
 /man
 
 # Ignore AI/LLM instruction files
+/.agents/
 /.claude/
 /.cursorrules
 /.cursor/
@@ -124,4 +125,8 @@ prime/
 /CLAUDE.md
 /llms.txt
 
+# eighttrigrams
 ROADMAP.md
+.mcp.json
+FOUND_ISSUES.md
+.editor-layouts.json

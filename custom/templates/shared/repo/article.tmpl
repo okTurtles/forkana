@@ -52,9 +52,11 @@
                     </a>
                     <div class="tw-flex tw-items-center tw-gap-2 tw-ml-auto">
                         {{if .IsArticleModeRead}}
+                            {{if not (and $.IsSigned (eq $.SignedUser.ID .Repository.OwnerID))}}
                             <div class="tw-flex">
                                 {{template "repo/watch_unwatch" .}}
                             </div>
+                            {{end}}
                             <div class="ui icon top left pointing dropdown button mini tw-px-3">
                                 {{svg "octicon-kebab-horizontal" 14}}
                                 <div class="menu">
