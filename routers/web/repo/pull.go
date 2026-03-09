@@ -965,8 +965,10 @@ func SubmitPullEditPost(ctx *context.Context) {
 	// count and diff.
 	if err := pull_service.PushToBaseRepo(ctx, pull); err != nil {
 		log.Error("SubmitPullEditPost: PushToBaseRepo: %v", err)
-		ctx.JSONError(ctx.Tr("repo.pulls.edit.ref_update_failed"))
-		return
+		// Non-fatal: the edit was saved; warn the user so they know the PR
+		// display (diff, commit count) may be stale until the ref is corrected
+		// by the next PR interaction.
+		ctx.Flash.Warning(ctx.Locale.Tr("repo.pulls.edit.ref_update_failed"))
 	}
 
 	// Record a "pushed N commits" timeline entry on the PR, mirroring what a
