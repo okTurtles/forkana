@@ -157,16 +157,16 @@ sudo usermod -aG docker forkana-deploy
 #### Fedora
 
 ```bash
-sudo useradd --system --create-home --shell /bin/bash --uid 1000 \
+sudo useradd --create-home --shell /bin/bash --uid 1000 \
   --home-dir /home/forkana-deploy forkana-deploy
 sudo usermod -aG docker forkana-deploy
 ```
 
 ### 2. Verify/Fix Deploy User Home Directory
 
-Some distributions (especially Fedora with `--system` users) may not create
-the home directory, or may leave it owned by root. Run these commands as root
-to ensure the home directory exists with correct ownership:
+Some distributions may not create the home directory, or may leave it owned
+by root. Run these commands as root to ensure the home directory exists with
+correct ownership:
 
 ```bash
 # Determine the home directory from the passwd entry
@@ -313,9 +313,9 @@ Generate the file (replace `dev.forkana.org` with your actual domain):
 
 ```bash
 # Create .env with generated secrets (overwrites any existing file)
-echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)"  >  ~/forkana/compose/.env
-echo "FORKANA_DOMAIN=dev.forkana.org"                 >> ~/forkana/compose/.env
-echo "FORKANA_SECRET_KEY=$(openssl rand -hex 32)"     >> ~/forkana/compose/.env
+echo "POSTGRES_PASSWORD=$(head -c 18 /dev/urandom | base64)"  >  ~/forkana/compose/.env
+echo "FORKANA_DOMAIN=dev.forkana.org"                          >> ~/forkana/compose/.env
+echo "FORKANA_SECRET_KEY=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" >> ~/forkana/compose/.env
 
 # Lock down permissions — only the deploy user should read this file
 chmod 600 ~/forkana/compose/.env
@@ -508,6 +508,56 @@ docker compose -f dev.yml -f compose.override.yml logs --tail=100 forkana
 
 ### Common Issues
 
+#### `systemctl` Command Not Found or "Failed to connect to bus"
+
+**Symptoms:**
+```
+System has not been booted with systemd as init system (PID 1).
+Can't operate.
+```
+
+**Cause:** You're running in a container or minimal VM without systemd.
+
+**Solution:** This is expected in containers. On a real VPS, systemd is the default init system. If testing in a container, skip `systemctl` commands and manage services directly:
+
+```bash
+# Instead of: sudo systemctl start docker
+sudo dockerd &
+
+# Instead of: sudo systemctl reload nginx
+sudo nginx -s reload
+```
+
+> **Note:** Full deployment testing requires a real VPS with systemd. Containers can only validate package installation, user creation, and script logic.
+
+#### Docker Daemon Not Running
+
+**Symptoms:**
+```
+Cannot connect to the Docker daemon at unix:///var/run/docker.sock.
+Is the docker daemon running?
+```
+
+**Cause:** Docker daemon is not started (common in containers without Docker-in-Docker).
+
+**Solution:**
+
+On a VPS:
+```bash
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+In a container (testing only):
+```bash
+# Start Docker daemon in background
+sudo dockerd &
+
+# Wait for daemon to be ready
+sleep 5
+docker info
+```
+
 #### Container Won't Start
 
 ```bash
@@ -534,6 +584,62 @@ step to repair it:
 ```bash
 DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
 sudo install -d -o forkana-deploy -g forkana-deploy -m 0755 "$DEPLOY_HOME"
+```
+
+#### UID 1000 Permission Issues (Bind-Mount Directories)
+
+**Symptoms:**
+```
+forkana: permission denied
+mkdir: cannot create directory '/data/git': Permission denied
+```
+
+**Cause:** Forkana containers run as UID 1000 (git user). All bind-mounted directories must be owned by UID 1000, or the container will fail to write.
+
+**Diagnosis:**
+```bash
+# Check directory ownership
+ls -la ~/forkana/data ~/forkana/config ~/forkana/postgres
+
+# Expected: all directories owned by UID 1000 (or forkana-deploy)
+# drwxr-xr-x  1000  1000  ... data/
+```
+
+**Solution:**
+```bash
+# Fix ownership on all bind-mount directories
+sudo chown -R 1000:1000 ~/forkana/data ~/forkana/config ~/forkana/postgres
+
+# Verify the deploy user has UID 1000
+getent passwd forkana-deploy | cut -d: -f3
+# Should output: 1000
+```
+
+> **Why UID 1000?** The container's `git` user is UID 1000. The deploy user is created with UID 1000 so directories it creates are automatically accessible to the container.
+
+#### Testing in a Container (Limitations)
+
+When validating the deployment guide in a container (e.g., for preflight testing on Mac M1), be aware of these limitations:
+
+| Step | Container-Testable | Notes |
+|------|-------------------|-------|
+| Package installation | ✅ Yes | All `dnf`/`apt` commands work |
+| User creation | ✅ Yes | `useradd`/`adduser` work |
+| Directory setup | ✅ Yes | All `mkdir`/`chmod` work |
+| Git clone | ✅ Yes | Works if network available |
+| Deploy script logic | ✅ Yes | Can validate script syntax |
+| `systemctl` commands | ❌ No | Requires systemd (VPS-only) |
+| Docker daemon | ❌ No | Requires Docker-in-Docker or VPS |
+| Nginx reverse proxy | ⚠️ Partial | Can install, but no systemd |
+| SSL certificates | ❌ No | Requires public domain |
+
+**Container testing commands:**
+```bash
+# Run Fedora container for testing
+docker run --rm -it --platform linux/amd64 fedora:43 bash
+
+# Inside container, run through the guide steps
+# Skip systemctl, Docker daemon, and Nginx/systemd commands
 ```
 
 #### Database Connection Failed
