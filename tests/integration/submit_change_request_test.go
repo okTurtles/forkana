@@ -930,14 +930,14 @@ func TestSubmitChangeRequestWhitespaceOnlyCommitSummary(t *testing.T) {
 		require.NoError(t, err)
 		defer headGitRepo.Close()
 
-		headCommit, err := headGitRepo.GetCommit(pr.HeadBranch)
+		headCommit, err := headGitRepo.GetBranchCommit(pr.HeadBranch)
 		require.NoError(t, err)
 
-		// The commit message should be the default "Update README.md", not empty
+		// The commit message should be the default "Update article", not empty
 		commitMessage := headCommit.CommitMessage
 		assert.NotEmpty(t, strings.TrimSpace(commitMessage),
 			"Commit message should not be empty when commit_summary is whitespace-only")
-		assert.Contains(t, commitMessage, "Update README.md",
+		assert.Contains(t, commitMessage, "Update article",
 			"Commit message should use the default format when commit_summary is whitespace-only")
 	})
 }
@@ -1030,14 +1030,35 @@ func TestSubmitPullEditPostStaleCommitID(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		sessionOwner.MakeRequest(t, req, http.StatusOK)
 
-		// Step 4: Non-owner tries to edit the PR with the stale last_commit
-		// This should return a JSONError, not HTTP 500
+		// Step 4: Non-owner tries to access the PR edit page.
+		// After the owner's concurrent edit in step 3, the head branch has
+		// advanced beyond the commit the REQUEST_CHANGES review targets
+		// (firstCommitSHA). The CommitID gate in ViewPullEdit rejects the
+		// request because no review matches the new head commit → 404.
 		pullEditURL := path.Join(owner.Name, repo.Name, "pulls", strconv.FormatInt(prIndex, 10), "edit")
+		req = NewRequest(t, "GET", pullEditURL)
+		sessionNonOwner.MakeRequest(t, req, http.StatusNotFound)
+
+		// Step 5: Create a fresh REQUEST_CHANGES review targeting the new
+		// head commit so the edit page becomes accessible again.
+		newHeadSHA, err := gitRepo.GetBranchCommitID(pr.HeadBranch)
+		require.NoError(t, err)
+		require.NotEqual(t, firstCommitSHA, newHeadSHA, "head should have advanced")
+
+		freshReviewBody := fmt.Sprintf(`{"body":"Please revise again.","commit_id":%q,"event":"REQUEST_CHANGES"}`, newHeadSHA)
+		req = NewRequestWithBody(t, "POST", reviewURL, strings.NewReader(freshReviewBody)).
+			AddTokenAuth(ownerToken)
+		req.Header.Set("Content-Type", "application/json")
+		sessionOwner.MakeRequest(t, req, http.StatusOK)
+
+		// Now GET /edit should succeed because the review matches the head.
 		req = NewRequest(t, "GET", pullEditURL)
 		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
 		htmlDoc = NewHTMLParser(t, resp.Body)
 
-		// Use the stale commit ID from the first edit
+		// Use the stale commit ID from step 1 (before the owner's concurrent
+		// edit). SubmitPullEditPost should detect the mismatch and return a
+		// user-friendly JSONError instead of HTTP 500.
 		staleEditForm := map[string]string{
 			"_csrf":       htmlDoc.GetCSRF(),
 			"last_commit": firstCommitSHA, // This is now stale
