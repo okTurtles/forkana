@@ -70,7 +70,7 @@
 }
 
 /* Toast editor border & padding to match design */
-.toast-comment-editor .toastui-editor-defaultUI .ProseMirror {
+.toast-comment-editor .toastui-editor-defaultUI .toastui-editor-ww-mode .ProseMirror {
   border: 1px solid var(--color-secondary);
   border-radius: var(--border-radius-medium);
   padding: 16px 10px 0;
@@ -78,7 +78,7 @@
 }
 
 /* Make the ww-container a flex column so hint stays at bottom */
-.toast-comment-editor .toastui-editor-ww-container {
+.toastui-editor-ww-mode .toast-comment-editor .toastui-editor-ww-container {
   display: flex;
   flex-direction: column;
   overflow: visible;
