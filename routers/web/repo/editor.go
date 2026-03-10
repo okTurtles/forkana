@@ -608,6 +608,8 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 
 // cleanupOrphanedBranch attempts to delete a branch that was created but is no longer needed
 // (e.g., when PR creation fails after the branch was already created).
+// It performs both a soft-delete (via DeleteBranch) and a hard-delete of the DB
+// record, since the branch was never meant to exist and should leave no trace.
 // It logs any errors but does not propagate them to the caller.
 func cleanupOrphanedBranch(ctx *context.Context, repo *repo_model.Repository, gitRepo *git.Repository, branchName string) {
 	if gitRepo == nil {
@@ -622,6 +624,19 @@ func cleanupOrphanedBranch(ctx *context.Context, repo *repo_model.Repository, gi
 		SkipPermissionCheck: true,
 	}); err != nil {
 		log.Error("cleanupOrphanedBranch: failed to cleanup branch %s: %v", branchName, err)
+		return
+	}
+
+	// Hard-delete the soft-deleted DB record so the orphaned branch leaves no
+	// trace. DeleteBranch only marks the record as deleted (is_deleted=true);
+	// without this step the branch would still appear in unfiltered queries.
+	branch, err := git_model.GetBranch(ctx, repo.ID, branchName)
+	if err != nil {
+		log.Error("cleanupOrphanedBranch: failed to get branch record for %s: %v", branchName, err)
+		return
+	}
+	if err := git_model.RemoveDeletedBranchByID(ctx, repo.ID, branch.ID); err != nil {
+		log.Error("cleanupOrphanedBranch: failed to hard-delete branch record for %s: %v", branchName, err)
 	}
 }
 

@@ -1058,22 +1058,18 @@ func TestSubmitPullEditPostStaleCommitID(t *testing.T) {
 
 		// Use the stale commit ID from step 1 (before the owner's concurrent
 		// edit). SubmitPullEditPost should detect the mismatch and return a
-		// user-friendly JSONError instead of HTTP 500.
+		// user-friendly JSONError (HTTP 400) instead of HTTP 500.
 		staleEditForm := map[string]string{
 			"_csrf":       htmlDoc.GetCSRF(),
 			"last_commit": firstCommitSHA, // This is now stale
 			"content":     "# Non-owner revision\n",
 		}
 		req = NewRequestWithValues(t, "POST", pullEditURL, staleEditForm)
-		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusBadRequest)
 
-		// Verify we get a JSONError (not HTTP 500)
-		assert.Equal(t, http.StatusOK, resp.Code,
-			"Should return HTTP 200 with JSONError, not HTTP 500")
-
-		// Verify the response contains the error message
+		// Verify the response contains the stale-commit error message
 		respBody := resp.Body.String()
-		assert.Contains(t, respBody, "already_changed",
-			"Error response should contain 'already_changed' locale key or message")
+		assert.Contains(t, respBody, "already been changed",
+			"Error response should contain the stale-commit error message")
 	})
 }
