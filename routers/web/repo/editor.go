@@ -608,6 +608,8 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 
 // cleanupOrphanedBranch attempts to delete a branch that was created but is no longer needed
 // (e.g., when PR creation fails after the branch was already created).
+// It performs both a soft-delete (via DeleteBranch) and a hard-delete of the DB
+// record, since the branch was never meant to exist and should leave no trace.
 // It logs any errors but does not propagate them to the caller.
 func cleanupOrphanedBranch(ctx *context.Context, repo *repo_model.Repository, gitRepo *git.Repository, branchName string) {
 	if gitRepo == nil {
@@ -622,6 +624,19 @@ func cleanupOrphanedBranch(ctx *context.Context, repo *repo_model.Repository, gi
 		SkipPermissionCheck: true,
 	}); err != nil {
 		log.Error("cleanupOrphanedBranch: failed to cleanup branch %s: %v", branchName, err)
+		return
+	}
+
+	// Hard-delete the soft-deleted DB record so the orphaned branch leaves no
+	// trace. DeleteBranch only marks the record as deleted (is_deleted=true);
+	// without this step the branch would still appear in unfiltered queries.
+	branch, err := git_model.GetBranch(ctx, repo.ID, branchName)
+	if err != nil {
+		log.Error("cleanupOrphanedBranch: failed to get branch record for %s: %v", branchName, err)
+		return
+	}
+	if err := git_model.RemoveDeletedBranchByID(ctx, repo.ID, branch.ID); err != nil {
+		log.Error("cleanupOrphanedBranch: failed to hard-delete branch record for %s: %v", branchName, err)
 	}
 }
 
@@ -687,7 +702,12 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	// The ChangeRepoFiles function will create the new branch from the default branch
 	// We use InternalPush to skip pre-receive hooks since this is a programmatic operation
 	// where we've already verified the user can submit change requests (via middleware)
-	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update", form.TreePath)
+	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update_article")
+	commitMessage := parsed.GetCommitMessage(defaultCommitMessage)
+	if strings.TrimSpace(commitMessage) == "" {
+		ctx.JSONError(ctx.Tr("repo.editor.commit_message_required"))
+		return nil
+	}
 	_, err = files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		// Use an empty LastCommitID so ChangeRepoFiles bases the new commit on the current
 		// HEAD of OldBranch. In this workflow we always create a new branch (NewBranch != OldBranch),
@@ -697,7 +717,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		LastCommitID: "",
 		OldBranch:    targetRepo.DefaultBranch,
 		NewBranch:    branchName,
-		Message:      parsed.GetCommitMessage(defaultCommitMessage),
+		Message:      commitMessage,
 		Files: []*files_service.ChangeRepoFile{
 			{
 				Operation:     "update",
@@ -726,6 +746,26 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		return nil
 	}
 	defer gitRepo.Close()
+
+	// Sync the newly created branch to the database. The InternalPush above
+	// bypasses post-receive hooks, so the branch exists only in git at this
+	// point. Without this sync, any subsequent operation that checks branch
+	// existence via the DB (e.g. ChangeRepoFiles from the API) would fail
+	// with "branch does not exist".
+	newCommitID, err := gitRepo.GetBranchCommitID(branchName)
+	if err != nil {
+		log.Error("handleSubmitChangeRequest: failed to get branch commit ID: %v", err)
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
+		ctx.ServerError("GetBranchCommitID", err)
+		return nil
+	}
+	if err := repo_service.SyncBranchesToDB(ctx, targetRepo.ID, ctx.Doer.ID,
+		[]string{branchName}, []string{newCommitID}, gitRepo.GetCommit); err != nil {
+		log.Error("handleSubmitChangeRequest: failed to sync branch to DB: %v", err)
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
+		ctx.ServerError("SyncBranchesToDB", err)
+		return nil
+	}
 
 	// Same-repo CR: both head and base are in the target repository
 	compareInfo, err := pull_service.GetCompareInfo(ctx, targetRepo, targetRepo, gitRepo,
