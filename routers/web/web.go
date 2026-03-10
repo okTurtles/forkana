@@ -1416,6 +1416,7 @@ func registerWebRoutes(m *web.Router) {
 
 	// Article-based pull request update routes (comments, reactions, title, content, etc.)
 	m.Group("/article/{username}/{subjectname}", func() {
+		m.Group("/{type:issues}", addIssuesPullsUpdateRoutes, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests))
 		m.Group("/{type:pulls}", addIssuesPullsUpdateRoutes, reqUnitPullsReader)
 
 		m.Group("/comments/{id}", func() {
