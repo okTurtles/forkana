@@ -77,11 +77,57 @@
   margin: 8px;
 }
 
+/* Make the ww-container a flex column so hint stays at bottom */
+.toast-comment-editor .toastui-editor-ww-container {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  height: auto !important;
+}
+
+/* All parent containers grow with the resized ProseMirror */
+.toast-comment-editor .toastui-editor-defaultUI,
+.toast-comment-editor .toastui-editor-main-container,
+.toast-comment-editor .toastui-editor-ww-container > .toastui-editor {
+  height: auto !important;
+}
+
+/* .toastui-editor-main collapses to 0px because children are absolutely positioned.
+   Force flex layout so children contribute to height. */
+.toast-comment-editor .toastui-editor-main {
+  height: auto !important;
+  display: flex !important;
+  flex-direction: column;
+}
+
+.toast-comment-editor .toastui-editor-main > .toastui-editor-main-container {
+  position: relative !important;
+  flex: 1 1 auto;
+}
+
+.toast-comment-editor .toast-editor-wrapper {
+  height: auto !important;
+  min-height: 200px;
+  overflow: auto;
+}
+
+/* Editable content area fills container height and is resizable */
+.toast-comment-editor .ProseMirror.toastui-editor-contents {
+  height: 100%;
+  min-height: 100px;
+  overflow-y: auto;
+  resize: vertical;
+}
+
+/* Hint stays pinned at bottom, never hidden */
+.toast-comment-editor .toastui-editor-ww-container > .dropzone-hint-text {
+  flex: 0 0 auto;
+}
+
 /* Hint text inside the editor, separated by a dashed line */
 .dropzone-hint-text {
   color: var(--color-text-light-2);
   font-size: 12px;
-  padding: 8px 0;
+  padding: 10px 10px 8px 10px;
   border-top: 1px dashed var(--color-secondary);
-  margin-top: 8px;
 }
