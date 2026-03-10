@@ -199,7 +199,7 @@ log "Wrote ${COMPOSE_OVERRIDE}"
 # ---------------------------------------------------------------------------
 ENV_FILE="${COMPOSE_DIR}/.env"
 if [[ ! -f "${ENV_FILE}" ]]; then
-  die "Missing ${ENV_FILE} — create it with POSTGRES_PASSWORD, FORKANA_DOMAIN, and FORKANA_SECRET_KEY (see DEPLOYMENT_GUIDE.md)."
+  die "Missing ${ENV_FILE} — create it with POSTGRES_PASSWORD, FORKANA_DOMAIN, FORKANA_SECRET_KEY, FORKANA_INTERNAL_TOKEN, and FORKANA_JWT_SECRET (see DEPLOYMENT_GUIDE.md)."
 fi
 
 # ---------------------------------------------------------------------------

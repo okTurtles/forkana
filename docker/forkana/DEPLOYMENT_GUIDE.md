@@ -255,7 +255,9 @@ The registry is managed by `docker compose` via `dev.yml`. For the initial
 bootstrap (before the first deploy), start it manually:
 
 ```bash
-docker compose -f ~/forkana/repo/docker/forkana/dev.yml up -d registry
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+
+docker compose -f $DEPLOY_HOME/forkana/repo/docker/forkana/dev.yml up -d registry
 ```
 
 Verify it is running:
@@ -298,33 +300,39 @@ this value — **never** use `StrictHostKeyChecking=no`.
 
 ### Create Environment File
 
-Create `~/forkana/compose/.env` with the commands below. Compose reads `.env`
+Create `$DEPLOY_HOME/forkana/compose/.env` with the commands below. Compose reads `.env`
 from the project directory automatically.
 
-The file requires three variables:
+The file requires **five** variables:
 
 | Variable | Description |
 |----------|-------------|
 | `POSTGRES_PASSWORD` | PostgreSQL password (random, never reused) |
 | `FORKANA_DOMAIN` | Your domain without `https://` prefix |
 | `FORKANA_SECRET_KEY` | 64-char hex key for session encryption |
+| `FORKANA_INTERNAL_TOKEN` | Internal API token (base64, 32+ chars) |
+| `FORKANA_JWT_SECRET` | OAuth2 JWT signing secret (base64, 32+ chars) |
 
 Generate the file (replace `dev.forkana.org` with your actual domain):
 
 ```bash
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+
 # Create .env with generated secrets (overwrites any existing file)
-echo "POSTGRES_PASSWORD=$(head -c 18 /dev/urandom | base64)"  >  ~/forkana/compose/.env
-echo "FORKANA_DOMAIN=dev.forkana.org"                          >> ~/forkana/compose/.env
-echo "FORKANA_SECRET_KEY=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" >> ~/forkana/compose/.env
+echo "POSTGRES_PASSWORD=$(head -c 18 /dev/urandom | base64)"  >  $DEPLOY_HOME/forkana/compose/.env
+echo "FORKANA_DOMAIN=dev.forkana.org"                          >> $DEPLOY_HOME/forkana/compose/.env
+echo "FORKANA_SECRET_KEY=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" >> $DEPLOY_HOME/forkana/compose/.env
+echo "FORKANA_INTERNAL_TOKEN=$(head -c 32 /dev/urandom | base64)" >> $DEPLOY_HOME/forkana/compose/.env
+echo "FORKANA_JWT_SECRET=$(head -c 32 /dev/urandom | base64)" >> $DEPLOY_HOME/forkana/compose/.env
 
 # Lock down permissions — only the deploy user should read this file
-chmod 600 ~/forkana/compose/.env
+chmod 600 $DEPLOY_HOME/forkana/compose/.env
 ```
 
 Verify the result:
 
 ```bash
-cat ~/forkana/compose/.env
+cat $DEPLOY_HOME/forkana/compose/.env
 ```
 
 ---
@@ -332,9 +340,21 @@ cat ~/forkana/compose/.env
 ## Running Forkana
 
 Automated deployments are handled by `deploy.sh` (triggered via GitHub Actions).
-For manual operations, use the compose files in `~/forkana/compose/`:
+For manual operations, use the compose files in `~/forkana/compose/`.
+
+> **User context:** All commands in this section (and in Health Checks,
+> Maintenance, and most of Troubleshooting) should be run **as the deploy
+> user**. Either log in as `forkana-deploy` or prefix your session with
+> `sudo -iu forkana-deploy`. This ensures `~` expands to
+> `/home/forkana-deploy`.
 
 ### Start the Services
+
+> **Note:** When running commands via `sudo -Hiu forkana-deploy`, Docker Compose
+> may not auto-load the `.env` file. Use `--env-file` explicitly:
+> ```bash
+> docker compose --env-file ~/forkana/compose/.env -f dev.yml -f compose.override.yml up -d
+> ```
 
 ```bash
 cd ~/forkana/compose
@@ -392,31 +412,68 @@ sudo dnf install -y nginx certbot python3-certbot-nginx
 ### Deploy the Nginx Configuration
 
 The repository includes a ready-made Nginx configuration at [`docker/forkana/nginx.conf`](nginx.conf).
-Copy it to your server and update the `server_name` and SSL paths to match your domain:
-
-#### Debian/Ubuntu
-
-```bash
-# Copy the config
-sudo cp docker/forkana/nginx.conf /etc/nginx/sites-available/forkana
-
-# Edit the config to replace dev.forkana.example with your actual domain
-sudo sed -i 's/dev.forkana.example/your-domain.example/g' /etc/nginx/sites-available/forkana
-
-# Enable the site
-sudo ln -s /etc/nginx/sites-available/forkana /etc/nginx/sites-enabled/
-```
+However, for the initial setup, use a simple HTTP-only config and let Certbot
+configure SSL automatically:
 
 #### Fedora
 
 Fedora uses `/etc/nginx/conf.d/` instead of `sites-available/sites-enabled`:
 
 ```bash
-# Copy the config
-sudo cp docker/forkana/nginx.conf /etc/nginx/conf.d/forkana.conf
+# Create HTTP-only config for initial Certbot setup
+sudo tee /etc/nginx/conf.d/forkana.conf << 'EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name your-domain.example;
 
-# Edit the config to replace dev.forkana.example with your actual domain
-sudo sed -i 's/dev.forkana.example/your-domain.example/g' /etc/nginx/conf.d/forkana.conf
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        client_max_body_size 100M;
+    }
+}
+EOF
+
+# Edit to set your actual domain
+sudo sed -i 's/your-domain.example/your-actual-domain.com/g' /etc/nginx/conf.d/forkana.conf
+```
+
+#### Debian/Ubuntu
+
+```bash
+# Create HTTP-only config for initial Certbot setup
+sudo tee /etc/nginx/sites-available/forkana << 'EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name your-domain.example;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        client_max_body_size 100M;
+    }
+}
+EOF
+
+# Edit to set your actual domain
+sudo sed -i 's/your-domain.example/your-actual-domain.com/g' /etc/nginx/sites-available/forkana
+
+# Enable the site
+sudo ln -s /etc/nginx/sites-available/forkana /etc/nginx/sites-enabled/
 ```
 
 ### Enable the Site and Obtain SSL Certificate
@@ -425,13 +482,18 @@ sudo sed -i 's/dev.forkana.example/your-domain.example/g' /etc/nginx/conf.d/fork
 # Test configuration
 sudo nginx -t
 
-# Obtain SSL certificate (before enabling HTTPS block)
-# First, temporarily comment out the SSL server block and run:
-sudo certbot --nginx -d your-domain.example
+# Enable and start nginx
+sudo systemctl enable nginx
+sudo systemctl start nginx
 
-# Reload Nginx
-sudo systemctl reload nginx
+# Obtain SSL certificate (Certbot will automatically update the nginx config)
+sudo certbot --nginx -d your-domain.example
 ```
+
+Certbot will automatically:
+1. Obtain the SSL certificate
+2. Add the HTTPS server block with proper SSL configuration
+3. Set up HTTP-to-HTTPS redirect
 
 ---
 
@@ -562,14 +624,18 @@ docker info
 
 ```bash
 docker compose -f dev.yml -f compose.override.yml logs forkana | tail -50
+```
 
-# Verify permissions (all bind-mount dirs must be owned by UID 1000)
-ls -la ~/forkana/data
-ls -la ~/forkana/config
-ls -la ~/forkana/postgres
+```bash
+# Verify permissions (run as root — ~/forkana would expand to /root)
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+
+ls -la $DEPLOY_HOME/forkana/data
+ls -la $DEPLOY_HOME/forkana/config
+ls -la $DEPLOY_HOME/forkana/postgres
 
 # Fix permissions if needed (deploy user must be UID 1000)
-chown -R 1000:1000 ~/forkana/data ~/forkana/config ~/forkana/postgres
+chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
 ```
 
 #### Deploy User Commands Fail with "Permission denied"
@@ -598,8 +664,10 @@ mkdir: cannot create directory '/data/git': Permission denied
 
 **Diagnosis:**
 ```bash
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+
 # Check directory ownership
-ls -la ~/forkana/data ~/forkana/config ~/forkana/postgres
+ls -la $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
 
 # Expected: all directories owned by UID 1000 (or forkana-deploy)
 # drwxr-xr-x  1000  1000  ... data/
@@ -607,8 +675,10 @@ ls -la ~/forkana/data ~/forkana/config ~/forkana/postgres
 
 **Solution:**
 ```bash
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+
 # Fix ownership on all bind-mount directories
-sudo chown -R 1000:1000 ~/forkana/data ~/forkana/config ~/forkana/postgres
+sudo chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
 
 # Verify the deploy user has UID 1000
 getent passwd forkana-deploy | cut -d: -f3
@@ -660,6 +730,22 @@ curl http://localhost:3000/api/healthz
 
 # Check Nginx error logs
 sudo tail -f /var/log/nginx/error.log
+```
+
+#### Fedora-Specific: Nginx Proxy Permission Denied
+
+**Symptoms:**
+```
+connect() to 127.0.0.1:3000 failed (13: Permission denied) while connecting to upstream
+```
+
+**Cause:** SELinux blocks nginx from making network connections by default.
+
+**Solution:**
+```bash
+# Enable nginx to connect to network services
+setsebool -P httpd_can_network_connect 1
+sudo systemctl restart nginx
 ```
 
 #### SSL Certificate Issues
