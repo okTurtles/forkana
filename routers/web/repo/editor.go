@@ -732,6 +732,26 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 	}
 	defer gitRepo.Close()
 
+	// Sync the newly created branch to the database. The InternalPush above
+	// bypasses post-receive hooks, so the branch exists only in git at this
+	// point. Without this sync, any subsequent operation that checks branch
+	// existence via the DB (e.g. ChangeRepoFiles from the API) would fail
+	// with "branch does not exist".
+	newCommitID, err := gitRepo.GetBranchCommitID(branchName)
+	if err != nil {
+		log.Error("handleSubmitChangeRequest: failed to get branch commit ID: %v", err)
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
+		ctx.ServerError("GetBranchCommitID", err)
+		return nil
+	}
+	if err := repo_service.SyncBranchesToDB(ctx, targetRepo.ID, ctx.Doer.ID,
+		[]string{branchName}, []string{newCommitID}, gitRepo.GetCommit); err != nil {
+		log.Error("handleSubmitChangeRequest: failed to sync branch to DB: %v", err)
+		cleanupOrphanedBranch(ctx, targetRepo, gitRepo, branchName)
+		ctx.ServerError("SyncBranchesToDB", err)
+		return nil
+	}
+
 	// Same-repo CR: both head and base are in the target repository
 	compareInfo, err := pull_service.GetCompareInfo(ctx, targetRepo, targetRepo, gitRepo,
 		git.BranchPrefix+targetRepo.DefaultBranch, git.BranchPrefix+branchName, false, false)
