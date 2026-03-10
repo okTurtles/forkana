@@ -123,6 +123,13 @@ export class ToastCommentEditor {
     // Remove loading indicator if present
     const loading = this.container.querySelector('.editor-loading');
     if (loading) loading.remove();
+
+    // Move the dropzone hint text inside the .toastui-editor-ww-container element
+    const wwContainer = this.editorWrapper.querySelector('.toastui-editor-ww-container');
+    const hintText = this.container.parentElement?.querySelector('.dropzone-hint-text');
+    if (wwContainer && hintText) {
+      wwContainer.appendChild(hintText);
+    }
   }
 
   async setupDropzone() {
