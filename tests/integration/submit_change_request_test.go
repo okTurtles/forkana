@@ -497,13 +497,24 @@ func TestArticleIssueTitleUpdate(t *testing.T) {
 		})
 
 		t.Run("UnauthenticatedUserCannotUpdateTitle", func(t *testing.T) {
+			// The update route group requires reqSignIn, but the CSRF middleware runs first.
+			// A POST with no CSRF token is rejected with 400 before reaching the auth check.
+			// We therefore obtain a valid CSRF token via a public GET (the PR view route uses
+			// optSignIn and is accessible without authentication), then POST with that token
+			// but no session cookie. This lets reqSignIn fire and redirect to login.
+			articlePRURL := fmt.Sprintf("/article/%s/%s/pulls/%d", owner.Name, subject.Name, prIndex)
+			getReq := NewRequest(t, "GET", articlePRURL)
+			getResp := MakeRequest(t, getReq, http.StatusOK)
+			csrf := NewHTMLParser(t, getResp.Body).GetCSRF()
+
 			req := NewRequestWithValues(t, "POST", articleTitleURL, map[string]string{
+				"_csrf": csrf,
 				"title": "Should Not Work",
 			})
 			resp := MakeRequest(t, req, NoExpectedStatus)
-			// Unauthenticated requests should be redirected to login or get 403
-			assert.True(t, resp.Code == http.StatusForbidden || resp.Code == http.StatusSeeOther,
-				"Expected 403 or redirect to login, got %d", resp.Code)
+			// reqSignIn redirects unauthenticated users to the login page
+			assert.Equal(t, http.StatusSeeOther, resp.Code,
+				"Expected redirect to login (303), got %d", resp.Code)
 		})
 
 		t.Run("NonAuthorNonCollaboratorCannotUpdateTitle", func(t *testing.T) {
