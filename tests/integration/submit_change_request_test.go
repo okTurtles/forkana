@@ -587,7 +587,7 @@ func TestSubmitChangeRequestConcurrentBranchCollision(t *testing.T) {
 				"submit_change_request": "true",
 			}
 
-			req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+			req = NewRequestWithValues(t, "POST", editURL, form)
 			resp = session.MakeRequest(t, req, NoExpectedStatus)
 
 			redirectURL := test.RedirectURL(resp)
