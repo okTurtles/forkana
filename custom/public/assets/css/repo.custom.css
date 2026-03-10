@@ -25,6 +25,11 @@
   .repository.view.issue .comment-list .comment .content .form .button:not(:last-child) {
       margin-bottom: 0 !important;
   }
+
+  /* Make footer buttons equal height when text wraps */
+  .field.footer .flex-text-block {
+    align-items: stretch;
+  }
 }
 
 /* Issue title font size and weight */
