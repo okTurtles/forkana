@@ -32,6 +32,8 @@ import (
 	"code.gitea.io/gitea/modules/graceful"
 	issue_template "code.gitea.io/gitea/modules/issue/template"
 	"code.gitea.io/gitea/modules/log"
+	"code.gitea.io/gitea/modules/optional"
+	repo_module "code.gitea.io/gitea/modules/repository"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/templates"
 	"code.gitea.io/gitea/modules/util"
@@ -44,9 +46,11 @@ import (
 	"code.gitea.io/gitea/services/context/upload"
 	"code.gitea.io/gitea/services/forms"
 	"code.gitea.io/gitea/services/gitdiff"
+	issue_service "code.gitea.io/gitea/services/issue"
 	notify_service "code.gitea.io/gitea/services/notify"
 	pull_service "code.gitea.io/gitea/services/pull"
 	repo_service "code.gitea.io/gitea/services/repository"
+	files_service "code.gitea.io/gitea/services/repository/files"
 	user_service "code.gitea.io/gitea/services/user"
 )
 
@@ -54,6 +58,7 @@ const (
 	tplCompareDiff templates.TplName = "repo/diff/compare"
 	tplPullCommits templates.TplName = "repo/pulls/commits"
 	tplPullFiles   templates.TplName = "repo/pulls/files"
+	tplPullEdit    templates.TplName = "repo/pulls/edit"
 
 	pullRequestTemplateKey = "PullRequestTemplate"
 )
@@ -649,6 +654,11 @@ func ViewPullCommits(ctx *context.Context) {
 	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
 	ctx.Data["IsIssuePoster"] = ctx.IsSigned && issue.IsPoster(ctx.Doer.ID)
 
+	preparePullEditTabVisibility(ctx, issue)
+	if ctx.Written() {
+		return
+	}
+
 	// For PR commits page
 	PrepareBranchList(ctx)
 	if ctx.Written() {
@@ -658,6 +668,382 @@ func ViewPullCommits(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplPullCommits)
 }
 
+// ViewPullEdit renders the article editor for revising a PR's content.
+// Only accessible to the PR poster when the PR is open and has received a "Request Changes" review.
+func ViewPullEdit(ctx *context.Context) {
+	ctx.Data["PageIsPullList"] = true
+	ctx.Data["PageIsPullEdit"] = true
+
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+	pull := issue.PullRequest
+
+	// Gate access: must be signed in and be the issue poster
+	if !ctx.IsSigned || !issue.IsPoster(ctx.Doer.ID) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// PR must be open (not closed, not merged)
+	if issue.IsClosed || pull.HasMerged {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Check for non-dismissed ReviewTypeReject reviews (changes requested)
+	reviews, err := issues_model.FindReviews(ctx, issues_model.FindReviewOptions{
+		IssueID:   issue.ID,
+		Types:     []issues_model.ReviewType{issues_model.ReviewTypeReject},
+		Dismissed: optional.Some(false),
+	})
+	if err != nil {
+		ctx.ServerError("FindReviews", err)
+		return
+	}
+	if len(reviews) == 0 {
+		ctx.NotFound(nil)
+		return
+	}
+	ctx.Data["HasChangesRequested"] = true
+
+	// Load head repo
+	if err := pull.LoadHeadRepo(ctx); err != nil {
+		ctx.ServerError("LoadHeadRepo", err)
+		return
+	}
+	if pull.HeadRepo == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Open the head repo's git repository
+	headGitRepo, err := gitrepo.OpenRepository(ctx, pull.HeadRepo)
+	if err != nil {
+		ctx.ServerError("OpenRepository", err)
+		return
+	}
+	defer headGitRepo.Close()
+
+	// Verify head branch exists
+	if !headGitRepo.IsBranchExist(pull.HeadBranch) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Get the head branch commit
+	commit, err := headGitRepo.GetBranchCommit(pull.HeadBranch)
+	if err != nil {
+		ctx.ServerError("GetBranchCommit", err)
+		return
+	}
+	headCommitID := commit.ID.String()
+
+	// Require that at least one non-dismissed "Request Changes" review targets
+	// the current head commit.  This mirrors the gate in SubmitPullEditPost
+	// (and the "Edit this file" button in viewPullFiles) so that the edit form
+	// is only reachable when the POST will actually be accepted.  Without this
+	// check a user who pushed new commits after a review could load the GET
+	// page even though the review is now stale and the POST would 404.
+	hasMatchingReview := false
+	for _, r := range reviews {
+		if r.CommitID == headCommitID {
+			hasMatchingReview = true
+			break
+		}
+	}
+	if !hasMatchingReview {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Read @README.md content from head branch, falling back to README.md only
+	// when the file genuinely does not exist. Any other error (I/O failure, git
+	// object corruption, …) is surfaced immediately so we never silently load
+	// the wrong file's content.
+	readmeTreePath := "@README.md"
+	fileContent, err := commit.GetFileContent(readmeTreePath, int(setting.UI.MaxDisplayFileSize))
+	if err != nil {
+		if !git.IsErrNotExist(err) {
+			ctx.ServerError("GetFileContent", err)
+			return
+		}
+		// @README.md does not exist — try the plain name
+		readmeTreePath = "README.md"
+		fileContent, err = commit.GetFileContent(readmeTreePath, int(setting.UI.MaxDisplayFileSize))
+		if err != nil {
+			ctx.ServerError("GetFileContent", err)
+			return
+		}
+	}
+
+	// Set context data for the editor template
+	ctx.Data["FileContent"] = fileContent
+	ctx.Data["BranchName"] = pull.HeadBranch
+	ctx.Data["ReadmeTreePath"] = readmeTreePath
+	ctx.Data["LastCommitID"] = headCommitID
+	ctx.Data["RepoOperationsLink"] = pull.HeadRepo.OperationsLink()
+
+	ctx.Data["IsIssuePoster"] = true
+	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
+
+	// Populate PR header metadata (HeadTarget, BaseTarget, NumCommits, branch links, etc.)
+	// required by view_title and tab_menu templates.  Without this the PR description
+	// line shows empty branch names and the files-tab commit count stays at zero.
+	prInfo := preparePullViewPullInfo(ctx, issue)
+	if ctx.Written() {
+		return
+	} else if prInfo == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	PrepareBranchList(ctx)
+	if ctx.Written() {
+		return
+	}
+	getBranchData(ctx, issue)
+
+	ctx.HTML(http.StatusOK, tplPullEdit)
+}
+
+// SubmitPullEditPost handles form submission from the PR edit page.
+// It commits changes to the PR head branch, optionally creates a comment,
+// and marks existing reviews as stale to restart the review cycle.
+func SubmitPullEditPost(ctx *context.Context) {
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+	pull := issue.PullRequest
+
+	// Gate access: must be signed in and be the issue poster
+	if !ctx.IsSigned || !issue.IsPoster(ctx.Doer.ID) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// PR must be open (not closed, not merged)
+	if issue.IsClosed || pull.HasMerged {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Check for non-dismissed ReviewTypeReject reviews (changes requested)
+	reviews, err := issues_model.FindReviews(ctx, issues_model.FindReviewOptions{
+		IssueID:   issue.ID,
+		Types:     []issues_model.ReviewType{issues_model.ReviewTypeReject},
+		Dismissed: optional.Some(false),
+	})
+	if err != nil {
+		ctx.ServerError("FindReviews", err)
+		return
+	}
+	if len(reviews) == 0 {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Load head and base repos. BaseRepo is required by CreatePushPullComment,
+	// which opens its git repo to enumerate the new commits.
+	if err := pull.LoadHeadRepo(ctx); err != nil {
+		ctx.ServerError("LoadHeadRepo", err)
+		return
+	}
+	if pull.HeadRepo == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Check that at least one "Request Changes" review applies to the current
+	// head commit.  This mirrors the gate in viewPullFiles: the edit button is
+	// only shown when review.CommitID == headCommitID, so SubmitPullEditPost
+	// must enforce the same constraint server-side.  Without this a user could
+	// push new commits after receiving a review, making it stale, and still
+	// POST to /edit because the UI gate and the server gate were inconsistent.
+	headGitRepo, err := gitrepo.OpenRepository(ctx, pull.HeadRepo)
+	if err != nil {
+		ctx.ServerError("OpenRepository", err)
+		return
+	}
+	defer headGitRepo.Close()
+
+	if !headGitRepo.IsBranchExist(pull.HeadBranch) {
+		ctx.NotFound(nil)
+		return
+	}
+
+	headBranchCommitID, err := headGitRepo.GetBranchCommitID(pull.HeadBranch)
+	if err != nil {
+		ctx.ServerError("GetBranchCommitID", err)
+		return
+	}
+
+	hasMatchingReview := false
+	for _, r := range reviews {
+		if r.CommitID == headBranchCommitID {
+			hasMatchingReview = true
+			break
+		}
+	}
+	if !hasMatchingReview {
+		ctx.NotFound(nil)
+		return
+	}
+
+	if err := pull.LoadBaseRepo(ctx); err != nil {
+		ctx.ServerError("LoadBaseRepo", err)
+		return
+	}
+	// CreatePushPullComment reads pr.Issue to attach the timeline comment.
+	pull.Issue = issue
+
+	// Read form data
+	content := ctx.Req.FormValue("content")
+	if strings.TrimSpace(content) == "" {
+		ctx.JSONError(ctx.Tr("repo.editor.content_required"))
+		return
+	}
+	lastCommitID := ctx.Req.FormValue("last_commit")
+	commitSummary := strings.TrimSpace(ctx.Req.FormValue("commit_summary"))
+	reviewComment := ctx.Req.FormValue("review_comment")
+
+	// Resolve the article README path server-side.
+	// Do NOT trust the client-provided "tree_path" form field: a malicious PR poster
+	// could modify the hidden input via browser DevTools to overwrite arbitrary files
+	// in the PR head branch (path traversal / unauthorized file modification).
+	headCommit, err := headGitRepo.GetCommit(headBranchCommitID)
+	if err != nil {
+		ctx.ServerError("GetCommit", err)
+		return
+	}
+	// Probe candidates in priority order. Only skip to the next candidate when
+	// the file genuinely does not exist; any other error (I/O failure, git
+	// object corruption, …) is surfaced immediately so we never silently
+	// commit to the wrong path.
+	treePath := ""
+	for _, candidate := range []string{"@README.md", "README.md"} {
+		_, fileErr := headCommit.GetFileContent(candidate, 1)
+		if fileErr == nil {
+			treePath = candidate
+			break
+		}
+		if !git.IsErrNotExist(fileErr) {
+			ctx.ServerError("GetFileContent", fileErr)
+			return
+		}
+	}
+	if treePath == "" {
+		ctx.JSONError(ctx.Tr("repo.editor.file_not_found"))
+		return
+	}
+
+	// Build commit message
+	commitMessage := commitSummary
+	if commitMessage == "" {
+		commitMessage = "Update " + treePath
+	}
+
+	// Ensure the head branch is synced to the database. Branches created via
+	// InternalPush (e.g. the submit-change-request workflow) bypass the
+	// post-receive hook, so they may exist in git but not in the branch table.
+	// ChangeRepoFiles checks the DB for branch existence and would fail without this.
+	if _, err = repo_module.SyncRepoBranches(ctx, pull.HeadRepo.ID, 0); err != nil {
+		ctx.ServerError("SyncRepoBranches", err)
+		return
+	}
+
+	// Commit changes to the PR head branch
+	filesResponse, err := files_service.ChangeRepoFiles(ctx, pull.HeadRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+		LastCommitID: lastCommitID,
+		OldBranch:    pull.HeadBranch,
+		NewBranch:    pull.HeadBranch,
+		Message:      commitMessage,
+		Files: []*files_service.ChangeRepoFile{
+			{
+				Operation:     "update",
+				TreePath:      treePath,
+				ContentReader: strings.NewReader(content),
+			},
+		},
+		InternalPush: true,
+	})
+	if err != nil {
+		// Handle user-facing errors with appropriate error messages
+		if files_service.IsErrCommitIDDoesNotMatch(err) || git.IsErrPushOutOfDate(err) {
+			// Stale commit ID or concurrent push — user should refresh and retry
+			ctx.JSONError(ctx.Tr("repo.pulls.edit.already_changed"))
+			return
+		}
+		if files_service.IsErrRepoFileDoesNotExist(err) {
+			ctx.JSONError(ctx.Tr("repo.editor.file_modifying_no_longer_exists", treePath))
+			return
+		}
+		if git.IsErrNotExist(err) {
+			ctx.JSONError(ctx.Tr("repo.editor.file_modifying_no_longer_exists", treePath))
+			return
+		}
+		// All other errors are treated as server errors
+		ctx.ServerError("ChangeRepoFiles", err)
+		return
+	}
+
+	// Update refs/pull/N/head to point at the new commit.  ChangeRepoFiles used
+	// InternalPush which skips the post-receive hook (and therefore
+	// UpdatePullsRefs / PushToBaseRepo).  Without this, prepareViewPullInfo
+	// reads a stale ref, treats the PR as broken, and shows the wrong commit
+	// count and diff.
+	if err := pull_service.PushToBaseRepo(ctx, pull); err != nil {
+		log.Error("SubmitPullEditPost: PushToBaseRepo: %v", err)
+		// Non-fatal: the edit was saved; warn the user so they know the PR
+		// display (diff, commit count) may be stale until the ref is corrected
+		// by the next PR interaction.
+		ctx.Flash.Warning(ctx.Locale.Tr("repo.pulls.edit.ref_update_failed"))
+	}
+
+	// Record a "pushed N commits" timeline entry on the PR, mirroring what a
+	// regular git push would produce via AddTestPullRequestTask.
+	if filesResponse != nil && filesResponse.Commit != nil {
+		newCommitID := filesResponse.Commit.SHA
+		pushComment, err := pull_service.CreatePushPullComment(ctx, ctx.Doer, pull, lastCommitID, newCommitID, false)
+		if err != nil {
+			log.Error("SubmitPullEditPost: CreatePushPullComment: %v", err)
+		} else if pushComment != nil {
+			notify_service.PullRequestPushCommits(ctx, ctx.Doer, pull, pushComment)
+		}
+	}
+
+	// Create a comment on the PR if review summary was provided
+	if reviewComment != "" {
+		_, err = issue_service.CreateIssueComment(ctx, ctx.Doer, ctx.Repo.Repository, issue, reviewComment, nil)
+		if err != nil {
+			log.Error("CreateIssueComment: %v", err)
+			// Don't fail the whole operation if comment creation fails
+		}
+	}
+
+	// Mark existing reviews as stale to restart the review cycle.
+	//
+	// Unlike the normal push flow (services/pull/pull.go, services/agit/agit.go)
+	// we do NOT follow up with MarkReviewsAsNotStale here.  In those flows the
+	// new commit SHA may already have been seen by a reviewer who submitted a
+	// review concurrently, so restoring non-stale status for that SHA is
+	// meaningful.  Here the commit was just created by ChangeRepoFiles in this
+	// same request — no review can target it yet, so MarkReviewsAsNotStale
+	// would always match zero rows.  Edit access is gated on CommitID matching
+	// (not the stale flag), so blanket staling is safe and correct.
+	if err := issues_model.MarkReviewsAsStale(ctx, issue.ID); err != nil {
+		log.Error("MarkReviewsAsStale: %v", err)
+		// Non-fatal: the edit was saved; warn the user so they are aware
+		// reviews may not visually reflect the new state until next activity.
+		ctx.Flash.Warning(ctx.Locale.Tr("repo.pulls.edit.reviews_stale_failed"))
+	}
+
+	// Redirect back to the PR conversation page
+	ctx.JSONRedirect(issue.Link())
+}
+
 func indexCommit(commits []*git.Commit, commitID string) *git.Commit {
 	for i := range commits {
 		if commits[i].ID.String() == commitID {
@@ -665,6 +1051,48 @@ func indexCommit(commits []*git.Commit, commitID string) *git.Commit {
 		}
 	}
 	return nil
+}
+
+// preparePullEditTabVisibility queries for non-dismissed "Request Changes" reviews
+// and sets ctx.Data["HasChangesRequested"] so that every handler rendering
+// tab_menu.tmpl shows the Edit tab consistently. It returns the full review list
+// so callers can reuse it without a second DB round-trip. Returns nil without
+// error when the PR is already closed or merged.
+//
+// HasChangesRequested is only set to true when at least one review's CommitID
+// matches ctx.Data["PullHeadCommitID"] (set by preparePullViewPullInfo), so
+// stale "request changes" reviews (where new commits were pushed after the
+// review) do not make the Edit tab visible. This mirrors the CommitID check in
+// viewPullFiles / ViewPullEdit / SubmitPullEditPost.
+func preparePullEditTabVisibility(ctx *context.Context, issue *issues_model.Issue) issues_model.ReviewList {
+	if !issue.IsPull || issue.PullRequest == nil || issue.IsClosed || issue.PullRequest.HasMerged {
+		return nil
+	}
+	reviews, err := issues_model.FindReviews(ctx, issues_model.FindReviewOptions{
+		IssueID:   issue.ID,
+		Types:     []issues_model.ReviewType{issues_model.ReviewTypeReject},
+		Dismissed: optional.Some(false),
+	})
+	if err != nil {
+		ctx.ServerError("FindReviews", err)
+		return nil
+	}
+
+	// Only count reviews that apply to the current head commit. A review is
+	// stale when new commits were pushed after it was submitted; in that case
+	// the edit button in the Files tab hides itself (r.CommitID == headCommitID),
+	// ViewPullEdit and SubmitPullEditPost reject the request, so the Edit tab
+	// itself should likewise not appear.
+	headCommitID, _ := ctx.Data["PullHeadCommitID"].(string)
+	hasCurrentReview := false
+	for _, r := range reviews {
+		if headCommitID != "" && r.CommitID == headCommitID {
+			hasCurrentReview = true
+			break
+		}
+	}
+	ctx.Data["HasChangesRequested"] = hasCurrentReview
+	return reviews
 }
 
 // ViewPullFiles render pull request changed files list page
@@ -843,6 +1271,7 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 
 	ctx.Data["Diff"] = diff
 	ctx.Data["DiffNotAvailable"] = diffShortStat.NumFiles == 0
+	ctx.Data["NumCommits"] = len(prInfo.Commits)
 
 	if ctx.IsSigned && ctx.Doer != nil {
 		if ctx.Data["CanMarkConversation"], err = issues_model.CanMarkConversation(ctx, issue, ctx.Doer); err != nil {
@@ -898,26 +1327,39 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 	ctx.Data["CanBlockUser"] = func(blocker, blockee *user_model.User) bool {
 		return user_service.CanBlockUser(ctx, ctx.Doer, blocker, blockee)
 	}
-	if isShowAllCommits && pull.Flow == issues_model.PullRequestFlowGithub {
+
+	// Set HasChangesRequested for the tab menu (needed for all viewers, not
+	// just the poster). The returned slice is reused below for CanEditFile to
+	// avoid a second DB round-trip.
+	rejectReviews := preparePullEditTabVisibility(ctx, issue)
+	if ctx.Written() {
+		return
+	}
+
+	// Show "Edit this file" only when the viewing user is the PR poster,
+	// the PR is still open, we are viewing all commits (cumulative diff), and
+	// there is at least one non-dismissed ReviewTypeReject review whose
+	// CommitID matches the current head (i.e. no new commits were pushed
+	// after the reviewer requested changes).  SubmitPullEditPost enforces the
+	// same CommitID constraint server-side, so the button is only shown when
+	// the POST will actually be permitted.
+	if isShowAllCommits && pull.Flow == issues_model.PullRequestFlowGithub &&
+		!pull.HasMerged && !issue.IsClosed &&
+		ctx.IsSigned && issue.IsPoster(ctx.Doer.ID) {
 		if err := pull.LoadHeadRepo(ctx); err != nil {
 			ctx.ServerError("LoadHeadRepo", err)
 			return
 		}
 
 		if pull.HeadRepo != nil {
-			if !pull.HasMerged && ctx.Doer != nil {
-				perm, err := access_model.GetUserRepoPermission(ctx, pull.HeadRepo, ctx.Doer)
-				if err != nil {
-					ctx.ServerError("GetUserRepoPermission", err)
-					return
-				}
-
-				if perm.CanWrite(unit.TypeCode) || issues_model.CanMaintainerWriteToBranch(ctx, perm, pull.HeadBranch, ctx.Doer) {
+			for _, r := range rejectReviews {
+				if r.CommitID == headCommitID {
 					ctx.Data["CanEditFile"] = true
 					ctx.Data["EditFileTooltip"] = ctx.Tr("repo.editor.edit_this_file")
 					ctx.Data["HeadRepoLink"] = pull.HeadRepo.Link()
 					ctx.Data["HeadBranchName"] = pull.HeadBranch
 					ctx.Data["BackToLink"] = setting.AppSubURL + ctx.Req.URL.RequestURI()
+					break
 				}
 			}
 		}
