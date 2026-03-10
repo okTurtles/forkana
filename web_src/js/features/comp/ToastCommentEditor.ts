@@ -128,7 +128,7 @@ export class ToastCommentEditor {
     const wwContainer = this.editorWrapper.querySelector('.toastui-editor-ww-container');
     const hintText = this.container.parentElement?.querySelector('.dropzone-hint-text');
     if (wwContainer && hintText) {
-      wwContainer.appendChild(hintText);
+      wwContainer.append(hintText);
     }
   }
 
