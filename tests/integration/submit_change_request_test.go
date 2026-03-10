@@ -428,6 +428,105 @@ func TestSubmitChangeRequestPRCreationFailureCleanup(t *testing.T) {
 	})
 }
 
+// TestArticleIssueTitleUpdate tests that the article-scoped issue title update endpoint
+// works correctly for pull requests created via submit-change-request.
+// This verifies the route /article/{username}/{subjectname}/issues/{index}/title is registered.
+func TestArticleIssueTitleUpdate(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		nonOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+		subject := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{ID: repo.SubjectID})
+
+		sessionNonOwner := loginUser(t, nonOwner.Name)
+
+		// Step 1: Create a PR via submit-change-request
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               "# Title update test\n\nContent for title update test.\n",
+			"commit_choice":         "direct",
+			"submit_change_request": "true",
+		}
+		req = NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form)
+		resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+		redirectURL := test.RedirectURL(resp)
+		require.Contains(t, redirectURL, "/pulls/", "Should redirect to a pull request page")
+
+		parts := strings.Split(redirectURL, "/pulls/")
+		require.Len(t, parts, 2)
+		prIndex, err := strconv.ParseInt(strings.TrimSuffix(parts[1], "/"), 10, 64)
+		require.NoError(t, err)
+
+		// Verify PR exists
+		pr, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, prIndex)
+		require.NoError(t, err)
+		require.NotNil(t, pr)
+
+		articleTitleURL := fmt.Sprintf("/article/%s/%s/issues/%d/title", owner.Name, subject.Name, prIndex)
+
+		t.Run("PRAuthorCanUpdateTitle", func(t *testing.T) {
+			// GET the article-scoped PR view page to extract CSRF token
+			articlePRURL := fmt.Sprintf("/article/%s/%s/pulls/%d", owner.Name, subject.Name, prIndex)
+			req := NewRequest(t, "GET", articlePRURL)
+			resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+			htmlDoc := NewHTMLParser(t, resp.Body)
+
+			// POST title update via article-scoped issues route
+			req = NewRequestWithValues(t, "POST", articleTitleURL, map[string]string{
+				"_csrf": htmlDoc.GetCSRF(),
+				"title": "Updated PR Title via Article Route",
+			})
+			resp = sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+
+			// Verify the title was updated in the database
+			updatedPR, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, prIndex)
+			require.NoError(t, err)
+			updatedPR.Issue = unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: updatedPR.IssueID})
+			assert.Equal(t, "Updated PR Title via Article Route", updatedPR.Issue.Title)
+
+			// Also verify the JSON response contains the new title
+			assert.Contains(t, resp.Body.String(), "Updated PR Title via Article Route")
+		})
+
+		t.Run("UnauthenticatedUserCannotUpdateTitle", func(t *testing.T) {
+			req := NewRequestWithValues(t, "POST", articleTitleURL, map[string]string{
+				"title": "Should Not Work",
+			})
+			resp := MakeRequest(t, req, NoExpectedStatus)
+			// Unauthenticated requests should be redirected to login or get 403
+			assert.True(t, resp.Code == http.StatusForbidden || resp.Code == http.StatusSeeOther,
+				"Expected 403 or redirect to login, got %d", resp.Code)
+		})
+
+		t.Run("NonAuthorNonCollaboratorCannotUpdateTitle", func(t *testing.T) {
+			otherUser := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+			sessionOther := loginUser(t, otherUser.Name)
+
+			// GET the PR page to extract CSRF token
+			articlePRURL := fmt.Sprintf("/article/%s/%s/pulls/%d", owner.Name, subject.Name, prIndex)
+			req := NewRequest(t, "GET", articlePRURL)
+			resp := sessionOther.MakeRequest(t, req, http.StatusOK)
+			htmlDoc := NewHTMLParser(t, resp.Body)
+
+			req = NewRequestWithValues(t, "POST", articleTitleURL, map[string]string{
+				"_csrf": htmlDoc.GetCSRF(),
+				"title": "Should Not Work Either",
+			})
+			resp = sessionOther.MakeRequest(t, req, NoExpectedStatus)
+			assert.True(t, resp.Code == http.StatusForbidden || resp.Code == http.StatusNotFound,
+				"Expected 403 or 404, got %d", resp.Code)
+		})
+	})
+}
+
 // TestSubmitChangeRequestConcurrentBranchCollision tests that concurrent change request
 // submissions from multiple users correctly generate unique branch names without collisions.
 // This verifies that getUniquePatchBranchName() handles the scenario where multiple users
