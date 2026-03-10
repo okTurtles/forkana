@@ -144,6 +144,12 @@
   .toastui-editor-defaultUI .toastui-editor-toolbar {
     justify-content: end !important;
   }
+
+  /* Hide toolbar groups in main toolbar on mobile — options are in the "more" dropdown */
+  .toast-comment-editor .toastui-editor-defaultUI-toolbar > .toastui-editor-toolbar-group:not(:has(.more)),
+  .toast-comment-editor .toastui-editor-defaultUI-toolbar > .toastui-editor-toolbar-divider {
+    display: none;
+  }
 }
 
 /* Prevent toolbar overflow on mobile — items wrap, mode switch stays visible */
