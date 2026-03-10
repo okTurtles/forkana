@@ -108,7 +108,7 @@
 .toast-comment-editor .toast-editor-wrapper {
   height: auto !important;
   min-height: 200px;
-  overflow: auto;
+  overflow: visible;
 }
 
 /* Editable content area fills container height and is resizable */
