@@ -11,6 +11,7 @@ GITEA="/app/gitea/gitea"
 WORK_DIR="/var/lib/gitea"
 APP_INI="/etc/gitea/app.ini"
 
+CONF_ARG=()
 APP_INI_SET=""
 for i in "$@"; do
 	case "$i" in

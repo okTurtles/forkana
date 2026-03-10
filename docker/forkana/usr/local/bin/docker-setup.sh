@@ -45,6 +45,7 @@ if [ ! -f ${GITEA_APP_INI} ]; then
     HTTP_PORT=${HTTP_PORT:-"3000"} \
     ROOT_URL=${ROOT_URL:-"http://${DOMAIN:-localhost}:${HTTP_PORT:-3000}/"} \
     DISABLE_SSH=${DISABLE_SSH:-"true"} \
+    START_SSH_SERVER=${START_SSH_SERVER:-"false"} \
     SSH_PORT=${SSH_PORT:-"2222"} \
     SSH_LISTEN_PORT=${SSH_LISTEN_PORT:-$SSH_PORT} \
     LFS_START_SERVER=${LFS_START_SERVER:-"true"} \

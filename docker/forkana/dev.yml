@@ -84,6 +84,8 @@ services:
       # they are always enforced.
       GITEA__security__INSTALL_LOCK: "true"
       GITEA__security__SECRET_KEY: ${FORKANA_SECRET_KEY}
+      GITEA__security__INTERNAL_TOKEN: ${FORKANA_INTERNAL_TOKEN}
+      GITEA__oauth2__JWT_SECRET: ${FORKANA_JWT_SECRET}
     volumes:
       - ${HOME}/forkana/data:/var/lib/gitea
       - ${HOME}/forkana/config:/etc/gitea
