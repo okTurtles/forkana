@@ -57,3 +57,21 @@
   then the layout from top to bottom is: size, filename, progress */
   top: 7em;
 }
+
+/* When dropzone is co-located with the toast editor, hide its visual border/message */
+.field > .toast-comment-editor ~ .ui.dropzone {
+  border: none;
+  min-height: 0;
+  padding: 0;
+}
+
+.field > .toast-comment-editor ~ .ui.dropzone .dz-message {
+  display: none;
+}
+
+/* Hint text below editor (non-interactive) */
+.dropzone-hint-text {
+  color: var(--color-text-light);
+  font-size: 12px;
+  padding: 6px 0;
+}
