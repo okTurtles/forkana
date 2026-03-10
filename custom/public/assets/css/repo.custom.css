@@ -21,6 +21,12 @@
   padding: 1rem;
 }
 
+@media (max-width: 767.98px) {
+  .repository.view.issue .comment-list .comment .content .form .button:not(:last-child) {
+      margin-bottom: 0 !important;
+  }
+}
+
 /* Issue title font size and weight */
 .issue-title h1 {
   font-size: 20px !important;

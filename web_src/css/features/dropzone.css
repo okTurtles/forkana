@@ -141,3 +141,26 @@
     margin-top: -4rem;
    }
 }
+
+@media (max-width: 640px) {
+  .toastui-editor-defaultUI .toastui-editor-toolbar {
+    justify-content: end !important;
+  }
+}
+
+/* Prevent toolbar overflow on mobile — items wrap, mode switch stays visible */
+.toast-comment-editor .toastui-editor-defaultUI-toolbar {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 45px;
+}
+
+.toast-comment-editor .toastui-editor-mode-switch {
+  flex-shrink: 0;
+}
+
+.toast-comment-editor .toastui-editor-dropdown-toolbar {
+  flex-wrap: wrap;
+  height: auto;
+  max-width: 100%;
+}
