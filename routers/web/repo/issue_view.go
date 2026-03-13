@@ -585,6 +585,14 @@ func preparePullViewDeleteBranch(ctx *context.Context, issue *issues_model.Issue
 
 		isPullBranchDeletable = !exist
 	}
+
+	// For closed (rejected), non-merged, same-repo PRs: prevent branch deletion
+	// until the contributor has forked the rejected changes. Once forked, the
+	// branch is auto-deleted by ForkRejectedChanges, so the button is not needed.
+	if isPullBranchDeletable && issue.IsClosed && !pull.HasMerged && pull.IsSameRepo() && !pull.IsForked {
+		isPullBranchDeletable = false
+	}
+
 	ctx.Data["IsPullBranchDeletable"] = isPullBranchDeletable
 }
 

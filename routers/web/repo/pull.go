@@ -2228,6 +2228,23 @@ func ForkRejectedChanges(ctx *context.Context) {
 		// Non-fatal: fork was created successfully, just can't update the PR record
 	}
 
+	// Auto-delete the CR head branch from the base repo now that the changes
+	// have been safely forked. Use SkipPermissionCheck because the contributor
+	// (PR author) typically doesn't have write access to the base repo — the
+	// branch was created via InternalPush during submit-change-request.
+	baseGitRepo, err := gitrepo.OpenRepository(ctx, baseRepo)
+	if err != nil {
+		log.Error("ForkRejectedChanges: failed to open base repo git for branch cleanup: %v", err)
+	} else {
+		defer baseGitRepo.Close()
+		if err := repo_service.DeleteBranch(ctx, ctx.Doer, baseRepo, baseGitRepo, pr.HeadBranch, pr, &repo_service.DeleteBranchOptions{
+			SkipPermissionCheck: true,
+		}); err != nil {
+			log.Error("ForkRejectedChanges: failed to delete CR branch %q from %s: %v", pr.HeadBranch, baseRepo.FullName(), err)
+			// Non-fatal: the fork succeeded, branch cleanup is best-effort
+		}
+	}
+
 	log.Info("ForkRejectedChanges: user %s forked rejected CR #%d into %s/%s",
 		ctx.Doer.Name, pr.Index, ctx.Doer.Name, forkedRepo.Name)
 
