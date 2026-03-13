@@ -115,6 +115,8 @@ const (
 	CommentTypeUnpin // 37 unpin Issue/PullRequest
 
 	CommentTypeChangeTimeEstimate // 38 Change time estimate
+
+	CommentTypeForkRejected // 39 Fork rejected PR changes
 )
 
 var commentStrings = []string{
@@ -157,6 +159,7 @@ var commentStrings = []string{
 	"pin",
 	"unpin",
 	"change_time_estimate",
+	"fork_rejected",
 }
 
 func (t CommentType) String() string {

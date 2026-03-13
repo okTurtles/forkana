@@ -2228,6 +2228,17 @@ func ForkRejectedChanges(ctx *context.Context) {
 		// Non-fatal: fork was created successfully, just can't update the PR record
 	}
 
+	// Add a timeline comment recording the fork event
+	if _, err := issues_model.CreateComment(ctx, &issues_model.CreateCommentOptions{
+		Type:  issues_model.CommentTypeForkRejected,
+		Doer:  ctx.Doer,
+		Repo:  baseRepo,
+		Issue: issue,
+	}); err != nil {
+		log.Error("ForkRejectedChanges: failed to create timeline comment: %v", err)
+		// Non-fatal: the fork succeeded, timeline comment is best-effort
+	}
+
 	// Auto-delete the CR head branch from the base repo now that the changes
 	// have been safely forked. Use SkipPermissionCheck because the contributor
 	// (PR author) typically doesn't have write access to the base repo — the
