@@ -1085,4 +1085,3 @@ func preparePullViewForkRejected(ctx *context.Context, issue *issues_model.Issue
 
 	ctx.Data["CanForkRejectedChanges"] = true
 }
-

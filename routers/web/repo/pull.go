@@ -2232,5 +2232,5 @@ func ForkRejectedChanges(ctx *context.Context) {
 		ctx.Doer.Name, pr.Index, ctx.Doer.Name, forkedRepo.Name)
 
 	ctx.Flash.Success(ctx.Tr("repo.pulls.fork_rejected.success", ctx.Doer.Name+"/"+forkedRepo.Name))
-	ctx.JSONRedirect(issue.Link())
+	ctx.JSONRedirect(forkedRepo.Link())
 }

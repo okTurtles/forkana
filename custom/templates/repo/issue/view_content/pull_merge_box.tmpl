@@ -83,7 +83,7 @@
 							<button class="delete-button ui button" data-url="{{.DeleteBranchLink}}">{{ctx.Locale.Tr "repo.branch.delete_html"}}</button>
 						{{end}}
 						{{if .CanForkRejectedChanges}}
-							<form method="post" action="{{.Issue.Link}}/fork_rejected_changes">
+							<form class="form-fetch-action" method="post" action="{{.Issue.Link}}/fork_rejected_changes">
 								{{.CsrfTokenHtml}}
 								<button class="ui primary button">{{ctx.Locale.Tr "repo.pulls.fork_rejected.fork_button"}}</button>
 							</form>
