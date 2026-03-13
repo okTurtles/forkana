@@ -58,20 +58,37 @@
 			{{else if .Issue.IsClosed}}
 				<div class="item item-section text tw-flex-1">
 					<div class="item-section-left">
-						<h3 class="tw-mb-2">{{ctx.Locale.Tr "repo.pulls.closed"}}</h3>
-						<div class="merge-section-info">
-							{{if .IsPullRequestBroken}}
-								{{ctx.Locale.Tr "repo.pulls.cant_reopen_deleted_branch"}}
-							{{else}}
-								{{ctx.Locale.Tr "repo.pulls.reopen_to_merge"}}
-							{{end}}
-						</div>
+						{{if .Issue.PullRequest.IsForked}}
+							<h3 class="tw-mb-2">{{ctx.Locale.Tr "repo.pulls.fork_rejected.forked_title"}}</h3>
+							<div class="merge-section-info">
+								{{if .ForkedRepoLink}}
+									{{ctx.Locale.Tr "repo.pulls.fork_rejected.forked_notice" .ForkedRepoLink .ForkedRepoFullName}}
+								{{else}}
+									{{ctx.Locale.Tr "repo.pulls.fork_rejected.already_forked"}}
+								{{end}}
+							</div>
+						{{else}}
+							<h3 class="tw-mb-2">{{ctx.Locale.Tr "repo.pulls.closed"}}</h3>
+							<div class="merge-section-info">
+								{{if .IsPullRequestBroken}}
+									{{ctx.Locale.Tr "repo.pulls.cant_reopen_deleted_branch"}}
+								{{else}}
+									{{ctx.Locale.Tr "repo.pulls.reopen_to_merge"}}
+								{{end}}
+							</div>
+						{{end}}
 					</div>
-					{{if and .IsPullBranchDeletable (not .IsPullRequestBroken)}}
-						<div class="item-section-right">
+					<div class="item-section-right">
+						{{if and .IsPullBranchDeletable (not .IsPullRequestBroken)}}
 							<button class="delete-button ui button" data-url="{{.DeleteBranchLink}}">{{ctx.Locale.Tr "repo.branch.delete_html"}}</button>
-						</div>
-					{{end}}
+						{{end}}
+						{{if .CanForkRejectedChanges}}
+							<form method="post" action="{{.Issue.Link}}/fork_rejected_changes">
+								{{.CsrfTokenHtml}}
+								<button class="ui primary button">{{ctx.Locale.Tr "repo.pulls.fork_rejected.fork_button"}}</button>
+							</form>
+						{{end}}
+					</div>
 				</div>
 			{{else if .IsPullFilesConflicted}}
 				<div class="item">

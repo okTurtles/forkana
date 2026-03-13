@@ -2122,3 +2122,115 @@ func SetAllowEdits(ctx *context.Context) {
 		"allow_maintainer_edit": pr.AllowMaintainerEdit,
 	})
 }
+
+// ForkRejectedChanges allows a PR author to fork their changes from a rejected
+// (closed) same-repo Change Request into their own repository. This preserves
+// the contributor's work after a CR is rejected.
+func ForkRejectedChanges(ctx *context.Context) {
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+
+	pr := issue.PullRequest
+
+	// Validate: must be a closed, non-merged, same-repo PR
+	if !issue.IsClosed || pr.HasMerged || !pr.IsSameRepo() {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Only the PR author can fork their rejected changes
+	if !ctx.IsSigned || !issue.IsPoster(ctx.Doer.ID) {
+		ctx.HTTPError(http.StatusForbidden)
+		return
+	}
+
+	// Prevent re-forking
+	if pr.IsForked {
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.already_forked"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	// Load base repo and check the CR branch still exists
+	if err := pr.LoadBaseRepo(ctx); err != nil {
+		ctx.ServerError("LoadBaseRepo", err)
+		return
+	}
+
+	baseRepo := pr.BaseRepo
+
+	// Check CR branch exists in the target repo
+	headBranchExists := gitrepo.IsBranchExist(ctx, baseRepo, pr.HeadBranch)
+	if !headBranchExists {
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.branch_deleted"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	// Check fork permissions using the existing subject-based blocking rules
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, baseRepo)
+	if err != nil {
+		ctx.ServerError("CheckForkOnEditPermissions", err)
+		return
+	}
+
+	if perms.HasExistingFork {
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.has_existing_fork"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	if perms.BlockedBySubject {
+		ctx.Flash.Error(ctx.Tr("repo.fork.already_own_subject_repo"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	// Create the fork
+	repoName := getUniqueRepositoryName(ctx, ctx.Doer.ID, baseRepo.Name)
+	if repoName == "" {
+		ctx.ServerError("getUniqueRepositoryName", errors.New("failed to generate unique repository name"))
+		return
+	}
+
+	forkedRepo := ForkRepoTo(ctx, ctx.Doer, repo_service.ForkRepoOptions{
+		BaseRepo:     baseRepo,
+		Name:         repoName,
+		Description:  baseRepo.Description,
+		SingleBranch: baseRepo.DefaultBranch,
+	})
+	if ctx.Written() {
+		return
+	}
+
+	// Push the CR branch commits to the fork's default branch.
+	// The fork was created from the base repo's default branch, so we need to
+	// force-push the CR head branch content onto the fork's default branch.
+	if err := git.Push(ctx, baseRepo.RepoPath(), git.PushOptions{
+		Remote: forkedRepo.RepoPath(),
+		Branch: pr.HeadBranch + ":" + git.BranchPrefix + forkedRepo.DefaultBranch,
+		Force:  true,
+		Env:    repo_module.InternalPushingEnvironment(ctx.Doer, forkedRepo),
+	}); err != nil {
+		log.Error("ForkRejectedChanges: failed to push CR branch to fork: %v", err)
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.push_failed"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	// Mark the PR as forked
+	pr.IsForked = true
+	pr.ForkedRepoID = forkedRepo.ID
+	if err := pr.UpdateCols(ctx, "is_forked", "forked_repo_id"); err != nil {
+		log.Error("ForkRejectedChanges: failed to update PR forked status: %v", err)
+		// Non-fatal: fork was created successfully, just can't update the PR record
+	}
+
+	log.Info("ForkRejectedChanges: user %s forked rejected CR #%d into %s/%s",
+		ctx.Doer.Name, pr.Index, ctx.Doer.Name, forkedRepo.Name)
+
+	ctx.Flash.Success(ctx.Tr("repo.pulls.fork_rejected.success", ctx.Doer.Name+"/"+forkedRepo.Name))
+	ctx.JSONRedirect(issue.Link())
+}
