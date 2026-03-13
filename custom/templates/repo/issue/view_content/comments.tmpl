@@ -712,6 +712,11 @@
 					{{template "shared/user/authorlink" .Poster}}
 					{{ctx.Locale.Tr "repo.issues.forked_rejected_changes" $createdStr}}
 				</span>
+				{{if $.ForkedRepoLink}}
+					<a href="{{$.ForkedRepoLink}}" class="ui secondary button">
+						{{ctx.Locale.Tr "repo.pulls.fork_rejected.view_fork"}}
+					</a>
+				{{end}}
 			</div>
 		{{end}}
 	{{end}}
