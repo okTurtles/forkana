@@ -89,7 +89,8 @@
 					{{if .BaseBranchNotExist}}
 						{{$baseHref = HTMLFormat `<span class="tw-line-through" data-tooltip-content="%s">%s</span>` (ctx.Locale.Tr "form.target_branch_not_exist") $baseHref}}
 					{{else}}
-						{{$baseHref = HTMLFormat `<a href="%s">%s</a>` .BaseBranchLink $baseHref}}
+						{{$articleHref := HTMLFormat `%s/article/%s/%s` AppSubUrl (PathEscape .Repository.OwnerName) (PathEscapeSegments (.Repository.GetSubject ctx))}}
+						{{$baseHref = HTMLFormat `<a href="%s">%s/%s</a>` $articleHref .Repository.OwnerName (.Repository.GetSubject ctx)}}
 					{{end}}
 				{{end}}
 				{{if .Issue.PullRequest.HasMerged}}
