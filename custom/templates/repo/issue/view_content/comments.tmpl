@@ -117,7 +117,7 @@
 				{{end}}
 				<span class="comment-text-line">
 					{{template "repo/issue/view_content/comments_authorlink" dict "ctxData" $ "comment" .}}
-					{{$link := printf "%s/commit/%s" $.Repository.Link ($.Issue.PullRequest.MergedCommitID|PathEscape)}}
+					{{$link := printf "%s?version=%s" $.Repository.Link ($.Issue.PullRequest.MergedCommitID|PathEscape)}}
 					{{$articleHref := HTMLFormat `%s/article/%s/%s` AppSubUrl (PathEscape $.Repository.OwnerName) (PathEscapeSegments ($.Repository.GetSubject ctx))}}
 					{{$baseDisplay := HTMLFormat `<b><a href="%[1]s">%[2]s/%[3]s</a></b>` $articleHref $.Repository.OwnerName ($.Repository.GetSubject ctx)}}
 					{{if eq $.Issue.PullRequest.Status 3}}
