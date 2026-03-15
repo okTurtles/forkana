@@ -276,9 +276,16 @@ func handlePullRequestAutoMerge(pullID int64, sha string) {
 		return
 	}
 
-	if pr.Flow == issues_model.PullRequestFlowGithub && scheduledPRM.DeleteBranchAfterMerge {
-		if err := repo_service.DeleteBranch(ctx, doer, pr.HeadRepo, headGitRepo, pr.HeadBranch, pr, nil); err != nil {
-			log.Error("DeletePullRequestHeadBranch: %v", err)
+	// Always delete head branch after merge for GitHub flow PRs
+	if pr.Flow == issues_model.PullRequestFlowGithub {
+		// Don't cleanup when there are other PRs that use this branch as head branch
+		exist, err := issues_model.HasUnmergedPullRequestsByHeadInfo(ctx, pr.HeadRepoID, pr.HeadBranch)
+		if err != nil {
+			log.Error("HasUnmergedPullRequestsByHeadInfo: %v", err)
+		} else if !exist {
+			if err := repo_service.DeleteBranch(ctx, doer, pr.HeadRepo, headGitRepo, pr.HeadBranch, pr, nil); err != nil {
+				log.Error("DeletePullRequestHeadBranch: %v", err)
+			}
 		}
 	}
 }
