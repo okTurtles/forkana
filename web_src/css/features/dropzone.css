@@ -83,21 +83,21 @@
   display: flex;
   flex-direction: column;
   overflow: visible;
-  height: auto !important;
+  height: auto;
 }
 
 /* All parent containers grow with the resized ProseMirror */
 .toast-comment-editor .toastui-editor-defaultUI,
 .toast-comment-editor .toastui-editor-main-container,
 .toast-comment-editor .toastui-editor-ww-container > .toastui-editor {
-  height: auto !important;
+  height: auto;
 }
 
 /* .toastui-editor-main collapses to 0px because children are absolutely positioned.
    Force flex layout so children contribute to height. */
 .toast-comment-editor .toastui-editor-main {
-  height: auto !important;
-  display: flex !important;
+  height: auto;
+  display: flex;
   flex-direction: column;
 }
 
@@ -107,7 +107,7 @@
 }
 
 .toast-comment-editor .toast-editor-wrapper {
-  height: auto !important;
+  height: auto;
   min-height: 200px;
   overflow: hidden;
 }

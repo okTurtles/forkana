@@ -85,7 +85,8 @@ export class ToastCommentEditor {
     // Initialize Toast UI Editor
     this.editor = new Editor({
       el: this.editorWrapper,
-      height,
+      height: 'auto',
+      minHeight: '0',
       initialEditType,
       previewStyle,
       usageStatistics: false,
