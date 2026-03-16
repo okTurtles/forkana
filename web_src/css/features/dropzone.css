@@ -137,12 +137,6 @@
     border-radius: 0 0 var(--border-radius-medium) var(--border-radius-medium);
 }
 
-@media (max-width: 436px) {
-   .dropzone-hint-text {
-    margin-top: -4rem;
-   }
-}
-
 @media (max-width: 640px) {
   .toastui-editor-defaultUI .toastui-editor-toolbar {
     justify-content: end !important;
