@@ -2216,12 +2216,16 @@ func ForkRejectedChanges(ctx *context.Context) {
 		return
 	}
 
-	// Mark the PR as forked
+	// Mark the PR as forked — this must succeed before we proceed to delete
+	// the CR branch, otherwise the PR stays in an inconsistent state (fork
+	// exists but UI still offers "Fork My Changes").
 	pr.IsForked = true
 	pr.ForkedRepoID = forkedRepo.ID
 	if err := pr.UpdateCols(ctx, "is_forked", "forked_repo_id"); err != nil {
 		log.Error("ForkRejectedChanges: failed to update PR forked status: %v", err)
-		// Non-fatal: fork was created successfully, just can't update the PR record
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.push_failed"))
+		ctx.JSONRedirect(issue.Link())
+		return
 	}
 
 	// Add a timeline comment recording the fork event
