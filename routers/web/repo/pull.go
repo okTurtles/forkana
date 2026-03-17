@@ -2119,6 +2119,17 @@ func SetAllowEdits(ctx *context.Context) {
 	})
 }
 
+// cleanupOrphanedFork deletes a fork repository that was created but whose
+// subsequent steps (push or DB update) failed. This prevents orphaned forks
+// from blocking retry attempts.
+func cleanupOrphanedFork(repoID int64) {
+	if err := repo_service.DeleteRepositoryDirectly(graceful.GetManager().ShutdownContext(), repoID); err != nil {
+		log.Error("ForkRejectedChanges: failed to clean up orphaned fork (repo_id=%d): %v", repoID, err)
+	} else {
+		log.Info("ForkRejectedChanges: cleaned up orphaned fork (repo_id=%d)", repoID)
+	}
+}
+
 // ForkRejectedChanges allows a PR author to fork their changes from a rejected
 // (closed) same-repo Change Request into their own repository. This preserves
 // the contributor's work after a CR is rejected.
@@ -2214,6 +2225,8 @@ func ForkRejectedChanges(ctx *context.Context) {
 		Env:    repo_module.PushingEnvironment(ctx.Doer, forkedRepo),
 	}); err != nil {
 		log.Error("ForkRejectedChanges: failed to push CR branch to fork: %v", err)
+		// Clean up the orphaned fork so the user can retry
+		cleanupOrphanedFork(forkedRepo.ID)
 		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.push_failed"))
 		ctx.JSONRedirect(issue.Link())
 		return
@@ -2226,7 +2239,9 @@ func ForkRejectedChanges(ctx *context.Context) {
 	pr.ForkedRepoID = forkedRepo.ID
 	if err := pr.UpdateCols(ctx, "is_forked", "forked_repo_id"); err != nil {
 		log.Error("ForkRejectedChanges: failed to update PR forked status: %v", err)
-		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.push_failed"))
+		// Clean up the orphaned fork so the user can retry
+		cleanupOrphanedFork(forkedRepo.ID)
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.fork_failed"))
 		ctx.JSONRedirect(issue.Link())
 		return
 	}
