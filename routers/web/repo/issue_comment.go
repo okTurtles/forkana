@@ -76,13 +76,19 @@ func NewComment(ctx *context.Context) {
 		return
 	}
 
+	// Explicitly reject attempts to reopen forked pull requests so callers
+	// receive a clear error instead of silently ignoring the status change.
+	if form.Status == "reopen" && issue.IsPull && issue.PullRequest != nil && issue.PullRequest.IsForked {
+		ctx.JSONError(ctx.Tr("repo.pulls.cannot_reopen_forked_pull_request"))
+		return
+	}
+
 	var comment *issues_model.Comment
 	defer func() {
 		// Check if issue admin/poster changes the status of issue.
 		if (ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) || (ctx.IsSigned && issue.IsPoster(ctx.Doer.ID))) &&
 			(form.Status == "reopen" || form.Status == "close") &&
-			!(issue.IsPull && issue.PullRequest.HasMerged) &&
-			!(form.Status == "reopen" && issue.IsPull && issue.PullRequest.IsForked) {
+			!(issue.IsPull && issue.PullRequest.HasMerged) {
 			// Duplication and conflict check should apply to reopen pull request.
 			var pr *issues_model.PullRequest
 
