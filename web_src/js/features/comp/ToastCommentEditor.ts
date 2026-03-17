@@ -125,11 +125,13 @@ export class ToastCommentEditor {
     const loading = this.container.querySelector('.editor-loading');
     if (loading) loading.remove();
 
-    // Move the dropzone hint text inside the .toastui-editor-ww-container element
-    const wwContainer = this.editorWrapper.querySelector('.toastui-editor-ww-container');
-    const hintText = this.container.parentElement?.querySelector('.dropzone-hint-text');
-    if (wwContainer && hintText) {
-      wwContainer.append(hintText);
+    // Move the dropzone hint text inside the editor so it behaves like a flex item
+    // The hint text is expected to be a sibling of .toast-comment-editor within the parent .field container
+    const defaultUI = this.editorWrapper.querySelector('.toastui-editor-defaultUI');
+    const fieldContainer = this.container.closest('.field');
+    const hintText = fieldContainer?.querySelector('.dropzone-hint-text');
+    if (defaultUI && hintText) {
+      defaultUI.append(hintText);
     }
   }
 

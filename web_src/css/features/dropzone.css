@@ -72,15 +72,15 @@
 /* Toast editor border & padding to match design */
 .toast-comment-editor .toastui-editor-defaultUI .toastui-editor-ww-mode .ProseMirror {
   border: 1px solid var(--color-secondary);
-    border-bottom: 0;
-    border-radius: var(--border-radius-medium) var(--border-radius-medium) 0 0;
-    padding: 16px 10px;
-    margin: 8px 8px 0 8px;
+  border-bottom: 0;
+  border-radius: var(--border-radius-medium) var(--border-radius-medium) 0 0;
+  padding: 16px 10px;
+  margin: 8px 8px 0;
 }
 
-/* Make the ww-container a flex column so hint stays at bottom */
-.toastui-editor-ww-mode .toast-comment-editor .toastui-editor-ww-container {
-  display: flex;
+/* Make the full UI container a flex column so hint stays at bottom */
+.toast-comment-editor .toastui-editor-defaultUI {
+  display: flex !important;
   flex-direction: column;
   overflow: visible;
   height: auto;
@@ -108,7 +108,6 @@
 
 .toast-comment-editor .toast-editor-wrapper {
   height: auto;
-  min-height: 200px;
   overflow: hidden;
 }
 
@@ -122,19 +121,19 @@
 }
 
 /* Hint stays pinned at bottom, never hidden */
-.toast-comment-editor .toastui-editor-ww-container > .dropzone-hint-text {
+.toast-comment-editor .toastui-editor-defaultUI > .dropzone-hint-text {
   flex: 0 0 auto;
 }
 
 /* Hint text overlaid inside the ProseMirror content area */
 .dropzone-hint-text {
-      color: var(--color-text-light-2);
-    font-size: 12px;
-    padding: 10px;
-    border: 1px solid var(--color-secondary);
-    border-top: 1px dashed var(--color-secondary);
-    margin: 0 8px 8px 8px;
-    border-radius: 0 0 var(--border-radius-medium) var(--border-radius-medium);
+  color: var(--color-text-light-2);
+  font-size: 12px;
+  padding: 10px;
+  border: 1px solid var(--color-secondary);
+  border-top: 1px dashed var(--color-secondary);
+  margin: 0 8px 8px;
+  border-radius: 0 0 var(--border-radius-medium) var(--border-radius-medium);
 }
 
 @media (max-width: 640px) {
