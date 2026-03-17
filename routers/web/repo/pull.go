@@ -2204,11 +2204,14 @@ func ForkRejectedChanges(ctx *context.Context) {
 	// Push the CR branch commits to the fork's default branch.
 	// The fork was created from the base repo's default branch, so we need to
 	// force-push the CR head branch content onto the fork's default branch.
+	// Use PushingEnvironment (not InternalPushingEnvironment) because this pushes
+	// to a normal branch - hooks must run so post-receive processes the push
+	// (e.g. marking the repo non-empty, firing webhooks, updating stats).
 	if err := git.Push(ctx, baseRepo.RepoPath(), git.PushOptions{
 		Remote: forkedRepo.RepoPath(),
 		Branch: pr.HeadBranch + ":" + git.BranchPrefix + forkedRepo.DefaultBranch,
 		Force:  true,
-		Env:    repo_module.InternalPushingEnvironment(ctx.Doer, forkedRepo),
+		Env:    repo_module.PushingEnvironment(ctx.Doer, forkedRepo),
 	}); err != nil {
 		log.Error("ForkRejectedChanges: failed to push CR branch to fork: %v", err)
 		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.push_failed"))
