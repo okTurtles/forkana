@@ -70,6 +70,13 @@
 }
 
 /* Toast editor border & padding to match design */
+.toastui-editor-md-vertical-style {
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius-medium) var(--border-radius-medium) 0 0;
+  border-bottom: 0;
+  margin: 8px 8px 0;
+}
+
 .toast-comment-editor .toastui-editor-defaultUI .toastui-editor-ww-mode .ProseMirror {
   border: 1px solid var(--color-secondary);
   border-bottom: 0;
