@@ -104,6 +104,9 @@ func ToAPIPullRequest(ctx context.Context, pr *issues_model.PullRequest, doer *u
 
 		AllowMaintainerEdit: pr.AllowMaintainerEdit,
 
+		IsForked:     pr.IsForked,
+		ForkedRepoID: pr.ForkedRepoID,
+
 		Base: &api.PRBranchInfo{
 			Name:       pr.BaseBranch,
 			Ref:        pr.BaseBranch,
@@ -374,6 +377,9 @@ func ToAPIPullRequests(ctx context.Context, baseRepo *repo_model.Repository, prs
 			PinOrder:       util.Iif(apiIssue.PinOrder == -1, 0, apiIssue.PinOrder),
 
 			AllowMaintainerEdit: pr.AllowMaintainerEdit,
+
+			IsForked:     pr.IsForked,
+			ForkedRepoID: pr.ForkedRepoID,
 
 			Base: &api.PRBranchInfo{
 				Name:       pr.BaseBranch,

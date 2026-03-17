@@ -72,6 +72,11 @@ type PullRequest struct {
 	// Whether maintainers can edit the pull request
 	AllowMaintainerEdit bool `json:"allow_maintainer_edit"`
 
+	// Whether this closed PR's changes were forked by the author
+	IsForked bool `json:"is_forked"`
+	// The ID of the forked repository, if any
+	ForkedRepoID int64 `json:"forked_repo_id,omitempty"`
+
 	// Information about the base branch
 	Base *PRBranchInfo `json:"base"`
 	// Information about the head branch
