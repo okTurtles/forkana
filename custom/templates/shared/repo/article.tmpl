@@ -84,13 +84,11 @@
                                         {{else if .HasExistingFork}}
                                             {{/* User has an existing fork of this repo - show both options */}}
                                             <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="ui secondary button">
-                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
                                             </a>
                                             {{if .CanSubmitChangeRequest}}
                                             <button type="button" id="pre-submit-changes-button" class="ui primary button"
                                                 data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
-                                                {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
                                             {{end}}

@@ -9,7 +9,6 @@ const mergeForm = pageData.pullRequestMergeForm;
 
 const mergeTitleFieldValue = shallowRef('');
 const mergeMessageFieldValue = shallowRef('');
-const deleteBranchAfterMerge = shallowRef(false);
 const autoMergeWhenSucceed = shallowRef(false);
 
 const mergeStyle = shallowRef('');
@@ -63,7 +62,6 @@ function hideMergeStyleMenu() {
 function toggleActionForm(show: boolean) {
   showActionForm.value = show;
   if (!show) return;
-  deleteBranchAfterMerge.value = mergeForm.defaultDeleteBranchAfterMerge;
   mergeTitleFieldValue.value = mergeStyleDetail.value.mergeTitleFieldText;
   mergeMessageFieldValue.value = mergeStyleDetail.value.mergeMessageFieldText;
 }
@@ -129,10 +127,9 @@ function clearMergeMessage() {
         {{ mergeForm.textCancel }}
       </button>
 
-      <div class="ui checkbox tw-ml-1" v-if="mergeForm.isPullBranchDeletable">
-        <input name="delete_branch_after_merge" type="checkbox" v-model="deleteBranchAfterMerge" id="delete-branch-after-merge">
-        <label for="delete-branch-after-merge">{{ mergeForm.textDeleteBranch }}</label>
-      </div>
+      <template v-if="mergeForm.isPullBranchDeletable">
+        <input name="delete_branch_after_merge" type="hidden" value="true">
+      </template>
     </form>
 
     <div v-if="!showActionForm" class="tw-flex">
