@@ -6,9 +6,15 @@
   border-bottom: 1px solid var(--color-secondary);
 }
 
-.toastui-editor-toolbar .toastui-editor-defaultUI-toolbar{
+.toastui-editor-toolbar .toastui-editor-defaultUI-toolbar {
   border-bottom: none;
   padding-right: 0;
+}
+
+.toast-comment-editor .toast-editor-wrapper {
+  min-height: 200px;
+  border: 1px solid var(--color-secondary);
+  border-radius: 4px;
 }
 
 #toast-editor-container .toastui-editor-mode-switch {
@@ -74,12 +80,6 @@
 .toast-comment-editor {
   position: relative;
   margin-bottom: 0.5em;
-}
-
-.toast-comment-editor .toast-editor-wrapper {
-  min-height: 200px;
-  border: 1px solid var(--color-secondary);
-  border-radius: 4px;
 }
 
 .toast-comment-editor .toastui-editor-defaultUI {
