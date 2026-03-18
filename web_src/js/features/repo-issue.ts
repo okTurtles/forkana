@@ -457,6 +457,15 @@ export function initRepoIssueWipToggle() {
   }));
 }
 
+export function initRepoPrBackLink() {
+  registerGlobalInitFunc('initPrBackLink', (el: HTMLAnchorElement) => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.history.back();
+    });
+  });
+}
+
 export function initRepoIssueTitleEdit() {
   const issueTitleDisplay = document.querySelector('#issue-title-display');
   const issueTitleEditor = document.querySelector<HTMLFormElement>('#issue-title-editor');
