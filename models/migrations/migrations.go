@@ -402,6 +402,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(325, "Forkana: add subject_id foreign key to repository table", v1_25_custom.AddSubjectForeignKeyToRepository),
 		newMigration(326, "Forkana: add slug column to subjects table", v1_25_custom.AddSubjectSlugColumn),
 		newMigration(327, "Forkana: add composite indexes for fork-on-edit optimization", v1_25_custom.AddCompositeIndexesForForkOnEdit),
+		newMigration(328, "Forkana: add is_forked and forked_repo_id to pull_request", v1_25_custom.AddIsForkedToPullRequest),
 	}
 	return preparedMigrations
 }

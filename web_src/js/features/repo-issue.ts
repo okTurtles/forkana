@@ -457,6 +457,27 @@ export function initRepoIssueWipToggle() {
   }));
 }
 
+export function initRepoPrBackLink() {
+  registerGlobalInitFunc('initPrBackLink', (el: HTMLAnchorElement) => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      const referrer = document.referrer;
+      let hasSameOriginReferrer = false;
+      if (referrer) {
+        try {
+          const refUrl = new URL(referrer, window.location.href);
+          hasSameOriginReferrer = refUrl.origin === window.location.origin;
+        } catch { /* invalid referrer URL, fall through */ }
+      }
+      if (hasSameOriginReferrer && window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = el.href;
+      }
+    });
+  });
+}
+
 export function initRepoIssueTitleEdit() {
   const issueTitleDisplay = document.querySelector('#issue-title-display');
   const issueTitleEditor = document.querySelector<HTMLFormElement>('#issue-title-editor');

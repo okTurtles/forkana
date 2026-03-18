@@ -1055,6 +1055,12 @@ func closeOrReopenIssue(ctx *context.APIContext, issue *issues_model.Issue, stat
 		return
 	}
 
+	// Reject attempts to reopen pull requests whose changes have been forked.
+	if state == api.StateOpen && issue.IsPull && issue.PullRequest != nil && issue.PullRequest.IsForked {
+		ctx.APIError(http.StatusForbidden, "cannot reopen this pull request because its changes have already been forked")
+		return
+	}
+
 	if state == api.StateClosed && !issue.IsClosed {
 		if err := issue_service.CloseIssue(ctx, issue, ctx.Doer, ""); err != nil {
 			if issues_model.IsErrDependenciesLeft(err) {

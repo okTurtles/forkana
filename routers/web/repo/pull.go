@@ -1650,34 +1650,30 @@ func MergePullRequest(ctx *context.Context) {
 
 	log.Trace("Pull request merged: %d", pr.ID)
 
-	if !form.DeleteBranchAfterMerge {
-		ctx.JSONRedirect(issue.Link())
-		return
-	}
-
-	// Don't cleanup when other pr use this branch as head branch
-	exist, err := issues_model.HasUnmergedPullRequestsByHeadInfo(ctx, pr.HeadRepoID, pr.HeadBranch)
-	if err != nil {
-		ctx.ServerError("HasUnmergedPullRequestsByHeadInfo", err)
-		return
-	}
-	if exist {
-		ctx.JSONRedirect(issue.Link())
-		return
-	}
-
-	var headRepo *git.Repository
-	if ctx.Repo != nil && ctx.Repo.Repository != nil && pr.HeadRepoID == ctx.Repo.Repository.ID && ctx.Repo.GitRepo != nil {
-		headRepo = ctx.Repo.GitRepo
-	} else {
-		headRepo, err = gitrepo.OpenRepository(ctx, pr.HeadRepo)
+	// Always delete head branch after merge for GitHub flow PRs
+	if pr.Flow == issues_model.PullRequestFlowGithub {
+		// Don't cleanup when other PRs use this branch as head branch
+		exist, err := issues_model.HasUnmergedPullRequestsByHeadInfo(ctx, pr.HeadRepoID, pr.HeadBranch)
 		if err != nil {
-			ctx.ServerError(fmt.Sprintf("OpenRepository[%s]", pr.HeadRepo.FullName()), err)
+			ctx.ServerError("HasUnmergedPullRequestsByHeadInfo", err)
 			return
 		}
-		defer headRepo.Close()
+		if !exist {
+			var headRepo *git.Repository
+			if ctx.Repo != nil && ctx.Repo.Repository != nil && pr.HeadRepoID == ctx.Repo.Repository.ID && ctx.Repo.GitRepo != nil {
+				headRepo = ctx.Repo.GitRepo
+			} else {
+				headRepo, err = gitrepo.OpenRepository(ctx, pr.HeadRepo)
+				if err != nil {
+					ctx.ServerError(fmt.Sprintf("OpenRepository[%s]", pr.HeadRepo.FullName()), err)
+					return
+				}
+				defer headRepo.Close()
+			}
+			deleteBranch(ctx, pr, headRepo)
+		}
 	}
-	deleteBranch(ctx, pr, headRepo)
+
 	ctx.JSONRedirect(issue.Link())
 }
 
@@ -2121,4 +2117,166 @@ func SetAllowEdits(ctx *context.Context) {
 	ctx.JSON(http.StatusOK, map[string]any{
 		"allow_maintainer_edit": pr.AllowMaintainerEdit,
 	})
+}
+
+// cleanupOrphanedFork deletes a fork repository that was created but whose
+// subsequent steps (push or DB update) failed. This prevents orphaned forks
+// from blocking retry attempts.
+func cleanupOrphanedFork(repoID int64) {
+	if err := repo_service.DeleteRepositoryDirectly(graceful.GetManager().ShutdownContext(), repoID); err != nil {
+		log.Error("ForkRejectedChanges: failed to clean up orphaned fork (repo_id=%d): %v", repoID, err)
+	} else {
+		log.Info("ForkRejectedChanges: cleaned up orphaned fork (repo_id=%d)", repoID)
+	}
+}
+
+// ForkRejectedChanges allows a PR author to fork their changes from a rejected
+// (closed) same-repo Change Request into their own repository. This preserves
+// the contributor's work after a CR is rejected.
+func ForkRejectedChanges(ctx *context.Context) {
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+
+	pr := issue.PullRequest
+
+	// Validate: must be a closed, non-merged, same-repo PR
+	if !issue.IsClosed || pr.HasMerged || !pr.IsSameRepo() {
+		ctx.NotFound(nil)
+		return
+	}
+
+	// Only the PR author can fork their rejected changes
+	if !ctx.IsSigned || !issue.IsPoster(ctx.Doer.ID) {
+		ctx.HTTPError(http.StatusForbidden)
+		return
+	}
+
+	// Prevent re-forking
+	if pr.IsForked {
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.already_forked"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	// Load base repo and check the CR branch still exists
+	if err := pr.LoadBaseRepo(ctx); err != nil {
+		ctx.ServerError("LoadBaseRepo", err)
+		return
+	}
+
+	baseRepo := pr.BaseRepo
+
+	// Check CR branch exists in the target repo
+	headBranchExists := gitrepo.IsBranchExist(ctx, baseRepo, pr.HeadBranch)
+	if !headBranchExists {
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.branch_deleted"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	// Check fork permissions using the existing subject-based blocking rules
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, baseRepo)
+	if err != nil {
+		ctx.ServerError("CheckForkOnEditPermissions", err)
+		return
+	}
+
+	if perms.HasExistingFork {
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.has_existing_fork"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	if perms.BlockedBySubject {
+		ctx.Flash.Error(ctx.Tr("repo.fork.already_own_subject_repo"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	// Create the fork
+	repoName := getUniqueRepositoryName(ctx, ctx.Doer.ID, baseRepo.Name)
+	if repoName == "" {
+		ctx.ServerError("getUniqueRepositoryName", errors.New("failed to generate unique repository name"))
+		return
+	}
+
+	forkedRepo := ForkRepoTo(ctx, ctx.Doer, repo_service.ForkRepoOptions{
+		BaseRepo:     baseRepo,
+		Name:         repoName,
+		Description:  baseRepo.Description,
+		SingleBranch: baseRepo.DefaultBranch,
+	})
+	if ctx.Written() {
+		return
+	}
+
+	// Push the CR branch commits to the fork's default branch.
+	// The fork was created from the base repo's default branch, so we need to
+	// force-push the CR head branch content onto the fork's default branch.
+	// Use PushingEnvironment (not InternalPushingEnvironment) because this pushes
+	// to a normal branch - hooks must run so post-receive processes the push
+	// (e.g. marking the repo non-empty, firing webhooks, updating stats).
+	if err := git.Push(ctx, baseRepo.RepoPath(), git.PushOptions{
+		Remote: forkedRepo.RepoPath(),
+		Branch: pr.HeadBranch + ":" + git.BranchPrefix + forkedRepo.DefaultBranch,
+		Force:  true,
+		Env:    repo_module.PushingEnvironment(ctx.Doer, forkedRepo),
+	}); err != nil {
+		log.Error("ForkRejectedChanges: failed to push CR branch to fork: %v", err)
+		// Clean up the orphaned fork so the user can retry
+		cleanupOrphanedFork(forkedRepo.ID)
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.push_failed"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	// Mark the PR as forked — this must succeed before we proceed to delete
+	// the CR branch, otherwise the PR stays in an inconsistent state (fork
+	// exists but UI still offers "Fork My Changes").
+	pr.IsForked = true
+	pr.ForkedRepoID = forkedRepo.ID
+	if err := pr.UpdateCols(ctx, "is_forked", "forked_repo_id"); err != nil {
+		log.Error("ForkRejectedChanges: failed to update PR forked status: %v", err)
+		// Clean up the orphaned fork so the user can retry
+		cleanupOrphanedFork(forkedRepo.ID)
+		ctx.Flash.Error(ctx.Tr("repo.pulls.fork_rejected.fork_failed"))
+		ctx.JSONRedirect(issue.Link())
+		return
+	}
+
+	// Add a timeline comment recording the fork event
+	if _, err := issues_model.CreateComment(ctx, &issues_model.CreateCommentOptions{
+		Type:  issues_model.CommentTypeForkRejected,
+		Doer:  ctx.Doer,
+		Repo:  baseRepo,
+		Issue: issue,
+	}); err != nil {
+		log.Error("ForkRejectedChanges: failed to create timeline comment: %v", err)
+		// Non-fatal: the fork succeeded, timeline comment is best-effort
+	}
+
+	// Auto-delete the CR head branch from the base repo now that the changes
+	// have been safely forked. Use SkipPermissionCheck because the contributor
+	// (PR author) typically doesn't have write access to the base repo — the
+	// branch was created via InternalPush during submit-change-request.
+	baseGitRepo, err := gitrepo.OpenRepository(ctx, baseRepo)
+	if err != nil {
+		log.Error("ForkRejectedChanges: failed to open base repo git for branch cleanup: %v", err)
+	} else {
+		defer baseGitRepo.Close()
+		if err := repo_service.DeleteBranch(ctx, ctx.Doer, baseRepo, baseGitRepo, pr.HeadBranch, pr, &repo_service.DeleteBranchOptions{
+			SkipPermissionCheck: true,
+		}); err != nil {
+			log.Error("ForkRejectedChanges: failed to delete CR branch %q from %s: %v", pr.HeadBranch, baseRepo.FullName(), err)
+			// Non-fatal: the fork succeeded, branch cleanup is best-effort
+		}
+	}
+
+	log.Info("ForkRejectedChanges: user %s forked rejected CR #%d into %s/%s",
+		ctx.Doer.Name, pr.Index, ctx.Doer.Name, forkedRepo.Name)
+
+	ctx.Flash.Success(ctx.Tr("repo.pulls.fork_rejected.success", ctx.Doer.Name+"/"+forkedRepo.Name))
+	ctx.JSONRedirect(forkedRepo.Link())
 }
