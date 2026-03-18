@@ -12,10 +12,8 @@
 		"PreviewUrl" (print $.Repository.Link "/markup")
 		"PreviewContext" $.Repository.Link
 	)}}
-</div>
-
-{{if .IsAttachmentEnabled}}
-	<div class="field">
+	{{if .IsAttachmentEnabled}}
 		{{template "repo/upload" .}}
-	</div>
-{{end}}
+		<div class="dropzone-hint-text">{{ctx.Locale.Tr "dropzone.default_message"}}</div>
+	{{end}}
+</div>
