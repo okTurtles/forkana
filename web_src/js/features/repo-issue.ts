@@ -461,7 +461,19 @@ export function initRepoPrBackLink() {
   registerGlobalInitFunc('initPrBackLink', (el: HTMLAnchorElement) => {
     el.addEventListener('click', (e) => {
       e.preventDefault();
-      window.history.back();
+      const referrer = document.referrer;
+      let hasSameOriginReferrer = false;
+      if (referrer) {
+        try {
+          const refUrl = new URL(referrer, window.location.href);
+          hasSameOriginReferrer = refUrl.origin === window.location.origin;
+        } catch { /* invalid referrer URL, fall through */ }
+      }
+      if (hasSameOriginReferrer && window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = el.href;
+      }
     });
   });
 }
