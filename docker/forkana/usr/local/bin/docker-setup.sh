@@ -36,6 +36,11 @@ if [ ! -f ${GITEA_APP_INI} ]; then
         INSTALL_LOCK=true
     fi
 
+    if [ "$DB_TYPE" = "postgres" ] && [ -z "$DB_PASSWD" ]; then
+        echo "ERROR: DB_PASSWD must be set when using PostgreSQL"
+        exit 1
+    fi
+
     # Forkana-specific defaults (PostgreSQL, production mode)
     APP_NAME=${APP_NAME:-"Forkana"} \
     RUN_MODE=${RUN_MODE:-"prod"} \
