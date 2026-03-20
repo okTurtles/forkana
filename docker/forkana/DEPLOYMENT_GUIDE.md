@@ -116,7 +116,7 @@ sudo dnf install -y git jq curl
 ### 4. Create Directory Structure
 
 > **CI/CD note:** If you are using the CI/CD deployment model (next section),
-> skip this step — the deploy user's directories are created there instead.
+> skip this step - the deploy user's directories are created there instead.
 
 ```bash
 mkdir -p ~/forkana/{data,data/git,data/custom,config,postgres,compose}
@@ -142,7 +142,7 @@ The deploy user **must** have UID 1000 so that directories it creates are
 automatically owned by the container user (git:git, also UID 1000).
 
 > **Important:** If UID 1000 is already taken on your system (`getent passwd
-> 1000`), you must resolve that conflict before continuing — either remove or
+> 1000`), you must resolve that conflict before continuing - either remove or
 > reassign the existing user. The container bind-mounts depend on UID 1000
 > ownership.
 
@@ -183,7 +183,7 @@ ls -ld "$DEPLOY_HOME"
 
 ### 3. Set Up the Deploy Directory and Git Repository
 
-All paths live under the deploy user's home directory — no root-owned
+All paths live under the deploy user's home directory - no root-owned
 directories and no `sudo` required during deployments.
 
 ```bash
@@ -202,20 +202,27 @@ if [ ! -d "$DEPLOY_HOME/forkana/repo/.git" ]; then
 fi
 ```
 
-### 4. Install the Deploy Script
+### 4. Install the Deploy Scripts
+
+`deploy.sh` is an OS-detecting wrapper that delegates to `deploy_debian.sh` or
+`deploy_fedora.sh` (which both source `deploy_common.sh`). All four scripts
+must be copied together:
 
 ```bash
 DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
 
-sudo -Hiu forkana-deploy cp \
-  "$DEPLOY_HOME/forkana/repo/docker/forkana/deploy.sh" \
-  "$DEPLOY_HOME/forkana/deploy.sh"
-sudo -Hiu forkana-deploy chmod 755 "$DEPLOY_HOME/forkana/deploy.sh"
+for script in deploy.sh deploy_common.sh deploy_debian.sh deploy_fedora.sh; do
+  sudo -Hiu forkana-deploy cp \
+    "$DEPLOY_HOME/forkana/repo/docker/forkana/$script" \
+    "$DEPLOY_HOME/forkana/$script"
+done
+sudo -Hiu forkana-deploy chmod 755 "$DEPLOY_HOME/forkana"/deploy*.sh
 ```
 
-> **Note:** The deploy script is also updated automatically during each
-> deployment (it copies `dev.yml` from the checked-out commit). To update
-> `deploy.sh` itself, pull the latest version from the repo.
+> **Note:** Each deployment automatically copies the compose file (`dev.yml`)
+> from the checked-out commit into `~/forkana/compose/`. The deploy scripts
+> themselves are **not** updated automatically - to update them, re-run this
+> copy step from the latest repo checkout.
 
 ### 5. Configure `authorized_keys` with Forced-Command Restrictions
 
@@ -246,8 +253,9 @@ sudo chmod 600 "$DEPLOY_HOME/.ssh/authorized_keys"
 **Security notes:**
 - `command=` forces every SSH session with this key to execute `deploy.sh`.
   The commit SHA is available to the script via `$SSH_ORIGINAL_COMMAND`.
-- `no-port-forwarding,no-pty,no-agent-forwarding,no-X11-forwarding` prevent
-  tunnelling, interactive shells, and agent hijacking.
+- `restrict` disables port forwarding, PTY allocation, agent forwarding,
+  and X11 forwarding - preventing tunnelling, interactive shells, and
+  agent hijacking.
 
 ### 6. Start the Local Docker Registry
 
@@ -281,7 +289,7 @@ ssh-keyscan -t ed25519 <VM_IP_OR_HOSTNAME> 2>/dev/null
 
 Copy the output and store it as the `DEPLOY_SSH_KNOWN_HOSTS` secret in the
 GitHub repository settings. The workflow uses `StrictHostKeyChecking=yes` with
-this value — **never** use `StrictHostKeyChecking=no`.
+this value - **never** use `StrictHostKeyChecking=no`.
 
 ### 8. Required GitHub Secrets
 
@@ -325,7 +333,7 @@ echo "FORKANA_SECRET_KEY=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" >> $DEP
 echo "FORKANA_INTERNAL_TOKEN=$(head -c 32 /dev/urandom | base64)" >> $DEPLOY_HOME/forkana/compose/.env
 echo "FORKANA_JWT_SECRET=$(head -c 32 /dev/urandom | base64)" >> $DEPLOY_HOME/forkana/compose/.env
 
-# Lock down permissions — only the deploy user should read this file
+# Lock down permissions - only the deploy user should read this file
 chmod 600 $DEPLOY_HOME/forkana/compose/.env
 ```
 
@@ -627,7 +635,7 @@ docker compose -f dev.yml -f compose.override.yml logs forkana | tail -50
 ```
 
 ```bash
-# Verify permissions (run as root — ~/forkana would expand to /root)
+# Verify permissions (run as root - ~/forkana would expand to /root)
 DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
 
 ls -la $DEPLOY_HOME/forkana/data
@@ -744,7 +752,7 @@ connect() to 127.0.0.1:3000 failed (13: Permission denied) while connecting to u
 **Solution:**
 ```bash
 # Enable nginx to connect to network services
-setsebool -P httpd_can_network_connect 1
+sudo setsebool -P httpd_can_network_connect 1
 sudo systemctl restart nginx
 ```
 
@@ -851,7 +859,7 @@ Type=oneshot
 RemainAfterExit=yes
 User=forkana-deploy
 Group=forkana-deploy
-WorkingDirectory=%h/forkana/compose
+WorkingDirectory=/home/forkana-deploy/forkana/compose
 ExecStart=/usr/bin/docker compose -f dev.yml -f compose.override.yml up -d
 ExecStop=/usr/bin/docker compose -f dev.yml -f compose.override.yml down
 TimeoutStartSec=0
@@ -872,8 +880,8 @@ sudo systemctl start forkana
 
 ---
 
-<summary><h2>Additional Configuration</h2></summary>
 <details>
+<summary><h2>Additional Configuration</h2></summary>
 
 ### Environment Variable Reference
 
@@ -924,6 +932,6 @@ services:
 - [ ] Regular backups scheduled
 - [ ] `DISABLE_REGISTRATION` set to true (invite-only access)
 - [ ] Nginx reverse proxy security headers configured (see `docker/forkana/nginx.conf`)
-- [ ] Deploy SSH key restricted with `command=` and `no-port-forwarding,no-pty,no-agent-forwarding`
+- [ ] Deploy SSH key restricted with `command=` and `restrict`
 - [ ] SSH host key pinned in GitHub secrets (`DEPLOY_SSH_KNOWN_HOSTS`)
 - [ ] Local registry bound to `127.0.0.1:5000` only (not publicly accessible)
