@@ -196,11 +196,21 @@ sudo -Hiu forkana-deploy bash -lc "
 "
 
 # Clone the repo (skip if already cloned)
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 if [ ! -d "$DEPLOY_HOME/forkana/repo/.git" ]; then
   sudo -Hiu forkana-deploy git clone \
+    --branch "$DEPLOY_BRANCH" --single-branch \
     https://github.com/okTurtles/forkana.git "$DEPLOY_HOME/forkana/repo"
+else
+  sudo -Hiu forkana-deploy git -C "$DEPLOY_HOME/forkana/repo" fetch origin "$DEPLOY_BRANCH"
+  sudo -Hiu forkana-deploy git -C "$DEPLOY_HOME/forkana/repo" checkout "$DEPLOY_BRANCH"
+  sudo -Hiu forkana-deploy git -C "$DEPLOY_HOME/forkana/repo" reset --hard "origin/$DEPLOY_BRANCH"
 fi
 ```
+
+> **Branch note:** for staging setups that rely on deployment-specific changes,
+> set `DEPLOY_BRANCH` before running the block above. Example:
+> `DEPLOY_BRANCH=docker-deploy`.
 
 ### 4. Install the Deploy Scripts
 
@@ -219,10 +229,13 @@ done
 sudo -Hiu forkana-deploy chmod 755 "$DEPLOY_HOME/forkana"/deploy*.sh
 ```
 
-> **Note:** Each deployment automatically copies the compose file (`dev.yml`)
-> from the checked-out commit into `~/forkana/compose/`. The deploy scripts
-> themselves are **not** updated automatically - to update them, re-run this
-> copy step from the latest repo checkout.
+> **Note:** The compose base file is `~/forkana/compose/dev.yml`.
+> Runtime overrides and secrets stay in `~/forkana/compose/`
+> (`compose.override.yml` and `.env`). The deploy scripts themselves are
+> **not** updated automatically - to update them, re-run this copy step from
+> the latest repo checkout. During deployment, `deploy_common.sh` refreshes
+> `~/forkana/compose/dev.yml` from the checked-out repo and rewrites
+> `~/forkana/compose/compose.override.yml` with the pinned image digest.
 
 ### 5. Configure `authorized_keys` with Forced-Command Restrictions
 
@@ -246,6 +259,7 @@ command="~/forkana/deploy.sh",restrict ssh-ed25519 AAAA... github-actions-deploy
 
 ```bash
 # Set correct ownership and permissions on authorized_keys
+sudo touch "$DEPLOY_HOME/.ssh/authorized_keys"
 sudo chown forkana-deploy:forkana-deploy "$DEPLOY_HOME/.ssh/authorized_keys"
 sudo chmod 600 "$DEPLOY_HOME/.ssh/authorized_keys"
 ```
@@ -265,7 +279,11 @@ bootstrap (before the first deploy), start it manually:
 ```bash
 DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
 
-docker compose -f $DEPLOY_HOME/forkana/repo/docker/forkana/dev.yml up -d registry
+sudo -Hiu forkana-deploy cp \
+  "$DEPLOY_HOME/forkana/repo/docker/forkana/dev.yml" \
+  "$DEPLOY_HOME/forkana/compose/dev.yml"
+
+sudo -Hiu forkana-deploy docker compose -f "$DEPLOY_HOME/forkana/compose/dev.yml" up -d registry
 ```
 
 Verify it is running:
@@ -354,7 +372,10 @@ done
 ## Running Forkana
 
 Automated deployments are handled by `deploy.sh` (triggered via GitHub Actions).
-For manual operations, use the compose files in `~/forkana/compose/`.
+For manual operations, use:
+- base file: `~/forkana/compose/dev.yml`
+- override file: `~/forkana/compose/compose.override.yml`
+- env file: `~/forkana/compose/.env`
 
 > **User context:** All commands in this section (and in Health Checks,
 > Maintenance, and most of Troubleshooting) should be run **as the deploy
@@ -367,20 +388,27 @@ For manual operations, use the compose files in `~/forkana/compose/`.
 > **Note:** When running commands via `sudo -Hiu forkana-deploy`, Docker Compose
 > may not auto-load the `.env` file. Use `--env-file` explicitly:
 > ```bash
-> docker compose --env-file ~/forkana/compose/.env -f dev.yml -f compose.override.yml up -d
+> docker compose --env-file ~/forkana/compose/.env -f ~/forkana/compose/dev.yml -f ~/forkana/compose/compose.override.yml up -d
 > ```
 
 ```bash
-cd ~/forkana/compose
-docker compose -f dev.yml -f compose.override.yml up -d
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  up -d
 ```
 
 ### Verify Services Are Running
 
 ```bash
-cd ~/forkana/compose
-docker compose -f dev.yml -f compose.override.yml ps
-docker compose -f dev.yml -f compose.override.yml logs -f forkana
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  ps
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  logs -f forkana
 ```
 
 ### Initialize the Database (First Run Only)
@@ -393,15 +421,19 @@ On first startup, Forkana will automatically:
 Watch the logs to ensure initialization completes:
 
 ```bash
-cd ~/forkana/compose
-docker compose -f dev.yml -f compose.override.yml logs -f forkana | grep -i "starting"
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  logs -f forkana | grep -i "starting"
 ```
 
 #### Create admin user
 
 ```bash
-cd ~/forkana/compose
-docker compose -f dev.yml -f compose.override.yml exec forkana gitea admin user create \
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  exec forkana gitea admin user create \
   --username admin --password your-password-here --email admin@forkana.org --admin
 ```
 
@@ -434,6 +466,8 @@ configure SSL automatically:
 Fedora uses `/etc/nginx/conf.d/` instead of `sites-available/sites-enabled`:
 
 ```bash
+FORKANA_DOMAIN="your-actual-domain.com"
+
 # Create HTTP-only config for initial Certbot setup
 sudo tee /etc/nginx/conf.d/forkana.conf << 'EOF'
 server {
@@ -456,12 +490,17 @@ server {
 EOF
 
 # Edit to set your actual domain
-sudo sed -i 's/your-domain.example/your-actual-domain.com/g' /etc/nginx/conf.d/forkana.conf
+sudo sed -i "s/your-domain.example/${FORKANA_DOMAIN}/g" /etc/nginx/conf.d/forkana.conf
+
+# Fedora + SELinux: allow nginx to proxy to localhost:3000
+sudo setsebool -P httpd_can_network_connect 1
 ```
 
 #### Debian/Ubuntu
 
 ```bash
+FORKANA_DOMAIN="your-actual-domain.com"
+
 # Create HTTP-only config for initial Certbot setup
 sudo tee /etc/nginx/sites-available/forkana << 'EOF'
 server {
@@ -484,7 +523,7 @@ server {
 EOF
 
 # Edit to set your actual domain
-sudo sed -i 's/your-domain.example/your-actual-domain.com/g' /etc/nginx/sites-available/forkana
+sudo sed -i "s/your-domain.example/${FORKANA_DOMAIN}/g" /etc/nginx/sites-available/forkana
 
 # Enable the site
 sudo ln -s /etc/nginx/sites-available/forkana /etc/nginx/sites-enabled/
@@ -501,7 +540,10 @@ sudo systemctl enable nginx
 sudo systemctl start nginx
 
 # Obtain SSL certificate (Certbot will automatically update the nginx config)
-sudo certbot --nginx -d your-domain.example
+sudo certbot --nginx -d "$FORKANA_DOMAIN"
+
+# Enable automatic renewal timer (needed on some distros/images)
+sudo systemctl enable --now certbot-renew.timer
 ```
 
 Certbot will automatically:
@@ -528,20 +570,26 @@ curl -f https://your-domain.example/api/healthz
 ### Verify Database Connection
 
 ```bash
-cd ~/forkana/compose
-
 # Check PostgreSQL is accessible
-docker compose -f dev.yml -f compose.override.yml exec postgres pg_isready -U forkana -d forkana
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  exec postgres pg_isready -U forkana -d forkana
 
 # Check Forkana can connect
-docker compose -f dev.yml -f compose.override.yml logs forkana | grep -i database
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  logs forkana | grep -i database
 ```
 
 ### Verify All Services
 
 ```bash
-cd ~/forkana/compose
-docker compose -f dev.yml -f compose.override.yml ps
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  ps
 
 # Expected output:
 # NAME               STATUS                   PORTS
@@ -566,20 +614,33 @@ docker compose -f dev.yml -f compose.override.yml ps
 
 ### View Logs
 
-All compose commands below assume `cd ~/forkana/compose` first.
+All compose commands below use explicit paths for `dev.yml`,
+`compose.override.yml`, and `.env`.
 
 ```bash
 # All services
-docker compose -f dev.yml -f compose.override.yml logs -f
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  logs -f
 
 # Forkana only
-docker compose -f dev.yml -f compose.override.yml logs -f forkana
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  logs -f forkana
 
 # PostgreSQL only
-docker compose -f dev.yml -f compose.override.yml logs -f postgres
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  logs -f postgres
 
 # Last 100 lines
-docker compose -f dev.yml -f compose.override.yml logs --tail=100 forkana
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  logs --tail=100 forkana
 ```
 
 ### Common Issues
@@ -637,7 +698,10 @@ docker info
 #### Container Won't Start
 
 ```bash
-docker compose -f dev.yml -f compose.override.yml logs forkana | tail -50
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  logs forkana | tail -50
 ```
 
 ```bash
@@ -729,17 +793,29 @@ docker run --rm -it --platform linux/amd64 fedora:43 bash
 #### Database Connection Failed
 
 ```bash
-docker compose -f dev.yml -f compose.override.yml ps postgres
-docker compose -f dev.yml -f compose.override.yml logs postgres
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  ps postgres
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  logs postgres
 
 # Test connection manually
-docker compose -f dev.yml -f compose.override.yml exec postgres psql -U forkana -d forkana -c "SELECT 1;"
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  exec postgres psql -U forkana -d forkana -c "SELECT 1;"
 ```
 
 #### 502 Bad Gateway from Nginx
 
 ```bash
-docker compose -f dev.yml -f compose.override.yml ps forkana
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  ps forkana
 curl http://localhost:3000/api/healthz
 
 # Check Nginx error logs
@@ -875,10 +951,15 @@ current `dev.yml` and `app.ini` template defaults), you need to recreate the
 Docker network. This requires brief downtime:
 
 ```bash
-cd ~/forkana/compose
-docker compose -f dev.yml -f compose.override.yml down
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  down
 docker network rm forkana_forkana-network
-docker compose -f dev.yml -f compose.override.yml up -d
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  up -d
 ```
 
 After recreation, verify the subnet is now `172.30.0.0/16`:
@@ -891,16 +972,20 @@ docker network inspect forkana_forkana-network --format '{{range .IPAM.Config}}{
 ### Reset and Rebuild
 
 ```bash
-cd ~/forkana/compose
-
 # Stop all services
-docker compose -f dev.yml -f compose.override.yml down
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  down
 
 # Remove data (CAUTION: destroys all data)
 rm -rf ~/forkana/data/* ~/forkana/config/* ~/forkana/postgres/*
 
 # Rebuild and restart
-docker compose -f dev.yml -f compose.override.yml up -d
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  up -d
 ```
 
 </details>
@@ -935,38 +1020,55 @@ fetch/checkout step, building directly from the working tree:
 ### Backup
 
 ```bash
-cd ~/forkana/compose
-
 # Stop Forkana (optional, for consistent backup)
-docker compose -f dev.yml -f compose.override.yml stop forkana
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  stop forkana
 
 # Backup PostgreSQL
-docker compose -f dev.yml -f compose.override.yml exec -T postgres pg_dump -U forkana forkana > backup-$(date +%Y%m%d).sql
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  exec -T postgres pg_dump -U forkana forkana > backup-$(date +%Y%m%d).sql
 
 # Backup data directory
 tar -czf forkana-data-$(date +%Y%m%d).tar.gz -C ~/forkana data
 
 # Restart Forkana
-docker compose -f dev.yml -f compose.override.yml start forkana
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  start forkana
 ```
 
 ### Restore from Backup
 
 ```bash
-cd ~/forkana/compose
-
 # Stop services
-docker compose -f dev.yml -f compose.override.yml down
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  down
 
 # Restore PostgreSQL
-docker compose -f dev.yml -f compose.override.yml up -d postgres
-cat backup-YYYYMMDD.sql | docker compose -f dev.yml -f compose.override.yml exec -T postgres psql -U forkana forkana
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  up -d postgres
+cat backup-YYYYMMDD.sql | docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  exec -T postgres psql -U forkana forkana
 
 # Restore data directory
 tar -xzf forkana-data-YYYYMMDD.tar.gz -C ~/forkana
 
 # Start Forkana
-docker compose -f dev.yml -f compose.override.yml up -d
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  up -d
 ```
 
 ### Systemd Service (Optional)
@@ -985,8 +1087,8 @@ RemainAfterExit=yes
 User=forkana-deploy
 Group=forkana-deploy
 WorkingDirectory=/home/forkana-deploy/forkana/compose
-ExecStart=/usr/bin/docker compose -f dev.yml -f compose.override.yml up -d
-ExecStop=/usr/bin/docker compose -f dev.yml -f compose.override.yml down
+ExecStart=/usr/bin/docker compose --env-file /home/forkana-deploy/forkana/compose/.env -f /home/forkana-deploy/forkana/compose/dev.yml -f /home/forkana-deploy/forkana/compose/compose.override.yml up -d
+ExecStop=/usr/bin/docker compose --env-file /home/forkana-deploy/forkana/compose/.env -f /home/forkana-deploy/forkana/compose/dev.yml -f /home/forkana-deploy/forkana/compose/compose.override.yml down
 TimeoutStartSec=0
 
 [Install]
