@@ -102,6 +102,15 @@ deploy_run() {
     chmod 0755 "${dir}"
   done
 
+  # --- Step 1c: Verify .env exists before any docker compose invocation ---
+  # This must happen before Step 2 (registry startup) because dev.yml interpolates
+  # environment variables like ${POSTGRES_PASSWORD}. If .env is missing, docker compose
+  # will fail with a confusing error. Validate early to give users a clear message.
+  ENV_FILE="${COMPOSE_DIR}/.env"
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    die "Missing ${ENV_FILE} — create it with POSTGRES_PASSWORD, FORKANA_DOMAIN, FORKANA_SECRET_KEY, FORKANA_INTERNAL_TOKEN, and FORKANA_JWT_SECRET (see DEPLOYMENT_GUIDE.md)."
+  fi
+
   # --- Step 2: Ensure the local registry is running ---
   log "Ensuring local registry is running..."
   if ! curl -sf "${REGISTRY_HTTP}/v2/" > /dev/null 2>&1; then
@@ -180,13 +189,7 @@ deploy_run() {
     > "${COMPOSE_OVERRIDE}"
   log "Wrote ${COMPOSE_OVERRIDE}"
 
-  # --- Step 8: Verify .env exists (secrets must be provisioned before first deploy) ---
-  ENV_FILE="${COMPOSE_DIR}/.env"
-  if [[ ! -f "${ENV_FILE}" ]]; then
-    die "Missing ${ENV_FILE} — create it with POSTGRES_PASSWORD, FORKANA_DOMAIN, FORKANA_SECRET_KEY, FORKANA_INTERNAL_TOKEN, and FORKANA_JWT_SECRET (see DEPLOYMENT_GUIDE.md)."
-  fi
-
-  # --- Step 9: Deploy with docker compose ---
+  # --- Step 8: Deploy with docker compose ---
   log "Running docker compose up..."
   docker compose \
     -p "${PROJECT_NAME}" \
@@ -195,7 +198,7 @@ deploy_run() {
     -f "${COMPOSE_OVERRIDE}" \
     up -d --remove-orphans
 
-  # --- Step 10: Health check ---
+  # --- Step 9: Health check ---
   log "Waiting for health check (up to 150s)..."
   for i in $(seq 1 30); do
     if curl -sf http://127.0.0.1:3000/api/healthz > /dev/null 2>&1; then
