@@ -864,7 +864,7 @@ scheme detection (Forkana thinks the request is HTTP when it's actually HTTPS),
 which in turn breaks CSRF validation and can cause redirect loops.
 
 Fresh deployments should not hit this issue: the Docker network subnet is pinned
-to `172.30.0.0/16` in `dev.yml` and `local.yml`, and the `app.ini` template
+to `172.30.0.0/16` in `dev.yml`, and the `app.ini` template
 trusts exactly that subnet (`127.0.0.0/8,::1/128,172.30.0.0/16`). However,
 instances deployed before the subnet was pinned will have a Docker-assigned
 subnet (e.g. `172.18.0.0/16`) that may not match the trusted proxy list.
