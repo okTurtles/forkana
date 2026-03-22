@@ -340,7 +340,13 @@ chmod 600 $DEPLOY_HOME/forkana/compose/.env
 Verify the result:
 
 ```bash
-cat $DEPLOY_HOME/forkana/compose/.env
+# Verify the file exists and has correct permissions
+ls -l $DEPLOY_HOME/forkana/compose/.env
+
+# Verify all required keys are present without revealing values
+for key in POSTGRES_PASSWORD FORKANA_DOMAIN FORKANA_SECRET_KEY FORKANA_INTERNAL_TOKEN FORKANA_JWT_SECRET; do
+  grep -q "^${key}=" "$DEPLOY_HOME/forkana/compose/.env" || echo "Missing ${key}"
+done
 ```
 
 ---
