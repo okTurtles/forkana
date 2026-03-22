@@ -763,6 +763,125 @@ sudo certbot renew --dry-run
 sudo certbot certificates
 ```
 
+#### CSRF Failures, Auth Errors, or Redirect Loops Behind Nginx
+
+**Symptoms:**
+- Login forms return 400 Bad Request (CSRF token mismatch)
+- Redirect loops between HTTP and HTTPS
+- All requests in Forkana logs show the Docker gateway IP instead of real client IPs
+
+**Cause:** Forkana uses the `REVERSE_PROXY_TRUSTED_PROXIES` setting to decide
+which IPs are allowed to set `X-Forwarded-For` and `X-Forwarded-Proto` headers.
+If the nginx reverse proxy's traffic arrives from a Docker network IP that falls
+outside the trusted list, Forkana silently ignores those headers. This breaks
+scheme detection (Forkana thinks the request is HTTP when it's actually HTTPS),
+which in turn breaks CSRF validation and can cause redirect loops.
+
+Fresh deployments should not hit this issue: the Docker network subnet is pinned
+to `172.30.0.0/16` in `dev.yml` and `local.yml`, and the `app.ini` template
+trusts exactly that subnet (`127.0.0.0/8,::1/128,172.30.0.0/16`). However,
+instances deployed before the subnet was pinned will have a Docker-assigned
+subnet (e.g. `172.18.0.0/16`) that may not match the trusted proxy list.
+Existing Docker networks are not retroactively updated by Docker Compose — the
+network must be recreated for the pinned subnet to take effect.
+
+**Diagnosis:**
+
+```bash
+# Find the subnet Docker assigned to the forkana network
+docker network inspect forkana_forkana-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+# Example output: 172.18.0.0/16  (should be 172.30.0.0/16 on fresh deployments)
+
+# Confirm the gateway IP that traffic arrives from
+docker inspect forkana --format '{{range .NetworkSettings.Networks}}Gateway: {{.Gateway}}{{end}}'
+# Example output: Gateway: 172.18.0.1
+
+# Check the current trusted proxy setting
+docker exec forkana cat /etc/gitea/app.ini | grep REVERSE_PROXY_TRUSTED
+```
+
+If the gateway IP is not covered by the `REVERSE_PROXY_TRUSTED_PROXIES` CIDRs,
+that's the problem.
+
+**Fix (running instance):**
+
+Edit the `app.ini` on the **host volume mount** (not `/etc/gitea/app.ini` on the
+host root filesystem — that path only exists inside the container):
+
+```bash
+nano ~/forkana/config/app.ini
+```
+
+In the `[security]` section, update the trusted proxies to include the actual
+Docker subnet discovered above:
+
+```ini
+REVERSE_PROXY_TRUSTED_PROXIES = 127.0.0.0/8,::1/128,172.18.0.0/16
+```
+
+Replace `172.18.0.0/16` with whatever subnet `docker network inspect` reported.
+
+Then restart the container:
+
+```bash
+docker restart forkana
+```
+
+> **Note:** If the `~/forkana/compose/` directory appears empty, you may be
+> logged in as a different user than the deploy user (`forkana-deploy`). The
+> `docker restart forkana` command works regardless of which user you're logged
+> in as, and is a reliable alternative to `docker compose restart`.
+
+**Verify the fix:**
+
+```bash
+docker exec forkana cat /etc/gitea/app.ini | grep REVERSE_PROXY_TRUSTED
+curl -sf http://127.0.0.1:3000/api/healthz && echo "healthy"
+```
+
+Then test login in a browser to confirm CSRF errors are gone.
+
+**Persistence across container recreation:**
+
+Editing `app.ini` directly survives container restarts (`docker restart`) but
+**not** full container recreations (`docker compose up` that rebuilds the
+container). The `app.ini` template is re-rendered from environment variables on
+first boot. To make the setting permanent across recreations, add the
+`GITEA__`-prefixed environment variable override to the compose configuration
+(e.g. in `compose.override.yml` or `dev.yml`):
+
+```yaml
+services:
+  forkana:
+    environment:
+      GITEA__security__REVERSE_PROXY_TRUSTED_PROXIES: "127.0.0.0/8,::1/128,172.18.0.0/16"
+```
+
+Replace `172.18.0.0/16` with the actual Docker subnet.
+
+The `GITEA__` prefix overrides are applied by `environment-to-ini` on every
+container startup, even when `app.ini` already exists on the volume.
+
+**Permanent fix (recreate the Docker network):**
+
+If you want the instance to use the pinned `172.30.0.0/16` subnet (matching the
+current `dev.yml` and `app.ini` template defaults), you need to recreate the
+Docker network. This requires brief downtime:
+
+```bash
+cd ~/forkana/compose
+docker compose -f dev.yml -f compose.override.yml down
+docker network rm forkana_forkana-network
+docker compose -f dev.yml -f compose.override.yml up -d
+```
+
+After recreation, verify the subnet is now `172.30.0.0/16`:
+
+```bash
+docker network inspect forkana_forkana-network --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+# Expected output: 172.30.0.0/16
+```
+
 ### Reset and Rebuild
 
 ```bash
