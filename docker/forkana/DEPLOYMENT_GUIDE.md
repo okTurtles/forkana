@@ -344,15 +344,19 @@ Generate the file (replace `dev.forkana.org` with your actual domain):
 ```bash
 DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
 
-# Create .env with generated secrets (overwrites any existing file)
-echo "POSTGRES_PASSWORD=$(head -c 18 /dev/urandom | base64)"  >  $DEPLOY_HOME/forkana/compose/.env
-echo "FORKANA_DOMAIN=dev.forkana.org"                          >> $DEPLOY_HOME/forkana/compose/.env
-echo "FORKANA_SECRET_KEY=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')" >> $DEPLOY_HOME/forkana/compose/.env
-echo "FORKANA_INTERNAL_TOKEN=$(head -c 32 /dev/urandom | base64)" >> $DEPLOY_HOME/forkana/compose/.env
-echo "FORKANA_JWT_SECRET=$(head -c 32 /dev/urandom | base64)" >> $DEPLOY_HOME/forkana/compose/.env
+# Create .env with generated secrets (overwrites any existing file).
+# openssl rand produces single-line output; tr -d '\n' guards against any
+# trailing newline so values never wrap and break .env parsing.
+{
+  printf 'POSTGRES_PASSWORD=%s\n'      "$(openssl rand -base64 24 | tr -d '\n')"
+  printf 'FORKANA_DOMAIN=%s\n'         "dev.forkana.org"
+  printf 'FORKANA_SECRET_KEY=%s\n'     "$(openssl rand -hex 32)"
+  printf 'FORKANA_INTERNAL_TOKEN=%s\n' "$(openssl rand -base64 32 | tr -d '\n')"
+  printf 'FORKANA_JWT_SECRET=%s\n'     "$(openssl rand -base64 32 | tr -d '\n')"
+} > "$DEPLOY_HOME/forkana/compose/.env"
 
 # Lock down permissions - only the deploy user should read this file
-chmod 600 $DEPLOY_HOME/forkana/compose/.env
+chmod 600 "$DEPLOY_HOME/forkana/compose/.env"
 ```
 
 Verify the result:
