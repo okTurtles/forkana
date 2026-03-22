@@ -13,7 +13,7 @@ mkdir -p ${GITEA_CUSTOM} && chmod 0700 ${GITEA_CUSTOM}
 # The defaults live outside the volume paths so they survive volume mounts.
 # Uses cp -rn so existing user-modified files are never overwritten.
 CUSTOM_DEFAULTS="/usr/local/share/gitea/custom-defaults"
-if [ -d "${CUSTOM_DEFAULTS}" ]; then
+if [ -d "${CUSTOM_DEFAULTS}" ] && [ -n "$(find "${CUSTOM_DEFAULTS}" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
     # Use glob instead of "/." — BusyBox cp -rn silently fails with the dot syntax.
     cp -rn "${CUSTOM_DEFAULTS}"/* "${GITEA_CUSTOM}/"
 fi
