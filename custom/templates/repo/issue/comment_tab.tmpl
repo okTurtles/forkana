@@ -1,0 +1,19 @@
+{{$textareaContent := .BodyQuery}}
+{{if not $textareaContent}}{{$textareaContent = .IssueTemplate}}{{end}}
+{{if not $textareaContent}}{{$textareaContent = .PullRequestTemplate}}{{end}}
+{{if not $textareaContent}}{{$textareaContent = .content}}{{end}}
+
+<div class="field">
+	{{template "shared/toasteditor" (dict
+		"TextareaName" "content"
+		"TextareaContent" $textareaContent
+		"TextareaPlaceholder" (ctx.Locale.Tr "repo.diff.comment.placeholder")
+		"DropzoneParentContainer" "form, .ui.form"
+		"PreviewUrl" (print $.Repository.Link "/markup")
+		"PreviewContext" $.Repository.Link
+	)}}
+	{{if .IsAttachmentEnabled}}
+		{{template "repo/upload" .}}
+		<div class="dropzone-hint-text">{{ctx.Locale.Tr "dropzone.default_message"}}</div>
+	{{end}}
+</div>

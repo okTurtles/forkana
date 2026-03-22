@@ -21,7 +21,8 @@
 			{{end}}
 			*/}}
 			{{if not ctx.Consts.RepoUnitTypePullRequests.UnitGlobalDisabled}}
-				<a class="item{{if .PageIsPulls}} active{{end}}" href="{{AppSubUrl}}/pulls">{{ctx.Locale.Tr "pull_requests"}}</a>
+				<span class="item navbar-view-modes">View modes</span>
+				<a class="item{{if .PageIsPullList}} navbar-pill-active{{end}}" href="{{AppSubUrl}}/pulls">{{ctx.Locale.Tr "pull_requests"}}</a>
 			{{end}}
 			{{/* Milestones link hidden - not used in Forkana
 			{{if not (and ctx.Consts.RepoUnitTypeIssues.UnitGlobalDisabled ctx.Consts.RepoUnitTypePullRequests.UnitGlobalDisabled)}}

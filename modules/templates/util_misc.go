@@ -107,6 +107,16 @@ func actionIcon(opType activities_model.ActionType) string {
 	}
 }
 
+func IsArticleOwnerUpdate(ctx context.Context, act Actioner) bool {
+	if act == nil || act.GetContent() == "" {
+		return false
+	}
+	if act.GetOpType() != activities_model.ActionCommitRepo {
+		return false
+	}
+	return act.GetActUserName(ctx) == act.GetRepoUserName(ctx)
+}
+
 // ActionContent2Commits converts action content to push commits
 func ActionContent2Commits(act Actioner) *repository.PushCommits {
 	push := repository.NewPushCommits()

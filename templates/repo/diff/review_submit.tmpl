@@ -1,0 +1,81 @@
+<div id="review-box" {{if $.Repository.IsArchived}}data-tooltip-content="{{ctx.Locale.Tr "repo.archive.pull.nocomment"}}"{{end}}>
+	<button class="ui tiny primary button js-btn-review diff-submit-review-btn {{if not $.IsShowingAllCommits}}disabled{{end}}"
+		{{if not $.IsShowingAllCommits}}data-tooltip-content="{{ctx.Locale.Tr "repo.pulls.review_only_possible_for_full_diff"}}"{{end}}
+		{{if $.Repository.IsArchived}}disabled{{end}}
+	>
+		{{ctx.Locale.Tr "repo.diff.review"}}
+		<span class="ui small label review-comments-counter" data-pending-comment-number="{{.PendingCodeCommentNumber}}">{{.PendingCodeCommentNumber}}</span>
+	</button>
+</div>
+{{if $.IsShowingAllCommits}}
+<div class="review-modal-overlay" id="review-modal-overlay" style="display:none">
+	<div class="review-modal" id="review-modal">
+		<form class="ui form form-fetch-action" action="{{.Link}}/reviews/submit" method="post">
+			{{.CsrfTokenHtml}}
+			<input type="hidden" name="commit_id" value="{{.AfterCommitID}}">
+			<div class="review-modal-header">
+				<span class="review-modal-title">{{ctx.Locale.Tr "repo.diff.review.draft_count" .PendingCodeCommentNumber}}</span>
+				<button type="button" class="review-modal-close" id="review-modal-close" aria-label="Close">
+					{{svg "octicon-x" 24}}
+				</button>
+			</div>
+			<div class="review-modal-body">
+				<div class="field">
+					<label class="review-field-label">{{ctx.Locale.Tr "repo.diff.review.summary"}}</label>
+					{{template "shared/combomarkdowneditor" (dict
+						"MarkdownPreviewInRepo" $.Repository
+						"MarkdownPreviewMode" "comment"
+						"TextareaName" "content"
+						"TextareaPlaceholder" (ctx.Locale.Tr "repo.diff.review.placeholder")
+						"DropzoneParentContainer" "form"
+					)}}
+				</div>
+				{{if .IsAttachmentEnabled}}
+					<div class="field">
+						{{template "repo/upload" .}}
+					</div>
+				{{end}}
+				<div class="review-radio-options">
+					{{$showSelfTooltip := (and $.IsSigned ($.Issue.IsPoster $.SignedUser.ID))}}
+					<label class="review-radio-option">
+						<input type="radio" name="type" value="comment" checked>
+						<div class="review-radio-content">
+							<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.comment"}}</span>
+							<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.comment_desc"}}</span>
+						</div>
+					</label>
+					{{if not $.Issue.IsClosed}}
+						<label class="review-radio-option" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_approve"}}"{{end}}>
+							<input type="radio" name="type" value="approve" {{if $showSelfTooltip}}disabled{{end}}>
+							<div class="review-radio-content">
+								<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.approve"}}</span>
+								<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.approve_desc"}}</span>
+							</div>
+						</label>
+					{{end}}
+					{{if not $.Issue.IsClosed}}
+						<label class="review-radio-option" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_reject"}}"{{end}}>
+							<input type="radio" name="type" value="reject" {{if $showSelfTooltip}}disabled{{end}}>
+							<div class="review-radio-content">
+								<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.reject"}}</span>
+								<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.reject_desc"}}</span>
+							</div>
+						</label>
+					{{end}}
+					<label class="review-radio-option">
+						<input type="radio" name="type" value="close">
+						<div class="review-radio-content">
+							<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.close"}}</span>
+							<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.close_desc"}}</span>
+						</div>
+					</label>
+				</div>
+			</div>
+			<div class="review-modal-footer">
+				<button type="submit" class="ui primary button btn-submit review-submit-btn">{{ctx.Locale.Tr "repo.diff.review.submit"}}</button>
+			</div>
+		</form>
+	</div>
+</div>
+
+{{end}}

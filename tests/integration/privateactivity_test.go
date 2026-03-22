@@ -94,14 +94,15 @@ func testPrivateActivityHelperHasVisibleProfileHeatmapFromSession(t *testing.T, 
 	return testPrivateActivityHelperHasVisibleHeatmapInHTMLDoc(htmlDoc)
 }
 
-func testPrivateActivityHelperHasVisibleDashboardHeatmapFromSession(t *testing.T, session *TestSession) bool {
-	req := NewRequest(t, "GET", "/")
-	resp := session.MakeRequest(t, req, http.StatusOK)
-
-	htmlDoc := NewHTMLParser(t, resp.Body)
-
-	return testPrivateActivityHelperHasVisibleHeatmapInHTMLDoc(htmlDoc)
-}
+// Disabled: heatmap removed from dashboard in https://github.com/okTurtles/forkana/pull/137
+// func testPrivateActivityHelperHasVisibleDashboardHeatmapFromSession(t *testing.T, session *TestSession) bool {
+// 	req := NewRequest(t, "GET", "/")
+// 	resp := session.MakeRequest(t, req, http.StatusOK)
+//
+// 	htmlDoc := NewHTMLParser(t, resp.Body)
+//
+// 	return testPrivateActivityHelperHasVisibleHeatmapInHTMLDoc(htmlDoc)
+// }
 
 func testPrivateActivityHelperHasVisibleHeatmapFromPublic(t *testing.T) bool {
 	req := NewRequestf(t, "GET", "/%s?tab=activity", privateActivityTestUser)
@@ -244,15 +245,16 @@ func TestPrivateActivityNoHeatmapVisibleForUserItselfAtProfile(t *testing.T) {
 	assert.True(t, visible, "user should have visible heatmap")
 }
 
-func TestPrivateActivityNoHeatmapVisibleForUserItselfAtDashboard(t *testing.T) {
-	defer tests.PrepareTestEnv(t)()
-	testPrivateActivityDoSomethingForActionEntries(t)
-
-	session := loginUser(t, privateActivityTestUser)
-	visible := testPrivateActivityHelperHasVisibleDashboardHeatmapFromSession(t, session)
-
-	assert.True(t, visible, "user should have visible heatmap")
-}
+// Disabled: heatmap removed from dashboard in https://github.com/okTurtles/forkana/pull/137
+// func TestPrivateActivityNoHeatmapVisibleForUserItselfAtDashboard(t *testing.T) {
+// 	defer tests.PrepareTestEnv(t)()
+// 	testPrivateActivityDoSomethingForActionEntries(t)
+//
+// 	session := loginUser(t, privateActivityTestUser)
+// 	visible := testPrivateActivityHelperHasVisibleDashboardHeatmapFromSession(t, session)
+//
+// 	assert.True(t, visible, "user should have visible heatmap")
+// }
 
 func TestPrivateActivityNoHeatmapVisibleForOtherUser(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
@@ -297,16 +299,17 @@ func TestPrivateActivityYesHeatmapVisibleForUserItselfAtProfile(t *testing.T) {
 	assert.True(t, visible, "user should have visible heatmap")
 }
 
-func TestPrivateActivityYesHeatmapVisibleForUserItselfAtDashboard(t *testing.T) {
-	defer tests.PrepareTestEnv(t)()
-	testPrivateActivityDoSomethingForActionEntries(t)
-	testPrivateActivityHelperEnablePrivateActivity(t)
-
-	session := loginUser(t, privateActivityTestUser)
-	visible := testPrivateActivityHelperHasVisibleDashboardHeatmapFromSession(t, session)
-
-	assert.True(t, visible, "user should have visible heatmap")
-}
+// Disabled: heatmap removed from dashboard in https://github.com/okTurtles/forkana/pull/137
+// func TestPrivateActivityYesHeatmapVisibleForUserItselfAtDashboard(t *testing.T) {
+// 	defer tests.PrepareTestEnv(t)()
+// 	testPrivateActivityDoSomethingForActionEntries(t)
+// 	testPrivateActivityHelperEnablePrivateActivity(t)
+//
+// 	session := loginUser(t, privateActivityTestUser)
+// 	visible := testPrivateActivityHelperHasVisibleDashboardHeatmapFromSession(t, session)
+//
+// 	assert.True(t, visible, "user should have visible heatmap")
+// }
 
 func TestPrivateActivityYesHeatmapInvisibleForOtherUser(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()

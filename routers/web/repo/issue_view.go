@@ -39,6 +39,7 @@ import (
 	"code.gitea.io/gitea/services/context/upload"
 	issue_service "code.gitea.io/gitea/services/issue"
 	pull_service "code.gitea.io/gitea/services/pull"
+	repo_service "code.gitea.io/gitea/services/repository"
 	user_service "code.gitea.io/gitea/services/user"
 )
 
@@ -417,6 +418,14 @@ func ViewIssue(ctx *context.Context) {
 	ctx.Data["LockReasons"] = setting.Repository.Issue.LockReasons
 	ctx.Data["RefEndName"] = git.RefName(issue.Ref).ShortName()
 
+	preparePullViewForkRejected(ctx, issue)
+
+	// Set HasChangesRequested for the Edit tab in the PR tab menu.
+	preparePullEditTabVisibility(ctx, issue)
+	if ctx.Written() {
+		return
+	}
+
 	tags, err := repo_model.GetTagNamesByRepoID(ctx, ctx.Repo.Repository.ID)
 	if err != nil {
 		ctx.ServerError("GetTagNamesByRepoID", err)
@@ -448,6 +457,7 @@ func ViewPullMergeBox(ctx *context.Context) {
 	// TODO: it should use a dedicated struct to render the pull merge box, to make sure all data is prepared correctly
 	ctx.Data["IsIssuePoster"] = ctx.IsSigned && issue.IsPoster(ctx.Doer.ID)
 	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
+	preparePullViewForkRejected(ctx, issue)
 	ctx.HTML(http.StatusOK, tplPullMergeBox)
 }
 
@@ -575,6 +585,14 @@ func preparePullViewDeleteBranch(ctx *context.Context, issue *issues_model.Issue
 
 		isPullBranchDeletable = !exist
 	}
+
+	// For closed (rejected), non-merged, same-repo PRs: prevent branch deletion
+	// until the contributor has forked the rejected changes. Once forked, the
+	// branch is auto-deleted by ForkRejectedChanges, so the button is not needed.
+	if isPullBranchDeletable && issue.IsClosed && !pull.HasMerged && pull.IsSameRepo() && !pull.IsForked {
+		isPullBranchDeletable = false
+	}
+
 	ctx.Data["IsPullBranchDeletable"] = isPullBranchDeletable
 }
 
@@ -858,6 +876,16 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 				}
 				canWriteToHeadRepo = true
 			}
+			// Load HeadRepo's BaseRepo if it's a fork (for "Fork of:" display)
+			if pull.HeadRepo.IsFork {
+				if err := pull.HeadRepo.GetBaseRepo(ctx); err != nil {
+					log.Error("GetBaseRepo for HeadRepo: %v", err)
+				} else if pull.HeadRepo.BaseRepo != nil {
+					if err := pull.HeadRepo.BaseRepo.LoadOwner(ctx); err != nil {
+						log.Error("LoadOwner for HeadRepo.BaseRepo: %v", err)
+					}
+				}
+			}
 		}
 
 		if err := pull.LoadBaseRepo(ctx); err != nil {
@@ -1012,4 +1040,56 @@ func prepareIssueViewContent(ctx *context.Context, issue *issues_model.Issue) {
 		ctx.ServerError("roleDescriptor", err)
 		return
 	}
+}
+
+// preparePullViewForkRejected sets template data for the "fork rejected changes" feature.
+// It determines whether the current user can fork their rejected CR changes and
+// whether the PR has already been forked.
+func preparePullViewForkRejected(ctx *context.Context, issue *issues_model.Issue) {
+	if !issue.IsPull || issue.PullRequest == nil {
+		return
+	}
+
+	pr := issue.PullRequest
+
+	// Only applies to closed, non-merged, same-repo PRs
+	if !issue.IsClosed || pr.HasMerged || !pr.IsSameRepo() {
+		return
+	}
+
+	// If already forked, load the forked repo data for the template
+	if pr.IsForked {
+		if forkedRepo := pr.ForkedRepo(ctx); forkedRepo != nil {
+			ctx.Data["ForkedRepoLink"] = forkedRepo.Link()
+			ctx.Data["ForkedRepoFullName"] = forkedRepo.FullName()
+		}
+		return
+	}
+
+	// Only the PR author can fork their rejected changes
+	if !ctx.IsSigned || !issue.IsPoster(ctx.Doer.ID) {
+		return
+	}
+
+	// Check that the CR branch still exists
+	if err := pr.LoadBaseRepo(ctx); err != nil {
+		log.Error("preparePullViewForkRejected: LoadBaseRepo: %v", err)
+		return
+	}
+	if !gitrepo.IsBranchExist(ctx, pr.BaseRepo, pr.HeadBranch) {
+		return
+	}
+
+	// Check fork permissions (subject ownership rules, existing forks, etc.)
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, pr.BaseRepo)
+	if err != nil {
+		log.Error("preparePullViewForkRejected: CheckForkOnEditPermissions: %v", err)
+		return
+	}
+
+	if perms.HasExistingFork || perms.BlockedBySubject {
+		return
+	}
+
+	ctx.Data["CanForkRejectedChanges"] = true
 }

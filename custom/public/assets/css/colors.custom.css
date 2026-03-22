@@ -27,5 +27,63 @@ gitea-theme-meta-info {
   --color-diff-removed-row-bg: #FFE7D1;
   --color-diff-added-linenum-bg: #E5E9FF;
   --color-diff-added-row-bg: #E5E9FF;
+
+  /* Green colors */
+  --color-green: #1F883D;
+  --color-green-light: #2DA44E;
+  --color-green-dark-1: #1A7F37;
+  --color-green-dark-2: #116329;
+
+  /* Text colors */
+  --color-text-primary: #1f2328;
+  --color-text-secondary: #656d76;
+  --color-text-tertiary: #969aa5;
+
+  /* Border colors */
+  --color-border: #d0d7de;
+  --color-border-light: #d1d9e0;
+  --color-border-input: #d1d7dd;
+  --color-border-muted: #eee;
+
+  /* Surface colors */
+  --color-surface: #fff;
+  --color-surface-muted: #f6f8fa;
+  --color-surface-subtle: #f0f0f0;
+  --color-surface-toolbar: #f7f9fc;
+
+  /* Overlay & shadow */
+  --color-overlay-backdrop: rgba(0, 0, 0, 0.5);
+  --color-shadow-medium: rgba(0, 0, 0, 0.15);
+
+  /* Navbar pill */
+  --color-navbar-pill-bg: #818B9826;
+
+  /* Info banner (purple-tinted) */
+  --color-banner-bg: #f0ecff;
+  --color-banner-border: #d8d0f0;
+  --color-banner-text: #3d2e7c;
+  --color-banner-hover: rgba(61, 46, 124, 0.1);
+
+  /* Diff word highlight */
+  --color-diff-del-word-bg: #ffd7d5;
+  --color-diff-add-num-bg: #dce0f5;
+
+  /* Warning theme */
+  --color-warning-theme-bg: #fef9e7;
+  --color-warning-theme-text: #92600e;
+  --color-warning-theme-border: #f5d887;
+  --color-warning-icon: #c9880d;
+
+  /* Fork modal */
+  --color-fork-text: #4a5568;
+  --color-fork-btn-primary: #6366f1;
+  --color-fork-btn-primary-hover: #4f46e5;
+  --color-fork-btn-cancel-bg: #f3f4f6;
+  --color-fork-btn-cancel-text: #374151;
+  --color-fork-btn-cancel-border: #e5e7eb;
+
+  /* Tab colors */
+  --color-tab-inactive: #969aa5;
+  --color-tab-active-text: #555;
 }
 

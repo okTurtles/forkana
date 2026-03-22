@@ -109,6 +109,8 @@ func toIssue(ctx context.Context, doer *user_model.User, issue *issues_model.Iss
 			apiIssue.PullRequest = &api.PullRequestMeta{
 				HasMerged:        issue.PullRequest.HasMerged,
 				IsWorkInProgress: issue.PullRequest.IsWorkInProgress(ctx),
+				IsForked:         issue.PullRequest.IsForked,
+				ForkedRepoID:     issue.PullRequest.ForkedRepoID,
 			}
 			if issue.PullRequest.HasMerged {
 				apiIssue.PullRequest.Merged = issue.PullRequest.MergedUnix.AsTimePtr()

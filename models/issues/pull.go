@@ -152,6 +152,11 @@ type PullRequest struct {
 	isHeadRepoLoaded bool `xorm:"-"`
 
 	Flow PullRequestFlow `xorm:"NOT NULL DEFAULT 0"`
+
+	// IsForked indicates whether this closed PR's changes were forked by the author.
+	// When true, the PR cannot be reopened and a link to the fork is shown.
+	IsForked     bool  `xorm:"NOT NULL DEFAULT false"`
+	ForkedRepoID int64 `xorm:"INDEX"`
 }
 
 func init() {
@@ -706,6 +711,21 @@ func (pr *PullRequest) UpdateCommitDivergence(ctx context.Context, ahead, behind
 // IsSameRepo returns true if base repo and head repo is the same
 func (pr *PullRequest) IsSameRepo() bool {
 	return pr.BaseRepoID == pr.HeadRepoID
+}
+
+// ForkedRepo returns the repository that was created when the author forked
+// their rejected changes. Returns nil if the PR has not been forked or if the
+// forked repo no longer exists.
+func (pr *PullRequest) ForkedRepo(ctx context.Context) *repo_model.Repository {
+	if !pr.IsForked || pr.ForkedRepoID == 0 {
+		return nil
+	}
+	repo, err := repo_model.GetRepositoryByID(ctx, pr.ForkedRepoID)
+	if err != nil {
+		log.Error("ForkedRepo: GetRepositoryByID(%d): %v", pr.ForkedRepoID, err)
+		return nil
+	}
+	return repo
 }
 
 // GetBaseBranchLink returns the relative URL of the base branch

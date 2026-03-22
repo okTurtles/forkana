@@ -117,6 +117,7 @@ prime/
 docker/forkana/.env
 
 # Ignore AI/LLM instruction files
+/.agents/
 /.claude/
 /.cursorrules
 /.cursor/
@@ -127,4 +128,8 @@ docker/forkana/.env
 /CLAUDE.md
 /llms.txt
 
+# eighttrigrams
 ROADMAP.md
+.mcp.json
+FOUND_ISSUES.md
+.editor-layouts.json

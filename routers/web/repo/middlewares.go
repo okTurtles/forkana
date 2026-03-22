@@ -33,7 +33,8 @@ func SetDiffViewStyle(ctx *context.Context) {
 	queryStyle := ctx.FormString("style")
 
 	if !ctx.IsSigned {
-		ctx.Data["IsSplitStyle"] = queryStyle == "split"
+		// Default to split view for non-signed users
+		ctx.Data["IsSplitStyle"] = queryStyle != "unified"
 		return
 	}
 
@@ -44,20 +45,20 @@ func SetDiffViewStyle(ctx *context.Context) {
 
 	if queryStyle == "unified" || queryStyle == "split" {
 		style = queryStyle
+		// Only persist the preference when the user explicitly selects a style
+		opts := &user_service.UpdateOptions{
+			DiffViewStyle: optional.Some(style),
+		}
+		if err := user_service.UpdateUser(ctx, ctx.Doer, opts); err != nil {
+			ctx.ServerError("UpdateUser", err)
+		}
 	} else if userStyle == "unified" || userStyle == "split" {
 		style = userStyle
 	} else {
-		style = "unified"
+		style = "split"
 	}
 
 	ctx.Data["IsSplitStyle"] = style == "split"
-
-	opts := &user_service.UpdateOptions{
-		DiffViewStyle: optional.Some(style),
-	}
-	if err := user_service.UpdateUser(ctx, ctx.Doer, opts); err != nil {
-		ctx.ServerError("UpdateUser", err)
-	}
 }
 
 // SetWhitespaceBehavior set whitespace behavior as render variable
