@@ -55,10 +55,11 @@ import (
 )
 
 const (
-	tplCompareDiff templates.TplName = "repo/diff/compare"
-	tplPullCommits templates.TplName = "repo/pulls/commits"
-	tplPullFiles   templates.TplName = "repo/pulls/files"
-	tplPullEdit    templates.TplName = "repo/pulls/edit"
+	tplCompareDiff   templates.TplName = "repo/diff/compare"
+	tplPullCommits   templates.TplName = "repo/pulls/commits"
+	tplPullFiles     templates.TplName = "repo/pulls/files"
+	tplPullConflicts templates.TplName = "repo/pulls/conflicts"
+	tplPullEdit      templates.TplName = "repo/pulls/edit"
 
 	pullRequestTemplateKey = "PullRequestTemplate"
 )
@@ -1366,6 +1367,193 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 	}
 
 	ctx.HTML(http.StatusOK, tplPullFiles)
+}
+
+// ViewPullConflicts renders the conflicted files diff for a pull request.
+func ViewPullConflicts(ctx *context.Context) {
+	ctx.Data["PageIsPullList"] = true
+	ctx.Data["PageIsPullConflicts"] = true
+
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+	pull := issue.PullRequest
+
+	prInfo := preparePullViewPullInfo(ctx, issue)
+	if ctx.Written() {
+		return
+	} else if prInfo == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	conflictedFiles, _ := ctx.Data["ConflictedFiles"].([]string)
+	if len(conflictedFiles) == 0 {
+		ctx.Redirect(issue.Link() + "/files")
+		return
+	}
+
+	conflictedFileSet := make(map[string]bool, len(conflictedFiles))
+	for _, file := range conflictedFiles {
+		conflictedFileSet[file] = true
+	}
+	ctx.Data["ConflictedFileSet"] = conflictedFileSet
+
+	gitRepo := ctx.Repo.GitRepo
+	headCommitID, err := gitRepo.GetRefCommitID(pull.GetGitHeadRefName())
+	if err != nil {
+		ctx.ServerError("GetRefCommitID", err)
+		return
+	}
+
+	beforeCommitID := prInfo.MergeBase
+	headCommit, err := gitRepo.GetCommit(headCommitID)
+	if err != nil {
+		ctx.ServerError("GetCommit(head)", err)
+		return
+	}
+	beforeCommit, err := gitRepo.GetCommit(beforeCommitID)
+	if err != nil {
+		ctx.ServerError("GetCommit(base)", err)
+		return
+	}
+
+	ctx.Data["Username"] = ctx.Repo.Owner.Name
+	ctx.Data["Reponame"] = ctx.Repo.Repository.Name
+	ctx.Data["MergeBase"] = prInfo.MergeBase
+	ctx.Data["BeforeCommitID"] = beforeCommitID
+	ctx.Data["AfterCommitID"] = headCommitID
+	ctx.Data["IsShowingOnlySingleCommit"] = false
+	ctx.Data["IsShowingAllCommits"] = true
+
+	maxLines, maxFiles := setting.Git.MaxGitDiffLines, -1
+	files := conflictedFiles
+	fileOnly := ctx.FormBool("file-only")
+	requestedFiles := ctx.FormStrings("files")
+	if fileOnly && (len(requestedFiles) == 2 || len(requestedFiles) == 1) {
+		maxLines, maxFiles = -1, -1
+		files = requestedFiles
+	}
+
+	diff, err := gitdiff.GetDiffForRender(ctx, ctx.Repo.RepoLink, gitRepo, &gitdiff.DiffOptions{
+		BeforeCommitID:     beforeCommitID,
+		AfterCommitID:      headCommitID,
+		SkipTo:             ctx.FormString("skip-to"),
+		MaxLines:           maxLines,
+		MaxLineCharacters:  setting.Git.MaxGitDiffLineCharacters,
+		MaxFiles:           maxFiles,
+		WhitespaceBehavior: gitdiff.GetWhitespaceFlag(ctx.Data["WhitespaceBehavior"].(string)),
+	}, files...)
+	if err != nil {
+		ctx.ServerError("GetDiff", err)
+		return
+	}
+
+	filteredFiles := make([]*gitdiff.DiffFile, 0, len(diff.Files))
+	diffShortStat := &gitdiff.DiffShortStat{}
+	for _, file := range diff.Files {
+		if !conflictedFileSet[file.Name] && !conflictedFileSet[file.OldName] {
+			continue
+		}
+		filteredFiles = append(filteredFiles, file)
+		diffShortStat.NumFiles++
+		diffShortStat.TotalAddition += file.Addition
+		diffShortStat.TotalDeletion += file.Deletion
+	}
+	diff.Files = filteredFiles
+	ctx.Data["DiffShortStat"] = diffShortStat
+
+	showOutdatedComments, _ := ctx.Data["ShowOutdatedComments"].(bool)
+	if err = diff.LoadComments(ctx, issue, ctx.Doer, showOutdatedComments); err != nil {
+		ctx.ServerError("LoadComments", err)
+		return
+	}
+
+	allComments := issues_model.CommentList{}
+	for _, file := range diff.Files {
+		for _, section := range file.Sections {
+			for _, line := range section.Lines {
+				allComments = append(allComments, line.Comments...)
+			}
+		}
+	}
+	if err := allComments.LoadAttachments(ctx); err != nil {
+		ctx.ServerError("LoadAttachments", err)
+		return
+	}
+
+	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pull.BaseRepoID, pull.BaseBranch)
+	if err != nil {
+		ctx.ServerError("LoadProtectedBranch", err)
+		return
+	}
+
+	if pb != nil {
+		glob := pb.GetProtectedFilePatterns()
+		if len(glob) != 0 {
+			for _, file := range diff.Files {
+				file.IsProtected = pb.IsProtectedFile(glob, file.Name)
+			}
+		}
+	}
+
+	if !fileOnly {
+		diffTree, err := gitdiff.GetDiffTree(ctx, gitRepo, false, beforeCommitID, headCommitID)
+		if err != nil {
+			ctx.ServerError("GetDiffTree", err)
+			return
+		}
+
+		filteredTreeFiles := make([]*gitdiff.DiffTreeRecord, 0, len(diffTree.Files))
+		for _, file := range diffTree.Files {
+			if !conflictedFileSet[file.HeadPath] && !conflictedFileSet[file.BasePath] {
+				continue
+			}
+			filteredTreeFiles = append(filteredTreeFiles, file)
+		}
+		diffTree.Files = filteredTreeFiles
+
+		renderedIconPool := fileicon.NewRenderedIconPool()
+		ctx.PageData["DiffFileTree"] = transformDiffTreeForWeb(renderedIconPool, diffTree, nil)
+		ctx.PageData["FolderIcon"] = fileicon.RenderEntryIconHTML(renderedIconPool, fileicon.EntryInfoFolder())
+		ctx.PageData["FolderOpenIcon"] = fileicon.RenderEntryIconHTML(renderedIconPool, fileicon.EntryInfoFolderOpen())
+		ctx.Data["FileIconPoolHTML"] = renderedIconPool.RenderToHTML()
+	}
+
+	ctx.Data["Diff"] = diff
+	ctx.Data["DiffNotAvailable"] = diffShortStat.NumFiles == 0
+	ctx.Data["NumCommits"] = len(prInfo.Commits)
+
+	if ctx.IsSigned && ctx.Doer != nil {
+		if ctx.Data["CanMarkConversation"], err = issues_model.CanMarkConversation(ctx, issue, ctx.Doer); err != nil {
+			ctx.ServerError("CanMarkConversation", err)
+			return
+		}
+	}
+
+	setCompareContext(ctx, beforeCommit, headCommit, ctx.Repo.Owner.Name, ctx.Repo.Repository.Name)
+	getBranchData(ctx, issue)
+	ctx.Data["IsIssuePoster"] = ctx.IsSigned && issue.IsPoster(ctx.Doer.ID)
+	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
+	ctx.Data["IsAttachmentEnabled"] = setting.Attachment.Enabled
+
+	PrepareBranchList(ctx)
+	if ctx.Written() {
+		return
+	}
+	upload.AddUploadContext(ctx, "comment")
+
+	ctx.Data["CanBlockUser"] = func(blocker, blockee *user_model.User) bool {
+		return user_service.CanBlockUser(ctx, ctx.Doer, blocker, blockee)
+	}
+
+	preparePullEditTabVisibility(ctx, issue)
+	if ctx.Written() {
+		return
+	}
+
+	ctx.HTML(http.StatusOK, tplPullConflicts)
 }
 
 func ViewPullFilesForSingleCommit(ctx *context.Context) {
