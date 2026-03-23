@@ -89,17 +89,18 @@
 					{{if .BaseBranchNotExist}}
 						{{$baseHref = HTMLFormat `<span class="tw-line-through" data-tooltip-content="%s">%s</span>` (ctx.Locale.Tr "form.target_branch_not_exist") $baseHref}}
 					{{else}}
-						{{$baseHref = HTMLFormat `<a href="%s">%s</a>` .BaseBranchLink $baseHref}}
+						{{$articleHref := HTMLFormat `%s/article/%s/%s` AppSubUrl (PathEscape .Repository.OwnerName) (PathEscapeSegments (.Repository.GetSubject ctx))}}
+						{{$baseHref = HTMLFormat `<a href="%s">%s/%s</a>` $articleHref .Repository.OwnerName (.Repository.GetSubject ctx)}}
 					{{end}}
 				{{end}}
 				{{if .Issue.PullRequest.HasMerged}}
 					{{$mergedStr:= DateUtils.TimeSince .Issue.PullRequest.MergedUnix}}
 					{{if .Issue.OriginalAuthor}}
 						{{.Issue.OriginalAuthor}}
-						<span class="pull-desc">{{ctx.Locale.Tr "repo.pulls.merged_title_desc" .NumCommits $headHref $baseHref $mergedStr}}</span>
+						<span class="pull-desc">{{ctx.Locale.Tr "repo.pulls.merged_title_desc" .NumCommits $baseHref $mergedStr}}</span>
 					{{else}}
 						<a {{if gt .Issue.PullRequest.Merger.ID 0}}href="{{.Issue.PullRequest.Merger.HomeLink}}"{{end}}>{{.Issue.PullRequest.Merger.GetDisplayName}}</a>
-						<span class="pull-desc">{{ctx.Locale.Tr "repo.pulls.merged_title_desc" .NumCommits $headHref $baseHref $mergedStr}}</span>
+						<span class="pull-desc">{{ctx.Locale.Tr "repo.pulls.merged_title_desc" .NumCommits $baseHref $mergedStr}}</span>
 					{{end}}
 				{{else}}
 					{{if .Issue.OriginalAuthor}}
@@ -111,6 +112,7 @@
 						</span>
 					{{end}}
 					<span id="pull-desc-editor" class="tw-hidden flex-text-block" data-target-update-url="{{$.RepoLink}}/pull/{{.Issue.Index}}/target_branch">
+
 					</span>
 				{{end}}
 			{{else}}

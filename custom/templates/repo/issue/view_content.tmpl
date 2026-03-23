@@ -87,9 +87,13 @@
 									<div class="flex-text-block tw-justify-end">
 										{{if and (or .HasIssuesOrPullsWritePermission .IsIssuePoster) (not .DisableStatusChange)}}
 											{{if .Issue.IsClosed}}
-												<button id="status-button" class="ui primary basic button" data-status="{{ctx.Locale.Tr "repo.issues.reopen_issue"}}" data-status-and-comment="{{ctx.Locale.Tr "repo.issues.reopen_comment_issue"}}" name="status" value="reopen">
-													{{ctx.Locale.Tr "repo.issues.reopen_issue"}}
-												</button>
+												{{if and .Issue.IsPull .Issue.PullRequest.IsForked}}
+													{{/* Forked PRs cannot be reopened */}}
+												{{else}}
+													<button id="status-button" class="ui primary basic button" data-status="{{ctx.Locale.Tr "repo.issues.reopen_issue"}}" data-status-and-comment="{{ctx.Locale.Tr "repo.issues.reopen_comment_issue"}}" name="status" value="reopen">
+														{{ctx.Locale.Tr "repo.issues.reopen_issue"}}
+													</button>
+												{{end}}
 											{{else}}
 												{{$closeTranslationKey := "repo.issues.close"}}
 												{{if .Issue.IsPull}}
@@ -150,13 +154,11 @@
 			"PreviewUrl" (print $.Repository.Link "/markup")
 			"PreviewContext" $.Repository.Link
 		)}}
-		</div>
-
 		{{if .IsAttachmentEnabled}}
-			<div class="field">
-				{{template "repo/upload" .}}
-			</div>
+			{{template "repo/upload" .}}
+			<div class="dropzone-hint-text">{{ctx.Locale.Tr "dropzone.default_message"}}</div>
 		{{end}}
+	</div>
 
 		<div class="field">
 			<div class="flex-text-block tw-justify-end">

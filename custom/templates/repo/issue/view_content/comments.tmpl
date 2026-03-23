@@ -13,7 +13,7 @@
 		29 = PULL_PUSH_EVENT, 30 = PROJECT_CHANGED, 31 = PROJECT_BOARD_CHANGED
 		32 = DISMISSED_REVIEW, 33 = COMMENT_TYPE_CHANGE_ISSUE_REF, 34 = PR_SCHEDULE_TO_AUTO_MERGE,
 		35 = CANCEL_SCHEDULED_AUTO_MERGE_PR, 36 = PIN_ISSUE, 37 = UNPIN_ISSUE,
-		38 = COMMENT_TYPE_CHANGE_TIME_ESTIMATE -->
+		38 = COMMENT_TYPE_CHANGE_TIME_ESTIMATE, 39 = COMMENT_TYPE_FORK_REJECTED -->
 		{{if eq .Type 0}}
 			<div class="timeline-item comment" id="{{.HashTag}}">
 			{{if .OriginalAuthor}}
@@ -117,16 +117,13 @@
 				{{end}}
 				<span class="comment-text-line">
 					{{template "repo/issue/view_content/comments_authorlink" dict "ctxData" $ "comment" .}}
-					{{$link := ""}}
-					{{if $.Issue.IsPull}}
-						{{$link = printf "%s/pulls/%d/commits/%s" $.Repository.Link $.Issue.Index ($.Issue.PullRequest.MergedCommitID|PathEscape)}}
-					{{else}}
-						{{$link = printf "%s/commit/%s" $.Repository.Link ($.Issue.PullRequest.MergedCommitID|PathEscape)}}
-					{{end}}
+					{{$link := printf "%s?version=%s" $.Repository.Link ($.Issue.PullRequest.MergedCommitID|PathEscape)}}
+					{{$articleHref := HTMLFormat `%s/article/%s/%s` AppSubUrl (PathEscape $.Repository.OwnerName) (PathEscapeSegments ($.Repository.GetSubject ctx))}}
+					{{$baseDisplay := HTMLFormat `<b><a href="%[1]s">%[2]s/%[3]s</a></b>` $articleHref $.Repository.OwnerName ($.Repository.GetSubject ctx)}}
 					{{if eq $.Issue.PullRequest.Status 3}}
-						{{ctx.Locale.Tr "repo.issues.comment_manually_pull_merged_at" (HTMLFormat `<a class="ui sha" href="%[1]s"><b>%[2]s</b></a>` $link (ShortSha $.Issue.PullRequest.MergedCommitID)) (HTMLFormat "<b>%[1]s</b>" $.BaseTarget) $createdStr}}
+						{{ctx.Locale.Tr "repo.issues.comment_manually_pull_merged_at" (HTMLFormat `<a class="ui sha" href="%[1]s"><b>%[2]s</b></a>` $link (ShortSha $.Issue.PullRequest.MergedCommitID)) $baseDisplay $createdStr}}
 					{{else}}
-						{{ctx.Locale.Tr "repo.issues.comment_pull_merged_at" (HTMLFormat `<a class="ui sha" href="%[1]s"><b>%[2]s</b></a>` $link (ShortSha $.Issue.PullRequest.MergedCommitID)) (HTMLFormat "<b>%[1]s</b>" $.BaseTarget) $createdStr}}
+						{{ctx.Locale.Tr "repo.issues.comment_pull_merged_at" (HTMLFormat `<a class="ui sha" href="%[1]s"><b>%[2]s</b></a>` $link (ShortSha $.Issue.PullRequest.MergedCommitID)) $baseDisplay $createdStr}}
 					{{end}}
 				</span>
 			</div>
@@ -699,6 +696,20 @@
 						{{ctx.Locale.Tr "repo.issues.remove_time_estimate_at" $createdStr}}
 					{{end}}
 				</span>
+			</div>
+		{{else if eq .Type 39}}
+			<div class="timeline-item event" id="{{.HashTag}}">
+				<span class="badge">{{svg "octicon-repo-forked"}}</span>
+				{{template "shared/user/avatarlink" dict "user" .Poster}}
+				<span class="comment-text-line">
+					{{template "shared/user/authorlink" .Poster}}
+					{{ctx.Locale.Tr "repo.issues.forked_rejected_changes" $createdStr}}
+				</span>
+				{{if $.ForkedRepoLink}}
+					<a href="{{$.ForkedRepoLink}}" class="ui secondary button">
+						{{ctx.Locale.Tr "repo.pulls.fork_rejected.view_fork"}}
+					</a>
+				{{end}}
 			</div>
 		{{end}}
 	{{end}}

@@ -31,6 +31,8 @@ type PullRequestMeta struct {
 	Merged           *time.Time `json:"merged_at"`
 	IsWorkInProgress bool       `json:"draft"`
 	HTMLURL          string     `json:"html_url"`
+	IsForked         bool       `json:"is_forked"`
+	ForkedRepoID     int64      `json:"forked_repo_id,omitempty"`
 }
 
 // RepositoryMeta basic repository information

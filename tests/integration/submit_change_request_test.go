@@ -1043,12 +1043,17 @@ func TestSubmitChangeRequestWhitespaceOnlyCommitSummary(t *testing.T) {
 		headCommit, err := headGitRepo.GetBranchCommit(pr.HeadBranch)
 		require.NoError(t, err)
 
-		// The commit message should be the default "Update article", not empty
+		// When commit_summary is whitespace-only AND no change_request_title is
+		// provided, the commit message falls back to the "Update article" default.
 		commitMessage := headCommit.CommitMessage
 		assert.NotEmpty(t, strings.TrimSpace(commitMessage),
 			"Commit message should not be empty when commit_summary is whitespace-only")
+		// The PR title (and thus the commit message default) uses the
+		// change_request_title when provided; otherwise it falls back to
+		// "Update article". This form omits change_request_title, so the
+		// fallback should be used.
 		assert.Contains(t, commitMessage, "Update article",
-			"Commit message should use the default format when commit_summary is whitespace-only")
+			"Commit message should use the default format when both commit_summary and change_request_title are empty")
 	})
 }
 

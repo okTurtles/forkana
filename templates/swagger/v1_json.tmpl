@@ -27397,6 +27397,12 @@
           "format": "date-time",
           "x-go-name": "Deadline"
         },
+        "forked_repo_id": {
+          "description": "The ID of the forked repository, if any",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ForkedRepoID"
+        },
         "head": {
           "$ref": "#/definitions/PRBranchInfo"
         },
@@ -27410,6 +27416,11 @@
           "type": "integer",
           "format": "int64",
           "x-go-name": "ID"
+        },
+        "is_forked": {
+          "description": "Whether this closed PR's changes were forked by the author",
+          "type": "boolean",
+          "x-go-name": "IsForked"
         },
         "is_locked": {
           "description": "Whether the pull request conversation is locked",
@@ -27526,9 +27537,18 @@
           "type": "boolean",
           "x-go-name": "IsWorkInProgress"
         },
+        "forked_repo_id": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "ForkedRepoID"
+        },
         "html_url": {
           "type": "string",
           "x-go-name": "HTMLURL"
+        },
+        "is_forked": {
+          "type": "boolean",
+          "x-go-name": "IsForked"
         },
         "merged": {
           "type": "boolean",

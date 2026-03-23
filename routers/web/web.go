@@ -1245,6 +1245,7 @@ func registerWebRoutes(m *web.Router) {
 			m.Post("/update", repo.UpdatePullRequest)
 			m.Post("/set_allow_maintainer_edit", web.Bind(forms.UpdateAllowEditsForm{}), repo.SetAllowEdits)
 			m.Post("/cleanup", context.RepoMustNotBeArchived(), repo.CleanUpPullRequest)
+			m.Post("/fork_rejected_changes", context.RepoMustNotBeArchived(), repo.ForkRejectedChanges)
 			m.Get("/edit", repo.ViewPullEdit)
 			m.Post("/edit", context.RepoMustNotBeArchived(), repo.SubmitPullEditPost)
 			m.Group("/files", func() {
@@ -1621,6 +1622,7 @@ func registerWebRoutes(m *web.Router) {
 			m.Post("/update", repo.UpdatePullRequest)
 			m.Post("/set_allow_maintainer_edit", web.Bind(forms.UpdateAllowEditsForm{}), repo.SetAllowEdits)
 			m.Post("/cleanup", context.RepoMustNotBeArchived(), repo.CleanUpPullRequest)
+			m.Post("/fork_rejected_changes", context.RepoMustNotBeArchived(), repo.ForkRejectedChanges)
 			m.Get("/edit", repo.ViewPullEdit)
 			m.Post("/edit", context.RepoMustNotBeArchived(), repo.SubmitPullEditPost)
 			m.Group("/files", func() {

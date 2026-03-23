@@ -698,12 +698,18 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		return nil
 	}
 
+	// Compute the change request title early so it can be used as both the
+	// commit message and the PR title, keeping them consistent.
+	prTitle := util.IfZero(strings.TrimSpace(form.ChangeRequestTitle), ctx.Locale.TrString("repo.editor.update_article"))
+	// Enforce maximum title length (255 characters) to prevent excessively long titles.
+	// Use rune-based truncation to avoid corrupting multi-byte UTF-8 characters.
+	prTitle = util.TruncateRunes(prTitle, 255)
+
 	// Commit the changes to a new branch in the target repository
 	// The ChangeRepoFiles function will create the new branch from the default branch
 	// We use InternalPush to skip pre-receive hooks since this is a programmatic operation
 	// where we've already verified the user can submit change requests (via middleware)
-	defaultCommitMessage := ctx.Locale.TrString("repo.editor.update_article")
-	commitMessage := parsed.GetCommitMessage(defaultCommitMessage)
+	commitMessage := parsed.GetCommitMessage(prTitle)
 	if strings.TrimSpace(commitMessage) == "" {
 		ctx.JSONError(ctx.Tr("repo.editor.commit_message_required"))
 		return nil
@@ -777,12 +783,7 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		return nil
 	}
 
-	// Create the change request
-	// Use custom title if provided, otherwise generate a title based on the file being edited
-	prTitle := util.IfZero(strings.TrimSpace(form.ChangeRequestTitle), ctx.Locale.TrString("repo.editor.submit_changes_pr_title", path.Base(form.TreePath)))
-	// Enforce maximum PR title length (255 characters) to prevent excessively long titles.
-	// Use rune-based truncation to avoid corrupting multi-byte UTF-8 characters.
-	prTitle = util.TruncateRunes(prTitle, 255)
+	// Create the change request using the title computed above
 	prContent := strings.TrimSpace(form.ChangeRequestDescription)
 	// Defense-in-depth: cap description length so downstream processing/storage isn't impacted by huge input.
 	// Note: this does not limit the incoming request size.
