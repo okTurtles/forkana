@@ -1,9 +1,9 @@
 <script lang="ts" setup>
-import {computed, onMounted, onUnmounted, shallowRef, watch} from 'vue';
-import {SvgIcon} from '../svg.ts';
-import {toggleElem} from '../utils/dom.ts';
+import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+import { SvgIcon } from '../svg.ts';
+import { toggleElem } from '../utils/dom.ts';
 
-const {csrfToken, pageData} = window.config;
+const { csrfToken, pageData } = window.config;
 
 const mergeForm = pageData.pullRequestMergeForm;
 
@@ -89,10 +89,11 @@ function clearMergeMessage() {
   -->
   <div>
     <!-- eslint-disable-next-line vue/no-v-html -->
-    <div v-if="mergeForm.hasPendingPullRequestMerge" v-html="mergeForm.hasPendingPullRequestMergeTip" class="ui info message"/>
+    <div v-if="mergeForm.hasPendingPullRequestMerge" v-html="mergeForm.hasPendingPullRequestMergeTip"
+      class="ui info message" />
 
     <!-- another similar form is in pull.tmpl (manual merge)-->
-    <form class="ui form form-fetch-action" v-if="showActionForm" :action="mergeForm.baseLink+'/merge'" method="post">
+    <form class="ui form form-fetch-action" v-if="showActionForm" :action="mergeForm.baseLink + '/merge'" method="post">
       <input type="hidden" name="_csrf" :value="csrfToken">
       <input type="hidden" name="head_commit_id" v-model="mergeForm.pullHeadCommitID">
       <input type="hidden" name="merge_when_checks_succeed" v-model="autoMergeWhenSucceed">
@@ -103,9 +104,11 @@ function clearMergeMessage() {
           <input type="text" name="merge_title_field" v-model="mergeTitleFieldValue">
         </div>
         <div class="field">
-          <textarea name="merge_message_field" rows="5" :placeholder="mergeForm.mergeMessageFieldPlaceHolder" v-model="mergeMessageFieldValue"/>
+          <textarea name="merge_message_field" rows="5" :placeholder="mergeForm.mergeMessageFieldPlaceHolder"
+            v-model="mergeMessageFieldValue" />
           <template v-if="mergeMessageFieldValue !== mergeForm.defaultMergeMessage">
-            <button @click.prevent="clearMergeMessage" class="btn tw-mt-1 tw-p-1 interact-fg" :data-tooltip-content="mergeForm.textClearMergeMessageHint">
+            <button @click.prevent="clearMergeMessage" class="btn tw-mt-1 tw-p-1 interact-fg"
+              :data-tooltip-content="mergeForm.textClearMergeMessageHint">
               {{ mergeForm.textClearMergeMessage }}
             </button>
           </template>
@@ -134,9 +137,11 @@ function clearMergeMessage() {
 
     <div v-if="!showActionForm" class="tw-flex">
       <!-- the merge button -->
-      <div class="ui buttons merge-button" :class="[mergeForm.emptyCommit ? '' : mergeForm.allOverridableChecksOk ? 'primary' : 'red']" @click="toggleActionForm(true)">
+      <div class="ui buttons merge-button"
+        :class="[mergeForm.emptyCommit ? '' : mergeForm.allOverridableChecksOk ? 'primary' : 'red']"
+        @click="toggleActionForm(true)">
         <button class="ui button">
-          <svg-icon name="octicon-git-merge"/>
+          <svg-icon name="octicon-git-merge" />
           <span class="button-text">
             {{ mergeStyleDetail.textDoMerge }}
             <template v-if="autoMergeWhenSucceed">
@@ -145,17 +150,19 @@ function clearMergeMessage() {
           </span>
         </button>
         <!-- Only show dropdown when there are multiple merge styles available -->
-        <div v-if="mergeStyleAllowedCount > 1" class="ui dropdown icon button" @click.stop="showMergeStyleMenu = !showMergeStyleMenu">
-          <svg-icon name="octicon-triangle-down" :size="14"/>
-          <div class="menu" :class="{'show':showMergeStyleMenu}">
+        <div v-if="mergeStyleAllowedCount > 1" class="ui dropdown icon button"
+          @click.stop="showMergeStyleMenu = !showMergeStyleMenu">
+          <svg-icon name="octicon-triangle-down" :size="14" />
+          <div class="menu" :class="{ 'show': showMergeStyleMenu }">
             <template v-for="msd in mergeForm.mergeStyles">
               <!-- if can merge now, show one action "merge now", and an action "auto merge when succeed" -->
-              <div class="item" v-if="msd.allowed && mergeForm.canMergeNow" :key="msd.name" @click.stop="switchMergeStyle(msd.name)">
+              <div class="item" v-if="msd.allowed && mergeForm.canMergeNow" :key="msd.name"
+                @click.stop="switchMergeStyle(msd.name)">
                 <div class="action-text">
                   {{ msd.textDoMerge }}
                 </div>
                 <div v-if="!msd.hideAutoMerge" class="auto-merge-small" @click.stop="switchMergeStyle(msd.name, true)">
-                  <svg-icon name="octicon-clock" :size="14"/>
+                  <svg-icon name="octicon-clock" :size="14" />
                   <div class="auto-merge-tip">
                     {{ mergeForm.textAutoMergeWhenSucceed }}
                   </div>
@@ -163,7 +170,8 @@ function clearMergeMessage() {
               </div>
 
               <!-- if can NOT merge now, only show one action "auto merge when succeed" -->
-              <div class="item" v-if="msd.allowed && !mergeForm.canMergeNow && !msd.hideAutoMerge" :key="msd.name" @click.stop="switchMergeStyle(msd.name, true)">
+              <div class="item" v-if="msd.allowed && !mergeForm.canMergeNow && !msd.hideAutoMerge" :key="msd.name"
+                @click.stop="switchMergeStyle(msd.name, true)">
                 <div class="action-text">
                   {{ msd.textDoMerge }} {{ mergeForm.textAutoMergeButtonWhenSucceed }}
                 </div>
@@ -174,7 +182,8 @@ function clearMergeMessage() {
       </div>
 
       <!-- the cancel auto merge button -->
-      <form v-if="mergeForm.hasPendingPullRequestMerge" :action="mergeForm.baseLink+'/cancel_auto_merge'" method="post" class="tw-ml-4">
+      <form v-if="mergeForm.hasPendingPullRequestMerge" :action="mergeForm.baseLink + '/cancel_auto_merge'" method="post"
+        class="tw-ml-4">
         <input type="hidden" name="_csrf" :value="csrfToken">
         <button class="ui button">
           {{ mergeForm.textAutoMergeCancelSchedule }}
@@ -189,25 +198,26 @@ function clearMergeMessage() {
 .ui.dropdown .menu.show {
   display: block;
 }
-.ui.checkbox label {
-  cursor: pointer;
-}
 
 /* make the dropdown list left-aligned */
 .ui.merge-button {
   position: relative;
 }
+
 .ui.merge-button .ui.dropdown {
   position: static;
 }
-.ui.merge-button > .ui.dropdown:last-child > .menu:not(.left) {
+
+.ui.merge-button>.ui.dropdown:last-child>.menu:not(.left) {
   left: 0;
   right: auto;
 }
-.ui.merge-button .ui.dropdown .menu > .item {
+
+.ui.merge-button .ui.dropdown .menu>.item {
   display: flex;
   align-items: stretch;
-  padding: 0 !important; /* polluted by semantic.css: .ui.dropdown .menu > .item { !important } */
+  padding: 0 !important;
+  /* polluted by semantic.css: .ui.dropdown .menu > .item { !important } */
 }
 
 /* merge style list item */
@@ -223,6 +233,7 @@ function clearMergeMessage() {
   justify-content: center;
   position: relative;
 }
+
 .auto-merge-small .auto-merge-tip {
   display: none;
   left: 38px;
@@ -246,5 +257,4 @@ function clearMergeMessage() {
 .auto-merge-small:hover .auto-merge-tip {
   display: flex;
 }
-
 </style>
