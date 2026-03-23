@@ -1407,7 +1407,13 @@ func ViewPullConflicts(ctx *context.Context) {
 		return
 	}
 
-	beforeCommitID := prInfo.MergeBase
+	baseCommitID, err := gitRepo.GetBranchCommitID(pull.BaseBranch)
+	if err != nil {
+		ctx.ServerError("GetBranchCommitID", err)
+		return
+	}
+
+	beforeCommitID := baseCommitID
 	headCommit, err := gitRepo.GetCommit(headCommitID)
 	if err != nil {
 		ctx.ServerError("GetCommit(head)", err)
