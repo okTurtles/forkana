@@ -89,8 +89,10 @@ function clearMergeMessage() {
   -->
   <div>
     <!-- eslint-disable vue/no-v-html -->
-    <div v-html="mergeForm.hasPendingPullRequestMergeTip" v-if="mergeForm.hasPendingPullRequestMerge"
-      class="ui info message" />
+    <div
+      v-html="mergeForm.hasPendingPullRequestMergeTip" v-if="mergeForm.hasPendingPullRequestMerge"
+      class="ui info message"
+    />
     <!-- eslint-enable vue/no-v-html -->
 
     <!-- another similar form is in pull.tmpl (manual merge)-->
@@ -105,11 +107,15 @@ function clearMergeMessage() {
           <input type="text" name="merge_title_field" v-model="mergeTitleFieldValue">
         </div>
         <div class="field">
-          <textarea name="merge_message_field" rows="5" :placeholder="mergeForm.mergeMessageFieldPlaceHolder"
-            v-model="mergeMessageFieldValue" />
+          <textarea
+            name="merge_message_field" rows="5" :placeholder="mergeForm.mergeMessageFieldPlaceHolder"
+            v-model="mergeMessageFieldValue"
+          />
           <template v-if="mergeMessageFieldValue !== mergeForm.defaultMergeMessage">
-            <button @click.prevent="clearMergeMessage" class="btn tw-mt-1 tw-p-1 interact-fg"
-              :data-tooltip-content="mergeForm.textClearMergeMessageHint">
+            <button
+              @click.prevent="clearMergeMessage" class="btn tw-mt-1 tw-p-1 interact-fg"
+              :data-tooltip-content="mergeForm.textClearMergeMessageHint"
+            >
               {{ mergeForm.textClearMergeMessage }}
             </button>
           </template>
@@ -138,9 +144,11 @@ function clearMergeMessage() {
 
     <div v-if="!showActionForm" class="tw-flex">
       <!-- the merge button -->
-      <div class="ui buttons merge-button small"
+      <div
+        class="ui buttons merge-button small"
         :class="[mergeForm.emptyCommit ? '' : mergeForm.allOverridableChecksOk ? 'primary' : 'red']"
-        @click="toggleActionForm(true)">
+        @click="toggleActionForm(true)"
+      >
         <button class="ui button">
           <span class="button-text">
             {{ mergeStyleDetail.textDoMerge }}
@@ -150,19 +158,23 @@ function clearMergeMessage() {
           </span>
         </button>
         <!-- Only show dropdown when there are multiple merge styles available -->
-        <div v-if="mergeStyleAllowedCount > 1" class="ui dropdown icon button"
-          @click.stop="showMergeStyleMenu = !showMergeStyleMenu">
-          <svg-icon name="octicon-triangle-down" :size="14" />
+        <div
+          v-if="mergeStyleAllowedCount > 1" class="ui dropdown icon button"
+          @click.stop="showMergeStyleMenu = !showMergeStyleMenu"
+        >
+          <svg-icon name="octicon-triangle-down" :size="14"/>
           <div class="menu" :class="{ 'show': showMergeStyleMenu }">
             <template v-for="msd in mergeForm.mergeStyles">
               <!-- if can merge now, show one action "merge now", and an action "auto merge when succeed" -->
-              <div class="item" v-if="msd.allowed && mergeForm.canMergeNow" :key="msd.name"
-                @click.stop="switchMergeStyle(msd.name)">
+              <div
+                class="item" v-if="msd.allowed && mergeForm.canMergeNow" :key="msd.name"
+                @click.stop="switchMergeStyle(msd.name)"
+              >
                 <div class="action-text">
                   {{ msd.textDoMerge }}
                 </div>
                 <div v-if="!msd.hideAutoMerge" class="auto-merge-small" @click.stop="switchMergeStyle(msd.name, true)">
-                  <svg-icon name="octicon-clock" :size="14" />
+                  <svg-icon name="octicon-clock" :size="14"/>
                   <div class="auto-merge-tip">
                     {{ mergeForm.textAutoMergeWhenSucceed }}
                   </div>
@@ -170,8 +182,10 @@ function clearMergeMessage() {
               </div>
 
               <!-- if can NOT merge now, only show one action "auto merge when succeed" -->
-              <div class="item" v-if="msd.allowed && !mergeForm.canMergeNow && !msd.hideAutoMerge" :key="msd.name"
-                @click.stop="switchMergeStyle(msd.name, true)">
+              <div
+                class="item" v-if="msd.allowed && !mergeForm.canMergeNow && !msd.hideAutoMerge" :key="msd.name"
+                @click.stop="switchMergeStyle(msd.name, true)"
+              >
                 <div class="action-text">
                   {{ msd.textDoMerge }} {{ mergeForm.textAutoMergeButtonWhenSucceed }}
                 </div>
@@ -182,8 +196,10 @@ function clearMergeMessage() {
       </div>
 
       <!-- the cancel auto merge button -->
-      <form v-if="mergeForm.hasPendingPullRequestMerge" :action="mergeForm.baseLink + '/cancel_auto_merge'"
-        method="post" class="tw-ml-4">
+      <form
+        v-if="mergeForm.hasPendingPullRequestMerge" :action="mergeForm.baseLink + '/cancel_auto_merge'"
+        method="post" class="tw-ml-4"
+      >
         <input type="hidden" name="_csrf" :value="csrfToken">
         <button class="ui button">
           {{ mergeForm.textAutoMergeCancelSchedule }}
