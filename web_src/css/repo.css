@@ -253,7 +253,11 @@ td .commit-summary {
   font-size: 14px;
   margin-bottom: 2.5rem;
   margin-top: 2rem;
-
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .pr-back-link:hover {
