@@ -21,6 +21,14 @@
   padding: 1rem;
 }
 
+/* Merge section border colors */
+.merge-section.border-red { border-color: var(--color-red) !important; }
+.merge-section.border-purple { border-color: var(--color-purple) !important; }
+.merge-section.border-grey { border-color: var(--color-grey) !important; }
+.merge-section.border-yellow { border-color: var(--color-yellow) !important; }
+.merge-section.border-green { border-color: var(--color-green) !important; }
+.merge-section.border-green-light-1 { border-color: var(--color-green-light-1) !important; }
+
 /* Smaller timeline avatars */
 .timeline-avatar {
   width: 28px !important;
