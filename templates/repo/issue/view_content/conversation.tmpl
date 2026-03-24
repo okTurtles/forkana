@@ -4,7 +4,7 @@
 	{{range $i, $c := .comments}}
 		{{$createdSubStr:= DateUtils.TimeSince $c.CreatedUnix}}
 		<div class="timeline-item comment" id="{{$c.HashTag}}">
-			
+
 			<div class="content comment-container">
 				<div class="comment-header avatar-content-left-arrow" role="heading" aria-level="3">
 					<div class="comment-header-left">
@@ -56,7 +56,7 @@
 					</div>
 				{{end}}
 				<div class="ui attached segment comment-body" role="article">
-					
+
 					<div class="render-content markup" {{if or $.Permission.IsAdmin $.HasIssuesOrPullsWritePermission (and $.IsSigned (eq $.SignedUserID $c.PosterID))}}data-can-edit="true"{{end}}>
 						{{if $c.RenderedContent}}
 							{{$c.RenderedContent}}
