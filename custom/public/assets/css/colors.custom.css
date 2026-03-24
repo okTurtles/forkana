@@ -31,6 +31,7 @@ gitea-theme-meta-info {
   /* Green colors */
   --color-green: #1F883D;
   --color-green-light: #2DA44E;
+  --color-green-light-1: #1DD781;
   --color-green-dark-1: #1A7F37;
   --color-green-dark-2: #116329;
 
@@ -85,5 +86,8 @@ gitea-theme-meta-info {
   /* Tab colors */
   --color-tab-inactive: #969aa5;
   --color-tab-active-text: #555;
+
+  --color-red: #CF222E;
+  --color-yellow: #EBB400;
 }
 

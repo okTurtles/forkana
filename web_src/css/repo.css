@@ -427,7 +427,7 @@ td .commit-summary {
 .repository.view.issue .comment-list .timeline {
   position: relative;
   display: block;
-  margin-left: 40px;
+  margin-left: 26px;
   padding-left: 16px;
 }
 
@@ -466,7 +466,9 @@ td .commit-summary {
 
 .repository.view.issue .comment-list .timeline-item .timeline-avatar {
   position: absolute;
-  left: -68px;
+  left: -58px;
+  border: 1px solid var(--color-banner-border);
+  border-radius: var(--border-radius);
 }
 
 /* Don't show the mobile oriented avatar ".inline-timeline-avatar" on desktop. Desktop uses the avatar with class ".timeline-avatar" */

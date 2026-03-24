@@ -540,8 +540,7 @@
 				{{continue}}
 			{{end}}
 			<div class="timeline-item event" id="{{.HashTag}}">
-				<span class="badge">{{svg "octicon-repo-push"}}</span>
-				<span class="comment-text-line">
+				<span class="comment-text-line tw-ml-2">
 					{{template "shared/user/authorlink" .Poster}}
 					{{if .IsForcePush}}
 						{{ctx.Locale.Tr "repo.issues.force_push_codes" $.Issue.PullRequest.HeadBranch (ShortSha .OldCommit) ($.Issue.Repo.CommitLink .OldCommit) (ShortSha .NewCommit) ($.Issue.Repo.CommitLink .NewCommit) $createdStr}}

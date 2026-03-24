@@ -24,3 +24,51 @@
 .ui.form .field > .ui.input > textarea {
   border-radius: var(--border-radius);
 }
+
+.circle {
+	border-radius: 50% !important;
+	overflow: hidden;
+	width: 2rem;
+	height: 2rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.circle.small {
+	width: 1.5rem;
+	height: 1.5rem;
+}
+
+.circle svg {
+	width: 18px;
+	height: 18px;
+}
+
+.circle.small svg {
+	scale: .8;
+}
+
+.circle.green-light-1{
+	color: var(--color-white);
+	background-color: var(--color-green-light-1);
+	border: none !important;
+}
+
+.circle.red{
+	color: var(--color-white);
+	background-color: var(--color-red);
+	border: none !important;
+}
+
+.circle.yellow{
+	color: var(--color-white);
+	background-color: var(--color-yellow);
+	border: none !important;
+}
+
+.circle.grey{
+	color: var(--color-white);
+	background-color: var(--color-grey);
+	border: none !important;
+}

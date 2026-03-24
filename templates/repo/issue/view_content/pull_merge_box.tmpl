@@ -1,6 +1,24 @@
 {{if and .Issue.PullRequest.HasMerged (not .IsPullBranchDeletable)}}
 {{/* Then the merge box will not be displayed because this page already contains enough information */}}
 {{else}}
+{{$mergeColor := "red"}}
+{{- if .Issue.PullRequest.HasMerged}}{{$mergeColor = "purple"}}
+{{- else if .Issue.IsClosed}}{{$mergeColor = "grey"}}
+{{- else if .IsPullWorkInProgress}}{{$mergeColor = "grey"}}
+{{- else if .IsFilesConflicted}}{{$mergeColor = "grey"}}
+{{- else if .IsPullRequestBroken}}{{$mergeColor = "red"}}
+{{- else if .IsBlockedByApprovals}}{{$mergeColor = "red"}}
+{{- else if .IsBlockedByRejection}}{{$mergeColor = "red"}}
+{{- else if .IsBlockedByOfficialReviewRequests}}{{$mergeColor = "red"}}
+{{- else if .IsBlockedByOutdatedBranch}}{{$mergeColor = "red"}}
+{{- else if .IsBlockedByChangedProtectedFiles}}{{$mergeColor = "red"}}
+{{- else if and .EnableStatusCheck (or .RequiredStatusCheckState.IsFailure .RequiredStatusCheckState.IsError)}}{{$mergeColor = "red"}}
+{{- else if and .EnableStatusCheck (or (not $.LatestCommitStatus) .RequiredStatusCheckState.IsPending .RequiredStatusCheckState.IsWarning)}}{{$mergeColor = "yellow"}}
+{{- else if and .AllowMerge .RequireSigned (not .WillSign)}}{{$mergeColor = "red"}}
+{{- else if .Issue.PullRequest.IsChecking}}{{$mergeColor = "yellow"}}
+{{- else if .Issue.PullRequest.IsEmpty}}{{$mergeColor = "grey"}}
+{{- else if .Issue.PullRequest.CanAutoMerge}}{{$mergeColor = "green"}}
+{{- end}}
 <div class="timeline-item comment pull-merge-box"
 	data-global-init="initRepoPullMergeBox"
 	{{if .PullMergeBoxReloadingInterval}}
@@ -8,23 +26,7 @@
 		data-pull-link="{{.Issue.Link}}"
 	{{end}}
 >
-	<div class="timeline-avatar text {{if .Issue.PullRequest.HasMerged}}purple
-	{{- else if .Issue.IsClosed}}grey
-	{{- else if .IsPullWorkInProgress}}grey
-	{{- else if .IsFilesConflicted}}grey
-	{{- else if .IsPullRequestBroken}}red
-	{{- else if .IsBlockedByApprovals}}red
-	{{- else if .IsBlockedByRejection}}red
-	{{- else if .IsBlockedByOfficialReviewRequests}}red
-	{{- else if .IsBlockedByOutdatedBranch}}red
-	{{- else if .IsBlockedByChangedProtectedFiles}}red
-	{{- else if and .EnableStatusCheck (or .RequiredStatusCheckState.IsFailure .RequiredStatusCheckState.IsError)}}red
-	{{- else if and .EnableStatusCheck (or (not $.LatestCommitStatus) .RequiredStatusCheckState.IsPending .RequiredStatusCheckState.IsWarning)}}yellow
-	{{- else if and .AllowMerge .RequireSigned (not .WillSign)}}red
-	{{- else if .Issue.PullRequest.IsChecking}}yellow
-	{{- else if .Issue.PullRequest.IsEmpty}}grey
-	{{- else if .Issue.PullRequest.CanAutoMerge}}green
-	{{- else}}red{{end}}">{{svg "octicon-git-merge" 40}}</div>
+	<div class="timeline-avatar text {{$mergeColor}}">{{svg "octicon-git-merge" 40}}</div>
 	<div class="content">
 		{{if .LatestCommitStatus}}
 		<div class="ui attached segment fitted">
@@ -38,7 +40,7 @@
 		</div>
 		{{end}}
 		{{$showGeneralMergeForm := false}}
-		<div class="ui attached segment merge-section {{if not $.LatestCommitStatus}}avatar-content-left-arrow{{end}} flex-items-block">
+		<div class="ui attached segment merge-section {{if not $.LatestCommitStatus}}avatar-content-left-arrow{{end}} flex-items-block" style="border-color: var(--color-{{$mergeColor}}) !important">
 			{{if .Issue.PullRequest.HasMerged}}
 				{{if .IsPullBranchDeletable}}
 					<div class="item item-section text tw-flex-1">
