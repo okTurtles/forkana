@@ -11,18 +11,30 @@
 			{{ctx.AvatarUtils.AvatarByEmail .Author.Email .Author.Name 20}}
 		{{end}}
 
+		{{$repoData := $.Repository}}
+		{{$repoLink := ""}}
+		{{if $.Repository}}
+			{{$repoLink = $.Repository.Link}}
+		{{end}}
+		{{if $.comment.Issue.PullRequest}}
+			{{if $.comment.Issue.PullRequest.BaseRepo}}
+				{{$repoData = $.comment.Issue.PullRequest.BaseRepo}}
+				{{$repoLink = $.comment.Issue.PullRequest.BaseRepo.Link}}
+			{{end}}
+		{{end}}
+
 		{{$commitBaseLink := ""}}
 		{{$commitLink := ""}}
 		{{if $.comment.Issue.IsPull}}
-			{{$commitBaseLink = printf "%s/pulls/%d/commits" $.comment.Issue.PullRequest.BaseRepo.Link $.comment.Issue.Index}}
+			{{$commitBaseLink = printf "%s/pulls/%d/commits" $repoLink $.comment.Issue.Index}}
 			{{$commitLink = printf "%s/%s" $commitBaseLink (PathEscape .ID.String)}}
 		{{else}}
-			{{$commitBaseLink = printf "%s/commit" $.comment.Issue.PullRequest.BaseRepo.Link}}
+			{{$commitBaseLink = printf "%s/commit" $repoLink}}
 			{{$commitLink = printf "%s/%s" $commitBaseLink (PathEscape .ID.String)}}
 		{{end}}
 
 		<span class="tw-flex-1 tw-font-mono gt-ellipsis" title="{{.Summary}}">
-			{{- ctx.RenderUtils.RenderCommitMessageLinkSubject .Message $commitLink $.comment.Issue.PullRequest.BaseRepo -}}
+			{{- ctx.RenderUtils.RenderCommitMessageLinkSubject .Message $commitLink $repoData -}}
 		</span>
 
 		{{if IsMultilineCommitMessage .Message}}
@@ -36,7 +48,7 @@
 	</div>
 	{{if IsMultilineCommitMessage .Message}}
 	<pre class="commit-body tw-ml-[33px] tw-hidden" data-singular-commit-body-for="{{$tag}}">
-		{{- ctx.RenderUtils.RenderCommitBody .Message $.comment.Issue.PullRequest.BaseRepo -}}
+		{{- ctx.RenderUtils.RenderCommitBody .Message $repoData -}}
 	</pre>
 	{{end}}
 {{end}}
