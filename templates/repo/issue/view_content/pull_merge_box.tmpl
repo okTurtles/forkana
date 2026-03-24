@@ -17,7 +17,7 @@
 {{- else if and .AllowMerge .RequireSigned (not .WillSign)}}{{$mergeColor = "red"}}
 {{- else if .Issue.PullRequest.IsChecking}}{{$mergeColor = "yellow"}}
 {{- else if .Issue.PullRequest.IsEmpty}}{{$mergeColor = "grey"}}
-{{- else if .Issue.PullRequest.CanAutoMerge}}{{$mergeColor = "green"}}
+{{- else if .Issue.PullRequest.CanAutoMerge}}{{$mergeColor = "green-light-1"}}
 {{- end}}
 <div class="timeline-item comment pull-merge-box"
 	data-global-init="initRepoPullMergeBox"
