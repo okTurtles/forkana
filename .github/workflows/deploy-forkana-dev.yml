@@ -1,0 +1,127 @@
+name: deploy-forkana-dev
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Optional 40-char commit SHA to deploy (for rollback/manual deploy)."
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-forkana-dev
+  # Never cancel an in-progress deployment; queue instead.
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions: {}
+    steps:
+      - name: Resolve deploy SHA
+        id: resolve_deploy_sha
+        env:
+          INPUT_COMMIT_SHA: ${{ github.event.inputs.commit_sha }}
+        run: |
+          set -euo pipefail
+
+          DEPLOY_SHA="${GITHUB_SHA}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "${INPUT_COMMIT_SHA:-}" ]]; then
+            DEPLOY_SHA="${INPUT_COMMIT_SHA}"
+          fi
+
+          echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Preflight checks
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          EXPECTED_DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+
+          [[ -n "${DEPLOY_HOST:-}" ]] || { echo "Missing required secret: DEPLOY_HOST" >&2; exit 1; }
+          [[ -n "${DEPLOY_USER:-}" ]] || { echo "Missing required secret: DEPLOY_USER" >&2; exit 1; }
+          [[ -n "${SSH_KEY:-}" ]] || { echo "Missing required secret: DEPLOY_SSH_KEY" >&2; exit 1; }
+          [[ -n "${SSH_KNOWN_HOSTS:-}" ]] || { echo "Missing required secret: DEPLOY_SSH_KNOWN_HOSTS" >&2; exit 1; }
+
+          # deploy_common.sh validates lowercase 40-char SHA; mirror that here
+          # so failures are explicit in CI before opening SSH.
+          if [[ ! "${DEPLOY_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid deploy SHA: '${DEPLOY_SHA}' (expected 40-char lowercase hex)." >&2
+            exit 1
+          fi
+
+          # Optional guard: keep workflow trigger branch aligned with the
+          # server clone branch configured during setup (DEPLOY_BRANCH).
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && -n "${EXPECTED_DEPLOY_BRANCH:-}" ]]; then
+            if [[ "${GITHUB_REF_NAME}" != "${EXPECTED_DEPLOY_BRANCH}" ]]; then
+              echo "Push branch '${GITHUB_REF_NAME}' does not match configured DEPLOY_BRANCH '${EXPECTED_DEPLOY_BRANCH}'." >&2
+              echo "Set repository variable DEPLOY_BRANCH (or update push branches) to keep CI and server config aligned." >&2
+              exit 1
+            fi
+          fi
+
+      # --- Deploy to VM via SSH ---
+      # The VM performs the full build from source; GitHub Actions only
+      # triggers the deploy script with the commit SHA.
+      - name: Deploy to VM
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+
+          cleanup() {
+            rm -f "${SSH_KEY_FILE:-}" "${KNOWN_HOSTS_FILE:-}"
+          }
+          trap cleanup EXIT
+
+          # Write the SSH key to a temp file with strict permissions.
+          umask 077
+          SSH_KEY_FILE="$(mktemp)"
+          printf '%s\n' "$SSH_KEY" > "$SSH_KEY_FILE"
+
+          # Write the known_hosts file so we verify the VM's host key.
+          KNOWN_HOSTS_FILE="$(mktemp)"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+
+          SSH_OPTS=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o IdentitiesOnly=yes
+            -o PreferredAuthentications=publickey
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="${KNOWN_HOSTS_FILE}"
+            -i "${SSH_KEY_FILE}"
+          )
+
+          # The forced-command in authorized_keys on the VM restricts this
+          # connection to running deploy.sh. We pass the commit SHA via the
+          # SSH_ORIGINAL_COMMAND mechanism (the argument after --).
+          ssh -T "${SSH_OPTS[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" -- "${DEPLOY_SHA}"
+
+      - name: Step summary
+        if: always()
+        env:
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          echo "## Forkana Deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Event:** ${GITHUB_EVENT_NAME}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Branch:** ${GITHUB_REF_NAME}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Commit:** \`${DEPLOY_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Rollback" >> "$GITHUB_STEP_SUMMARY"
+          echo "Re-run a prior successful workflow, trigger this workflow with a commit SHA, or SSH into the VM and run:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo '~/forkana/deploy.sh <previous-commit-sha>' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
