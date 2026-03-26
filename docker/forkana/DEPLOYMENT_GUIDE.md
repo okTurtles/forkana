@@ -80,8 +80,12 @@ docker compose version
 #### Fedora
 
 ```bash
-# Install Docker from Fedora repos (or use the official Docker repo)
-sudo dnf install -y docker docker-compose-plugin
+# Add Docker's official repo (DNF5 syntax for Fedora 41+)
+sudo dnf config-manager addrepo \
+  --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo
+
+# Install Docker
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
 # Start and enable Docker
 sudo systemctl start docker
@@ -137,66 +141,106 @@ override.
 The deploy user **must** have UID 1000 so that directories it creates are
 automatically owned by the container user (git:git, also UID 1000).
 
+> **Important:** If UID 1000 is already taken on your system (`getent passwd
+> 1000`), you must resolve that conflict before continuing — either remove or
+> reassign the existing user. The container bind-mounts depend on UID 1000
+> ownership.
+
 #### Debian/Ubuntu
 
 ```bash
-sudo adduser --system --group --shell /bin/bash --uid 1000 forkana-deploy
+sudo adduser --system --group --shell /bin/bash --uid 1000 \
+  --home /home/forkana-deploy forkana-deploy
 sudo usermod -aG docker forkana-deploy
 ```
 
 #### Fedora
 
 ```bash
-sudo useradd --system --create-home --shell /bin/bash --uid 1000 forkana-deploy
+sudo useradd --system --create-home --shell /bin/bash --uid 1000 \
+  --home-dir /home/forkana-deploy forkana-deploy
 sudo usermod -aG docker forkana-deploy
 ```
 
-### 2. Set Up the Deploy Directory and Git Repository
+### 2. Verify/Fix Deploy User Home Directory
+
+Some distributions (especially Fedora with `--system` users) may not create
+the home directory, or may leave it owned by root. Run these commands as root
+to ensure the home directory exists with correct ownership:
+
+```bash
+# Determine the home directory from the passwd entry
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+echo "Deploy user home: $DEPLOY_HOME"
+
+# Create the home directory if missing, set correct ownership/permissions
+sudo install -d -o forkana-deploy -g forkana-deploy -m 0755 "$DEPLOY_HOME"
+
+# Verify
+ls -ld "$DEPLOY_HOME"
+# Expected: drwxr-xr-x ... forkana-deploy forkana-deploy ... /home/forkana-deploy
+```
+
+### 3. Set Up the Deploy Directory and Git Repository
 
 All paths live under the deploy user's home directory — no root-owned
 directories and no `sudo` required during deployments.
 
 ```bash
-# Run these as the forkana-deploy user (or sudo -u forkana-deploy)
-sudo -u forkana-deploy bash -c '
-  mkdir -p ~/forkana/{repo,compose,data,data/git,data/custom,config,postgres}
-  chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/data/custom ~/forkana/config
-  git clone https://github.com/okTurtles/forkana.git ~/forkana/repo
-'
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+
+sudo -Hiu forkana-deploy bash -lc "
+  mkdir -p $DEPLOY_HOME/forkana/{repo,compose,data,data/git,data/custom,config,postgres}
+  chmod 0755 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/data/git \
+             $DEPLOY_HOME/forkana/data/custom $DEPLOY_HOME/forkana/config
+"
+
+# Clone the repo (skip if already cloned)
+if [ ! -d "$DEPLOY_HOME/forkana/repo/.git" ]; then
+  sudo -Hiu forkana-deploy git clone \
+    https://github.com/okTurtles/forkana.git "$DEPLOY_HOME/forkana/repo"
+fi
 ```
 
-### 3. Install the Deploy Script
+### 4. Install the Deploy Script
 
 ```bash
-sudo -u forkana-deploy cp ~/forkana/repo/docker/forkana/deploy.sh ~/forkana/deploy.sh
-sudo -u forkana-deploy chmod 755 ~/forkana/deploy.sh
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+
+sudo -Hiu forkana-deploy cp \
+  "$DEPLOY_HOME/forkana/repo/docker/forkana/deploy.sh" \
+  "$DEPLOY_HOME/forkana/deploy.sh"
+sudo -Hiu forkana-deploy chmod 755 "$DEPLOY_HOME/forkana/deploy.sh"
 ```
 
 > **Note:** The deploy script is also updated automatically during each
 > deployment (it copies `dev.yml` from the checked-out commit). To update
 > `deploy.sh` itself, pull the latest version from the repo.
 
-### 4. Configure `authorized_keys` with Forced-Command Restrictions
+### 5. Configure `authorized_keys` with Forced-Command Restrictions
 
-Create `~forkana-deploy/.ssh/authorized_keys` with the GitHub Actions public
+Create the deploy user's `authorized_keys` with the GitHub Actions public
 key. The `command=` directive restricts the key to running the deploy script
 only:
 
 ```bash
-sudo -u forkana-deploy mkdir -p ~forkana-deploy/.ssh
-sudo chmod 700 ~forkana-deploy/.ssh
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+
+# Create .ssh directory with correct ownership and permissions
+sudo install -d -o forkana-deploy -g forkana-deploy -m 0700 "$DEPLOY_HOME/.ssh"
 ```
 
-Add the following single line (replace `ssh-ed25519 AAAA...` with the actual
-public key):
+Add the following single line to `$DEPLOY_HOME/.ssh/authorized_keys` (replace
+`ssh-ed25519 AAAA...` with the actual public key):
 
 ```
 command="~/forkana/deploy.sh",restrict ssh-ed25519 AAAA... github-actions-deploy
 ```
 
 ```bash
-sudo chmod 600 ~forkana-deploy/.ssh/authorized_keys
-sudo chown -R forkana-deploy:forkana-deploy ~forkana-deploy/.ssh
+# Set correct ownership and permissions on authorized_keys
+sudo chown forkana-deploy:forkana-deploy "$DEPLOY_HOME/.ssh/authorized_keys"
+sudo chmod 600 "$DEPLOY_HOME/.ssh/authorized_keys"
 ```
 
 **Security notes:**
@@ -205,7 +249,7 @@ sudo chown -R forkana-deploy:forkana-deploy ~forkana-deploy/.ssh
 - `no-port-forwarding,no-pty,no-agent-forwarding,no-X11-forwarding` prevent
   tunnelling, interactive shells, and agent hijacking.
 
-### 5. Start the Local Docker Registry
+### 6. Start the Local Docker Registry
 
 The registry is managed by `docker compose` via `dev.yml`. For the initial
 bootstrap (before the first deploy), start it manually:
@@ -223,7 +267,7 @@ curl -sf http://127.0.0.1:5000/v2/ && echo "Registry OK"
 The registry binds to `127.0.0.1:5000` only and is **not** publicly
 accessible. Data persists in the `registry-data` Docker volume.
 
-### 6. Obtain the SSH Host Key for GitHub
+### 7. Obtain the SSH Host Key for GitHub
 
 Pin the VM's SSH host key in the GitHub Actions workflow to prevent MITM
 attacks. Run on the VM:
@@ -237,14 +281,14 @@ Copy the output and store it as the `DEPLOY_SSH_KNOWN_HOSTS` secret in the
 GitHub repository settings. The workflow uses `StrictHostKeyChecking=yes` with
 this value — **never** use `StrictHostKeyChecking=no`.
 
-### 7. Required GitHub Secrets
+### 8. Required GitHub Secrets
 
 | Secret | Description |
 |---|---|
 | `DEPLOY_HOST` | VM IP address or hostname |
 | `DEPLOY_USER` | `forkana-deploy` |
 | `DEPLOY_SSH_KEY` | Private key (ed25519 recommended) for the deploy user |
-| `DEPLOY_SSH_KNOWN_HOSTS` | Output of `ssh-keyscan` from step 6 |
+| `DEPLOY_SSH_KNOWN_HOSTS` | Output of `ssh-keyscan` from step 7 |
 
 </details>
 
@@ -476,6 +520,20 @@ ls -la ~/forkana/postgres
 
 # Fix permissions if needed (deploy user must be UID 1000)
 chown -R 1000:1000 ~/forkana/data ~/forkana/config ~/forkana/postgres
+```
+
+#### Deploy User Commands Fail with "Permission denied"
+
+If `sudo -u forkana-deploy` commands fail with errors like
+`mkdir: cannot create directory '/home/forkana-deploy': Permission denied`,
+the deploy user's home directory is either missing or owned by root. This is
+common on Fedora with system users. Run the
+[Verify/Fix Deploy User Home Directory](#2-verifyfix-deploy-user-home-directory)
+step to repair it:
+
+```bash
+DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+sudo install -d -o forkana-deploy -g forkana-deploy -m 0755 "$DEPLOY_HOME"
 ```
 
 #### Database Connection Failed
