@@ -1,5 +1,18 @@
 name: forkana
 
+# Docker-native log rotation defaults shared by all services.
+# Note: Docker supports size-based rotation (not daily time-based rotation).
+# Keep json-file as the safe default; use overrides/logging.override.yml for other drivers.
+x-logging-defaults: &logging-defaults
+  driver: json-file
+  options:
+    # Approximate logrotate's "rotate 14" retention.
+    max-file: "${DOCKER_LOG_MAX_FILE:-14}"
+    # Size-based trigger (Docker does not support time-based daily rotation).
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    # Compress rotated files (equivalent to logrotate's `compress`).
+    compress: "true"
+
 services:
   registry:
     # Pinned by manifest digest so the tag can never be swapped.
@@ -22,6 +35,7 @@ services:
       start_period: 5s
     networks:
       - forkana-network
+    logging: *logging-defaults
 
   postgres:
     image: postgres:14-alpine
@@ -40,6 +54,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *logging-defaults
 
   forkana:
     # Human-friendly default; deploy.sh generates compose.override.yml to pin
@@ -91,6 +106,7 @@ services:
       - ${HOME}/forkana/config:/etc/gitea
     networks:
       - forkana-network
+    logging: *logging-defaults
 
 volumes:
   registry-data:
