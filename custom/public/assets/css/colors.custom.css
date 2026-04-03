@@ -87,7 +87,11 @@ gitea-theme-meta-info {
   --color-tab-inactive: #969aa5;
   --color-tab-active-text: #555;
 
+  --color-white: #FFFFFF;
   --color-red: #CF222E;
   --color-yellow: #EBB400;
+  --color-purple: #8250DF;
+  --color-grey: #59636E;
+  
 }
 
