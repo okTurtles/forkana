@@ -11,8 +11,7 @@
 ></div>
 {{if and .Issue.IsPull .Issue.PullRequest.HeadRepo}}
 <div class="pr-repo-header">
-	<button id="pr-back-link" class="pr-back-link">{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "repo.pulls.back"}}</button>
-	<script>document.getElementById('pr-back-link')?.addEventListener('click',function(e){e.preventDefault();history.back()});</script>
+	<a href="{{.Issue.PullRequest.HeadRepo.Link}}/pulls" data-global-init="initPrBackLink" class="pr-back-link">{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "repo.pulls.back"}}</a>
 	<div class="pr-repo-title">
 		<a href="{{AppSubUrl}}/{{.Issue.PullRequest.HeadRepo.OwnerName}}">{{.Issue.PullRequest.HeadRepo.OwnerName}}</a>
 		/
