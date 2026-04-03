@@ -61,6 +61,12 @@
 	border: none !important;
 }
 
+.circle.purple {
+	color: var(--color-white);
+	background-color: var(--color-purple);
+	border: none !important;
+}
+
 .circle.yellow{
 	color: var(--color-white);
 	background-color: var(--color-yellow);
