@@ -11,10 +11,10 @@
 			{{ctx.AvatarUtils.AvatarByEmail .Author.Email .Author.Name 20}}
 		{{end}}
 
-		{{$repoData := $.Repository}}
+		{{$repoData := $.root.Repository}}
 		{{$repoLink := ""}}
-		{{if $.Repository}}
-			{{$repoLink = $.Repository.Link}}
+		{{if $.root.Repository}}
+			{{$repoLink = $.root.Repository.Link}}
 		{{end}}
 		{{if $.comment.Issue.PullRequest}}
 			{{if $.comment.Issue.PullRequest.BaseRepo}}
