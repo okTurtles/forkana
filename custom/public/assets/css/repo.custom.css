@@ -177,10 +177,6 @@
   border-right: 1px solid var(--color-border-light);
 }
 
-.diff-split-header-right {
-  background: var(--color-surface-subtle);
-}
-
 /* Hide the collapsible file header for changes */
 .diff-file-header {
   display: none !important;
@@ -451,4 +447,247 @@
   border-top: 0;
   border-radius: 0 0 .5rem .5rem;
   display: block; /* Ensure it behaves like a block for borders/padding */
+}
+
+/* ===== Conflict Resolution Page ===== */
+
+/* Conflicts count header */
+.conflicts-stats-header strong {
+  font-size: 1rem;
+  color: var(--color-error);
+}
+
+/* Submit button styling */
+.conflict-submit-btn {
+  border-radius: 8px !important;
+  font-weight: var(--font-weight-semibold) !important;
+  font-size: 0.85rem !important;
+  white-space: nowrap;
+}
+
+.conflict-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Fold/unfold toggle button */
+.conflict-fold-toggle-btn {
+  border-radius: 6px !important;
+}
+
+/* Conflict wrapper row (contains the full conflict region) */
+.conflict-wrapper-row {
+  border: none !important;
+}
+
+.repository .diff-file-box .code-diff .conflict-wrapper-cell {
+  padding: 0 !important;
+  border: none !important;
+}
+
+.conflict-wrapper-row .combo-markdown-editor .ui.top.tabular.menu {
+  border-top: none;
+  border-radius: 0;
+}
+
+.conflict-wrapper-row .ui .field .dropzone {
+  margin: 0 4px;
+}
+
+.conflict-comment-form .flex-text-block {
+  padding-right: 4px;
+  padding-bottom: 8px;
+}
+
+.conflict-diff-file-boxes .diff-file-box{
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+/* Main conflict wrapper - colored border that changes when resolved */
+.conflict-wrapper {
+  border: 2px solid var(--color-red);
+  margin: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.conflict-wrapper.resolved {
+  border-color: var(--color-green);
+}
+
+/* Conflict header: counter and navigation */
+.conflict-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.875rem;
+  font-weight: var(--font-weight-medium);
+}
+
+.conflict-wrapper.resolved .conflict-header {
+  background: var(--color-success-bg);
+  border-bottom-color: var(--color-success);
+}
+
+.conflict-counter {
+  color: var(--color-red);
+  font-weight: var(--font-weight-semibold);
+}
+
+.conflict-wrapper.resolved .conflict-counter {
+  color: var(--color-success);
+}
+
+.conflict-nav {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.conflict-nav a {
+  color: #25292E;
+  text-decoration: none;
+  font-weight: var(--font-weight-medium);
+  font-size: 0.875rem;
+}
+
+.conflict-nav a:hover {
+  color: var(--color-primary);
+}
+
+.conflict-nav a.disabled {
+  color: #818B98;
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Inner table for conflict lines - full width, standard split diff layout */
+.conflict-inner-table {
+  width: 100% !important;
+  border-collapse: collapse;
+  table-layout: fixed !important;
+}
+
+/* Conflict line content: text wraps as paragraphs */
+.conflict-inner-table .lines-code code.code-inner {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+  font-family: inherit !important;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  padding: 8px 12px !important;
+  display: block !important;
+}
+
+/* Left side (del/current): old gutter color #D1D9E0 */
+.conflict-inner-table .lines-num.lines-num-old {
+  background: #FFE7D1 !important;
+  color: var(--color-text-light-3) !important;
+  vertical-align: top;
+  padding-top: 10px;
+}
+
+/* Right side (add/proposed): new gutter color #FFE7D1 */
+.conflict-inner-table .lines-num.lines-num-new.add-code {
+  background: #E5E9FF !important;
+  color: var(--color-text-light-3) !important;
+  vertical-align: top;
+  padding-top: 10px;
+}
+
+/* Left code content: match gutter #D1D9E0 */
+.conflict-inner-table .del-code .lines-code-old .code-inner {
+  background: #FFE7D1 !important;
+}
+
+.repository .diff-file-box .code-diff td {
+  padding: 8px 12px !important;
+}
+
+/* Right code content: match gutter #FFE7D1 */
+.conflict-inner-table .add-code .lines-code-new {
+  background: #FFE7D1 !important;
+}
+
+/* Type marker column */
+.conflict-inner-table .lines-type-marker {
+  display: none !important;
+  width: 0 !important;
+}
+
+.conflict-buttons-row .conflict-btn-gutter {
+  vertical-align: middle;
+}
+
+.conflict-buttons-row .conflict-btn-gutter.lines-num-new.add-code {
+  background: #E5E9FF !important;
+}
+
+.conflict-btn-cell {
+  padding: 8px 12px !important;
+  text-align: right !important;
+}
+
+.conflict-choice-btn {
+  gap: 8px !important;
+  padding: 4px 8px !important;
+  font-size: 0.75rem !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+/* Circle-down-arrow icon — purple stroke, transparent fill */
+.conflict-choice-icon {
+  color: var(--color-primary);
+  vertical-align: middle;
+}
+
+.conflict-choice-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.conflict-choice-btn.selected {
+  background: var(--color-primary) !important;
+  color: var(--color-surface) !important;
+  border-color: var(--color-primary) !important;
+}
+
+.conflict-choice-btn.selected .conflict-choice-icon {
+  color: var(--color-surface);
+}
+
+.conflict-choice-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Comment section */
+.conflict-comment-section {
+  border-top: 1px solid var(--color-border);
+}
+
+.conflict-comment-section .ui.form.comment {
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+}
+
+.conflict-comment-form {
+  padding: 0;
+}
+
+.conflict-resolve-btn {
+  border-radius: 6px !important;
+  font-size: 0.8rem !important;
+  white-space: nowrap;
+}
+
+.conflict-resolve-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
