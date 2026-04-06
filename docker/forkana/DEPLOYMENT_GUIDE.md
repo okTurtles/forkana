@@ -185,16 +185,18 @@ by root. Run these commands as root to ensure the home directory exists with
 correct ownership:
 
 ```bash
+DEPLOY_USER="forkana-deploy"  # ← replace with your UID 1000 username
+
 # Determine the home directory from the passwd entry
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 echo "Deploy user home: $DEPLOY_HOME"
 
 # Create the home directory if missing, set correct ownership/permissions
-sudo install -d -o forkana-deploy -g forkana-deploy -m 0755 "$DEPLOY_HOME"
+sudo install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 0755 "$DEPLOY_HOME"
 
 # Verify
 ls -ld "$DEPLOY_HOME"
-# Expected: drwxr-xr-x ... forkana-deploy forkana-deploy ... /home/forkana-deploy
+# Expected: drwxr-xr-x ... <deploy-user> <deploy-user> ... /home/<deploy-user>
 ```
 
 ### 3. Set Up the Deploy Directory
@@ -207,9 +209,10 @@ Docker image and transfers it as a pre-built tarball. The VPS only needs
 the directory structure and deploy scripts.
 
 ```bash
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+DEPLOY_USER="forkana-deploy"  # ← replace with your UID 1000 username
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
-sudo -Hiu forkana-deploy bash -lc "
+sudo -Hiu "${DEPLOY_USER}" bash -lc "
   mkdir -p $DEPLOY_HOME/forkana/{compose,data,data/git,data/custom,config,postgres,images}
   chmod 0755 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/data/git \
              $DEPLOY_HOME/forkana/data/custom $DEPLOY_HOME/forkana/config \
@@ -224,15 +227,16 @@ sudo -Hiu forkana-deploy bash -lc "
 must be deployed together. Download them from the repository:
 
 ```bash
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+DEPLOY_USER="forkana-deploy"  # ← replace with your UID 1000 username
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 BRANCH="master"
 BASE_URL="https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana"
 
 for script in deploy.sh deploy_common.sh deploy_debian.sh deploy_fedora.sh; do
-  sudo -Hiu forkana-deploy curl -fsSL \
+  sudo -Hiu "${DEPLOY_USER}" curl -fsSL \
     "${BASE_URL}/${script}" -o "$DEPLOY_HOME/forkana/${script}"
 done
-sudo -Hiu forkana-deploy chmod 755 "$DEPLOY_HOME/forkana"/deploy*.sh
+sudo -Hiu "${DEPLOY_USER}" chmod 755 "$DEPLOY_HOME/forkana"/deploy*.sh
 ```
 
 > **Note:** The compose base file is `~/forkana/compose/dev.yml`.
@@ -250,10 +254,11 @@ key. The `command=` directive restricts the key to running the deploy script
 only:
 
 ```bash
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
 # Create .ssh directory with correct ownership and permissions
-sudo install -d -o forkana-deploy -g forkana-deploy -m 0700 "$DEPLOY_HOME/.ssh"
+sudo install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 0700 "$DEPLOY_HOME/.ssh"
 ```
 
 Add the following single line to `$DEPLOY_HOME/.ssh/authorized_keys` (replace
@@ -266,7 +271,7 @@ command="~/forkana/deploy.sh",restrict ssh-ed25519 AAAA... github-actions-deploy
 ```bash
 # Set correct ownership and permissions on authorized_keys
 sudo touch "$DEPLOY_HOME/.ssh/authorized_keys"
-sudo chown forkana-deploy:forkana-deploy "$DEPLOY_HOME/.ssh/authorized_keys"
+sudo chown "${DEPLOY_USER}:${DEPLOY_USER}" "$DEPLOY_HOME/.ssh/authorized_keys"
 sudo chmod 600 "$DEPLOY_HOME/.ssh/authorized_keys"
 ```
 
@@ -283,14 +288,15 @@ The registry is managed by `docker compose` via `dev.yml`. For the initial
 bootstrap (before the first deploy), start it manually:
 
 ```bash
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 BRANCH="master"
 
-sudo -Hiu forkana-deploy curl -fsSL \
+sudo -Hiu "${DEPLOY_USER}" curl -fsSL \
   "https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana/dev.yml" \
   -o "$DEPLOY_HOME/forkana/compose/dev.yml"
 
-sudo -Hiu forkana-deploy docker compose -f "$DEPLOY_HOME/forkana/compose/dev.yml" up -d registry
+sudo -Hiu "${DEPLOY_USER}" docker compose -f "$DEPLOY_HOME/forkana/compose/dev.yml" up -d registry
 ```
 
 Verify it is running:
@@ -350,7 +356,8 @@ The file requires **five** variables (plus one optional):
 Generate the file (replace `dev.forkana.org` with your actual domain):
 
 ```bash
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
 # Create .env with generated secrets (overwrites any existing file).
 # openssl rand produces single-line output; tr -d '\n' guards against any
@@ -391,13 +398,13 @@ For manual operations, use:
 
 > **User context:** All commands in this section (and in Health Checks,
 > Maintenance, and most of Troubleshooting) should be run **as the deploy
-> user**. Either log in as `forkana-deploy` or prefix your session with
-> `sudo -iu forkana-deploy`. This ensures `~` expands to
-> `/home/forkana-deploy`.
+> user** (your UID 1000 user). Either log in as that user directly or prefix
+> your session with `sudo -iu <deploy-user>`. This ensures `~` expands to
+> the deploy user's home directory.
 
 ### Start the Services
 
-> **Note:** When running commands via `sudo -Hiu forkana-deploy`, Docker Compose
+> **Note:** When running commands via `sudo -Hiu <deploy-user>`, Docker Compose
 > may not auto-load the `.env` file. Use `--env-file` explicitly:
 > ```bash
 > docker compose --env-file ~/forkana/compose/.env -f ~/forkana/compose/dev.yml -f ~/forkana/compose/compose.override.yml up -d
@@ -693,8 +700,9 @@ docker compose --env-file ~/forkana/compose/.env \
 ```
 
 ```bash
-# Verify permissions (run as root - ~/forkana would expand to /root)
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+# Verify permissions (run as root — ~/forkana would expand to /root)
+DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
 ls -la $DEPLOY_HOME/forkana/data
 ls -la $DEPLOY_HOME/forkana/config
@@ -706,16 +714,17 @@ chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY
 
 #### Deploy User Commands Fail with "Permission denied"
 
-If `sudo -u forkana-deploy` commands fail with errors like
-`mkdir: cannot create directory '/home/forkana-deploy': Permission denied`,
+If `sudo -u <deploy-user>` commands fail with errors like
+`mkdir: cannot create directory '/home/<deploy-user>': Permission denied`,
 the deploy user's home directory is either missing or owned by root. This is
 common on Fedora with system users. Run the
 [Verify/Fix Deploy User Home Directory](#2-verifyfix-deploy-user-home-directory)
 step to repair it:
 
 ```bash
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
-sudo install -d -o forkana-deploy -g forkana-deploy -m 0755 "$DEPLOY_HOME"
+DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
+sudo install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 0755 "$DEPLOY_HOME"
 ```
 
 #### UID 1000 Permission Issues (Bind-Mount Directories)
@@ -730,24 +739,26 @@ mkdir: cannot create directory '/data/git': Permission denied
 
 **Diagnosis:**
 ```bash
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
 # Check directory ownership
 ls -la $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
 
-# Expected: all directories owned by UID 1000 (or forkana-deploy)
+# Expected: all directories owned by UID 1000
 # drwxr-xr-x  1000  1000  ... data/
 ```
 
 **Solution:**
 ```bash
-DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
+DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
 # Fix ownership on all bind-mount directories
 sudo chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
 
 # Verify the deploy user has UID 1000
-getent passwd forkana-deploy | cut -d: -f3
+getent passwd "${DEPLOY_USER}" | cut -d: -f3
 # Should output: 1000
 ```
 
@@ -873,7 +884,7 @@ docker restart forkana
 ```
 
 > **Note:** If the `~/forkana/compose/` directory appears empty, you may be
-> logged in as a different user than the deploy user (`forkana-deploy`). The
+> logged in as a different user than the deploy user (your UID 1000 user). The
 > `docker restart forkana` command works regardless of which user you're logged
 > in as, and is a reliable alternative to `docker compose restart`.
 
@@ -1036,7 +1047,9 @@ docker compose --env-file ~/forkana/compose/.env \
 
 ### Systemd Service (Optional)
 
-Create `/etc/systemd/system/forkana.service` for automatic startup:
+Create `/etc/systemd/system/forkana.service` for automatic startup.
+Replace `forkana-deploy` and its home directory path with your UID 1000
+username and home directory:
 
 ```ini
 [Unit]
