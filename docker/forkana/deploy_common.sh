@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# deploy_common.sh — Shared library for Forkana deploy scripts.
+# deploy_common.sh - Shared library for Forkana deploy scripts.
 #
 # Sourced by deploy_debian.sh and deploy_fedora.sh.
-# This file only defines functions — it does NOT execute any code when sourced.
+# This file only defines functions - it does NOT execute any code when sourced.
 
 # Guard against direct execution.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -17,11 +17,11 @@ log()  { printf '[deploy %s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 die()  { log "FATAL: $*"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# deploy_init — Set up configuration variables and resolve commit SHA.
+# deploy_init - Set up configuration variables and resolve commit SHA.
 #
 # Arguments:
-#   $1 — commit SHA (or empty; falls back to SSH_ORIGINAL_COMMAND)
-#   $2 — optional OS label for log messages (e.g. "Fedora")
+#   $1 - commit SHA (or empty; falls back to SSH_ORIGINAL_COMMAND)
+#   $2 - optional OS label for log messages (e.g. "Fedora")
 # ---------------------------------------------------------------------------
 deploy_init() {
   local commit_arg="${1:-}"
@@ -43,7 +43,7 @@ deploy_init() {
   fi
   COMPOSE_DIR="${DEPLOY_DIR}/compose"
   REGISTRY="localhost:5000"
-  # Use explicit IPv4 for curl checks — avoids IPv6 resolution issues on hosts
+  # Use explicit IPv4 for curl checks - avoids IPv6 resolution issues on hosts
   # where "localhost" may resolve to ::1 before 127.0.0.1.
   REGISTRY_HTTP="http://127.0.0.1:5000"
   IMAGE_NAME="forkana"
@@ -51,7 +51,7 @@ deploy_init() {
   COMPOSE_BASE="${COMPOSE_DIR}/dev.yml"
   COMPOSE_OVERRIDE="${COMPOSE_DIR}/compose.override.yml"
 
-  # --- Resolve commit SHA — prefer argument, fall back to SSH_ORIGINAL_COMMAND ---
+  # --- Resolve commit SHA - prefer argument, fall back to SSH_ORIGINAL_COMMAND ---
   COMMIT_SHA="${commit_arg:-${SSH_ORIGINAL_COMMAND:-}}"
   [[ -z "${COMMIT_SHA}" ]] && die "No commit SHA provided."
 
@@ -69,7 +69,7 @@ deploy_init() {
 }
 
 # ---------------------------------------------------------------------------
-# deploy_run — Execute the full deployment pipeline (steps 1–10).
+# deploy_run - Execute the full deployment pipeline (steps 1–10).
 #
 # Expects deploy_init to have been called first.
 # If the caller defines an install_os_packages function, it is called
@@ -108,24 +108,34 @@ deploy_run() {
   # will fail with a confusing error. Validate early to give users a clear message.
   ENV_FILE="${COMPOSE_DIR}/.env"
   if [[ ! -f "${ENV_FILE}" ]]; then
-    die "Missing ${ENV_FILE} — create it with POSTGRES_PASSWORD, FORKANA_DOMAIN, FORKANA_SECRET_KEY, FORKANA_INTERNAL_TOKEN, and FORKANA_JWT_SECRET (see DEPLOYMENT_GUIDE.md)."
+    die "Missing ${ENV_FILE} - create it with POSTGRES_PASSWORD, FORKANA_DOMAIN, FORKANA_SECRET_KEY, FORKANA_INTERNAL_TOKEN, and FORKANA_JWT_SECRET (see DEPLOYMENT_GUIDE.md)."
   fi
 
   # --- Step 2: Ensure the local registry is running ---
+  # The registry on 127.0.0.1:5000 may be shared infrastructure (not owned by
+  # Forkana).  Reuse it if already reachable; only start one via compose if
+  # nothing is listening.
   log "Ensuring local registry is running..."
   if ! curl -sf "${REGISTRY_HTTP}/v2/" > /dev/null 2>&1; then
-    REGISTRY_STATE="$(docker inspect -f '{{.State.Status}}' forkana-registry 2>/dev/null || true)"
+    # Check for an existing container named "registry" (shared) or
+    # "forkana-registry" (compose-managed).
+    REGISTRY_STATE=""
+    for cname in registry forkana-registry; do
+      REGISTRY_STATE="$(docker inspect -f '{{.State.Status}}' "${cname}" 2>/dev/null || true)"
+      if [[ "${REGISTRY_STATE}" == "running" ]]; then
+        log "Found running container '${cname}' - waiting for it to respond..."
+        break
+      fi
+    done
 
     if [[ "${REGISTRY_STATE}" != "running" ]]; then
-      log "Registry container not running (state: '${REGISTRY_STATE:-absent}') — starting it via compose..."
+      log "No registry container running - starting one via compose..."
       docker compose \
         -p "${PROJECT_NAME}" \
         --project-directory "${COMPOSE_DIR}" \
         -f "${COMPOSE_BASE}" \
         -f "${COMPOSE_OVERRIDE}" \
         up -d registry
-    else
-      log "Registry container is running but not yet responding — waiting..."
     fi
 
     log "Waiting for registry to become ready..."
@@ -136,7 +146,7 @@ deploy_run() {
       if [[ "$i" -eq 12 ]]; then
         die "Registry did not become ready within 60s."
       fi
-      log "  attempt ${i}/12 — registry not ready yet"
+      log "  attempt ${i}/12 - registry not ready yet"
       sleep 5
     done
   fi
@@ -144,7 +154,7 @@ deploy_run() {
 
   # --- Step 3: Git fetch & checkout ---
   if [[ "${LOCAL_MODE}" == true ]]; then
-    log "Local mode — skipping git fetch/checkout (using working tree at ${REPO_DIR})"
+    log "Local mode - skipping git fetch/checkout (using working tree at ${REPO_DIR})"
   else
     log "Fetching latest objects..."
     cd "${REPO_DIR}"
@@ -206,7 +216,7 @@ deploy_run() {
       log "Deployment of ${COMMIT_SHA} complete."
       exit 0
     fi
-    log "  attempt ${i}/30 — not ready yet"
+    log "  attempt ${i}/30 - not ready yet"
     sleep 5
   done
 
