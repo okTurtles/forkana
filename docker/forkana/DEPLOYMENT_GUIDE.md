@@ -136,15 +136,28 @@ override.
 
 <details>
 
-### 1. Create a Dedicated Deploy User
+### 1. Identify or Create the Deploy User (UID 1000)
 
 The deploy user **must** have UID 1000 so that directories it creates are
 automatically owned by the container user (git:git, also UID 1000).
 
-> **Important:** If UID 1000 is already taken on your system (`getent passwd
-> 1000`), you must resolve that conflict before continuing - either remove or
-> reassign the existing user. The container bind-mounts depend on UID 1000
-> ownership.
+You do **not** need to create a user specifically named `forkana-deploy`.
+On many servers, UID 1000 is already assigned to the first normal user
+created during OS setup. Check with:
+
+```bash
+getent passwd 1000
+```
+
+If that returns a user, you can use it as the deploy user - just add it to the
+`docker` group and use its username wherever `forkana-deploy` appears in this
+guide.
+
+> **Important:** If UID 1000 is taken by a user you cannot repurpose, you must
+> resolve that conflict before continuing - either remove or reassign the
+> existing user. The container bind-mounts depend on UID 1000 ownership.
+
+If no UID 1000 user exists, create one:
 
 #### Debian/Ubuntu
 
@@ -161,6 +174,9 @@ sudo useradd --create-home --shell /bin/bash --uid 1000 \
   --home-dir /home/forkana-deploy forkana-deploy
 sudo usermod -aG docker forkana-deploy
 ```
+
+> **Note:** Throughout this guide, `forkana-deploy` is used as a placeholder
+> name. Substitute your actual UID 1000 username wherever it appears.
 
 ### 2. Verify/Fix Deploy User Home Directory
 
@@ -314,7 +330,7 @@ this value - **never** use `StrictHostKeyChecking=no`.
 | Secret | Description |
 |---|---|
 | `DEPLOY_HOST` | VM IP address or hostname |
-| `DEPLOY_USER` | `forkana-deploy` |
+| `DEPLOY_USER` | Username of the UID 1000 deploy user (e.g. `forkana-deploy`) |
 | `DEPLOY_SSH_KEY` | Private key (ed25519 recommended) for the deploy user |
 | `DEPLOY_SSH_KNOWN_HOSTS` | Output of `ssh-keyscan` from step 7 |
 
