@@ -31,7 +31,7 @@ This guide covers deploying Forkana to a single Linux VM for private dev instanc
 ### Software Requirements
 
 - Docker 24.0+ with Docker Compose v2
-- Git (for cloning the repository)
+- `curl`, `jq` (for deploy scripts and initial setup)
 - A domain name pointing to your server's IP
 
 > **Note:** The deployment script (`deploy.sh`) auto-detects the host OS
@@ -129,10 +129,10 @@ chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/data/custom ~/forkana/con
 
 ## Server Setup (CI/CD)
 
-This section configures the VM for the **build-on-server** deployment model.
-GitHub Actions triggers a deploy via SSH; the VM builds the image from source,
-pushes it to a local Docker registry, and deploys with a digest-pinned compose
-override.
+This section configures the VM for CI/CD deployment. GitHub Actions builds
+the Docker image, transfers it to the VPS as a pre-built tarball, and
+triggers deployment via SSH. The VPS loads the image, pushes it to a local
+Docker registry, and deploys with a digest-pinned compose override.
 
 <details>
 
@@ -197,50 +197,40 @@ ls -ld "$DEPLOY_HOME"
 # Expected: drwxr-xr-x ... forkana-deploy forkana-deploy ... /home/forkana-deploy
 ```
 
-### 3. Set Up the Deploy Directory and Git Repository
+### 3. Set Up the Deploy Directory
 
 All paths live under the deploy user's home directory - no root-owned
 directories and no `sudo` required during deployments.
+
+The repository is **not** cloned on the server. GitHub Actions builds the
+Docker image and transfers it as a pre-built tarball. The VPS only needs
+the directory structure and deploy scripts.
 
 ```bash
 DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
 
 sudo -Hiu forkana-deploy bash -lc "
-  mkdir -p $DEPLOY_HOME/forkana/{repo,compose,data,data/git,data/custom,config,postgres}
+  mkdir -p $DEPLOY_HOME/forkana/{compose,data,data/git,data/custom,config,postgres,images}
   chmod 0755 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/data/git \
-             $DEPLOY_HOME/forkana/data/custom $DEPLOY_HOME/forkana/config
+             $DEPLOY_HOME/forkana/data/custom $DEPLOY_HOME/forkana/config \
+             $DEPLOY_HOME/forkana/images
 "
-
-# Clone the repo (skip if already cloned)
-DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
-if [ ! -d "$DEPLOY_HOME/forkana/repo/.git" ]; then
-  sudo -Hiu forkana-deploy git clone \
-    --branch "$DEPLOY_BRANCH" --single-branch \
-    https://github.com/okTurtles/forkana.git "$DEPLOY_HOME/forkana/repo"
-else
-  sudo -Hiu forkana-deploy git -C "$DEPLOY_HOME/forkana/repo" fetch origin "$DEPLOY_BRANCH"
-  sudo -Hiu forkana-deploy git -C "$DEPLOY_HOME/forkana/repo" checkout "$DEPLOY_BRANCH"
-  sudo -Hiu forkana-deploy git -C "$DEPLOY_HOME/forkana/repo" reset --hard "origin/$DEPLOY_BRANCH"
-fi
 ```
-
-> **Branch note:** for staging setups that rely on deployment-specific changes,
-> set `DEPLOY_BRANCH` before running the block above. Example:
-> `DEPLOY_BRANCH=docker-deploy`.
 
 ### 4. Install the Deploy Scripts
 
 `deploy.sh` is an OS-detecting wrapper that delegates to `deploy_debian.sh` or
 `deploy_fedora.sh` (which both source `deploy_common.sh`). All four scripts
-must be copied together:
+must be deployed together. Download them from the repository:
 
 ```bash
 DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+BRANCH="master"
+BASE_URL="https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana"
 
 for script in deploy.sh deploy_common.sh deploy_debian.sh deploy_fedora.sh; do
-  sudo -Hiu forkana-deploy cp \
-    "$DEPLOY_HOME/forkana/repo/docker/forkana/$script" \
-    "$DEPLOY_HOME/forkana/$script"
+  sudo -Hiu forkana-deploy curl -fsSL \
+    "${BASE_URL}/${script}" -o "$DEPLOY_HOME/forkana/${script}"
 done
 sudo -Hiu forkana-deploy chmod 755 "$DEPLOY_HOME/forkana"/deploy*.sh
 ```
@@ -248,10 +238,10 @@ sudo -Hiu forkana-deploy chmod 755 "$DEPLOY_HOME/forkana"/deploy*.sh
 > **Note:** The compose base file is `~/forkana/compose/dev.yml`.
 > Runtime overrides and secrets stay in `~/forkana/compose/`
 > (`compose.override.yml` and `.env`). The deploy scripts themselves are
-> **not** updated automatically - to update them, re-run this copy step from
-> the latest repo checkout. During deployment, `deploy_common.sh` refreshes
-> `~/forkana/compose/dev.yml` from the checked-out repo and rewrites
-> `~/forkana/compose/compose.override.yml` with the pinned image digest.
+> **not** updated automatically - to update them, re-run the download step
+> above. `deploy_common.sh` rewrites
+> `~/forkana/compose/compose.override.yml` with the pinned image digest
+> on each deployment.
 
 ### 5. Configure `authorized_keys` with Forced-Command Restrictions
 
@@ -294,10 +284,11 @@ bootstrap (before the first deploy), start it manually:
 
 ```bash
 DEPLOY_HOME="$(getent passwd forkana-deploy | cut -d: -f6)"
+BRANCH="master"
 
-sudo -Hiu forkana-deploy cp \
-  "$DEPLOY_HOME/forkana/repo/docker/forkana/dev.yml" \
-  "$DEPLOY_HOME/forkana/compose/dev.yml"
+sudo -Hiu forkana-deploy curl -fsSL \
+  "https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana/dev.yml" \
+  -o "$DEPLOY_HOME/forkana/compose/dev.yml"
 
 sudo -Hiu forkana-deploy docker compose -f "$DEPLOY_HOME/forkana/compose/dev.yml" up -d registry
 ```
@@ -884,7 +875,7 @@ to `172.30.0.0/16` in `dev.yml`, and the `app.ini` template
 trusts exactly that subnet (`127.0.0.0/8,::1/128,172.30.0.0/16`). However,
 instances deployed before the subnet was pinned will have a Docker-assigned
 subnet (e.g. `172.18.0.0/16`) that may not match the trusted proxy list.
-Existing Docker networks are not retroactively updated by Docker Compose — the
+Existing Docker networks are not retroactively updated by Docker Compose - the
 network must be recreated for the pinned subnet to take effect.
 
 **Diagnosis:**
@@ -908,7 +899,7 @@ that's the problem.
 **Fix (running instance):**
 
 Edit the `app.ini` on the **host volume mount** (not `/etc/gitea/app.ini` on the
-host root filesystem — that path only exists inside the container):
+host root filesystem - that path only exists inside the container):
 
 ```bash
 nano ~/forkana/config/app.ini
