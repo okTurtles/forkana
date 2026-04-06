@@ -469,9 +469,13 @@ sudo dnf install -y nginx certbot python3-certbot-nginx
 
 ### Deploy the Nginx Configuration
 
-The repository includes a ready-made Nginx configuration at [`docker/forkana/nginx.conf`](nginx.conf).
-However, for the initial setup, use a simple HTTP-only config and let Certbot
-configure SSL automatically:
+The repository includes a ready-made Nginx configuration at
+[`docker/forkana/nginx.conf`](nginx.conf). Use it as your starting point -
+replace `dev.forkana.example` with your actual domain and adjust the
+`proxy_pass` port if you changed `FORKANA_HOST_PORT` in `.env`.
+
+For the initial setup, deploy only the HTTP server block (Certbot will add
+the HTTPS block automatically when obtaining the certificate).
 
 #### Fedora
 
@@ -480,29 +484,13 @@ Fedora uses `/etc/nginx/conf.d/` instead of `sites-available/sites-enabled`:
 ```bash
 FORKANA_DOMAIN="your-actual-domain.com"
 
-# Create HTTP-only config for initial Certbot setup
-sudo tee /etc/nginx/conf.d/forkana.conf << 'EOF'
-server {
-    listen 80;
-    listen [::]:80;
-    server_name your-domain.example;
+# Copy the reference config and strip the HTTPS block for initial Certbot setup.
+# Extract only the HTTP server block (first 10 lines of nginx.conf):
+sudo head -10 docker/forkana/nginx.conf \
+  | sudo tee /etc/nginx/conf.d/forkana.conf > /dev/null
 
-    location / {
-        proxy_pass http://127.0.0.1:3000;  # Match FORKANA_HOST_PORT in .env
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        client_max_body_size 100M;
-    }
-}
-EOF
-
-# Edit to set your actual domain
-sudo sed -i "s/your-domain.example/${FORKANA_DOMAIN}/g" /etc/nginx/conf.d/forkana.conf
+# Set your actual domain
+sudo sed -i "s/dev.forkana.example/${FORKANA_DOMAIN}/g" /etc/nginx/conf.d/forkana.conf
 
 # Fedora + SELinux: allow nginx to proxy to the Forkana host port
 sudo setsebool -P httpd_can_network_connect 1
@@ -513,33 +501,21 @@ sudo setsebool -P httpd_can_network_connect 1
 ```bash
 FORKANA_DOMAIN="your-actual-domain.com"
 
-# Create HTTP-only config for initial Certbot setup
-sudo tee /etc/nginx/sites-available/forkana << 'EOF'
-server {
-    listen 80;
-    listen [::]:80;
-    server_name your-domain.example;
+# Copy the reference config and strip the HTTPS block for initial Certbot setup.
+# Extract only the HTTP server block (first 10 lines of nginx.conf):
+sudo head -10 docker/forkana/nginx.conf \
+  | sudo tee /etc/nginx/sites-available/forkana > /dev/null
 
-    location / {
-        proxy_pass http://127.0.0.1:3000;  # Match FORKANA_HOST_PORT in .env
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        client_max_body_size 100M;
-    }
-}
-EOF
-
-# Edit to set your actual domain
-sudo sed -i "s/your-domain.example/${FORKANA_DOMAIN}/g" /etc/nginx/sites-available/forkana
+# Set your actual domain
+sudo sed -i "s/dev.forkana.example/${FORKANA_DOMAIN}/g" /etc/nginx/sites-available/forkana
 
 # Enable the site
 sudo ln -s /etc/nginx/sites-available/forkana /etc/nginx/sites-enabled/
 ```
+
+> **After Certbot:** Once you have a certificate, replace the config with the
+> full [`docker/forkana/nginx.conf`](nginx.conf) (updating the domain and
+> certificate paths to match your setup).
 
 ### Enable the Site and Obtain SSL Certificate
 
@@ -776,31 +752,6 @@ getent passwd forkana-deploy | cut -d: -f3
 ```
 
 > **Why UID 1000?** The container's `git` user is UID 1000. The deploy user is created with UID 1000 so directories it creates are automatically accessible to the container.
-
-#### Testing in a Container (Limitations)
-
-When validating the deployment guide in a container (e.g., for preflight testing on Mac M1), be aware of these limitations:
-
-| Step | Container-Testable | Notes |
-|------|-------------------|-------|
-| Package installation | ✅ Yes | All `dnf`/`apt` commands work |
-| User creation | ✅ Yes | `useradd`/`adduser` work |
-| Directory setup | ✅ Yes | All `mkdir`/`chmod` work |
-| Git clone | ✅ Yes | Works if network available |
-| Deploy script logic | ✅ Yes | Can validate script syntax |
-| `systemctl` commands | ❌ No | Requires systemd (VPS-only) |
-| Docker daemon | ❌ No | Requires Docker-in-Docker or VPS |
-| Nginx reverse proxy | ⚠️ Partial | Can install, but no systemd |
-| SSL certificates | ❌ No | Requires public domain |
-
-**Container testing commands:**
-```bash
-# Run Fedora container for testing
-docker run --rm -it --platform linux/amd64 fedora:43 bash
-
-# Inside container, run through the guide steps
-# Skip systemctl, Docker daemon, and Nginx/systemd commands
-```
 
 #### Database Connection Failed
 
