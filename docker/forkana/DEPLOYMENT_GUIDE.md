@@ -336,7 +336,7 @@ this value - **never** use `StrictHostKeyChecking=no`.
 Create `$DEPLOY_HOME/forkana/compose/.env` with the commands below. Compose reads `.env`
 from the project directory automatically.
 
-The file requires **five** variables:
+The file requires **five** variables (plus one optional):
 
 | Variable | Description |
 |----------|-------------|
@@ -345,6 +345,7 @@ The file requires **five** variables:
 | `FORKANA_SECRET_KEY` | 64-char hex key for session encryption |
 | `FORKANA_INTERNAL_TOKEN` | Internal API token (base64, 32+ chars) |
 | `FORKANA_JWT_SECRET` | OAuth2 JWT signing secret (base64, 32+ chars) |
+| `FORKANA_HOST_PORT` | *(optional)* Host port for the Forkana service (default: `3000`) |
 
 Generate the file (replace `dev.forkana.org` with your actual domain):
 
@@ -487,7 +488,7 @@ server {
     server_name your-domain.example;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3000;  # Match FORKANA_HOST_PORT in .env
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -503,7 +504,7 @@ EOF
 # Edit to set your actual domain
 sudo sed -i "s/your-domain.example/${FORKANA_DOMAIN}/g" /etc/nginx/conf.d/forkana.conf
 
-# Fedora + SELinux: allow nginx to proxy to localhost:3000
+# Fedora + SELinux: allow nginx to proxy to the Forkana host port
 sudo setsebool -P httpd_can_network_connect 1
 ```
 
@@ -520,7 +521,7 @@ server {
     server_name your-domain.example;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3000;  # Match FORKANA_HOST_PORT in .env
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -571,8 +572,8 @@ Certbot will automatically:
 ### Verify Application Health
 
 ```bash
-# Check the health endpoint
-curl -f http://localhost:3000/api/healthz
+# Check the health endpoint (use your configured FORKANA_HOST_PORT, default 3000)
+curl -f http://localhost:${FORKANA_HOST_PORT:-3000}/api/healthz
 
 # Check via HTTPS (after proxy setup)
 curl -f https://your-domain.example/api/healthz
@@ -602,9 +603,9 @@ docker compose --env-file ~/forkana/compose/.env \
   -f ~/forkana/compose/compose.override.yml \
   ps
 
-# Expected output:
+# Expected output (port depends on FORKANA_HOST_PORT, default 3000):
 # NAME               STATUS                   PORTS
-# forkana            Up (healthy)             127.0.0.1:3000->3000/tcp
+# forkana            Up (healthy)             127.0.0.1:<host-port>->3000/tcp
 # forkana-postgres   Up (healthy)             5432/tcp
 # forkana-registry   Up (healthy)             127.0.0.1:5000->5000/tcp
 ```
@@ -827,7 +828,7 @@ docker compose --env-file ~/forkana/compose/.env \
   -f ~/forkana/compose/dev.yml \
   -f ~/forkana/compose/compose.override.yml \
   ps forkana
-curl http://localhost:3000/api/healthz
+curl http://localhost:${FORKANA_HOST_PORT:-3000}/api/healthz
 
 # Check Nginx error logs
 sudo tail -f /var/log/nginx/error.log
@@ -929,7 +930,7 @@ docker restart forkana
 
 ```bash
 docker exec forkana cat /etc/gitea/app.ini | grep REVERSE_PROXY_TRUSTED
-curl -sf http://127.0.0.1:3000/api/healthz && echo "healthy"
+curl -sf http://127.0.0.1:${FORKANA_HOST_PORT:-3000}/api/healthz && echo "healthy"
 ```
 
 Then test login in a browser to confirm CSRF errors are gone.
@@ -1149,7 +1150,7 @@ To enable SSH for Git operations, update `docker/forkana/dev.yml`:
 services:
   forkana:
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${FORKANA_HOST_PORT:-3000}:3000"
       - "2222:2222"  # Add SSH port
     environment:
       DISABLE_SSH: "false"

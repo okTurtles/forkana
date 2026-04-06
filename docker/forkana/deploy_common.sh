@@ -48,6 +48,7 @@ deploy_init() {
   REGISTRY_HTTP="http://127.0.0.1:5000"
   IMAGE_NAME="forkana"
   PROJECT_NAME="forkana"
+  HOST_PORT="${FORKANA_HOST_PORT:-3000}"
   COMPOSE_BASE="${COMPOSE_DIR}/dev.yml"
   COMPOSE_OVERRIDE="${COMPOSE_DIR}/compose.override.yml"
 
@@ -211,7 +212,7 @@ deploy_run() {
   # --- Step 9: Health check ---
   log "Waiting for health check (up to 150s)..."
   for i in $(seq 1 30); do
-    if curl -sf http://127.0.0.1:3000/api/healthz > /dev/null 2>&1; then
+    if curl -sf "http://127.0.0.1:${HOST_PORT}/api/healthz" > /dev/null 2>&1; then
       log "Service is healthy!"
       log "Deployment of ${COMMIT_SHA} complete."
       exit 0
