@@ -324,12 +324,32 @@ this value - **never** use `StrictHostKeyChecking=no`.
 
 ### 8. Required GitHub Secrets
 
-| Secret | Description |
-|---|---|
-| `DEPLOY_HOST` | VM IP address or hostname |
+| Secret | Description                                                  |
+|---|--------------------------------------------------------------|
+| `DEPLOY_HOST` | VM IP address or hostname                                    |
 | `DEPLOY_USER` | Username of the UID 1000 deploy user (e.g. `forkana-deploy`) |
-| `DEPLOY_SSH_KEY` | Private key (ed25519 recommended) for the deploy user |
-| `DEPLOY_SSH_KNOWN_HOSTS` | Output of `ssh-keyscan` from step 7 |
+| `DEPLOY_SSH_KEY` | Private key (ed25519 recommended) - see workflow below       |
+| `DEPLOY_SSH_KNOWN_HOSTS` | Output of `ssh-keyscan` from step 7                          |
+
+**SSH key workflow:**
+
+1. Generate a dedicated key pair locally:
+   ```bash
+   ssh-keygen -t ed25519 -C "github-actions-deploy" -f deploy_key -N ""
+   ```
+2. Install the **public** key (`deploy_key.pub`) on the server - see
+   [step 5](#5-configure-authorized_keys-with-forced-command-restrictions).
+3. Copy the **private** key contents into GitHub: go to **Settings > Secrets
+   and variables > Actions > New repository secret**, name it
+   `DEPLOY_SSH_KEY`, and paste the full contents of `deploy_key`.
+4. The workflow YAML loads `DEPLOY_SSH_KEY` at deploy time to SSH into the
+   server.
+
+> **Security:** Only the public key goes on the server; only the private key
+> goes into GitHub Secrets. Never commit the private key to the repository.
+> Delete the local `deploy_key` file after storing it in GitHub Secrets.
+>
+> See [Using secrets in GitHub Actions](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets).
 
 </details>
 
