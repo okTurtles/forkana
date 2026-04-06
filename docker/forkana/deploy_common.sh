@@ -187,9 +187,9 @@ deploy_run() {
   docker push "${FULL_TAG}"
 
   # --- Step 6: Resolve the pushed digest (immutable reference) ---
-  DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' "${FULL_TAG}" \
+  DIGEST="$(docker inspect --format='{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "${FULL_TAG}" \
             | sed 's/.*@//')"
-  [[ -z "${DIGEST}" ]] && die "Failed to resolve digest for ${FULL_TAG}."
+  [[ -z "${DIGEST}" ]] && die "Failed to resolve digest for ${FULL_TAG}. Push may have failed - check registry connectivity."
 
   PINNED_REF="${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
   log "Resolved digest: ${DIGEST}"

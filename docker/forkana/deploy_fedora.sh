@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy_fedora.sh — Build-on-server deploy script for Forkana (Fedora).
+# deploy_fedora.sh - Build-on-server deploy script for Forkana (Fedora).
 #
 # Invoked via SSH forced-command from GitHub Actions.  The commit SHA is
 # passed either as $1 (direct invocation) or via SSH_ORIGINAL_COMMAND
@@ -19,34 +19,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/deploy_common.sh"
 
 # ---------------------------------------------------------------------------
-# 0. Ensure required packages are installed (Fedora — dnf)
+# 0. Verify required packages are installed (Fedora)
+#
+# The deploy user typically has no sudo access, so this function only
+# validates that prerequisites exist - it does not attempt to install them.
+# Install missing packages as root before the first deploy (see
+# DEPLOYMENT_GUIDE.md § Server Preparation).
 # ---------------------------------------------------------------------------
 install_os_packages() {
-  log "Ensuring required packages are installed..."
-  for cmd in git docker jq curl; do
+  log "Verifying required packages are installed..."
+  local missing=()
+  for cmd in docker jq curl; do
     if ! command -v "${cmd}" &>/dev/null; then
-      log "Installing missing command: ${cmd}"
-      case "${cmd}" in
-        docker)
-          sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin 2>/dev/null \
-            || sudo dnf install -y docker docker-compose 2>/dev/null \
-            || die "Failed to install Docker. Please install Docker manually."
-          sudo systemctl start docker
-          sudo systemctl enable docker
-          sudo usermod -aG docker "$(whoami)" || true
-          ;;
-        *)
-          sudo dnf install -y "${cmd}" || die "Failed to install ${cmd}."
-          ;;
-      esac
+      missing+=("${cmd}")
     fi
   done
 
   # Ensure docker compose (v2 plugin) is available.
-  if ! docker compose version &>/dev/null; then
-    log "Installing docker-compose-plugin..."
-    sudo dnf install -y docker-compose-plugin 2>/dev/null \
-      || die "Failed to install docker-compose-plugin. Please install Docker Compose v2 manually."
+  if command -v docker &>/dev/null && ! docker compose version &>/dev/null; then
+    missing+=("docker-compose-plugin")
+  fi
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    die "Missing required commands: ${missing[*]}. Install them as root before deploying (see DEPLOYMENT_GUIDE.md)."
   fi
 }
 
