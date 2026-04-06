@@ -23,7 +23,7 @@
 
 @media (max-width: 767.98px) {
   .repository.view.issue .comment-list .comment .content .form .button:not(:last-child) {
-      margin-bottom: 0 !important;
+    margin-bottom: 0 !important;
   }
 
   /* Make footer buttons equal height when text wraps */
@@ -40,7 +40,7 @@
 
 /* More padding on diff detail box and ensure high z-index for sticky header and contained modal */
 .diff-detail-box {
-  padding: .8rem .4rem .8rem .4rem !important;
+  padding: .8rem .4rem !important;
   z-index: 105 !important;
   margin-bottom: .5rem !important;
 }
@@ -92,7 +92,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  margin: 0 0 12px 0;
+  margin: 0 0 12px;
   background: var(--color-banner-bg);
   border: 1px solid var(--color-banner-border);
   border-radius: 8px;
@@ -195,7 +195,6 @@
 .diff-file-box .file-body.file-code {
   border: none !important;
 }
-
 
 /* #9 — Hide hunk header rows (@@ ... @@) */
 .code-diff-split tr[data-line-type="tag"],
@@ -311,7 +310,6 @@
   margin-bottom: 16px;
 }
 
-
 .review-radio-options {
   display: flex;
   flex-direction: column;
@@ -385,7 +383,7 @@
 /* PR diff file comment styling */
 .pull.files.diff .comment {
   border: 1px solid var(--color-secondary);
-  padding: 0rem .4rem;
+  padding: 0 .4rem;
   border-radius: .5rem;
 }
 
@@ -403,7 +401,7 @@
   .combo-markdown-editor markdown-toolbar {
     border-right: 1px solid var(--color-border-input);
     border-left: 1px solid var(--color-border-input);
-    padding: 0.5rem .5rem 0 .5rem;
+    padding: 0.5rem .5rem 0;
   }
 }
 
@@ -499,7 +497,7 @@
   padding-bottom: 8px;
 }
 
-.conflict-diff-file-boxes .diff-file-box{
+.conflict-diff-file-boxes .diff-file-box {
   border-bottom-left-radius: 0 !important;
   border-bottom-right-radius: 0 !important;
 }
@@ -549,7 +547,7 @@
 }
 
 .conflict-nav a {
-  color: #25292E;
+  color: #25292e;
   text-decoration: none;
   font-weight: var(--font-weight-medium);
   font-size: 0.875rem;
@@ -560,7 +558,7 @@
 }
 
 .conflict-nav a.disabled {
-  color: #818B98;
+  color: #818b98;
   pointer-events: none;
   cursor: default;
 }
@@ -585,7 +583,7 @@
 
 /* Left side (del/current): old gutter color #D1D9E0 */
 .conflict-inner-table .lines-num.lines-num-old {
-  background: #FFE7D1 !important;
+  background: #ffe7d1 !important;
   color: var(--color-text-light-3) !important;
   vertical-align: top;
   padding-top: 10px;
@@ -593,7 +591,7 @@
 
 /* Right side (add/proposed): new gutter color #FFE7D1 */
 .conflict-inner-table .lines-num.lines-num-new.add-code {
-  background: #E5E9FF !important;
+  background: #e5e9ff !important;
   color: var(--color-text-light-3) !important;
   vertical-align: top;
   padding-top: 10px;
@@ -601,7 +599,7 @@
 
 /* Left code content: match gutter #D1D9E0 */
 .conflict-inner-table .del-code .lines-code-old .code-inner {
-  background: #FFE7D1 !important;
+  background: #ffe7d1 !important;
 }
 
 .repository .diff-file-box .code-diff td {
@@ -610,7 +608,7 @@
 
 /* Right code content: match gutter #FFE7D1 */
 .conflict-inner-table .add-code .lines-code-new {
-  background: #FFE7D1 !important;
+  background: #ffe7d1 !important;
 }
 
 /* Type marker column */
@@ -624,7 +622,7 @@
 }
 
 .conflict-buttons-row .conflict-btn-gutter.lines-num-new.add-code {
-  background: #E5E9FF !important;
+  background: #e5e9ff !important;
 }
 
 .conflict-btn-cell {

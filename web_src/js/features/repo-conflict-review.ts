@@ -68,7 +68,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
 
   for (const group of conflictGroups) {
     const firstRow = group[0];
-    const parentNode = firstRow.parentNode!;
+    const parentNode = firstRow.parentNode;
 
     // Create wrapper container row
     const wrapperRow = document.createElement('tr');
@@ -76,13 +76,13 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
     const wrapperCell = document.createElement('td');
     wrapperCell.colSpan = 6;
     wrapperCell.className = 'conflict-wrapper-cell';
-    wrapperRow.appendChild(wrapperCell);
+    wrapperRow.append(wrapperCell);
 
     // Create the conflict wrapper div
     const wrapper = document.createElement('div');
     wrapper.className = 'conflict-wrapper';
     wrapper.setAttribute('data-resolved', 'false');
-    wrapperCell.appendChild(wrapper);
+    wrapperCell.append(wrapper);
 
     // Add conflict header
     const header = document.createElement('div');
@@ -94,7 +94,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
         <a href="#" class="conflict-nav-next">Next &rsaquo;</a>
       </span>
     `;
-    wrapper.appendChild(header);
+    wrapper.append(header);
 
     // Create an inner table for the conflict lines
     const innerTable = document.createElement('table');
@@ -102,20 +102,22 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
 
     // Add colgroup matching the visible columns (4 columns: num, code, num, code)
     // The type marker columns are hidden via display: none, so they are skipped in fixed layout
+    // eslint-disable-next-line github/unescaped-html-literal
     innerTable.innerHTML = `<colgroup>
       <col width="50"><col width="50%">
       <col width="50"><col width="50%">
     </colgroup>`;
 
     const innerTbody = document.createElement('tbody');
-    innerTable.appendChild(innerTbody);
+    innerTable.append(innerTbody);
 
     // Move conflict lines into the inner table
     for (const row of group) {
-      innerTbody.appendChild(row);
+      innerTbody.append(row);
     }
 
     // SVG icon for circle-down-arrow (stroked, purple outline, transparent fill)
+    // eslint-disable-next-line github/unescaped-html-literal
     const arrowIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" class="conflict-choice-icon"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5v5m0 0L5.5 7M8 9.5L10.5 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
     // Add Keep this / Use this buttons as table row
@@ -137,9 +139,9 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
         </button>
       </td>
     `;
-    innerTbody.appendChild(buttonsRow);
+    innerTbody.append(buttonsRow);
 
-    wrapper.appendChild(innerTable);
+    wrapper.append(innerTable);
 
     // Add comment section with combo-markdown-editor from template
     const commentSection = document.createElement('div');
@@ -159,7 +161,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
         `;
       }
 
-      commentSection.appendChild(editorContent);
+      commentSection.append(editorContent);
 
       // Initialize the combo-markdown-editor
       const comboEditor = commentSection.querySelector<HTMLElement>('.combo-markdown-editor');
@@ -170,7 +172,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
       }
     }
 
-    wrapper.appendChild(commentSection);
+    wrapper.append(commentSection);
 
     // Insert wrapper before the first conflict line's original position
     parentNode.insertBefore(wrapperRow, null);
@@ -184,13 +186,12 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
   return wrappers;
 }
 
-
 /**
  * Numbers all conflict wrappers and sets the counter text.
  */
 function numberConflicts(wrappers: HTMLElement[]) {
   const total = wrappers.length;
-  wrappers.forEach((wrapper, index) => {
+  for (const [index, wrapper] of wrappers.entries()) {
     const counter = wrapper.querySelector('.conflict-counter');
     if (counter) {
       counter.textContent = `${index + 1} of ${total} conflicts`;
@@ -206,7 +207,7 @@ function numberConflicts(wrappers: HTMLElement[]) {
     if (index === total - 1 && nextLink) {
       nextLink.classList.add('disabled');
     }
-  });
+  }
 }
 
 /**
