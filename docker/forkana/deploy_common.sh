@@ -84,8 +84,15 @@ deploy_run() {
 
   # --- Step 1: Prepare compose directory and base file ---
   mkdir -p "${COMPOSE_DIR}"
-  cp "${REPO_DIR}/docker/forkana/dev.yml" "${COMPOSE_BASE}"
-  log "Copied dev.yml to ${COMPOSE_BASE}"
+  if [[ -f "${REPO_DIR}/docker/forkana/dev.yml" ]]; then
+    cp "${REPO_DIR}/docker/forkana/dev.yml" "${COMPOSE_BASE}"
+    log "Copied dev.yml to ${COMPOSE_BASE}"
+  else
+    if [[ ! -f "${COMPOSE_BASE}" ]]; then
+      die "Missing ${COMPOSE_BASE} - ensure dev.yml is deployed to ${COMPOSE_DIR}"
+    fi
+    log "Using pre-deployed dev.yml at ${COMPOSE_BASE}"
+  fi
 
   printf 'services:\n  forkana:\n    image: localhost:5000/forkana:latest\n' \
     > "${COMPOSE_OVERRIDE}"
@@ -153,34 +160,26 @@ deploy_run() {
   fi
   log "Registry is ready at ${REGISTRY}."
 
-  # --- Step 3: Git fetch & checkout ---
-  if [[ "${LOCAL_MODE}" == true ]]; then
-    log "Local mode - skipping git fetch/checkout (using working tree at ${REPO_DIR})"
-  else
-    log "Fetching latest objects..."
-    cd "${REPO_DIR}"
-    git fetch --all --prune --quiet
-    git checkout --force "${COMMIT_SHA}"
-    git submodule update --init --recursive --quiet
-    log "Checked out ${COMMIT_SHA}"
-
-    # Re-copy dev.yml after checkout so the compose base matches this commit.
-    cp "${REPO_DIR}/docker/forkana/dev.yml" "${COMPOSE_BASE}"
-  fi
-
-  # Ensure CWD is the repo root for docker build (relative Dockerfile path).
-  cd "${REPO_DIR}"
-
-  # --- Step 4: Docker build ---
+  # --- Step 3: Load pre-built image ---
   IMAGE_TAG="sha-${COMMIT_SHA::7}"
   FULL_TAG="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+  TARBALL="${DEPLOY_DIR}/images/forkana-${COMMIT_SHA::7}.tar.gz"
 
-  log "Building image ${FULL_TAG} ..."
-  docker build \
-    --file docker/forkana/Dockerfile \
-    --tag "${FULL_TAG}" \
-    .
-  log "Build complete."
+  log "Loading pre-built image from ${TARBALL} ..."
+  if [[ ! -f "${TARBALL}" ]]; then
+    die "Missing image tarball: ${TARBALL}. Ensure GitHub Actions transferred it."
+  fi
+
+  docker load -i "${TARBALL}"
+  log "Image loaded successfully."
+
+  # --- Step 4: Tag for local registry ---
+  log "Tagging image as ${FULL_TAG} ..."
+  # The image in the tarball is tagged forkana:${COMMIT_SHA} by the CI workflow.
+  # We tag it for our local registry so it can be pushed in Step 5.
+  docker tag "forkana:${COMMIT_SHA}" "${FULL_TAG}" 2>/dev/null || \
+    docker tag "forkana:${IMAGE_TAG}" "${FULL_TAG}" 2>/dev/null || \
+    log "Assuming image is already tagged correctly."
 
   # --- Step 5: Push to local registry ---
   log "Pushing ${FULL_TAG} to local registry..."
