@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# deploy_debian.sh — Build-on-server deploy script for Forkana (Debian/Ubuntu).
+# deploy_debian.sh — Deploy script for Forkana (Debian/Ubuntu).
 #
-# Invoked via SSH forced-command from GitHub Actions.  The commit SHA is
-# passed either as $1 (direct invocation) or via SSH_ORIGINAL_COMMAND
-# (forced-command mode).
+# Loads a pre-built Docker image tarball and deploys it via the local
+# registry.  Invoked via SSH forced-command from GitHub Actions.  The
+# commit SHA is passed either as $1 (direct invocation) or via
+# SSH_ORIGINAL_COMMAND (forced-command mode).
 #
 # Usage:  deploy_debian.sh <40-char-hex-commit-sha>
 #
 # Local testing:
-#   Run from anywhere inside the git checkout.  The script detects the
-#   repo root via `git rev-parse` and skips fetch/checkout (step 3).
+#   Build and save the image tarball first, then run from inside the
+#   git checkout.  See DEPLOYMENT_GUIDE.md § Maintenance for details.
 #     ./docker/forkana/deploy_debian.sh "$(git rev-parse HEAD)"
 
 set -euo pipefail

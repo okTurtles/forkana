@@ -30,15 +30,14 @@ deploy_init() {
   # --- Configuration ---
   DEPLOY_DIR="${HOME}/forkana"
 
-  # Detect whether we are already inside a git checkout that contains the
-  # deploy infrastructure.  If so, use the working tree directly (local
-  # testing mode) instead of the production clone at ${DEPLOY_DIR}/repo.
+  # Detect whether we are inside a git checkout that contains dev.yml.
+  # If so, use the working tree to locate dev.yml for local testing
+  # (Step 1 copies it to COMPOSE_DIR).  On production servers REPO_DIR
+  # will not contain dev.yml, so Step 1 expects it pre-deployed.
   LOCAL_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   if [[ -n "${LOCAL_REPO_ROOT}" && -f "${LOCAL_REPO_ROOT}/docker/forkana/dev.yml" ]]; then
-    LOCAL_MODE=true
     REPO_DIR="${LOCAL_REPO_ROOT}"
   else
-    LOCAL_MODE=false
     REPO_DIR="${DEPLOY_DIR}/repo"
   fi
   COMPOSE_DIR="${DEPLOY_DIR}/compose"
@@ -119,6 +118,19 @@ deploy_run() {
     die "Missing ${ENV_FILE} - create it with POSTGRES_PASSWORD, FORKANA_DOMAIN, FORKANA_SECRET_KEY, FORKANA_INTERNAL_TOKEN, and FORKANA_JWT_SECRET (see DEPLOYMENT_GUIDE.md)."
   fi
 
+  local required_vars=(POSTGRES_PASSWORD FORKANA_DOMAIN FORKANA_SECRET_KEY FORKANA_INTERNAL_TOKEN FORKANA_JWT_SECRET)
+  local missing=()
+
+  for var in "${required_vars[@]}"; do
+    if ! grep -Eq "^[[:space:]]*${var}[[:space:]]*=[[:space:]]*[^[:space:]#]+" "${ENV_FILE}"; then
+      missing+=("${var}")
+    fi
+  done
+
+  if (( ${#missing[@]} > 0 )); then
+    die "Missing or empty required variables in ${ENV_FILE}: ${missing[*]}. Please set valid values before deploying."
+  fi
+
   # --- Step 2: Ensure the local registry is running ---
   # The registry on 127.0.0.1:5000 may be shared infrastructure (not owned by
   # Forkana).  Reuse it if already reachable; only start one via compose if
@@ -179,7 +191,7 @@ deploy_run() {
   # We tag it for our local registry so it can be pushed in Step 5.
   docker tag "forkana:${COMMIT_SHA}" "${FULL_TAG}" 2>/dev/null || \
     docker tag "forkana:${IMAGE_TAG}" "${FULL_TAG}" 2>/dev/null || \
-    log "Assuming image is already tagged correctly."
+    die "Failed to tag loaded image as ${FULL_TAG}. The tarball may not contain the expected image tag."
 
   # --- Step 5: Push to local registry ---
   log "Pushing ${FULL_TAG} to local registry..."

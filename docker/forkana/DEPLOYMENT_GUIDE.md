@@ -1003,12 +1003,24 @@ Deployments are automated via GitHub Actions. To deploy manually:
 docker image prune -f
 ```
 
-**Local testing:** When run from inside a git checkout of the repository,
-`deploy.sh` automatically detects the repo root and skips the git
-fetch/checkout step, building directly from the working tree:
+**Local testing:** The deploy script expects a pre-built image tarball at
+`~/forkana/images/forkana-<7-char-sha>.tar.gz`. When run from inside a git
+checkout, it automatically copies `dev.yml` from the working tree. Build
+and place the tarball before invoking the script:
 
 ```bash
-./docker/forkana/deploy.sh "$(git rev-parse HEAD)"
+# 1. Build the image locally
+COMMIT_SHA="$(git rev-parse HEAD)"
+docker build --file docker/forkana/Dockerfile \
+  --tag "forkana:${COMMIT_SHA}" .
+
+# 2. Save as a compressed tarball
+mkdir -p ~/forkana/images
+docker save "forkana:${COMMIT_SHA}" | gzip \
+  > ~/forkana/images/forkana-"${COMMIT_SHA:0:7}".tar.gz
+
+# 3. Run the deploy script
+./docker/forkana/deploy.sh "${COMMIT_SHA}"
 ```
 
 ### Backup
