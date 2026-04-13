@@ -6,7 +6,7 @@
 			<span class="ui small label">{{.Issue.NumComments}}</span>
 		</a>
         {{if .IsPullFilesConflicted}}
-        <a class="item" href="{{.Issue.Link}}/conflicts">
+        <a class="item {{if .PageIsPullConflicts}}active{{end}}" href="{{.Issue.Link}}/conflicts">
             {{svg "octicon-git-merge"}}
             {{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_conflicts")}}
         </a>
