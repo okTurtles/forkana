@@ -157,7 +157,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
       // Clone the editor template content
       const editorContent = document.createElement('div');
       editorContent.className = 'conflict-comment-form';
-      editorContent.innerHTML = editorTemplate.innerHTML;
+      editorContent.appendChild(editorTemplate.content.cloneNode(true));
 
       // Replace the default buttons (Cancel/Save) with our Resolve button
       const buttonContainer = editorContent.querySelector('.field.flex-text-block');
@@ -238,14 +238,28 @@ function setupWrapperEvents(wrapper: HTMLElement) {
 
   // Resolve button
   resolveBtn?.addEventListener('click', () => {
-    wrapper.setAttribute('data-resolved', 'true');
-    wrapper.classList.add('resolved');
+    const isResolved = wrapper.getAttribute('data-resolved') === 'true';
 
-    // Disable buttons after resolution
-    if (keepBtn) keepBtn.disabled = true;
-    if (useBtn) useBtn.disabled = true;
-    resolveBtn.disabled = true;
-    resolveBtn.textContent = '✓ Resolved';
+    if (isResolved) {
+      // Unresolve
+      wrapper.setAttribute('data-resolved', 'false');
+      wrapper.classList.remove('resolved');
+
+      // Re-enable choice buttons
+      if (keepBtn) keepBtn.disabled = false;
+      if (useBtn) useBtn.disabled = false;
+      resolveBtn.textContent = 'Resolve';
+      resolveBtn.classList.remove('disabled');
+    } else {
+      // Resolve
+      wrapper.setAttribute('data-resolved', 'true');
+      wrapper.classList.add('resolved');
+
+      // Disable choice buttons after resolution
+      if (keepBtn) keepBtn.disabled = true;
+      if (useBtn) useBtn.disabled = true;
+      resolveBtn.textContent = '✓ Resolved';
+    }
 
     // Check if all conflicts are resolved
     checkAllResolved();
