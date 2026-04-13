@@ -133,7 +133,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
       <td class="lines-num lines-num-old conflict-btn-gutter"></td>
       <td class="lines-type-marker"></td>
       <td class="lines-code lines-code-old conflict-btn-cell">
-        <button type="button" class="conflict-choice-btn conflict-keep-btn">
+        <button type="button" class="conflict-choice-btn conflict-keep-btn ui button tiny">
           ${arrowIcon} Keep this
         </button>
       </td>
