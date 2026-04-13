@@ -157,7 +157,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
       // Clone the editor template content
       const editorContent = document.createElement('div');
       editorContent.className = 'conflict-comment-form';
-      editorContent.appendChild(editorTemplate.content.cloneNode(true));
+      editorContent.append(editorTemplate.content.cloneNode(true));
 
       // Replace the default buttons (Cancel/Save) with our Resolve button
       const buttonContainer = editorContent.querySelector('.field.flex-text-block');
