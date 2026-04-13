@@ -53,8 +53,8 @@
 						{{- end -}}
 					</td>
 				</tr>
-			{{else}}
-				{{/* Context line (same on both sides) or single-side change */}}
+			{{else if eq .GetType 1}}
+				{{/* Context line (same on both sides) */}}
 				{{$inlineDiff := $section.GetComputedInlineDiffFor $line ctx.Locale}}
 				<tr class="context-line same-code nl-{{$k}} ol-{{$k}}" data-line-type="context">
 					<td class="lines-num lines-num-old" data-line-num="{{if $line.LeftIdx}}{{$line.LeftIdx}}{{end}}"><span>{{if $line.LeftIdx}}{{$line.LeftIdx}}{{end}}</span></td>
@@ -69,6 +69,29 @@
 					<td class="lines-num lines-num-new" data-line-num="{{if $line.RightIdx}}{{$line.RightIdx}}{{end}}"><span>{{if $line.RightIdx}}{{$line.RightIdx}}{{end}}</span></td>
 					<td class="lines-type-marker lines-type-marker-new">{{if $line.RightIdx}}<span class="tw-font-mono" data-type-marker="{{$line.GetLineTypeMarker}}"></span>{{end}}</td>
 					<td class="lines-code lines-code-new">
+						{{- if $line.RightIdx -}}
+							{{- template "repo/diff/section_code" dict "diff" $inlineDiff -}}
+						{{- else -}}
+							<code class="code-inner"></code>
+						{{- end -}}
+					</td>
+				</tr>
+			{{else}}
+				{{/* Single-side change (unmatched DEL or unmatched ADD) */}}
+				{{$inlineDiff := $section.GetComputedInlineDiffFor $line ctx.Locale}}
+				<tr class="conflict-line {{if eq .GetType 2}}add-code{{else}}del-code{{end}} nl-{{$k}} ol-{{$k}}" data-line-type="conflict">
+					<td class="lines-num lines-num-old" data-line-num="{{if $line.LeftIdx}}{{$line.LeftIdx}}{{end}}"><span>{{if $line.LeftIdx}}{{$line.LeftIdx}}{{end}}</span></td>
+					<td class="lines-type-marker lines-type-marker-old {{if eq .GetType 3}}del-code{{end}}">{{if $line.LeftIdx}}<span class="tw-font-mono" data-type-marker="{{$line.GetLineTypeMarker}}"></span>{{end}}</td>
+					<td class="lines-code lines-code-old {{if eq .GetType 3}}del-code{{end}}">
+						{{- if $line.LeftIdx -}}
+							{{- template "repo/diff/section_code" dict "diff" $inlineDiff -}}
+						{{- else -}}
+							<code class="code-inner"></code>
+						{{- end -}}
+					</td>
+					<td class="lines-num lines-num-new {{if eq .GetType 2}}add-code{{end}}" data-line-num="{{if $line.RightIdx}}{{$line.RightIdx}}{{end}}"><span>{{if $line.RightIdx}}{{$line.RightIdx}}{{end}}</span></td>
+					<td class="lines-type-marker lines-type-marker-new {{if eq .GetType 2}}add-code{{end}}">{{if $line.RightIdx}}<span class="tw-font-mono" data-type-marker="{{$line.GetLineTypeMarker}}"></span>{{end}}</td>
+					<td class="lines-code lines-code-new {{if eq .GetType 2}}add-code{{end}}">
 						{{- if $line.RightIdx -}}
 							{{- template "repo/diff/section_code" dict "diff" $inlineDiff -}}
 						{{- else -}}
