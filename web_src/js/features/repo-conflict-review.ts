@@ -73,6 +73,12 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
     // Create wrapper container row
     const wrapperRow = document.createElement('tr');
     wrapperRow.className = 'conflict-wrapper-row';
+
+    // Insert wrapper into the table tree BEFORE we detach the conflict lines
+    if (parentNode) {
+      parentNode.insertBefore(wrapperRow, firstRow);
+    }
+
     const wrapperCell = document.createElement('td');
     wrapperCell.colSpan = 6;
     wrapperCell.className = 'conflict-wrapper-cell';
@@ -173,9 +179,6 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
     }
 
     wrapper.append(commentSection);
-
-    // Insert wrapper before the first conflict line's original position
-    parentNode.insertBefore(wrapperRow, null);
 
     // Setup event listeners for this wrapper
     setupWrapperEvents(wrapper);
