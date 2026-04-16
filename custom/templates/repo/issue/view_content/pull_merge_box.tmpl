@@ -216,7 +216,11 @@
 							{{svg "octicon-lock" 16 "text green"}}
 							{{ctx.Locale.Tr "repo.signing.will_sign" .SigningKeyMergeDisplay}}
 						</div>
-
+					{{else if .IsSigned}}
+						<div class="item">
+							{{svg "octicon-unlock"}}
+							{{ctx.Locale.Tr (printf "repo.signing.wont_sign.%s" .WontSignReason)}}
+						</div>
 					{{end}}
 				{{end}}
 
