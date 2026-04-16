@@ -110,9 +110,6 @@
 							{{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits (print .Repository.OwnerName "/" .Repository.Name)}}
 						</span>
 					{{end}}
-					<span id="pull-desc-editor" class="tw-hidden flex-text-block">
-
-					</span>
 				{{end}}
 			{{else}}
 				{{$createdStr:= DateUtils.TimeSince .Issue.CreatedUnix}}

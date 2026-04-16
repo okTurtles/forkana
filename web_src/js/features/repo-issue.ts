@@ -487,9 +487,7 @@ export function initRepoIssueTitleEdit() {
   const oldTitle = issueTitleInput.getAttribute('data-old-title');
   issueTitleDisplay.querySelector('#issue-title-edit-show').addEventListener('click', () => {
     hideElem(issueTitleDisplay);
-    hideElem('#pull-desc-display');
     showElem(issueTitleEditor);
-    showElem('#pull-desc-editor');
     if (!issueTitleInput.value.trim()) {
       issueTitleInput.value = oldTitle;
     }
@@ -497,9 +495,7 @@ export function initRepoIssueTitleEdit() {
   });
   issueTitleEditor.querySelector('.ui.cancel.button').addEventListener('click', () => {
     hideElem(issueTitleEditor);
-    hideElem('#pull-desc-editor');
     showElem(issueTitleDisplay);
-    showElem('#pull-desc-display');
   });
 
   const pullDescEditor = document.querySelector('#pull-desc-editor'); // it may not exist for a merged PR
@@ -516,16 +512,6 @@ export function initRepoIssueTitleEdit() {
           throw new Error(`Failed to update issue title: ${resp.statusText}`);
         }
       }
-      if (prTargetUpdateUrl) {
-        const newTargetBranch = document.querySelector('#pull-target-branch').getAttribute('data-branch');
-        const oldTargetBranch = document.querySelector('#branch_target').textContent;
-        if (newTargetBranch !== oldTargetBranch) {
-          const resp = await POST(prTargetUpdateUrl, {data: new URLSearchParams({target_branch: newTargetBranch})});
-          if (!resp.ok) {
-            throw new Error(`Failed to update PR target branch: ${resp.statusText}`);
-          }
-        }
-      }
       ignoreAreYouSure(issueTitleEditor);
       window.location.reload();
     } catch (error) {
@@ -536,16 +522,7 @@ export function initRepoIssueTitleEdit() {
 }
 
 export function initRepoIssueBranchSelect() {
-  document.querySelector<HTMLElement>('#branch-select')?.addEventListener('click', (e: DOMEvent<MouseEvent>) => {
-    const el = e.target.closest('.item[data-branch]');
-    if (!el) return;
-    const pullTargetBranch = document.querySelector('#pull-target-branch');
-    const baseName = pullTargetBranch.getAttribute('data-basename');
-    const branchNameNew = el.getAttribute('data-branch');
-    const branchNameOld = pullTargetBranch.getAttribute('data-branch');
-    pullTargetBranch.textContent = pullTargetBranch.textContent.replace(`${baseName}:${branchNameOld}`, `${baseName}:${branchNameNew}`);
-    pullTargetBranch.setAttribute('data-branch', branchNameNew);
-  });
+  // branch selection is disabled in Forkana
 }
 
 async function initSingleCommentEditor(commentForm: HTMLFormElement) {
