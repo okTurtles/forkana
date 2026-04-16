@@ -55,7 +55,7 @@ func TestRenderConversation(t *testing.T) {
 	run("diff with outdated", func(t *testing.T, ctx *context.Context, resp *httptest.ResponseRecorder) {
 		ctx.Data["ShowOutdatedComments"] = true
 		renderConversation(ctx, preparedComment, "diff")
-		assert.Contains(t, resp.Body.String(), `<div class="content comment-container"`)
+		assert.Contains(t, resp.Body.String(), `<div class="timeline-item comment"`)
 	})
 	run("diff without outdated", func(t *testing.T, ctx *context.Context, resp *httptest.ResponseRecorder) {
 		ctx.Data["ShowOutdatedComments"] = false
@@ -65,12 +65,12 @@ func TestRenderConversation(t *testing.T) {
 	run("timeline with outdated", func(t *testing.T, ctx *context.Context, resp *httptest.ResponseRecorder) {
 		ctx.Data["ShowOutdatedComments"] = true
 		renderConversation(ctx, preparedComment, "timeline")
-		assert.Contains(t, resp.Body.String(), `<div class="content comment-container"`)
+		assert.Contains(t, resp.Body.String(), `<div class="timeline-item comment"`)
 	})
 	run("timeline is not affected by ShowOutdatedComments=false", func(t *testing.T, ctx *context.Context, resp *httptest.ResponseRecorder) {
 		ctx.Data["ShowOutdatedComments"] = false
 		renderConversation(ctx, preparedComment, "timeline")
-		assert.Contains(t, resp.Body.String(), `<div class="content comment-container"`)
+		assert.Contains(t, resp.Body.String(), `<div class="timeline-item comment"`)
 	})
 	run("diff non-existing review", func(t *testing.T, ctx *context.Context, resp *httptest.ResponseRecorder) {
 		err := db.TruncateBeans(t.Context(), &issues_model.Review{})
