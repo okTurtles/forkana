@@ -12,26 +12,12 @@
 		{{end}}
 
 		{{$repoData := $.root.Repository}}
-		{{$repoLink := ""}}
-		{{if $.root.Repository}}
-			{{$repoLink = $.root.Repository.Link}}
+		{{if and $.comment.Issue.PullRequest $.comment.Issue.PullRequest.BaseRepo}}
+			{{$repoData = $.comment.Issue.PullRequest.BaseRepo}}
 		{{end}}
-		{{if $.comment.Issue.PullRequest}}
-			{{if $.comment.Issue.PullRequest.BaseRepo}}
-				{{$repoData = $.comment.Issue.PullRequest.BaseRepo}}
-				{{$repoLink = $.comment.Issue.PullRequest.BaseRepo.Link}}
-			{{end}}
-		{{end}}
-
-		{{$commitBaseLink := ""}}
-		{{$commitLink := ""}}
-		{{if $.comment.Issue.IsPull}}
-			{{$commitBaseLink = printf "%s/pulls/%d/commits" $repoLink $.comment.Issue.Index}}
-			{{$commitLink = printf "%s/%s" $commitBaseLink (PathEscape .ID.String)}}
-		{{else}}
-			{{$commitBaseLink = printf "%s/commit" $repoLink}}
-			{{$commitLink = printf "%s/%s" $commitBaseLink (PathEscape .ID.String)}}
-		{{end}}
+		
+		{{$commitBaseLink := printf "%s/pulls/%d/commits" $repoData.Link $.comment.Issue.Index}}
+		{{$commitLink := printf "%s/%s" $commitBaseLink (PathEscape .ID.String)}}
 
 		<span class="tw-flex-1 tw-font-mono gt-ellipsis" title="{{.Summary}}">
 			{{- ctx.RenderUtils.RenderCommitMessageLinkSubject .Message $commitLink $repoData -}}
