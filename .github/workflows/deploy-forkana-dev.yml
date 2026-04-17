@@ -19,7 +19,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    permissions: {}
+    permissions:
+      contents: read
     steps:
       - name: Resolve deploy SHA
         id: resolve_deploy_sha
@@ -34,6 +35,7 @@ jobs:
           fi
 
           echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${DEPLOY_SHA:0:7}" >> "$GITHUB_OUTPUT"
 
       - name: Preflight checks
         env:
@@ -68,9 +70,96 @@ jobs:
             fi
           fi
 
-      # --- Deploy to VM via SSH ---
-      # The VM performs the full build from source; GitHub Actions only
-      # triggers the deploy script with the commit SHA.
+      # --- Build image in CI, transfer tarball, then trigger deploy ---
+      # GitHub Actions builds the Docker image, exports it as a tarball, and
+      # SCPs it to the VM at ~/forkana/images/. The VM's deploy.sh then loads
+      # the pre-built image instead of building from source.
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+
+      - name: Build Docker image
+        env:
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+
+          # Pass the sqlite tags as the TAGS build arg; the Dockerfile
+          # prepends "bindata timetzdata" to produce the final set:
+          #   bindata sqlite sqlite_unlock_notify timetzdata
+          docker build \
+            --file docker/forkana/Dockerfile \
+            --build-arg TAGS="sqlite sqlite_unlock_notify" \
+            --tag "forkana:${DEPLOY_SHA}" \
+            --label "commit=${DEPLOY_SHA}" \
+            .
+
+      - name: Generate image digest
+        env:
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+
+          DIGEST="$(docker inspect --format='{{.Id}}' "forkana:${DEPLOY_SHA}")"
+          [[ -n "${DIGEST}" ]] || { echo "Failed to resolve image digest." >&2; exit 1; }
+          printf '%s\n' "${DIGEST}" > forkana.digest
+          echo "Image digest: ${DIGEST}"
+
+      - name: Export image to tarball
+        env:
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+          SHORT_SHA: ${{ steps.resolve_deploy_sha.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+
+          docker save "forkana:${DEPLOY_SHA}" -o "forkana-${SHORT_SHA}.tar"
+          gzip -n "forkana-${SHORT_SHA}.tar"
+          ls -lh "forkana-${SHORT_SHA}.tar.gz" forkana.digest
+
+      - name: Transfer artifacts to VM
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          SHORT_SHA: ${{ steps.resolve_deploy_sha.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+
+          cleanup() {
+            rm -f "${SSH_KEY_FILE:-}" "${KNOWN_HOSTS_FILE:-}"
+          }
+          trap cleanup EXIT
+
+          umask 077
+          SSH_KEY_FILE="$(mktemp)"
+          printf '%s\n' "$SSH_KEY" > "$SSH_KEY_FILE"
+
+          KNOWN_HOSTS_FILE="$(mktemp)"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+
+          SCP_OPTS=(
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o IdentitiesOnly=yes
+            -o PreferredAuthentications=publickey
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="${KNOWN_HOSTS_FILE}"
+            -i "${SSH_KEY_FILE}"
+          )
+
+          # Destination is relative to the deploy user's home directory
+          # (~/forkana/images/), matching DEPLOY_DIR in deploy_common.sh.
+          scp "${SCP_OPTS[@]}" \
+            "forkana-${SHORT_SHA}.tar.gz" \
+            forkana.digest \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:forkana/images/"
+
+      # --- Trigger deploy on VM via SSH ---
+      # GitHub Actions has already transferred the pre-built image tarball;
+      # deploy.sh on the VM loads it, pushes it to the local registry, and
+      # rolls out the new image with docker compose.
       - name: Deploy to VM
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
