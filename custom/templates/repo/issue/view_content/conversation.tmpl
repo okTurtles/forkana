@@ -1,0 +1,82 @@
+{{if len .comments}}
+	{{$comment := index .comments 0}}
+	{{$diff := (CommentMustAsDiff ctx $comment)}}
+	{{range $i, $c := .comments}}
+		{{$createdSubStr:= DateUtils.TimeSince $c.CreatedUnix}}
+		<div class="timeline-item comment" id="{{$c.HashTag}}">
+
+			<div class="content comment-container">
+				<div class="comment-header avatar-content-left-arrow" role="heading" aria-level="3">
+					<div class="comment-header-left">
+						{{if $c.OriginalAuthor}}
+							<span class="text black tw-font-semibold tw-mr-1">
+								{{svg (MigrationIcon $.Repository.GetOriginalURLHostname)}}
+								{{$c.OriginalAuthor}}
+							</span>
+							<span class="text grey muted-links">
+								{{ctx.Locale.Tr "repo.issues.commented_at" $c.HashTag $createdSubStr}}
+							</span>
+							{{if $.Repository.OriginalURL}}
+							<span class="text migrate">
+								({{ctx.Locale.Tr "repo.migrated_from" $.Repository.OriginalURL $.Repository.GetOriginalURLHostname}})
+							</span>
+							{{end}}
+						{{else}}
+							{{if gt $c.Poster.ID 0}}
+							<a class="inline-timeline-avatar" href="{{$c.Poster.HomeLink}}">
+								{{ctx.AvatarUtils.Avatar $c.Poster 24}}
+							</a>
+							{{end}}
+							<span class="text grey muted-links">
+								{{template "shared/user/authorlink" $c.Poster}}
+								{{ctx.Locale.Tr "repo.issues.commented_at" $c.HashTag $createdSubStr}}
+							</span>
+						{{end}}
+					</div>
+					<div class="comment-header-right">
+						{{template "repo/issue/view_content/show_role" dict "ShowRole" $c.ShowRole}}
+						{{if not $.Repository.IsArchived}}
+							{{template "repo/issue/view_content/add_reaction" dict "ActionURL" (printf "%s/comments/%d/reactions" $.RepoLink $c.ID)}}
+							{{template "repo/issue/view_content/context_menu" dict "item" $c "delete" true "issue" true "diff" true "IsCommentPoster" (and $.IsSigned (eq $.SignedUserID $c.PosterID))}}
+						{{end}}
+					</div>
+				</div>
+				{{if and (eq $i 0) $diff}}
+					{{$file := (index $diff.Files 0)}}
+					<div id="code-preview-{{$comment.ID}}" class="tw-mb-4">
+						<div class="diff-file-box file-content {{TabSizeClass $.Editorconfig $file.Name}}">
+							<div class="file-body file-code code-view code-diff code-diff-unified unicode-escaped">
+								<table>
+									<tbody>
+										{{template "repo/diff/section_unified" dict "file" $file "root" $}}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</div>
+				{{end}}
+				<div class="ui attached segment comment-body" role="article">
+
+					<div class="render-content markup" {{if or $.Permission.IsAdmin $.HasIssuesOrPullsWritePermission (and $.IsSigned (eq $.SignedUserID $c.PosterID))}}data-can-edit="true"{{end}}>
+						{{if $c.RenderedContent}}
+							{{$c.RenderedContent}}
+						{{else}}
+							<span class="no-content">{{ctx.Locale.Tr "repo.issues.no_content"}}</span>
+						{{end}}
+					</div>
+					<div id="issuecomment-{{$c.ID}}-raw" class="raw-content tw-hidden">{{$c.Content}}</div>
+					<div class="edit-content-zone tw-hidden" data-update-url="{{$.RepoLink}}/comments/{{$c.ID}}" data-content-version="{{$c.ContentVersion}}" data-context="{{$.RepoLink}}" data-attachment-url="{{$.RepoLink}}/comments/{{$c.ID}}/attachments"></div>
+					{{if $c.Attachments}}
+						{{template "repo/issue/view_content/attachments" dict "Attachments" $c.Attachments "RenderedContent" $c.RenderedContent}}
+					{{end}}
+				</div>
+				{{$reactions := $c.Reactions.GroupByType}}
+				{{if $reactions}}
+					{{template "repo/issue/view_content/reactions" dict "ActionURL" (printf "%s/comments/%d/reactions" $.RepoLink $c.ID) "Reactions" $reactions}}
+				{{end}}
+			</div>
+		</div>
+	{{end}}
+{{else}}
+	{{template "repo/diff/conversation_outdated"}}
+{{end}}
