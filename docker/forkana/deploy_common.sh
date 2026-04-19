@@ -61,6 +61,10 @@ deploy_init() {
     die "Invalid commit SHA: '${SAFE_DISPLAY}' (expected 40-char hex)."
   fi
 
+  # Short SHA used for artifact file names (matches GitHub Actions workflow,
+  # which writes forkana-${SHORT_SHA}.tar.gz to ~/forkana/images/).
+  SHORT_SHA="${COMMIT_SHA:0:7}"
+
   if [[ -n "${os_label}" ]]; then
     log "Starting deployment for commit ${COMMIT_SHA} (${os_label})"
   else
@@ -173,9 +177,9 @@ deploy_run() {
   log "Registry is ready at ${REGISTRY}."
 
   # --- Step 3: Load pre-built image ---
-  IMAGE_TAG="sha-${COMMIT_SHA::7}"
+  IMAGE_TAG="sha-${SHORT_SHA}"
   FULL_TAG="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-  TARBALL="${DEPLOY_DIR}/images/forkana-${COMMIT_SHA::7}.tar.gz"
+  TARBALL="${DEPLOY_DIR}/images/forkana-${SHORT_SHA}.tar.gz"
 
   log "Loading pre-built image from ${TARBALL} ..."
   if [[ ! -f "${TARBALL}" ]]; then
@@ -198,9 +202,21 @@ deploy_run() {
   docker push "${FULL_TAG}"
 
   # --- Step 6: Resolve the pushed digest (immutable reference) ---
-  DIGEST="$(docker inspect --format='{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "${FULL_TAG}" \
-            | sed 's/.*@//')"
-  [[ -z "${DIGEST}" ]] && die "Failed to resolve digest for ${FULL_TAG}. Push may have failed - check registry connectivity."
+  # Guard against both a failing `docker inspect` (missing image, daemon
+  # error) and an empty RepoDigests array (push did not produce a digest).
+  # The template conditional keeps output empty instead of panicking when
+  # RepoDigests is absent; capturing stderr surfaces the real error if the
+  # inspect itself fails.
+  DIGEST_RAW=""
+  if ! DIGEST_RAW="$(docker inspect \
+      --format='{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' \
+      "${FULL_TAG}" 2>&1)"; then
+    die "docker inspect failed for ${FULL_TAG}: ${DIGEST_RAW}"
+  fi
+  DIGEST="${DIGEST_RAW##*@}"
+  if [[ -z "${DIGEST_RAW}" || "${DIGEST}" == "${DIGEST_RAW}" ]]; then
+    die "No RepoDigests for ${FULL_TAG}. Push may have failed - check registry connectivity."
+  fi
 
   PINNED_REF="${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
   log "Resolved digest: ${DIGEST}"

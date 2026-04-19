@@ -223,8 +223,10 @@ sudo -Hiu "${DEPLOY_USER}" bash -lc "
 ### 4. Install the Deploy Scripts
 
 `deploy.sh` is an OS-detecting wrapper that delegates to `deploy_debian.sh` or
-`deploy_fedora.sh` (which both source `deploy_common.sh`). All four scripts
-must be deployed together. Download them from the repository:
+`deploy_fedora.sh` (which both source `deploy_common.sh`). `cleanup-images.sh`
+prunes old tarballs from `~/forkana/images` and is scheduled via cron (see
+[Maintenance](#cleanup-old-image-tarballs)). Download them from the
+repository:
 
 ```bash
 DEPLOY_USER="forkana-deploy"  # ← replace with your UID 1000 username
@@ -232,11 +234,12 @@ DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 BRANCH="master"
 BASE_URL="https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana"
 
-for script in deploy.sh deploy_common.sh deploy_debian.sh deploy_fedora.sh; do
+for script in deploy.sh deploy_common.sh deploy_debian.sh deploy_fedora.sh cleanup-images.sh; do
   sudo -Hiu "${DEPLOY_USER}" curl -fsSL \
     "${BASE_URL}/${script}" -o "$DEPLOY_HOME/forkana/${script}"
 done
-sudo -Hiu "${DEPLOY_USER}" chmod 755 "$DEPLOY_HOME/forkana"/deploy*.sh
+sudo -Hiu "${DEPLOY_USER}" chmod 755 \
+  "$DEPLOY_HOME/forkana"/deploy*.sh "$DEPLOY_HOME/forkana/cleanup-images.sh"
 ```
 
 > **Note:** The compose base file is `~/forkana/compose/dev.yml`.
@@ -497,27 +500,32 @@ sudo dnf install -y nginx certbot python3-certbot-nginx
 ### Deploy the Nginx Configuration
 
 The repository includes a ready-made Nginx configuration at
-[`docker/forkana/nginx.conf`](nginx.conf). Use it as your starting point -
-replace `dev.forkana.example` with your actual domain and adjust the
-`proxy_pass` port if you changed `FORKANA_HOST_PORT` in `.env`.
+[`docker/forkana/nginx.conf`](nginx.conf) - treat it as the canonical source
+rather than copy-pasting server blocks into this guide. Download it to the
+VPS with `curl`, substitute `dev.forkana.example` for your actual domain, and
+adjust the `proxy_pass` port if you changed `FORKANA_HOST_PORT` in `.env`.
 
-For the initial setup, deploy only the HTTP server block (Certbot will add
-the HTTPS block automatically when obtaining the certificate).
+For the initial setup, deploy only the HTTP server block (first 10 lines).
+Certbot will add the HTTPS block automatically when obtaining the certificate.
+
+```bash
+FORKANA_DOMAIN="your-actual-domain.com"
+BRANCH="master"
+NGINX_RAW_URL="https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana/nginx.conf"
+
+# Stage the reference config locally, then strip to the HTTP block for the
+# Certbot bootstrap (Certbot rewrites the file to add the HTTPS block).
+curl -fsSL "${NGINX_RAW_URL}" -o /tmp/forkana.nginx.conf
+head -10 /tmp/forkana.nginx.conf \
+  | sed "s/dev.forkana.example/${FORKANA_DOMAIN}/g" > /tmp/forkana.nginx.http.conf
+```
 
 #### Fedora
 
 Fedora uses `/etc/nginx/conf.d/` instead of `sites-available/sites-enabled`:
 
 ```bash
-FORKANA_DOMAIN="your-actual-domain.com"
-
-# Copy the reference config and strip the HTTPS block for initial Certbot setup.
-# Extract only the HTTP server block (first 10 lines of nginx.conf):
-sudo head -10 docker/forkana/nginx.conf \
-  | sudo tee /etc/nginx/conf.d/forkana.conf > /dev/null
-
-# Set your actual domain
-sudo sed -i "s/dev.forkana.example/${FORKANA_DOMAIN}/g" /etc/nginx/conf.d/forkana.conf
+sudo install -m 0644 /tmp/forkana.nginx.http.conf /etc/nginx/conf.d/forkana.conf
 
 # Fedora + SELinux: allow nginx to proxy to the Forkana host port
 sudo setsebool -P httpd_can_network_connect 1
@@ -526,23 +534,14 @@ sudo setsebool -P httpd_can_network_connect 1
 #### Debian/Ubuntu
 
 ```bash
-FORKANA_DOMAIN="your-actual-domain.com"
-
-# Copy the reference config and strip the HTTPS block for initial Certbot setup.
-# Extract only the HTTP server block (first 10 lines of nginx.conf):
-sudo head -10 docker/forkana/nginx.conf \
-  | sudo tee /etc/nginx/sites-available/forkana > /dev/null
-
-# Set your actual domain
-sudo sed -i "s/dev.forkana.example/${FORKANA_DOMAIN}/g" /etc/nginx/sites-available/forkana
-
-# Enable the site
-sudo ln -s /etc/nginx/sites-available/forkana /etc/nginx/sites-enabled/
+sudo install -m 0644 /tmp/forkana.nginx.http.conf /etc/nginx/sites-available/forkana
+sudo ln -sf /etc/nginx/sites-available/forkana /etc/nginx/sites-enabled/forkana
 ```
 
-> **After Certbot:** Once you have a certificate, replace the config with the
-> full [`docker/forkana/nginx.conf`](nginx.conf) (updating the domain and
-> certificate paths to match your setup).
+> **After Certbot:** Once you have a certificate, replace the site file with
+> the full `/tmp/forkana.nginx.conf` (still domain-substituted) so the HSTS,
+> security headers, and WebSocket/`proxy_pass` tuning from `nginx.conf` take
+> effect. Certbot leaves the SSL directives it injected earlier intact.
 
 ### Enable the Site and Obtain SSL Certificate
 
@@ -1022,6 +1021,38 @@ docker save "forkana:${COMMIT_SHA}" | gzip \
 # 3. Run the deploy script
 ./docker/forkana/deploy.sh "${COMMIT_SHA}"
 ```
+
+### Cleanup Old Image Tarballs
+
+Each deployment transfers a ~500MB tarball to `~/forkana/images/`. Without
+periodic pruning the deploy user's home directory will fill up.
+`cleanup-images.sh` keeps the most recent N tarballs (default 3) and removes
+older ones; it is safe to run repeatedly and does nothing when the directory
+holds fewer than N entries.
+
+Installed alongside the deploy scripts (see
+[Install the Deploy Scripts](#4-install-the-deploy-scripts)), the script
+lives at `~/forkana/cleanup-images.sh` on the VM.
+
+Schedule it via the deploy user's crontab (run as the deploy user):
+
+```bash
+# Runs daily at 02:00 UTC, keeping the last 3 image tarballs.
+( crontab -l 2>/dev/null; \
+  echo '0 2 * * * $HOME/forkana/cleanup-images.sh' ) | crontab -
+```
+
+Run it once manually to confirm it works:
+
+```bash
+~/forkana/cleanup-images.sh           # keep 3 (default)
+~/forkana/cleanup-images.sh 5         # keep 5
+```
+
+> **Untagged image layers:** `cleanup-images.sh` only removes tarballs on
+> disk. To reclaim Docker layer storage for images that are no longer
+> referenced by `compose.override.yml`, occasionally run
+> `docker image prune -f` as the deploy user.
 
 ### Backup
 
