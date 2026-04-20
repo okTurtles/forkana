@@ -119,9 +119,17 @@ sudo dnf install -y git jq curl
 > skip this step - the deploy user's directories are created there instead.
 
 ```bash
-mkdir -p ~/forkana/{data,data/git,data/custom,config,postgres,compose}
-chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/data/custom ~/forkana/config
+mkdir -p ~/forkana/{compose,data,data/git,data/custom,config,postgres,images}
+chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/data/custom \
+           ~/forkana/config ~/forkana/images
 ```
+
+> **Note:** `postgres/` is intentionally omitted from `chmod` - the
+> postgres container takes ownership of its data directory on first
+> start (UID 999 / 70) and a later `chmod 0755` by the host user
+> would break subsequent startups. See
+> [UID 1000 Permission Issues](#uid-1000-permission-issues-bind-mount-directories)
+> in Troubleshooting.
 
 </details>
 
