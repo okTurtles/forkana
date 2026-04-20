@@ -1180,9 +1180,10 @@ services:
       - "127.0.0.1:${FORKANA_HOST_PORT:-3000}:3000"
       - "2222:2222"  # Add SSH port
     environment:
-      DISABLE_SSH: "false"
-      SSH_PORT: "2222"
-      SSH_DOMAIN: your-domain.example
+      GITEA__server__DISABLE_SSH: "false"
+      GITEA__server__START_SSH_SERVER: "true"
+      GITEA__server__SSH_PORT: "2222"
+      GITEA__server__SSH_DOMAIN: your-domain.example
 ```
 
 </details>
