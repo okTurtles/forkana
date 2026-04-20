@@ -231,6 +231,14 @@ deploy_run() {
   log "Pinned image ref: ${PINNED_REF}"
 
   # --- Step 7: Generate compose.override.yml (digest-pinned) ---
+  # Snapshot the current override so step 9 can restore it on failure.
+  # On a first deploy the snapshot is the placeholder written in step 1;
+  # on subsequent deploys it is the previous pinned digest.
+  PREV_OVERRIDE=""
+  if [[ -f "${COMPOSE_OVERRIDE}" ]]; then
+    PREV_OVERRIDE="${COMPOSE_OVERRIDE}.prev"
+    cp -f "${COMPOSE_OVERRIDE}" "${PREV_OVERRIDE}"
+  fi
   printf 'services:\n  forkana:\n    image: %s\n' "${PINNED_REF}" \
     > "${COMPOSE_OVERRIDE}"
   log "Wrote ${COMPOSE_OVERRIDE}"
@@ -258,6 +266,7 @@ deploy_run() {
     if curl -sf "http://127.0.0.1:${HOST_PORT}/api/healthz" > /dev/null 2>&1; then
       log "Service is healthy!"
       log "Deployment of ${COMMIT_SHA} complete."
+      [[ -n "${PREV_OVERRIDE}" && -f "${PREV_OVERRIDE}" ]] && rm -f "${PREV_OVERRIDE}"
       exit 0
     fi
     log "  attempt ${i}/30 - not ready yet"
@@ -265,11 +274,34 @@ deploy_run() {
   done
 
   log "ERROR: Service did not become healthy within 150s."
+  # GitHub Actions annotation - surfaces the failing image in the job log.
+  printf '::error::Deployment of %s failed health check (pinned ref: %s)\n' \
+    "${COMMIT_SHA}" "${PINNED_REF}" >&2
+
   docker compose \
     -p "${PROJECT_NAME}" \
     --project-directory "${COMPOSE_DIR}" \
     -f "${COMPOSE_BASE}" \
     -f "${COMPOSE_OVERRIDE}" \
-    logs --tail=50 forkana
+    logs --tail=100 forkana || true
+
+  if [[ -n "${PREV_OVERRIDE}" && -f "${PREV_OVERRIDE}" ]]; then
+    log "Rolling back to previous pinned image from ${PREV_OVERRIDE}..."
+    mv -f "${PREV_OVERRIDE}" "${COMPOSE_OVERRIDE}"
+    # Re-run compose on forkana only; postgres/registry are already healthy
+    # and do not need to be recreated.
+    if docker compose \
+         -p "${PROJECT_NAME}" \
+         --project-directory "${COMPOSE_DIR}" \
+         -f "${COMPOSE_BASE}" \
+         -f "${COMPOSE_OVERRIDE}" \
+         up -d forkana; then
+      log "Rollback complete - previous image is active again."
+    else
+      log "ERROR: Rollback compose up failed; manual intervention required."
+    fi
+  else
+    log "No previous override to roll back to (first deploy?)."
+  fi
   exit 1
 }
