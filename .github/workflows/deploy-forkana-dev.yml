@@ -204,13 +204,15 @@ jobs:
         env:
           DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
         run: |
-          echo "## Forkana Deploy" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Event:** ${GITHUB_EVENT_NAME}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Branch:** ${GITHUB_REF_NAME}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Commit:** \`${DEPLOY_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Rollback" >> "$GITHUB_STEP_SUMMARY"
-          echo "Re-run a prior successful workflow, trigger this workflow with a commit SHA, or SSH into the VM and run:" >> "$GITHUB_STEP_SUMMARY"
-          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
-          echo '~/forkana/deploy.sh <previous-commit-sha>' >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Forkana Deploy"
+            echo "- **Event:** ${GITHUB_EVENT_NAME}"
+            echo "- **Branch:** ${GITHUB_REF_NAME}"
+            echo "- **Commit:** \`${DEPLOY_SHA}\`"
+            echo ""
+            echo "### Rollback"
+            echo "Re-run a prior successful workflow, trigger this workflow with a commit SHA, or SSH into the VM and run:"
+            echo '```bash'
+            echo '$HOME/forkana/deploy.sh <previous-commit-sha>'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
