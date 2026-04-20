@@ -229,19 +229,7 @@
 					{{ctx.Locale.Tr "repo.issues.change_title_at" (.OldTitle|ctx.RenderUtils.RenderEmoji) (.NewTitle|ctx.RenderUtils.RenderEmoji) $createdStr}}
 				</span>
 			</div>
-		{{else if eq .Type 11}}
-			<!-- 11 = DELETE_BRANCH -->
-			<!--
-			<div class="timeline-item event" id="{{.HashTag}}">
-				<span class="badge">{{svg "octicon-git-branch"}}</span>
-				{# template "shared/user/avatarlink" dict "user" .Poster }
-				<span class="comment-text-line">
-					{# template "shared/user/authorlink" .Poster }
-					{{$oldRef := HTMLFormat `<span class="tw-line-through">%s</span>` .OldRef}}
-					{{ctx.Locale.Tr "repo.issues.delete_branch_at" $oldRef $createdStr}}
-				</span>
-			</div>
-			-->
+
 		{{else if eq .Type 12}}
 			<div class="timeline-item event" id="{{.HashTag}}">
 				<span class="badge">{{svg "octicon-clock"}}</span>
@@ -552,8 +540,7 @@
 				{{continue}}
 			{{end}}
 			<div class="timeline-item event" id="{{.HashTag}}">
-				<span class="badge">{{svg "octicon-repo-push"}}</span>
-				<span class="comment-text-line">
+				<span class="comment-text-line tw-ml-2">
 					{{template "shared/user/authorlink" .Poster}}
 					{{if .IsForcePush}}
 						{{ctx.Locale.Tr "repo.issues.force_push_codes" $.Issue.PullRequest.HeadBranch (ShortSha .OldCommit) ($.Issue.Repo.CommitLink .OldCommit) (ShortSha .NewCommit) ($.Issue.Repo.CommitLink .NewCommit) $createdStr}}
