@@ -142,6 +142,48 @@ the Docker image, transfers it to the VPS as a pre-built tarball, and
 triggers deployment via SSH. The VPS loads the image, pushes it to a local
 Docker registry, and deploys with a digest-pinned compose override.
 
+### Deployment Flow
+
+Every push to the configured deploy branch (or a manual
+`workflow_dispatch`) runs the pipeline below. Steps 1-3 execute on
+the GitHub Actions runner; steps 4-6 execute on the VM under the
+deploy user via `~/forkana/deploy.sh` (which sources
+`deploy_common.sh`).
+
+1. **Build.** The runner builds the Docker image from the checked-out
+   commit and exports it as a gzipped tarball
+   (`docker save forkana:${sha} | gzip > forkana-${sha:0:7}.tar.gz`).
+2. **Transfer.** The tarball is copied to the VM with SCP, landing at
+   `~/forkana/images/forkana-<7-char-sha>.tar.gz`.
+3. **Trigger.** The runner opens an SSH connection with the deploy
+   key; `authorized_keys` pins a `command="~/forkana/deploy.sh"`
+   forced-command restriction (see
+   [step 5](#5-configure-authorized_keys-with-forced-command-restrictions)),
+   so every session runs the deploy script regardless of what the
+   client requests. The commit SHA is passed via
+   `$SSH_ORIGINAL_COMMAND`.
+4. **Load & push.** `deploy_common.sh` `docker load`s the tarball and
+   pushes the image to a local registry at
+   `127.0.0.1:${REGISTRY_PORT}` (loopback-bound, not publicly
+   reachable). The push output yields the registry digest that gets
+   pinned in step 5.
+5. **Pin.** The script rewrites `~/forkana/compose/compose.override.yml`
+   to pin the `forkana` service to the push digest
+   (`image: 127.0.0.1:${REGISTRY_PORT}/forkana@sha256:…`) and runs
+   `docker compose up -d` on the pinned override. Registry and
+   postgres are left alone unless their definitions changed.
+6. **Verify.** The script polls
+   `http://127.0.0.1:${FORKANA_HOST_PORT}/api/healthz` for up to
+   150 s. On success the previous override snapshot is removed and
+   the workflow run is marked green. On failure the script restores
+   the previous override from `compose.override.yml.prev`, re-runs
+   compose for `forkana` only, and exits 1 - see
+   [Automatic Rollback on Health-Check Failure](#automatic-rollback-on-health-check-failure)
+   in Maintenance.
+
+The numbered steps that follow configure the VM so this pipeline can
+run end-to-end.
+
 <details>
 
 ### 1. Identify or Create the Deploy User (UID 1000)
