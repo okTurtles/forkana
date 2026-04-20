@@ -62,7 +62,8 @@ deploy_init() {
 
   # Validate: exactly 40 lowercase hex characters.
   if [[ ! "${COMMIT_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
-    SAFE_DISPLAY="$(printf '%.80s' "${COMMIT_SHA}" | tr -cd '[:print:]')"
+    SAFE_DISPLAY="${COMMIT_SHA:0:80}"
+    SAFE_DISPLAY="${SAFE_DISPLAY//[^[:print:]]/}"
     die "Invalid commit SHA: '${SAFE_DISPLAY}' (expected 40-char hex)."
   fi
 
