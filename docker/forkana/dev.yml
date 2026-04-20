@@ -82,6 +82,9 @@ services:
       GITEA__security__INSTALL_LOCK: "true"
       GITEA__security__SECRET_KEY: ${FORKANA_SECRET_KEY}
       GITEA__security__INTERNAL_TOKEN: ${FORKANA_INTERNAL_TOKEN}
+      # Trusted reverse-proxy CIDRs.  Keep this list in sync with the subnet
+      # pinned below under networks.forkana-network.ipam.config.subnet.
+      GITEA__security__REVERSE_PROXY_TRUSTED_PROXIES: "127.0.0.0/8,::1/128,172.30.0.0/16"
       GITEA__oauth2__JWT_SECRET: ${FORKANA_JWT_SECRET}
     volumes:
       - ${HOME}/forkana/data:/var/lib/gitea
