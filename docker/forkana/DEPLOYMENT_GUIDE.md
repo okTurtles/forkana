@@ -231,7 +231,7 @@ repository:
 ```bash
 DEPLOY_USER="forkana-deploy"  # ← replace with your UID 1000 username
 DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
-BRANCH="master"
+BRANCH="master"               # keep in sync with vars.DEPLOY_BRANCH if set (see step 8)
 BASE_URL="https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana"
 
 for script in deploy.sh deploy_common.sh deploy_debian.sh deploy_fedora.sh cleanup-images.sh; do
@@ -293,7 +293,7 @@ bootstrap (before the first deploy), start it manually:
 ```bash
 DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
 DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
-BRANCH="master"
+BRANCH="master"               # keep in sync with vars.DEPLOY_BRANCH if set (see step 8)
 
 sudo -Hiu "${DEPLOY_USER}" curl -fsSL \
   "https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana/dev.yml" \
@@ -325,7 +325,7 @@ Copy the output and store it as the `DEPLOY_SSH_KNOWN_HOSTS` secret in the
 GitHub repository settings. The workflow uses `StrictHostKeyChecking=yes` with
 this value - **never** use `StrictHostKeyChecking=no`.
 
-### 8. Required GitHub Secrets
+### 8. Required GitHub Secrets and Variables
 
 | Secret | Description                                                  |
 |---|--------------------------------------------------------------|
@@ -333,6 +333,14 @@ this value - **never** use `StrictHostKeyChecking=no`.
 | `DEPLOY_USER` | Username of the UID 1000 deploy user (e.g. `forkana-deploy`) |
 | `DEPLOY_SSH_KEY` | Private key (ed25519 recommended) - see workflow below       |
 | `DEPLOY_SSH_KNOWN_HOSTS` | Output of `ssh-keyscan` from step 7                          |
+
+**Optional repository variables:**
+
+| Variable | Description                                                                                                                                                                                                                                                        |
+|---|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `DEPLOY_BRANCH` | If set, the workflow's preflight guard rejects `push`-triggered runs whose branch name does not match this value. Leave unset to deploy from whatever branches are listed under `on.push.branches` in the workflow. Keep aligned with the `BRANCH=` values used in steps 4 and 6. |
+
+Repository variables are configured under **Settings > Secrets and variables > Actions > Variables** (distinct from the *Secrets* tab above).
 
 **SSH key workflow:**
 
