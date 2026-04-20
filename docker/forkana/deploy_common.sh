@@ -107,6 +107,10 @@ deploy_run() {
   log "Wrote placeholder ${COMPOSE_OVERRIDE}"
 
   # --- Step 1b: Ensure host volume directories exist with correct ownership ---
+  # Only chmod when we create the directory: once a container (postgres initdb,
+  # gitea entrypoint) has taken ownership of its bind-mounted data dir, a later
+  # chmod by the deploying user would return EPERM and break subsequent
+  # redeploys.
   log "Ensuring volume directories exist with correct ownership..."
   for dir in \
     "${DEPLOY_DIR}/data" \
@@ -114,8 +118,10 @@ deploy_run() {
     "${DEPLOY_DIR}/data/custom" \
     "${DEPLOY_DIR}/config" \
     "${DEPLOY_DIR}/postgres"; do
-    mkdir -p "${dir}"
-    chmod 0755 "${dir}"
+    if [[ ! -d "${dir}" ]]; then
+      mkdir -p "${dir}"
+      chmod 0755 "${dir}"
+    fi
   done
 
   # --- Step 1c: Verify .env exists before any docker compose invocation ---
