@@ -727,8 +727,12 @@ ls -la $DEPLOY_HOME/forkana/data
 ls -la $DEPLOY_HOME/forkana/config
 ls -la $DEPLOY_HOME/forkana/postgres
 
-# Fix permissions if needed (deploy user must be UID 1000)
-chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
+# Fix permissions if needed (deploy user must be UID 1000).
+# Do NOT include $DEPLOY_HOME/forkana/postgres here: after the first
+# deployment that directory is owned by the postgres container's
+# internal user (UID 999 on debian-based postgres, 70 on alpine).
+# Chowning it back to 1000:1000 will break postgres startup.
+chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config
 ```
 
 #### Deploy User Commands Fail with "Permission denied"
@@ -764,8 +768,13 @@ DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 # Check directory ownership
 ls -la $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
 
-# Expected: all directories owned by UID 1000
+# Expected: data/ and config/ owned by UID 1000; postgres/ owned by
+# the postgres container's internal user after the first deployment
+# (UID 999 on debian-based postgres, 70 on alpine). That is normal
+# and must not be changed back to 1000:1000.
 # drwxr-xr-x  1000  1000  ... data/
+# drwxr-xr-x  1000  1000  ... config/
+# drwx------   999   999  ... postgres/
 ```
 
 **Solution:**
@@ -773,8 +782,10 @@ ls -la $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkan
 DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
 DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
-# Fix ownership on all bind-mount directories
-sudo chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
+# Fix ownership on Forkana-managed bind-mounts only. Leave
+# $DEPLOY_HOME/forkana/postgres untouched: it is managed by the
+# postgres container's internal user (UID 999 / 70) after initdb.
+sudo chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config
 
 # Verify the deploy user has UID 1000
 getent passwd "${DEPLOY_USER}" | cut -d: -f3
