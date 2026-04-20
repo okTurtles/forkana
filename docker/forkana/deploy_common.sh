@@ -193,25 +193,37 @@ deploy_run() {
     docker tag "forkana:${IMAGE_TAG}" "${FULL_TAG}" 2>/dev/null || \
     die "Failed to tag loaded image as ${FULL_TAG}. The tarball may not contain the expected image tag."
 
-  # --- Step 5: Push to local registry ---
+  # --- Step 5: Push to local registry (capture digest from push output) ---
+  # The digest in `docker push`'s trailer is by definition the digest for
+  # the registry just pushed to, so it cannot be confused with a digest
+  # from a different registry the image may also be tagged for.
   log "Pushing ${FULL_TAG} to local registry..."
-  docker push "${FULL_TAG}"
+  PUSH_LOG="$(docker push "${FULL_TAG}" 2>&1)" || die "docker push failed: ${PUSH_LOG}"
+  printf '%s\n' "${PUSH_LOG}"
+  # `docker push` prints a trailer like:
+  #   <tag>: digest: sha256:abc... size: 1234
+  # Layer IDs earlier in the output are 12-char short IDs without the
+  # `sha256:` prefix, so the regex below matches only the digest trailer.
+  DIGEST="$(printf '%s\n' "${PUSH_LOG}" \
+            | grep -oE 'sha256:[0-9a-f]{64}' | tail -n 1 || true)"
 
-  # --- Step 6: Resolve the pushed digest (immutable reference) ---
-  # Guard against both a failing `docker inspect` (missing image, daemon
-  # error) and an empty RepoDigests array (push did not produce a digest).
-  # The template conditional keeps output empty instead of panicking when
-  # RepoDigests is absent; capturing stderr surfaces the real error if the
-  # inspect itself fails.
-  DIGEST_RAW=""
-  if ! DIGEST_RAW="$(docker inspect \
-      --format='{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' \
-      "${FULL_TAG}" 2>&1)"; then
-    die "docker inspect failed for ${FULL_TAG}: ${DIGEST_RAW}"
+  # --- Step 6: Fall back to a registry-filtered docker inspect if needed ---
+  # Filter RepoDigests by the local-registry prefix so we never pick up a
+  # digest from a different registry (e.g. GHCR) the image is also tagged
+  # for.  `index 0` would not give that guarantee.
+  if [[ -z "${DIGEST}" ]]; then
+    log "Push output did not include a digest - querying docker inspect..."
+    INSPECT_FMT='{{range .RepoDigests}}{{println .}}{{end}}'
+    REPO_PREFIX="${REGISTRY}/${IMAGE_NAME}@"
+    if ! RAW="$(docker inspect --format="${INSPECT_FMT}" "${FULL_TAG}" 2>&1)"; then
+      die "docker inspect failed for ${FULL_TAG}: ${RAW}"
+    fi
+    LINE="$(printf '%s\n' "${RAW}" | grep -F "${REPO_PREFIX}" | head -n 1 || true)"
+    DIGEST="${LINE##*@}"
   fi
-  DIGEST="${DIGEST_RAW##*@}"
-  if [[ -z "${DIGEST_RAW}" || "${DIGEST}" == "${DIGEST_RAW}" ]]; then
-    die "No RepoDigests for ${FULL_TAG}. Push may have failed - check registry connectivity."
+
+  if [[ -z "${DIGEST}" || "${DIGEST}" != sha256:* ]]; then
+    die "Could not resolve a digest for ${FULL_TAG} in ${REGISTRY}. Push may have failed."
   fi
 
   PINNED_REF="${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
