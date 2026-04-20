@@ -41,15 +41,20 @@ deploy_init() {
     REPO_DIR="${DEPLOY_DIR}/repo"
   fi
   COMPOSE_DIR="${DEPLOY_DIR}/compose"
-  REGISTRY="localhost:5000"
+  REGISTRY_PORT="${REGISTRY_PORT:-5000}"
+  REGISTRY="localhost:${REGISTRY_PORT}"
   # Use explicit IPv4 for curl checks - avoids IPv6 resolution issues on hosts
   # where "localhost" may resolve to ::1 before 127.0.0.1.
-  REGISTRY_HTTP="http://127.0.0.1:5000"
+  REGISTRY_HTTP="http://127.0.0.1:${REGISTRY_PORT}"
   IMAGE_NAME="forkana"
   PROJECT_NAME="forkana"
   HOST_PORT="${FORKANA_HOST_PORT:-3000}"
   COMPOSE_BASE="${COMPOSE_DIR}/dev.yml"
   COMPOSE_OVERRIDE="${COMPOSE_DIR}/compose.override.yml"
+
+  # Set by deploy_run step 2; true when this deploy owns the compose-managed
+  # registry service, false when an external registry is being reused.
+  REGISTRY_MANAGED_BY_US=false
 
   # --- Resolve commit SHA - prefer argument, fall back to SSH_ORIGINAL_COMMAND ---
   COMMIT_SHA="${commit_arg:-${SSH_ORIGINAL_COMMAND:-}}"
@@ -97,7 +102,7 @@ deploy_run() {
     log "Using pre-deployed dev.yml at ${COMPOSE_BASE}"
   fi
 
-  printf 'services:\n  forkana:\n    image: localhost:5000/forkana:latest\n' \
+  printf 'services:\n  forkana:\n    image: %s/forkana:latest\n' "${REGISTRY}" \
     > "${COMPOSE_OVERRIDE}"
   log "Wrote placeholder ${COMPOSE_OVERRIDE}"
 
@@ -136,37 +141,28 @@ deploy_run() {
   fi
 
   # --- Step 2: Ensure the local registry is running ---
-  # The registry on 127.0.0.1:5000 may be shared infrastructure (not owned by
-  # Forkana).  Reuse it if already reachable; only start one via compose if
-  # nothing is listening.
+  # The registry on 127.0.0.1:${REGISTRY_PORT} may be shared infrastructure
+  # (not owned by Forkana).  Reuse it if already reachable; only start the
+  # compose-managed registry if nothing is listening.
   log "Ensuring local registry is running..."
-  if ! curl -sf "${REGISTRY_HTTP}/v2/" > /dev/null 2>&1; then
-    # Check for an existing container named "registry" (shared) or
-    # "forkana-registry" (compose-managed).
-    REGISTRY_STATE=""
-    for cname in registry forkana-registry; do
-      REGISTRY_STATE="$(docker inspect -f '{{.State.Status}}' "${cname}" 2>/dev/null || true)"
-      if [[ "${REGISTRY_STATE}" == "running" ]]; then
-        log "Found running container '${cname}' - waiting for it to respond..."
-        break
-      fi
-    done
-
-    if [[ "${REGISTRY_STATE}" != "running" ]]; then
-      log "No registry container running - starting one via compose..."
-      docker compose \
-        -p "${PROJECT_NAME}" \
-        --project-directory "${COMPOSE_DIR}" \
-        -f "${COMPOSE_BASE}" \
-        -f "${COMPOSE_OVERRIDE}" \
-        up -d registry
-    fi
+  if curl -sf "${REGISTRY_HTTP}/v2/" > /dev/null 2>&1; then
+    # Something is already listening - treat as external/shared and do not
+    # try to (re)create our compose-managed registry in step 8.
+    log "Registry already reachable at ${REGISTRY_HTTP} - reusing it."
+    REGISTRY_MANAGED_BY_US=false
+  else
+    log "No registry on ${REGISTRY_HTTP} - starting compose-managed registry..."
+    docker compose \
+      -p "${PROJECT_NAME}" \
+      --project-directory "${COMPOSE_DIR}" \
+      -f "${COMPOSE_BASE}" \
+      -f "${COMPOSE_OVERRIDE}" \
+      up -d registry
+    REGISTRY_MANAGED_BY_US=true
 
     log "Waiting for registry to become ready..."
     for i in $(seq 1 12); do
-      if curl -sf "${REGISTRY_HTTP}/v2/" > /dev/null 2>&1; then
-        break
-      fi
+      if curl -sf "${REGISTRY_HTTP}/v2/" > /dev/null 2>&1; then break; fi
       if [[ "$i" -eq 12 ]]; then
         die "Registry did not become ready within 60s."
       fi
@@ -228,13 +224,21 @@ deploy_run() {
   log "Wrote ${COMPOSE_OVERRIDE}"
 
   # --- Step 8: Deploy with docker compose ---
+  # Select services explicitly so we do not try to (re)bind port
+  # ${REGISTRY_PORT} when the registry is external/shared.  --remove-orphans
+  # is intentionally omitted here: compose would otherwise interpret unlisted
+  # services (the registry, when external) as "orphans" and stop them.
   log "Running docker compose up..."
+  local compose_services=(postgres forkana)
+  if [[ "${REGISTRY_MANAGED_BY_US}" == "true" ]]; then
+    compose_services=(registry postgres forkana)
+  fi
   docker compose \
     -p "${PROJECT_NAME}" \
     --project-directory "${COMPOSE_DIR}" \
     -f "${COMPOSE_BASE}" \
     -f "${COMPOSE_OVERRIDE}" \
-    up -d --remove-orphans
+    up -d "${compose_services[@]}"
 
   # --- Step 9: Health check ---
   log "Waiting for health check (up to 150s)..."
