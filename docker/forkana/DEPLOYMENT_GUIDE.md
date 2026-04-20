@@ -605,11 +605,11 @@ docker compose --env-file ~/forkana/compose/.env \
   -f ~/forkana/compose/compose.override.yml \
   ps
 
-# Expected output (port depends on FORKANA_HOST_PORT, default 3000):
+# Expected output (ports depend on FORKANA_HOST_PORT and REGISTRY_PORT):
 # NAME               STATUS                   PORTS
 # forkana            Up (healthy)             127.0.0.1:<host-port>->3000/tcp
 # forkana-postgres   Up (healthy)             5432/tcp
-# forkana-registry   Up (healthy)             127.0.0.1:5000->5000/tcp
+# registry           Up (healthy)             127.0.0.1:<registry-port>->5000/tcp
 ```
 
 ### Test Web Access

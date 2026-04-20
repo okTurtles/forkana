@@ -4,10 +4,10 @@ services:
   registry:
     # Pinned by manifest digest so the tag can never be swapped.
     image: registry:3.0.0@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e
-    container_name: forkana-registry
+    container_name: registry
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:${REGISTRY_PORT:-5000}:5000"
     environment:
       # Registry 3.0.0 enables OpenTelemetry tracing by default and tries to
       # export to localhost:4318.  Disable it since we don't run a collector.
