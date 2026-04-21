@@ -1662,11 +1662,8 @@ func applyConflictResolutions(baseContent, headContent []byte, groups []conflict
 		}
 
 		if g.headStart > 0 {
-			hStart := g.headStart - 1 // 0-based inclusive start
-			hEnd := g.headEnd         // 0-based exclusive end (headEnd is 1-based inclusive → headEnd is exclusive upper)
-			if hEnd > len(headLines) {
-				hEnd = len(headLines)
-			}
+			hStart := g.headStart - 1              // 0-based inclusive start
+			hEnd := min(g.headEnd, len(headLines)) // headEnd is 1-based inclusive, so it's the 0-based exclusive upper bound
 			// Replace head range with base section
 			newHead := make([]string, 0, len(headLines)-hEnd+hStart+len(baseSection))
 			newHead = append(newHead, headLines[:hStart]...)
