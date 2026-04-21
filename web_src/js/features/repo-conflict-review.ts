@@ -10,7 +10,7 @@
  * 6. Provides a fold/unfold toggle for context lines
  */
 
-import {initComboMarkdownEditor} from './comp/ComboMarkdownEditor.ts';
+import {initToastCommentEditor} from './comp/ToastCommentEditor.ts';
 
 export async function initConflictReview() {
   const container = document.querySelector('#diff-file-boxes');
@@ -169,12 +169,10 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
 
       commentSection.append(editorContent);
 
-      // Initialize the combo-markdown-editor
-      const comboEditor = commentSection.querySelector<HTMLElement>('.combo-markdown-editor');
-      if (comboEditor) {
-        // Remove the custom-init class if present so the editor can be initialized
-        comboEditor.classList.remove('custom-init');
-        await initComboMarkdownEditor(comboEditor);
+      // Initialize the toast comment editor
+      const toastEditorContainer = commentSection.querySelector<HTMLElement>('.toast-comment-editor');
+      if (toastEditorContainer) {
+        await initToastCommentEditor(toastEditorContainer);
       }
     }
 

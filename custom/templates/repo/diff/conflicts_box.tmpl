@@ -60,19 +60,17 @@
 		<template id="issue-comment-editor-template">
 			<form class="ui form comment">
 				<div class="field">
-				{{template "shared/combomarkdowneditor" (dict
-					"CustomInit" true
-					"MarkdownPreviewInRepo" $.Repository
-					"MarkdownPreviewMode" "comment"
+				{{template "shared/toasteditor" (dict
 					"TextareaName" "content"
 					"DropzoneParentContainer" ".ui.form"
+					"PreviewUrl" (print $.Repository.Link "/markup")
+					"PreviewContext" $.Repository.Link
 				)}}
-				</div>
 				{{if .IsAttachmentEnabled}}
-					<div class="field">
-						{{template "repo/upload" .}}
-					</div>
+					{{template "repo/upload" .}}
+					<div class="dropzone-hint-text">{{ctx.Locale.Tr "dropzone.default_message"}}</div>
 				{{end}}
+				</div>
 				<div class="field flex-text-block tw-justify-end">
 					<button class="ui cancel button">{{ctx.Locale.Tr "repo.issues.cancel"}}</button>
 					<button class="ui primary button">{{ctx.Locale.Tr "repo.issues.save"}}</button>

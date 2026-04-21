@@ -508,7 +508,7 @@
   border: none !important;
 }
 
-.conflict-wrapper-row .combo-markdown-editor .ui.top.tabular.menu {
+.conflict-wrapper-row .toast-comment-editor .toastui-editor-mode-switch {
   border-top: none;
   border-radius: 0;
 }
