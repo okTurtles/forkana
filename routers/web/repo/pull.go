@@ -6,9 +6,12 @@
 package repo
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -1560,6 +1563,318 @@ func ViewPullConflicts(ctx *context.Context) {
 	}
 
 	ctx.HTML(http.StatusOK, tplPullConflicts)
+}
+
+// conflictGroup represents a group of consecutive conflict lines in a diff (one "conflict" in the UI).
+type conflictGroup struct {
+	baseStart int // LeftIdx of first DEL line (1-based, 0 = none)
+	baseEnd   int // LeftIdx of last DEL line (1-based, 0 = none)
+	headStart int // RightIdx of first ADD line (1-based, 0 = none)
+	headEnd   int // RightIdx of last ADD line (1-based, 0 = none)
+}
+
+// extractConflictGroups groups consecutive conflict lines (non-context diff lines) into groups,
+// matching the same grouping that the frontend JavaScript performs on data-line-type="conflict" rows.
+func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
+	var groups []conflictGroup
+	var cur *conflictGroup
+
+	flush := func() {
+		if cur != nil {
+			groups = append(groups, *cur)
+			cur = nil
+		}
+	}
+
+	for _, section := range diffFile.Sections {
+		for _, line := range section.Lines {
+			switch line.Type {
+			case gitdiff.DiffLinePlain, gitdiff.DiffLineSection:
+				flush()
+			case gitdiff.DiffLineDel:
+				// DEL line (matched or unmatched) → contributes to conflict group
+				if cur == nil {
+					cur = &conflictGroup{}
+				}
+				if line.LeftIdx > 0 {
+					if cur.baseStart == 0 {
+						cur.baseStart = line.LeftIdx
+					}
+					cur.baseEnd = line.LeftIdx
+				}
+				// If this DEL has a match, record the matched ADD's RightIdx as the head range
+				if line.Match >= 0 && line.Match < len(section.Lines) {
+					matchLine := section.Lines[line.Match]
+					if matchLine.RightIdx > 0 {
+						if cur.headStart == 0 {
+							cur.headStart = matchLine.RightIdx
+						}
+						cur.headEnd = matchLine.RightIdx
+					}
+				}
+			case gitdiff.DiffLineAdd:
+				// Only unmatched ADD lines produce a separate conflict row in the template.
+				// Matched ADD lines are rendered within their paired DEL row and are skipped.
+				if line.Match != -1 {
+					continue
+				}
+				if cur == nil {
+					cur = &conflictGroup{}
+				}
+				if line.RightIdx > 0 {
+					if cur.headStart == 0 {
+						cur.headStart = line.RightIdx
+					}
+					cur.headEnd = line.RightIdx
+				}
+			}
+		}
+		flush()
+	}
+	flush()
+	return groups
+}
+
+// applyConflictResolutions builds the resolved file content from base and head blobs,
+// using the user's keep/use choices for each conflict group.
+// "keep" means use the base version; "use" means keep the head version.
+func applyConflictResolutions(baseContent, headContent []byte, groups []conflictGroup, choices map[int]string) []byte {
+	headLines := strings.Split(string(headContent), "\n")
+	baseLines := strings.Split(string(baseContent), "\n")
+
+	// Process groups in reverse order so line indices stay valid after splice operations.
+	for i := len(groups) - 1; i >= 0; i-- {
+		if choices[i] != "keep" {
+			continue // "use" = keep head as-is for this section
+		}
+		g := groups[i]
+		if g.headStart == 0 && g.baseStart == 0 {
+			continue
+		}
+
+		var baseSection []string
+		if g.baseStart > 0 {
+			end := g.baseEnd
+			if end >= len(baseLines) {
+				end = len(baseLines) - 1
+			}
+			baseSection = baseLines[g.baseStart-1 : end]
+		}
+
+		if g.headStart > 0 {
+			hStart := g.headStart - 1 // 0-based inclusive start
+			hEnd := g.headEnd         // 0-based exclusive end (headEnd is 1-based inclusive → headEnd is exclusive upper)
+			if hEnd > len(headLines) {
+				hEnd = len(headLines)
+			}
+			// Replace head range with base section
+			newHead := make([]string, 0, len(headLines)-hEnd+hStart+len(baseSection))
+			newHead = append(newHead, headLines[:hStart]...)
+			newHead = append(newHead, baseSection...)
+			newHead = append(newHead, headLines[hEnd:]...)
+			headLines = newHead
+		} else if g.baseStart > 0 {
+			// Only DEL lines, no ADD lines in head: nothing to remove, nothing to insert
+			// (base lines are absent from head; for "keep" they should be present, but we
+			// cannot determine the insertion point without tracking context. Skip for now.)
+		}
+	}
+
+	return []byte(strings.Join(headLines, "\n"))
+}
+
+// conflictResolutionRequest is the JSON body for POST /conflicts.
+type conflictResolutionRequest struct {
+	Files []struct {
+		Path      string `json:"path"`
+		Conflicts []struct {
+			Index  int    `json:"index"`
+			Choice string `json:"choice"` // "keep" or "use"
+		} `json:"conflicts"`
+	} `json:"files"`
+}
+
+// SubmitConflictResolution handles POST /{owner}/{repo}/pulls/{index}/conflicts.
+// It reads the user's keep/use choices, applies them to each conflicted file,
+// commits the result to the head branch, and returns 200 so the frontend can redirect.
+func SubmitConflictResolution(ctx *context.Context) {
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+	pull := issue.PullRequest
+
+	// Parse JSON body
+	body, err := io.ReadAll(ctx.Req.Body)
+	if err != nil {
+		ctx.PlainText(http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var req conflictResolutionRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		ctx.PlainText(http.StatusBadRequest, "parse body: "+err.Error())
+		return
+	}
+	if len(req.Files) == 0 {
+		ctx.PlainText(http.StatusBadRequest, "no files provided")
+		return
+	}
+
+	// Load the head repo (may differ from base repo for forked PRs)
+	if err := pull.LoadHeadRepo(ctx); err != nil {
+		ctx.ServerError("LoadHeadRepo", err)
+		return
+	}
+	headRepo := pull.HeadRepo
+	if headRepo == nil {
+		ctx.PlainText(http.StatusBadRequest, "head repository not found")
+		return
+	}
+
+	gitRepo := ctx.Repo.GitRepo
+
+	headCommitID, err := gitRepo.GetRefCommitID(pull.GetGitHeadRefName())
+	if err != nil {
+		ctx.ServerError("GetRefCommitID", err)
+		return
+	}
+	baseCommitID, err := gitRepo.GetBranchCommitID(pull.BaseBranch)
+	if err != nil {
+		ctx.ServerError("GetBranchCommitID", err)
+		return
+	}
+
+	headCommit, err := gitRepo.GetCommit(headCommitID)
+	if err != nil {
+		ctx.ServerError("GetCommit(head)", err)
+		return
+	}
+	baseCommit, err := gitRepo.GetCommit(baseCommitID)
+	if err != nil {
+		ctx.ServerError("GetCommit(base)", err)
+		return
+	}
+
+	// Build list of resolved files to commit
+	var changeFiles []*files_service.ChangeRepoFile
+
+	for _, fileReq := range req.Files {
+		if len(fileReq.Conflicts) == 0 {
+			continue
+		}
+
+		// Get base blob content
+		baseBlob, err := baseCommit.GetBlobByPath(fileReq.Path)
+		if err != nil {
+			ctx.ServerError("GetBlobByPath(base)", err)
+			return
+		}
+		baseReader, err := baseBlob.DataAsync()
+		if err != nil {
+			ctx.ServerError("baseBlob.DataAsync", err)
+			return
+		}
+		baseContent, err := io.ReadAll(baseReader)
+		baseReader.Close()
+		if err != nil {
+			ctx.ServerError("read base blob", err)
+			return
+		}
+
+		// Get head blob content
+		headBlob, err := headCommit.GetBlobByPath(fileReq.Path)
+		if err != nil {
+			ctx.ServerError("GetBlobByPath(head)", err)
+			return
+		}
+		headReader, err := headBlob.DataAsync()
+		if err != nil {
+			ctx.ServerError("headBlob.DataAsync", err)
+			return
+		}
+		headContent, err := io.ReadAll(headReader)
+		headReader.Close()
+		if err != nil {
+			ctx.ServerError("read head blob", err)
+			return
+		}
+
+		// Compute diff between base and head for this file (no line limit)
+		diff, err := gitdiff.GetDiffForRender(ctx, ctx.Repo.RepoLink, gitRepo, &gitdiff.DiffOptions{
+			BeforeCommitID:    baseCommitID,
+			AfterCommitID:     headCommitID,
+			MaxLines:          -1,
+			MaxLineCharacters: setting.Git.MaxGitDiffLineCharacters,
+			MaxFiles:          1,
+		}, fileReq.Path)
+		if err != nil {
+			ctx.ServerError("GetDiff", err)
+			return
+		}
+
+		// Find the diff file
+		var diffFile *gitdiff.DiffFile
+		for _, f := range diff.Files {
+			if f.Name == fileReq.Path || f.OldName == fileReq.Path {
+				diffFile = f
+				break
+			}
+		}
+		if diffFile == nil {
+			// File not in diff (no changes) – use head content as-is
+			changeFiles = append(changeFiles, &files_service.ChangeRepoFile{
+				Operation:     "update",
+				TreePath:      fileReq.Path,
+				ContentReader: bytes.NewReader(headContent),
+			})
+			continue
+		}
+
+		groups := extractConflictGroups(diffFile)
+
+		choices := make(map[int]string, len(fileReq.Conflicts))
+		for _, c := range fileReq.Conflicts {
+			choices[c.Index] = c.Choice
+		}
+
+		resolved := applyConflictResolutions(baseContent, headContent, groups, choices)
+
+		changeFiles = append(changeFiles, &files_service.ChangeRepoFile{
+			Operation:     "update",
+			TreePath:      fileReq.Path,
+			ContentReader: bytes.NewReader(resolved),
+		})
+	}
+
+	if len(changeFiles) == 0 {
+		ctx.Status(http.StatusOK)
+		return
+	}
+
+	// Commit resolved files to the head branch
+	_, err = files_service.ChangeRepoFiles(ctx, headRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+		OldBranch:    pull.HeadBranch,
+		NewBranch:    pull.HeadBranch,
+		Message:      "Resolve merge conflicts",
+		Files:        changeFiles,
+		Author:       &files_service.IdentityOptions{GitUserName: ctx.Doer.Name, GitUserEmail: ctx.Doer.Email},
+		Committer:    &files_service.IdentityOptions{GitUserName: ctx.Doer.Name, GitUserEmail: ctx.Doer.Email},
+		InternalPush: true,
+	})
+	if err != nil {
+		ctx.ServerError("ChangeRepoFiles", err)
+		return
+	}
+
+	// Trigger async re-check of the PR merge status so IsPullFilesConflicted updates
+	pull_service.AddTestPullRequestTask(pull_service.TestPullRequestOptions{
+		RepoID:  headRepo.ID,
+		Branch:  pull.HeadBranch,
+		Doer:    ctx.Doer,
+		IsSync:  true,
+	})
+
+	ctx.Status(http.StatusOK)
 }
 
 func ViewPullFilesForSingleCommit(ctx *context.Context) {

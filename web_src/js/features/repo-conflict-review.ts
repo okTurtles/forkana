@@ -336,14 +336,60 @@ function initFoldToggle() {
 }
 
 /**
- * Initialize submit button click handlers — redirect back to the PR conversation page on submit.
+ * Initialize submit button click handlers.
+ * Collects all keep/use choices, POSTs them to the backend, then redirects to the PR page.
  */
 function initSubmitTracking() {
   const submitBtns = document.querySelectorAll<HTMLButtonElement>('.conflict-submit-btn');
   for (const btn of submitBtns) {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       if (btn.disabled) return;
-      window.location.href = window.location.pathname.replace(/\/conflicts$/, '');
+
+      // Collect choices grouped by file
+      const fileMap = new Map<string, Array<{index: number; choice: string}>>();
+      const allWrappers = document.querySelectorAll<HTMLElement>('.conflict-wrapper');
+      for (const wrapper of allWrappers) {
+        const conflictIndex = parseInt(wrapper.getAttribute('data-conflict-index') ?? '0', 10);
+        const choice = wrapper.getAttribute('data-choice');
+        if (!choice) continue;
+        const fileBox = wrapper.closest<HTMLElement>('.diff-file-box');
+        if (!fileBox) continue;
+        const filePath = fileBox.getAttribute('data-new-filename') ?? '';
+        if (!filePath) continue;
+        if (!fileMap.has(filePath)) fileMap.set(filePath, []);
+        fileMap.get(filePath)!.push({index: conflictIndex, choice});
+      }
+
+      const files = Array.from(fileMap.entries()).map(([path, conflicts]) => ({
+        path,
+        conflicts: conflicts.sort((a, b) => a.index - b.index),
+      }));
+
+      const issueLink = window.location.pathname.replace(/\/conflicts$/, '');
+
+      btn.textContent = 'Submitting…';
+      btn.disabled = true;
+
+      try {
+        const resp = await fetch(window.location.pathname, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Csrf-Token': window.config.csrfToken,
+          },
+          body: JSON.stringify({files}),
+        });
+        if (resp.ok) {
+          window.location.href = issueLink;
+        } else {
+          const msg = await resp.text().catch(() => resp.statusText);
+          btn.textContent = `Submit failed: ${msg}`;
+          btn.disabled = false;
+        }
+      } catch (err) {
+        btn.textContent = 'Submit failed';
+        btn.disabled = false;
+      }
     });
   }
 }
