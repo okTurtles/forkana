@@ -1750,8 +1750,12 @@ func SubmitConflictResolution(ctx *context.Context) {
 		return
 	}
 
-	// Build list of resolved files to commit
-	var changeFiles []*files_service.ChangeRepoFile
+	// Resolve each conflicted file and collect the resulting content.
+	type resolvedFile struct {
+		path    string
+		content []byte
+	}
+	var resolvedFiles []resolvedFile
 
 	for _, fileReq := range req.Files {
 		if len(fileReq.Conflicts) == 0 {
@@ -1807,7 +1811,6 @@ func SubmitConflictResolution(ctx *context.Context) {
 			return
 		}
 
-		// Find the diff file
 		var diffFile *gitdiff.DiffFile
 		for _, f := range diff.Files {
 			if f.Name == fileReq.Path || f.OldName == fileReq.Path {
@@ -1815,58 +1818,101 @@ func SubmitConflictResolution(ctx *context.Context) {
 				break
 			}
 		}
+
+		var resolved []byte
 		if diffFile == nil {
-			// File not in diff (no changes) – use head content as-is
-			changeFiles = append(changeFiles, &files_service.ChangeRepoFile{
-				Operation:     "update",
-				TreePath:      fileReq.Path,
-				ContentReader: bytes.NewReader(headContent),
-			})
-			continue
+			resolved = headContent
+		} else {
+			groups := extractConflictGroups(diffFile)
+			choices := make(map[int]string, len(fileReq.Conflicts))
+			for _, c := range fileReq.Conflicts {
+				choices[c.Index] = c.Choice
+			}
+			resolved = applyConflictResolutions(baseContent, headContent, groups, choices)
 		}
 
-		groups := extractConflictGroups(diffFile)
-
-		choices := make(map[int]string, len(fileReq.Conflicts))
-		for _, c := range fileReq.Conflicts {
-			choices[c.Index] = c.Choice
-		}
-
-		resolved := applyConflictResolutions(baseContent, headContent, groups, choices)
-
-		changeFiles = append(changeFiles, &files_service.ChangeRepoFile{
-			Operation:     "update",
-			TreePath:      fileReq.Path,
-			ContentReader: bytes.NewReader(resolved),
-		})
+		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, content: resolved})
 	}
 
-	if len(changeFiles) == 0 {
+	if len(resolvedFiles) == 0 {
 		ctx.Status(http.StatusOK)
 		return
 	}
 
-	// Commit resolved files to the head branch
-	_, err = files_service.ChangeRepoFiles(ctx, headRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
-		OldBranch:    pull.HeadBranch,
-		NewBranch:    pull.HeadBranch,
-		Message:      "Resolve merge conflicts",
-		Files:        changeFiles,
-		Author:       &files_service.IdentityOptions{GitUserName: ctx.Doer.Name, GitUserEmail: ctx.Doer.Email},
-		Committer:    &files_service.IdentityOptions{GitUserName: ctx.Doer.Name, GitUserEmail: ctx.Doer.Email},
-		InternalPush: true,
-	})
+	// Create a merge commit on the head branch.
+	// Using two parents [headCommit, baseCommit] reconciles the diverged histories so that:
+	//   - "This branch is out-of-date" disappears (CommitsBehind becomes 0)
+	//   - "This will be an empty commit" disappears (the PR is no longer empty after merge)
+	t, err := files_service.NewTemporaryUploadRepository(headRepo)
 	if err != nil {
-		ctx.ServerError("ChangeRepoFiles", err)
+		ctx.ServerError("NewTemporaryUploadRepository", err)
+		return
+	}
+	defer t.Close()
+
+	if err := t.Clone(ctx, pull.HeadBranch, false); err != nil {
+		ctx.ServerError("Clone", err)
 		return
 	}
 
-	// Trigger async re-check of the PR merge status so IsPullFilesConflicted updates
+	// For fork PRs the base commit lives in a different repo; make it reachable via alternates.
+	if headRepo.ID != pull.BaseRepoID {
+		if err := t.AddObjectAlternates(ctx.Repo.Repository.RepoPath()); err != nil {
+			ctx.ServerError("AddObjectAlternates", err)
+			return
+		}
+	}
+
+	if err := t.SetDefaultIndex(ctx); err != nil {
+		ctx.ServerError("SetDefaultIndex", err)
+		return
+	}
+
+	for _, rf := range resolvedFiles {
+		blobHash, err := t.HashObjectAndWrite(ctx, bytes.NewReader(rf.content))
+		if err != nil {
+			ctx.ServerError("HashObjectAndWrite", err)
+			return
+		}
+		if err := t.AddObjectToIndex(ctx, "100644", blobHash, rf.path); err != nil {
+			ctx.ServerError("AddObjectToIndex", err)
+			return
+		}
+	}
+
+	treeHash, err := t.WriteTree(ctx)
+	if err != nil {
+		ctx.ServerError("WriteTree", err)
+		return
+	}
+
+	mergeCommitID, err := t.CommitTree(ctx, &files_service.CommitTreeUserOptions{
+		ParentCommitID:            headCommitID,
+		AdditionalParentCommitIDs: []string{baseCommitID},
+		TreeHash:                  treeHash,
+		CommitMessage:             "Resolve merge conflicts",
+		DoerUser:                  ctx.Doer,
+	})
+	if err != nil {
+		ctx.ServerError("CommitTree", err)
+		return
+	}
+
+	if err := t.PushWithOptions(ctx, ctx.Doer, mergeCommitID, pull.HeadBranch, true); err != nil {
+		ctx.ServerError("PushWithOptions", err)
+		return
+	}
+
+	// Trigger re-check so IsPullFilesConflicted and CommitsBehind update.
+	// Passing NewCommitID causes GetDiverging to run synchronously, so CommitsBehind = 0
+	// is written to the database before we return — the PR page never shows "out-of-date".
 	pull_service.AddTestPullRequestTask(pull_service.TestPullRequestOptions{
-		RepoID: headRepo.ID,
-		Branch: pull.HeadBranch,
-		Doer:   ctx.Doer,
-		IsSync: true,
+		RepoID:      headRepo.ID,
+		Branch:      pull.HeadBranch,
+		Doer:        ctx.Doer,
+		IsSync:      true,
+		OldCommitID: headCommitID,
+		NewCommitID: mergeCommitID,
 	})
 
 	ctx.Status(http.StatusOK)
