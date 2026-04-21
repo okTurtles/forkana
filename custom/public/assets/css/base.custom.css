@@ -45,8 +45,14 @@
 	height: 18px;
 }
 
+.item .circle svg,
 .circle.small svg {
 	scale: .8;
+}
+
+.timeline-avatar.circle {
+  width: 32px !important;
+  height: 32px !important;
 }
 
 .circle.green-light-1 {

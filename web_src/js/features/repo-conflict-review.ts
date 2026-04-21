@@ -336,17 +336,14 @@ function initFoldToggle() {
 }
 
 /**
- * Initialize submit button click handlers
+ * Initialize submit button click handlers — redirect back to the PR conversation page on submit.
  */
 function initSubmitTracking() {
   const submitBtns = document.querySelectorAll<HTMLButtonElement>('.conflict-submit-btn');
   for (const btn of submitBtns) {
     btn.addEventListener('click', () => {
       if (btn.disabled) return;
-      // TODO: Wire to actual submission API
-      // For now, just mark as submitted visually
-      btn.textContent = '✓ Submitted';
-      btn.disabled = true;
+      window.location.href = window.location.pathname.replace(/\/conflicts$/, '');
     });
   }
 }
