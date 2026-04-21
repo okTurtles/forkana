@@ -7,7 +7,6 @@ package repo
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -34,6 +33,7 @@ import (
 	"code.gitea.io/gitea/modules/glob"
 	"code.gitea.io/gitea/modules/graceful"
 	issue_template "code.gitea.io/gitea/modules/issue/template"
+	"code.gitea.io/gitea/modules/json"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/optional"
 	repo_module "code.gitea.io/gitea/modules/repository"
@@ -1673,11 +1673,9 @@ func applyConflictResolutions(baseContent, headContent []byte, groups []conflict
 			newHead = append(newHead, baseSection...)
 			newHead = append(newHead, headLines[hEnd:]...)
 			headLines = newHead
-		} else if g.baseStart > 0 {
-			// Only DEL lines, no ADD lines in head: nothing to remove, nothing to insert
-			// (base lines are absent from head; for "keep" they should be present, but we
-			// cannot determine the insertion point without tracking context. Skip for now.)
 		}
+		// else: only DEL lines with no head counterpart — insertion point is ambiguous without
+		// context tracking, so we leave these absent from the resolved output for now.
 	}
 
 	return []byte(strings.Join(headLines, "\n"))
@@ -1868,10 +1866,10 @@ func SubmitConflictResolution(ctx *context.Context) {
 
 	// Trigger async re-check of the PR merge status so IsPullFilesConflicted updates
 	pull_service.AddTestPullRequestTask(pull_service.TestPullRequestOptions{
-		RepoID:  headRepo.ID,
-		Branch:  pull.HeadBranch,
-		Doer:    ctx.Doer,
-		IsSync:  true,
+		RepoID: headRepo.ID,
+		Branch: pull.HeadBranch,
+		Doer:   ctx.Doer,
+		IsSync: true,
 	})
 
 	ctx.Status(http.StatusOK)

@@ -10,6 +10,7 @@
  * 6. Provides a fold/unfold toggle for context lines
  */
 
+import {POST} from '../modules/fetch.ts';
 import {initToastCommentEditor} from './comp/ToastCommentEditor.ts';
 
 export async function initConflictReview() {
@@ -349,7 +350,7 @@ function initSubmitTracking() {
       const fileMap = new Map<string, Array<{index: number; choice: string}>>();
       const allWrappers = document.querySelectorAll<HTMLElement>('.conflict-wrapper');
       for (const wrapper of allWrappers) {
-        const conflictIndex = parseInt(wrapper.getAttribute('data-conflict-index') ?? '0', 10);
+        const conflictIndex = parseInt(wrapper.getAttribute('data-conflict-index') ?? '0');
         const choice = wrapper.getAttribute('data-choice');
         if (!choice) continue;
         const fileBox = wrapper.closest<HTMLElement>('.diff-file-box');
@@ -357,10 +358,10 @@ function initSubmitTracking() {
         const filePath = fileBox.getAttribute('data-new-filename') ?? '';
         if (!filePath) continue;
         if (!fileMap.has(filePath)) fileMap.set(filePath, []);
-        fileMap.get(filePath)!.push({index: conflictIndex, choice});
+        fileMap.get(filePath).push({index: conflictIndex, choice});
       }
 
-      const files = Array.from(fileMap.entries()).map(([path, conflicts]) => ({
+      const files = Array.from(fileMap, ([path, conflicts]) => ({
         path,
         conflicts: conflicts.sort((a, b) => a.index - b.index),
       }));
@@ -371,22 +372,20 @@ function initSubmitTracking() {
       btn.disabled = true;
 
       try {
-        const resp = await fetch(window.location.pathname, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Csrf-Token': window.config.csrfToken,
-          },
-          body: JSON.stringify({files}),
-        });
+        const resp = await POST(window.location.pathname, {data: {files}});
         if (resp.ok) {
           window.location.href = issueLink;
         } else {
-          const msg = await resp.text().catch(() => resp.statusText);
+          let msg: string;
+          try {
+            msg = await resp.text();
+          } catch {
+            msg = resp.statusText;
+          }
           btn.textContent = `Submit failed: ${msg}`;
           btn.disabled = false;
         }
-      } catch (err) {
+      } catch {
         btn.textContent = 'Submit failed';
         btn.disabled = false;
       }
