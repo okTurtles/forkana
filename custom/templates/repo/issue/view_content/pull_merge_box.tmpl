@@ -222,17 +222,6 @@
 							</div>
 						</div>
 					{{end}}
-					{{if .WillSign}}
-						<div class="item">
-							{{svg "octicon-lock" 16 "text green"}}
-							{{ctx.Locale.Tr "repo.signing.will_sign" .SigningKeyMergeDisplay}}
-						</div>
-					{{else if .IsSigned}}
-						<div class="item">
-							{{svg "octicon-unlock"}}
-							{{ctx.Locale.Tr (printf "repo.signing.wont_sign.%s" .WontSignReason)}}
-						</div>
-					{{end}}
 				{{end}}
 
 				{{template "repo/issue/view_content/update_branch_by_merge" $}}
