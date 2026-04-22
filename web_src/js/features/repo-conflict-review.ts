@@ -11,7 +11,7 @@
  */
 
 import {POST} from '../modules/fetch.ts';
-import {initToastCommentEditor} from './comp/ToastCommentEditor.ts';
+import {initToastCommentEditor, getToastCommentEditor, EventEditorContentChanged} from './comp/ToastCommentEditor.ts';
 
 export async function initConflictReview() {
   const container = document.querySelector('#diff-file-boxes');
@@ -118,6 +118,18 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
     const innerTbody = document.createElement('tbody');
     innerTable.append(innerTbody);
 
+    // Extract base and head text before moving rows (rows stay as the same DOM nodes)
+    const baseLines: string[] = [];
+    const headLines: string[] = [];
+    for (const row of group) {
+      const oldLineNum = parseInt(row.querySelector('.lines-num-old')?.getAttribute('data-line-num') ?? '0');
+      const newLineNum = parseInt(row.querySelector('.lines-num-new')?.getAttribute('data-line-num') ?? '0');
+      if (oldLineNum > 0) baseLines.push(row.querySelector('.lines-code-old .code-inner')?.textContent ?? '');
+      if (newLineNum > 0) headLines.push(row.querySelector('.lines-code-new .code-inner')?.textContent ?? '');
+    }
+    const baseText = baseLines.join('\n');
+    const headText = headLines.join('\n');
+
     // Move conflict lines into the inner table
     for (const row of group) {
       innerTbody.append(row);
@@ -180,7 +192,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
     wrapper.append(commentSection);
 
     // Setup event listeners for this wrapper
-    setupWrapperEvents(wrapper);
+    setupWrapperEvents(wrapper, baseText, headText);
 
     wrappers.push(wrapper);
   }
@@ -214,53 +226,62 @@ function numberConflicts(wrappers: HTMLElement[]) {
 
 /**
  * Sets up Keep/Use/Resolve event listeners for a single conflict wrapper.
+ * Keep this → pre-fills editor with base text; Use this → pre-fills with head text.
+ * The editor content is what gets submitted as the resolved version.
  */
-function setupWrapperEvents(wrapper: HTMLElement) {
+function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: string) {
   const keepBtn = wrapper.querySelector<HTMLButtonElement>('.conflict-keep-btn');
   const useBtn = wrapper.querySelector<HTMLButtonElement>('.conflict-use-btn');
   const resolveBtn = wrapper.querySelector<HTMLButtonElement>('.conflict-resolve-btn');
+  const toastContainer = wrapper.querySelector<HTMLElement>('.toast-comment-editor');
 
-  // Keep this / Use this selection
+  const fillEditor = (text: string) => {
+    const editor = getToastCommentEditor(toastContainer);
+    if (editor) editor.value(text);
+    if (resolveBtn) resolveBtn.disabled = !text.trim();
+  };
+
   keepBtn?.addEventListener('click', () => {
     keepBtn.classList.add('selected');
     useBtn?.classList.remove('selected');
     wrapper.setAttribute('data-choice', 'keep');
-    if (resolveBtn) resolveBtn.disabled = false;
+    fillEditor(baseText);
   });
 
   useBtn?.addEventListener('click', () => {
     useBtn.classList.add('selected');
     keepBtn?.classList.remove('selected');
     wrapper.setAttribute('data-choice', 'use');
-    if (resolveBtn) resolveBtn.disabled = false;
+    fillEditor(headText);
   });
+
+  // Also enable/disable Resolve when the user edits the editor directly
+  if (toastContainer) {
+    toastContainer.addEventListener(EventEditorContentChanged, () => {
+      const editor = getToastCommentEditor(toastContainer);
+      if (resolveBtn) resolveBtn.disabled = !editor?.value().trim();
+    });
+  }
 
   // Resolve button
   resolveBtn?.addEventListener('click', () => {
     const isResolved = wrapper.getAttribute('data-resolved') === 'true';
 
     if (isResolved) {
-      // Unresolve
       wrapper.setAttribute('data-resolved', 'false');
       wrapper.classList.remove('resolved');
-
-      // Re-enable choice buttons
       if (keepBtn) keepBtn.disabled = false;
       if (useBtn) useBtn.disabled = false;
       resolveBtn.textContent = 'Resolve';
       resolveBtn.classList.remove('disabled');
     } else {
-      // Resolve
       wrapper.setAttribute('data-resolved', 'true');
       wrapper.classList.add('resolved');
-
-      // Disable choice buttons after resolution
       if (keepBtn) keepBtn.disabled = true;
       if (useBtn) useBtn.disabled = true;
       resolveBtn.textContent = '✓ Resolved';
     }
 
-    // Check if all conflicts are resolved
     checkAllResolved();
   });
 
@@ -346,19 +367,20 @@ function initSubmitTracking() {
     btn.addEventListener('click', async () => {
       if (btn.disabled) return;
 
-      // Collect choices grouped by file
-      const fileMap = new Map<string, Array<{index: number; choice: string}>>();
+      // Collect resolved editor text grouped by file
+      const fileMap = new Map<string, Array<{index: number; text: string}>>();
       const allWrappers = document.querySelectorAll<HTMLElement>('.conflict-wrapper');
       for (const wrapper of allWrappers) {
         const conflictIndex = parseInt(wrapper.getAttribute('data-conflict-index') ?? '0');
-        const choice = wrapper.getAttribute('data-choice');
-        if (!choice) continue;
+        const toastContainer = wrapper.querySelector<HTMLElement>('.toast-comment-editor');
+        const text = getToastCommentEditor(toastContainer)?.value() ?? '';
+        if (!text.trim()) continue;
         const fileBox = wrapper.closest<HTMLElement>('.diff-file-box');
         if (!fileBox) continue;
         const filePath = fileBox.getAttribute('data-new-filename') ?? '';
         if (!filePath) continue;
         if (!fileMap.has(filePath)) fileMap.set(filePath, []);
-        fileMap.get(filePath).push({index: conflictIndex, choice});
+        fileMap.get(filePath).push({index: conflictIndex, text});
       }
 
       const files = Array.from(fileMap, ([path, conflicts]) => ({

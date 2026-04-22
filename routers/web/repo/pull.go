@@ -1635,44 +1635,30 @@ func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
 	return groups
 }
 
-// applyConflictResolutions builds the resolved file content from base and head blobs,
-// using the user's keep/use choices for each conflict group.
-// "keep" means use the base version; "use" means keep the head version.
-func applyConflictResolutions(baseContent, headContent []byte, groups []conflictGroup, choices map[int]string) []byte {
+// applyConflictTexts builds the resolved file content by replacing each conflicted head range
+// with the text the user confirmed in the editor (which may be the base version, head version,
+// or a manual blend). texts maps conflictGroup index → resolved text from the editor.
+func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[int]string) []byte {
 	headLines := strings.Split(string(headContent), "\n")
-	baseLines := strings.Split(string(baseContent), "\n")
 
-	// Process groups in reverse order so line indices stay valid after splice operations.
+	// Process in reverse so earlier indices stay valid after splice operations.
 	for i := len(groups) - 1; i >= 0; i-- {
-		if choices[i] != "keep" {
-			continue // "use" = keep head as-is for this section
-		}
-		g := groups[i]
-		if g.headStart == 0 && g.baseStart == 0 {
+		text, ok := texts[i]
+		if !ok {
 			continue
 		}
-
-		var baseSection []string
-		if g.baseStart > 0 {
-			end := g.baseEnd
-			if end >= len(baseLines) {
-				end = len(baseLines) - 1
-			}
-			baseSection = baseLines[g.baseStart-1 : end]
+		g := groups[i]
+		if g.headStart == 0 {
+			continue
 		}
-
-		if g.headStart > 0 {
-			hStart := g.headStart - 1              // 0-based inclusive start
-			hEnd := min(g.headEnd, len(headLines)) // headEnd is 1-based inclusive, so it's the 0-based exclusive upper bound
-			// Replace head range with base section
-			newHead := make([]string, 0, len(headLines)-hEnd+hStart+len(baseSection))
-			newHead = append(newHead, headLines[:hStart]...)
-			newHead = append(newHead, baseSection...)
-			newHead = append(newHead, headLines[hEnd:]...)
-			headLines = newHead
-		}
-		// else: only DEL lines with no head counterpart — insertion point is ambiguous without
-		// context tracking, so we leave these absent from the resolved output for now.
+		resolvedLines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+		hStart := g.headStart - 1
+		hEnd := min(g.headEnd, len(headLines))
+		newHead := make([]string, 0, len(headLines)-hEnd+hStart+len(resolvedLines))
+		newHead = append(newHead, headLines[:hStart]...)
+		newHead = append(newHead, resolvedLines...)
+		newHead = append(newHead, headLines[hEnd:]...)
+		headLines = newHead
 	}
 
 	return []byte(strings.Join(headLines, "\n"))
@@ -1683,8 +1669,8 @@ type conflictResolutionRequest struct {
 	Files []struct {
 		Path      string `json:"path"`
 		Conflicts []struct {
-			Index  int    `json:"index"`
-			Choice string `json:"choice"` // "keep" or "use"
+			Index int    `json:"index"`
+			Text  string `json:"text"` // resolved text from the editor
 		} `json:"conflicts"`
 	} `json:"files"`
 }
@@ -1744,12 +1730,6 @@ func SubmitConflictResolution(ctx *context.Context) {
 		ctx.ServerError("GetCommit(head)", err)
 		return
 	}
-	baseCommit, err := gitRepo.GetCommit(baseCommitID)
-	if err != nil {
-		ctx.ServerError("GetCommit(base)", err)
-		return
-	}
-
 	// Resolve each conflicted file and collect the resulting content.
 	type resolvedFile struct {
 		path    string
@@ -1762,25 +1742,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 			continue
 		}
 
-		// Get base blob content
-		baseBlob, err := baseCommit.GetBlobByPath(fileReq.Path)
-		if err != nil {
-			ctx.ServerError("GetBlobByPath(base)", err)
-			return
-		}
-		baseReader, err := baseBlob.DataAsync()
-		if err != nil {
-			ctx.ServerError("baseBlob.DataAsync", err)
-			return
-		}
-		baseContent, err := io.ReadAll(baseReader)
-		baseReader.Close()
-		if err != nil {
-			ctx.ServerError("read base blob", err)
-			return
-		}
-
-		// Get head blob content
+		// Get head blob content (the starting point for applying resolutions)
 		headBlob, err := headCommit.GetBlobByPath(fileReq.Path)
 		if err != nil {
 			ctx.ServerError("GetBlobByPath(head)", err)
@@ -1798,7 +1760,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 			return
 		}
 
-		// Compute diff between base and head for this file (no line limit)
+		// Compute diff to identify which line ranges in HEAD correspond to each conflict
 		diff, err := gitdiff.GetDiffForRender(ctx, ctx.Repo.RepoLink, gitRepo, &gitdiff.DiffOptions{
 			BeforeCommitID:    baseCommitID,
 			AfterCommitID:     headCommitID,
@@ -1824,11 +1786,11 @@ func SubmitConflictResolution(ctx *context.Context) {
 			resolved = headContent
 		} else {
 			groups := extractConflictGroups(diffFile)
-			choices := make(map[int]string, len(fileReq.Conflicts))
+			texts := make(map[int]string, len(fileReq.Conflicts))
 			for _, c := range fileReq.Conflicts {
-				choices[c.Index] = c.Choice
+				texts[c.Index] = c.Text
 			}
-			resolved = applyConflictResolutions(baseContent, headContent, groups, choices)
+			resolved = applyConflictTexts(headContent, groups, texts)
 		}
 
 		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, content: resolved})
