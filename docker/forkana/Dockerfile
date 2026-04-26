@@ -72,7 +72,6 @@ RUN apk --no-cache add \
     curl \
     gnupg \
     openssh-keygen \
-    postgresql-client \
     && rm -rf /var/cache/apk/*
 
 # Create git user (UID 1000 for rootless operation)
