@@ -505,18 +505,22 @@ rather than copy-pasting server blocks into this guide. Download it to the
 VPS with `curl`, substitute `dev.forkana.example` for your actual domain, and
 adjust the `proxy_pass` port if you changed `FORKANA_HOST_PORT` in `.env`.
 
-For the initial setup, deploy only the HTTP server block (first 10 lines).
-Certbot will add the HTTPS block automatically when obtaining the certificate.
+For the initial setup, deploy only the HTTP server block. Certbot will add
+the HTTPS block automatically when obtaining the certificate.
 
 ```bash
 FORKANA_DOMAIN="your-actual-domain.com"
 BRANCH="master"
 NGINX_RAW_URL="https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana/nginx.conf"
 
-# Stage the reference config locally, then strip to the HTTP block for the
-# Certbot bootstrap (Certbot rewrites the file to add the HTTPS block).
+# Stage the reference config locally, then strip to the first server { ... }
+# block for the Certbot bootstrap (Certbot rewrites the file to add the HTTPS
+# block). The sed range extracts from the first `server {` line to its
+# matching closing `}` and quits, so reformatting nginx.conf (extra comments,
+# blank lines, additional directives inside the HTTP block) does not break
+# this step.
 curl -fsSL "${NGINX_RAW_URL}" -o /tmp/forkana.nginx.conf
-head -10 /tmp/forkana.nginx.conf \
+sed -n '/^server {/,/^}/{p;/^}/q;}' /tmp/forkana.nginx.conf \
   | sed "s/dev.forkana.example/${FORKANA_DOMAIN}/g" > /tmp/forkana.nginx.http.conf
 ```
 
