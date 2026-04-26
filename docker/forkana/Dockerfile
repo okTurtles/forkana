@@ -113,10 +113,6 @@ ENV HOME="/var/lib/gitea/git"
 # Forkana-specific defaults
 ENV APP_NAME="Forkana"
 ENV RUN_MODE="prod"
-ENV DB_TYPE="postgres"
-ENV DISABLE_SSH="true"
-ENV INSTALL_LOCK="true"
-ENV DISABLE_REGISTRATION="true"
 
 VOLUME ["/var/lib/gitea", "/etc/gitea"]
 WORKDIR /var/lib/gitea
