@@ -17,6 +17,25 @@ log()  { printf '[deploy %s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 die()  { log "FATAL: $*"; exit 1; }
 
 # ---------------------------------------------------------------------------
+# read_env_var FILE NAME
+#
+# Echo the parsed value of NAME from a dotenv-style FILE.  Last definition
+# wins; surrounding whitespace and a single layer of matching quotes are
+# stripped.  Echoes the empty string when FILE is missing, NAME is absent,
+# or the value resolves to empty (matching docker compose's env_file
+# behavior).  Safe to call under set -euo pipefail.
+# ---------------------------------------------------------------------------
+read_env_var() {
+  local file="$1" name="$2"
+  [[ -f "${file}" ]] || return 0
+  { grep -E "^[[:space:]]*${name}[[:space:]]*=" "${file}" || true; } \
+    | tail -n1 \
+    | cut -d= -f2- \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+          -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+}
+
+# ---------------------------------------------------------------------------
 # deploy_init - Set up configuration variables and resolve commit SHA.
 #
 # Arguments:
@@ -58,13 +77,9 @@ deploy_init() {
   # this, setting FORKANA_HOST_PORT only in .env (as documented) caused every
   # deploy to fail health-check and roll back.
   HOST_PORT="${FORKANA_HOST_PORT:-3000}"
-  if [[ -z "${FORKANA_HOST_PORT:-}" && -f "${ENV_FILE}" ]]; then
+  if [[ -z "${FORKANA_HOST_PORT:-}" ]]; then
     local env_port
-    env_port="$(grep -E '^[[:space:]]*FORKANA_HOST_PORT[[:space:]]*=' "${ENV_FILE}" \
-      | tail -n1 \
-      | cut -d= -f2- \
-      | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
-            -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
+    env_port="$(read_env_var "${ENV_FILE}" FORKANA_HOST_PORT)"
     if [[ -n "${env_port}" ]]; then
       if [[ "${env_port}" =~ ^[0-9]+$ ]]; then
         HOST_PORT="${env_port}"
@@ -159,8 +174,14 @@ deploy_run() {
   local required_vars=(POSTGRES_PASSWORD FORKANA_DOMAIN FORKANA_SECRET_KEY FORKANA_INTERNAL_TOKEN FORKANA_JWT_SECRET)
   local missing=()
 
+  # Parse each value through read_env_var so empty quoted forms (FOO="",
+  # FOO='') and surrounding whitespace are caught; a bare "[^space#]+" grep
+  # would treat a lone quote as a valid value and let an empty secret reach
+  # the container.
   for var in "${required_vars[@]}"; do
-    if ! grep -Eq "^[[:space:]]*${var}[[:space:]]*=[[:space:]]*[^[:space:]#]+" "${ENV_FILE}"; then
+    local val
+    val="$(read_env_var "${ENV_FILE}" "${var}")"
+    if [[ -z "${val}" ]]; then
       missing+=("${var}")
     fi
   done
