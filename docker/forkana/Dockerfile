@@ -32,8 +32,12 @@ RUN if [ -n "${GITEA_VERSION}" ]; then git checkout "${GITEA_VERSION}"; fi \
 # Build env-to-ini utility
 RUN go build contrib/environment-to-ini/environment-to-ini.go
 
-# Copy local files (Forkana-specific scripts and templates)
-COPY docker/forkana /tmp/local
+# Copy local files (Forkana-specific scripts and templates).
+# Only the runtime subtrees are staged; deployment artifacts (Dockerfile,
+# deploy*.sh, dev.yml, nginx.conf, DEPLOYMENT_GUIDE.md, etc.) must not ship
+# inside the runtime image.
+COPY docker/forkana/etc /tmp/local/etc
+COPY docker/forkana/usr /tmp/local/usr
 
 # Stage Forkana custom overrides (options, public, services, templates) for the
 # runtime image. Uses conditional copies so the build succeeds even if a
