@@ -48,9 +48,31 @@ deploy_init() {
   REGISTRY_HTTP="http://127.0.0.1:${REGISTRY_PORT}"
   IMAGE_NAME="forkana"
   PROJECT_NAME="forkana"
-  HOST_PORT="${FORKANA_HOST_PORT:-3000}"
   COMPOSE_BASE="${COMPOSE_DIR}/dev.yml"
   COMPOSE_OVERRIDE="${COMPOSE_DIR}/compose.override.yml"
+  ENV_FILE="${COMPOSE_DIR}/.env"
+
+  # Resolve HOST_PORT for the health-check probe.  Prefer the exported shell
+  # variable; otherwise read FORKANA_HOST_PORT from ${ENV_FILE} so the probe
+  # targets the same port Compose binds via dev.yml interpolation.  Without
+  # this, setting FORKANA_HOST_PORT only in .env (as documented) caused every
+  # deploy to fail health-check and roll back.
+  HOST_PORT="${FORKANA_HOST_PORT:-3000}"
+  if [[ -z "${FORKANA_HOST_PORT:-}" && -f "${ENV_FILE}" ]]; then
+    local env_port
+    env_port="$(grep -E '^[[:space:]]*FORKANA_HOST_PORT[[:space:]]*=' "${ENV_FILE}" \
+      | tail -n1 \
+      | cut -d= -f2- \
+      | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+            -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
+    if [[ -n "${env_port}" ]]; then
+      if [[ "${env_port}" =~ ^[0-9]+$ ]]; then
+        HOST_PORT="${env_port}"
+      else
+        die "Invalid FORKANA_HOST_PORT in ${ENV_FILE}: '${env_port}' (must be numeric)."
+      fi
+    fi
+  fi
 
   # Set by deploy_run step 2; true when this deploy owns the compose-managed
   # registry service, false when an external registry is being reused.
@@ -129,7 +151,7 @@ deploy_run() {
   # This must happen before Step 2 (registry startup) because dev.yml interpolates
   # environment variables like ${POSTGRES_PASSWORD}. If .env is missing, docker compose
   # will fail with a confusing error. Validate early to give users a clear message.
-  ENV_FILE="${COMPOSE_DIR}/.env"
+  # ENV_FILE is set in deploy_init so HOST_PORT can be resolved from it.
   if [[ ! -f "${ENV_FILE}" ]]; then
     die "Missing ${ENV_FILE} - create it with POSTGRES_PASSWORD, FORKANA_DOMAIN, FORKANA_SECRET_KEY, FORKANA_INTERNAL_TOKEN, and FORKANA_JWT_SECRET (see DEPLOYMENT_GUIDE.md)."
   fi
