@@ -1,0 +1,218 @@
+name: deploy-forkana-dev
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Optional 40-char commit SHA to deploy (for rollback/manual deploy)."
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-forkana-dev
+  # Never cancel an in-progress deployment; queue instead.
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve deploy SHA
+        id: resolve_deploy_sha
+        env:
+          INPUT_COMMIT_SHA: ${{ github.event.inputs.commit_sha }}
+        run: |
+          set -euo pipefail
+
+          DEPLOY_SHA="${GITHUB_SHA}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "${INPUT_COMMIT_SHA:-}" ]]; then
+            DEPLOY_SHA="${INPUT_COMMIT_SHA}"
+          fi
+
+          echo "deploy_sha=${DEPLOY_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${DEPLOY_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Preflight checks
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          EXPECTED_DEPLOY_BRANCH: ${{ vars.DEPLOY_BRANCH }}
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+
+          [[ -n "${DEPLOY_HOST:-}" ]] || { echo "Missing required secret: DEPLOY_HOST" >&2; exit 1; }
+          [[ -n "${DEPLOY_USER:-}" ]] || { echo "Missing required secret: DEPLOY_USER" >&2; exit 1; }
+          [[ -n "${SSH_KEY:-}" ]] || { echo "Missing required secret: DEPLOY_SSH_KEY" >&2; exit 1; }
+          [[ -n "${SSH_KNOWN_HOSTS:-}" ]] || { echo "Missing required secret: DEPLOY_SSH_KNOWN_HOSTS" >&2; exit 1; }
+
+          # deploy_common.sh validates lowercase 40-char SHA; mirror that here
+          # so failures are explicit in CI before opening SSH.
+          if [[ ! "${DEPLOY_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid deploy SHA: '${DEPLOY_SHA}' (expected 40-char lowercase hex)." >&2
+            exit 1
+          fi
+
+          # Optional guard: keep workflow trigger branch aligned with the
+          # server clone branch configured during setup (DEPLOY_BRANCH).
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && -n "${EXPECTED_DEPLOY_BRANCH:-}" ]]; then
+            if [[ "${GITHUB_REF_NAME}" != "${EXPECTED_DEPLOY_BRANCH}" ]]; then
+              echo "Push branch '${GITHUB_REF_NAME}' does not match configured DEPLOY_BRANCH '${EXPECTED_DEPLOY_BRANCH}'." >&2
+              echo "Set repository variable DEPLOY_BRANCH (or update push branches) to keep CI and server config aligned." >&2
+              exit 1
+            fi
+          fi
+
+      # --- Build image in CI, transfer tarball, then trigger deploy ---
+      # GitHub Actions builds the Docker image, exports it as a tarball, and
+      # SCPs it to the VM at ~/forkana/images/. The VM's deploy.sh then loads
+      # the pre-built image instead of building from source.
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+
+      - name: Build Docker image
+        env:
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+
+          # Pass the sqlite tags as the TAGS build arg; the Dockerfile
+          # prepends "bindata timetzdata" to produce the final set:
+          #   bindata sqlite sqlite_unlock_notify timetzdata
+          docker build \
+            --file docker/forkana/Dockerfile \
+            --build-arg TAGS="sqlite sqlite_unlock_notify" \
+            --tag "forkana:${DEPLOY_SHA}" \
+            --label "commit=${DEPLOY_SHA}" \
+            .
+
+      - name: Generate image digest
+        env:
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+
+          DIGEST="$(docker inspect --format='{{.Id}}' "forkana:${DEPLOY_SHA}")"
+          [[ -n "${DIGEST}" ]] || { echo "Failed to resolve image digest." >&2; exit 1; }
+          printf '%s\n' "${DIGEST}" > forkana.digest
+          echo "Image digest: ${DIGEST}"
+
+      - name: Export image to tarball
+        env:
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+          SHORT_SHA: ${{ steps.resolve_deploy_sha.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+
+          docker save "forkana:${DEPLOY_SHA}" -o "forkana-${SHORT_SHA}.tar"
+          gzip -n "forkana-${SHORT_SHA}.tar"
+          ls -lh "forkana-${SHORT_SHA}.tar.gz" forkana.digest
+
+      - name: Transfer artifacts to VM
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          SHORT_SHA: ${{ steps.resolve_deploy_sha.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+
+          cleanup() {
+            rm -f "${SSH_KEY_FILE:-}" "${KNOWN_HOSTS_FILE:-}"
+          }
+          trap cleanup EXIT
+
+          umask 077
+          SSH_KEY_FILE="$(mktemp)"
+          printf '%s\n' "$SSH_KEY" > "$SSH_KEY_FILE"
+
+          KNOWN_HOSTS_FILE="$(mktemp)"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+
+          SCP_OPTS=(
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o IdentitiesOnly=yes
+            -o PreferredAuthentications=publickey
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="${KNOWN_HOSTS_FILE}"
+            -i "${SSH_KEY_FILE}"
+          )
+
+          # Destination is relative to the deploy user's home directory
+          # (~/forkana/images/), matching DEPLOY_DIR in deploy_common.sh.
+          scp "${SCP_OPTS[@]}" \
+            "forkana-${SHORT_SHA}.tar.gz" \
+            forkana.digest \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:forkana/images/"
+
+      # --- Trigger deploy on VM via SSH ---
+      # GitHub Actions has already transferred the pre-built image tarball;
+      # deploy.sh on the VM loads it, pushes it to the local registry, and
+      # rolls out the new image with docker compose.
+      - name: Deploy to VM
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          set -euo pipefail
+
+          cleanup() {
+            rm -f "${SSH_KEY_FILE:-}" "${KNOWN_HOSTS_FILE:-}"
+          }
+          trap cleanup EXIT
+
+          # Write the SSH key to a temp file with strict permissions.
+          umask 077
+          SSH_KEY_FILE="$(mktemp)"
+          printf '%s\n' "$SSH_KEY" > "$SSH_KEY_FILE"
+
+          # Write the known_hosts file so we verify the VM's host key.
+          KNOWN_HOSTS_FILE="$(mktemp)"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+
+          SSH_OPTS=(
+            -o BatchMode=yes
+            -o ConnectTimeout=15
+            -o IdentitiesOnly=yes
+            -o PreferredAuthentications=publickey
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="${KNOWN_HOSTS_FILE}"
+            -i "${SSH_KEY_FILE}"
+          )
+
+          # The forced-command in authorized_keys on the VM restricts this
+          # connection to running deploy.sh. We pass the commit SHA via the
+          # SSH_ORIGINAL_COMMAND mechanism (the argument after --).
+          ssh -T "${SSH_OPTS[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" -- "${DEPLOY_SHA}"
+
+      - name: Step summary
+        if: always()
+        env:
+          DEPLOY_SHA: ${{ steps.resolve_deploy_sha.outputs.deploy_sha }}
+        run: |
+          {
+            echo "## Forkana Deploy"
+            echo "- **Event:** ${GITHUB_EVENT_NAME}"
+            echo "- **Branch:** ${GITHUB_REF_NAME}"
+            echo "- **Commit:** \`${DEPLOY_SHA}\`"
+            echo ""
+            echo "### Rollback"
+            echo "Re-run a prior successful workflow, trigger this workflow with a commit SHA, or SSH into the VM and run:"
+            echo '```bash'
+            echo '$HOME/forkana/deploy.sh <previous-commit-sha>'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

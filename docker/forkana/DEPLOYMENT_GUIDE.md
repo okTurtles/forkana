@@ -119,9 +119,17 @@ sudo dnf install -y git jq curl
 > skip this step - the deploy user's directories are created there instead.
 
 ```bash
-mkdir -p ~/forkana/{data,data/git,data/custom,config,postgres,compose}
-chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/data/custom ~/forkana/config
+mkdir -p ~/forkana/{compose,data,data/git,data/custom,config,postgres,images}
+chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/data/custom \
+           ~/forkana/config ~/forkana/images
 ```
+
+> **Note:** `postgres/` is intentionally omitted from `chmod` - the
+> postgres container takes ownership of its data directory on first
+> start (UID 999 / 70) and a later `chmod 0755` by the host user
+> would break subsequent startups. See
+> [UID 1000 Permission Issues](#uid-1000-permission-issues-bind-mount-directories)
+> in Troubleshooting.
 
 </details>
 
@@ -133,6 +141,48 @@ This section configures the VM for CI/CD deployment. GitHub Actions builds
 the Docker image, transfers it to the VPS as a pre-built tarball, and
 triggers deployment via SSH. The VPS loads the image, pushes it to a local
 Docker registry, and deploys with a digest-pinned compose override.
+
+### Deployment Flow
+
+Every push to the configured deploy branch (or a manual
+`workflow_dispatch`) runs the pipeline below. Steps 1-3 execute on
+the GitHub Actions runner; steps 4-6 execute on the VM under the
+deploy user via `~/forkana/deploy.sh` (which sources
+`deploy_common.sh`).
+
+1. **Build.** The runner builds the Docker image from the checked-out
+   commit and exports it as a gzipped tarball
+   (`docker save forkana:${sha} | gzip > forkana-${sha:0:7}.tar.gz`).
+2. **Transfer.** The tarball is copied to the VM with SCP, landing at
+   `~/forkana/images/forkana-<7-char-sha>.tar.gz`.
+3. **Trigger.** The runner opens an SSH connection with the deploy
+   key; `authorized_keys` pins a `command="~/forkana/deploy.sh"`
+   forced-command restriction (see
+   [step 5](#5-configure-authorized_keys-with-forced-command-restrictions)),
+   so every session runs the deploy script regardless of what the
+   client requests. The commit SHA is passed via
+   `$SSH_ORIGINAL_COMMAND`.
+4. **Load & push.** `deploy_common.sh` `docker load`s the tarball and
+   pushes the image to a local registry at
+   `127.0.0.1:${REGISTRY_PORT}` (loopback-bound, not publicly
+   reachable). The push output yields the registry digest that gets
+   pinned in step 5.
+5. **Pin.** The script rewrites `~/forkana/compose/compose.override.yml`
+   to pin the `forkana` service to the push digest
+   (`image: 127.0.0.1:${REGISTRY_PORT}/forkana@sha256:…`) and runs
+   `docker compose up -d` on the pinned override. Registry and
+   postgres are left alone unless their definitions changed.
+6. **Verify.** The script polls
+   `http://127.0.0.1:${FORKANA_HOST_PORT}/api/healthz` for up to
+   150 s. On success the previous override snapshot is removed and
+   the workflow run is marked green. On failure the script restores
+   the previous override from `compose.override.yml.prev`, re-runs
+   compose for `forkana` only, and exits 1 - see
+   [Automatic Rollback on Health-Check Failure](#automatic-rollback-on-health-check-failure)
+   in Maintenance.
+
+The numbered steps that follow configure the VM so this pipeline can
+run end-to-end.
 
 <details>
 
@@ -231,7 +281,7 @@ repository:
 ```bash
 DEPLOY_USER="forkana-deploy"  # ← replace with your UID 1000 username
 DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
-BRANCH="master"
+BRANCH="master"               # keep in sync with vars.DEPLOY_BRANCH if set (see step 8)
 BASE_URL="https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana"
 
 for script in deploy.sh deploy_common.sh deploy_debian.sh deploy_fedora.sh cleanup-images.sh; do
@@ -293,7 +343,7 @@ bootstrap (before the first deploy), start it manually:
 ```bash
 DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
 DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
-BRANCH="master"
+BRANCH="master"               # keep in sync with vars.DEPLOY_BRANCH if set (see step 8)
 
 sudo -Hiu "${DEPLOY_USER}" curl -fsSL \
   "https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana/dev.yml" \
@@ -325,7 +375,7 @@ Copy the output and store it as the `DEPLOY_SSH_KNOWN_HOSTS` secret in the
 GitHub repository settings. The workflow uses `StrictHostKeyChecking=yes` with
 this value - **never** use `StrictHostKeyChecking=no`.
 
-### 8. Required GitHub Secrets
+### 8. Required GitHub Secrets and Variables
 
 | Secret | Description                                                  |
 |---|--------------------------------------------------------------|
@@ -333,6 +383,14 @@ this value - **never** use `StrictHostKeyChecking=no`.
 | `DEPLOY_USER` | Username of the UID 1000 deploy user (e.g. `forkana-deploy`) |
 | `DEPLOY_SSH_KEY` | Private key (ed25519 recommended) - see workflow below       |
 | `DEPLOY_SSH_KNOWN_HOSTS` | Output of `ssh-keyscan` from step 7                          |
+
+**Optional repository variables:**
+
+| Variable | Description                                                                                                                                                                                                                                                        |
+|---|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `DEPLOY_BRANCH` | If set, the workflow's preflight guard rejects `push`-triggered runs whose branch name does not match this value. Leave unset to deploy from whatever branches are listed under `on.push.branches` in the workflow. Keep aligned with the `BRANCH=` values used in steps 4 and 6. |
+
+Repository variables are configured under **Settings > Secrets and variables > Actions > Variables** (distinct from the *Secrets* tab above).
 
 **SSH key workflow:**
 
@@ -731,8 +789,12 @@ ls -la $DEPLOY_HOME/forkana/data
 ls -la $DEPLOY_HOME/forkana/config
 ls -la $DEPLOY_HOME/forkana/postgres
 
-# Fix permissions if needed (deploy user must be UID 1000)
-chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
+# Fix permissions if needed (deploy user must be UID 1000).
+# Do NOT include $DEPLOY_HOME/forkana/postgres here: after the first
+# deployment that directory is owned by the postgres container's
+# internal user (UID 999 on debian-based postgres, 70 on alpine).
+# Chowning it back to 1000:1000 will break postgres startup.
+chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config
 ```
 
 #### Deploy User Commands Fail with "Permission denied"
@@ -768,8 +830,13 @@ DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 # Check directory ownership
 ls -la $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
 
-# Expected: all directories owned by UID 1000
+# Expected: data/ and config/ owned by UID 1000; postgres/ owned by
+# the postgres container's internal user after the first deployment
+# (UID 999 on debian-based postgres, 70 on alpine). That is normal
+# and must not be changed back to 1000:1000.
 # drwxr-xr-x  1000  1000  ... data/
+# drwxr-xr-x  1000  1000  ... config/
+# drwx------   999   999  ... postgres/
 ```
 
 **Solution:**
@@ -777,8 +844,10 @@ ls -la $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkan
 DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
 DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
-# Fix ownership on all bind-mount directories
-sudo chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/postgres
+# Fix ownership on Forkana-managed bind-mounts only. Leave
+# $DEPLOY_HOME/forkana/postgres untouched: it is managed by the
+# postgres container's internal user (UID 999 / 70) after initdb.
+sudo chown -R 1000:1000 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/config
 
 # Verify the deploy user has UID 1000
 getent passwd "${DEPLOY_USER}" | cut -d: -f3
@@ -992,19 +1061,60 @@ docker compose --env-file ~/forkana/compose/.env \
 ## Maintenance
 <details>
 
-### Updating Forkana
+### Updating / Rolling Back Forkana
 
-Deployments are automated via GitHub Actions. To deploy manually:
+Deployments are automated via GitHub Actions on pushes to the
+configured deploy branch (see [`DEPLOY_BRANCH`](#8-required-github-secrets-and-variables)).
+Three paths to redeploy or roll back, in order of preference:
 
-```bash
-# Run the deploy script with a specific commit SHA
-~/forkana/deploy.sh <commit-sha>
+1. **Re-run a prior successful workflow run.** Open the *Actions* tab,
+   pick the green run you want to revert to, and use *Re-run all jobs*.
+   The original commit is rebuilt in CI and redeployed. No VM access
+   required.
 
-# Or re-run a previous GitHub Actions workflow from the Actions tab.
+2. **Manual workflow dispatch with a commit SHA.** Go to
+   *Actions > deploy-forkana-dev > Run workflow*, paste a 40-char
+   commit SHA into the *Optional 40-char commit SHA to deploy* input,
+   and run. CI rebuilds that commit and redeploys it. No VM access
+   required; the preferred path for targeted rollbacks.
 
-# Clean up old images
-docker image prune -f
-```
+3. **Direct SSH (emergency only).** When GitHub Actions is
+   unavailable:
+
+   ```bash
+   ~/forkana/deploy.sh <commit-sha>
+
+   # Clean up old image layers afterwards
+   docker image prune -f
+   ```
+
+   Requires a previously-transferred tarball at
+   `~/forkana/images/forkana-<7-char-sha>.tar.gz` - the 7-character
+   prefix must match the first 7 characters of the full commit SHA
+   passed as argument. Tarballs land there as part of every CI
+   deploy; `cleanup-images.sh` (see below) keeps only the most
+   recent N.
+
+#### Automatic Rollback on Health-Check Failure
+
+After every deploy, `deploy_common.sh` (Step 9) polls
+`http://127.0.0.1:${FORKANA_HOST_PORT}/api/healthz` for up to 150 s
+(30 attempts × 5 s). If the service never becomes healthy the script:
+
+- Emits a `::error::` annotation to the GitHub Actions job log
+  identifying the failing commit and pinned image ref.
+- Dumps the last 100 lines of the `forkana` container logs.
+- Restores the previous `compose.override.yml` from the
+  `compose.override.yml.prev` sidecar snapshot (written just before
+  Step 7 generates the new override) and re-runs
+  `docker compose up -d forkana` so the previously-healthy image
+  becomes active again. `postgres` and `registry` are left alone.
+- Exits 1 so the workflow run is marked failed.
+
+On a first-ever deploy there is no prior override to restore; the
+script logs `No previous override to roll back to (first deploy?)`
+and exits 1 without replacing the current override. In that case,
+redeploy a known-good SHA via path 2 above.
 
 **Local testing:** The deploy script expects a pre-built image tarball at
 `~/forkana/images/forkana-<7-char-sha>.tar.gz`. When run from inside a git
@@ -1150,8 +1260,8 @@ sudo systemctl start forkana
 
 ---
 
-<details>
 <summary><h2>Additional Configuration</h2></summary>
+<details>
 
 ### Environment Variable Reference
 
