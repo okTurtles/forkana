@@ -1706,22 +1706,6 @@ func SubmitConflictResolution(ctx *context.Context) {
 		return
 	}
 
-	// Parse JSON body
-	body, err := io.ReadAll(ctx.Req.Body)
-	if err != nil {
-		ctx.PlainText(http.StatusBadRequest, "read body: "+err.Error())
-		return
-	}
-	var req conflictResolutionRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		ctx.PlainText(http.StatusBadRequest, "parse body: "+err.Error())
-		return
-	}
-	if len(req.Files) == 0 {
-		ctx.PlainText(http.StatusBadRequest, "no files provided")
-		return
-	}
-
 	if !pull.IsFilesConflicted() {
 		ctx.PlainText(http.StatusBadRequest, "pull request has no conflicts")
 		return
@@ -1729,6 +1713,29 @@ func SubmitConflictResolution(ctx *context.Context) {
 	conflictedFileSet := make(map[string]struct{}, len(pull.ConflictedFiles))
 	for _, f := range pull.ConflictedFiles {
 		conflictedFileSet[f] = struct{}{}
+	}
+
+	// Cap the request body to bound memory: each conflicted file may carry at
+	// most one fully-resolved blob, so MaxDisplayFileSize per file is the
+	// natural upper bound, plus a fixed envelope for JSON framing.
+	const conflictBodyEnvelopeOverhead = 64 * 1024
+	maxBytes := int64(len(pull.ConflictedFiles))*setting.UI.MaxDisplayFileSize + conflictBodyEnvelopeOverhead
+	bodyReader := http.MaxBytesReader(ctx.Resp, ctx.Req.Body, maxBytes)
+	defer bodyReader.Close()
+
+	var req conflictResolutionRequest
+	if err := json.NewDecoder(bodyReader).Decode(&req); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			ctx.PlainText(http.StatusRequestEntityTooLarge, fmt.Sprintf("request body exceeds %d bytes", maxBytes))
+			return
+		}
+		ctx.PlainText(http.StatusBadRequest, "parse body: "+err.Error())
+		return
+	}
+	if len(req.Files) == 0 {
+		ctx.PlainText(http.StatusBadRequest, "no files provided")
+		return
 	}
 	for _, fileReq := range req.Files {
 		if _, ok := conflictedFileSet[fileReq.Path]; !ok {
