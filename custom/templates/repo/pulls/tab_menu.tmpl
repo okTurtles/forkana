@@ -5,17 +5,17 @@
 			{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_conversation")}}
 			<span class="ui small label">{{.Issue.NumComments}}</span>
 		</a>
-        {{if .IsPullFilesConflicted}}
-        <a class="item {{if .PageIsPullConflicts}}active{{end}}" href="{{.Issue.Link}}/conflicts">
-            {{svg "octicon-git-merge"}}
-            {{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_conflicts")}}
-        </a>
-        {{end}}
-        {{if and .IsIssuePoster (not .Issue.IsClosed) (not .Issue.PullRequest.HasMerged) .HasChangesRequested (not .IsPullFilesConflicted)}}
-		<a class="item {{if .PageIsPullEdit}}active{{end}}" href="{{.Issue.Link}}/edit">
-			{{svg "octicon-pencil"}}
-			{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.editor.edit_file")}}
-		</a>
+		{{if .IsPullFilesConflicted}}
+			<a class="item {{if .PageIsPullConflicts}}active{{end}}" href="{{.Issue.Link}}/conflicts">
+				{{svg "octicon-git-merge"}}
+				{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_conflicts")}}
+			</a>
+		{{end}}
+		{{if and .IsIssuePoster (not .Issue.IsClosed) (not .Issue.PullRequest.HasMerged) .HasChangesRequested}}
+			<a class="item {{if .PageIsPullEdit}}active{{end}}" href="{{.Issue.Link}}/edit">
+				{{svg "octicon-pencil"}}
+				{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.editor.edit_file")}}
+			</a>
 		{{end}}
 		<a class="item {{if .PageIsPullFiles}}active{{end}}" href="{{.Issue.Link}}/files">
 			{{svg "octicon-diff"}}
