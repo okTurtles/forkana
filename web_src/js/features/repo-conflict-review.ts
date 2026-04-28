@@ -191,7 +191,11 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
       // Initialize the toast comment editor
       const toastEditorContainer = commentSection.querySelector<HTMLElement>('.toast-comment-editor');
       if (toastEditorContainer) {
-        await initToastCommentEditor(toastEditorContainer);
+        try {
+          await initToastCommentEditor(toastEditorContainer);
+        } catch (err) {
+          console.error('failed to init conflict editor', err);
+        }
       }
     }
 
