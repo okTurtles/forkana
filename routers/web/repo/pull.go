@@ -1701,12 +1701,9 @@ func SubmitConflictResolution(ctx *context.Context) {
 		ctx.ServerError("IsUserAllowedToUpdate", err)
 		return
 	}
-	if !allowedUpdateByMerge {
+	isPosterOrAdmin := ctx.Doer.ID == issue.PosterID || ctx.Doer.IsAdmin
+	if !isPosterOrAdmin && !allowedUpdateByMerge {
 		ctx.PlainText(http.StatusForbidden, "not allowed to resolve conflicts")
-		return
-	}
-	if ctx.Doer.ID != issue.PosterID {
-		ctx.PlainText(http.StatusForbidden, "only the creator of the change request can resolve conflicts")
 		return
 	}
 
