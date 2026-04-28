@@ -100,9 +100,9 @@
 							{{svg "octicon-alert"}}
 						</div>
 						<div>
-							<strong>This change has conflicts that must be resolved.</strong>
+							<strong>{{ctx.Locale.Tr "repo.pulls.files_conflicted"}}</strong>
 							<div class="tw-text-xs tw-mt-0.5">
-								Use the <a href="{{.Issue.Link}}/conflicts">Editor tab</a> to resolve conflicts.
+								{{ctx.Locale.Tr "repo.pulls.files_conflicted_help" (print .Issue.Link "/conflicts")}}
 							</div>
 						</div>
 					</div>

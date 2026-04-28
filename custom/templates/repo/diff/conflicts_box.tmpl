@@ -10,7 +10,7 @@
 		<div class="tw-flex tw-items-center tw-flex-wrap tw-gap-2 tw-ml-0.5">
 			{{if not .DiffNotAvailable}}
 				<div class="diff-detail-stats conflicts-stats-header tw-flex tw-items-center tw-flex-wrap">
-					<strong class="tw-text-red">{{.DiffShortStat.NumFiles}} Conflicts</strong>
+					<strong class="tw-text-red">{{ctx.Locale.TrN .DiffShortStat.NumFiles "repo.diff.conflicts_count_1" "repo.diff.conflicts_count_n" .DiffShortStat.NumFiles}}</strong>
 				</div>
 			{{end}}
 		</div>
