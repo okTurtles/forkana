@@ -1705,6 +1705,10 @@ func SubmitConflictResolution(ctx *context.Context) {
 		ctx.PlainText(http.StatusForbidden, "not allowed to resolve conflicts")
 		return
 	}
+	if ctx.Doer.ID != issue.PosterID {
+		ctx.PlainText(http.StatusForbidden, "only the creator of the change request can resolve conflicts")
+		return
+	}
 
 	if !pull.IsFilesConflicted() {
 		ctx.PlainText(http.StatusBadRequest, "pull request has no conflicts")
