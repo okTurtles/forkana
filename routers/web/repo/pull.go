@@ -1685,6 +1685,21 @@ func SubmitConflictResolution(ctx *context.Context) {
 	}
 	pull := issue.PullRequest
 
+	if !ctx.IsSigned || ctx.Doer == nil {
+		ctx.PlainText(http.StatusUnauthorized, "sign in required")
+		return
+	}
+
+	allowedUpdateByMerge, _, err := pull_service.IsUserAllowedToUpdate(ctx, pull, ctx.Doer)
+	if err != nil {
+		ctx.ServerError("IsUserAllowedToUpdate", err)
+		return
+	}
+	if !allowedUpdateByMerge {
+		ctx.PlainText(http.StatusForbidden, "not allowed to resolve conflicts")
+		return
+	}
+
 	// Parse JSON body
 	body, err := io.ReadAll(ctx.Req.Body)
 	if err != nil {
