@@ -1716,6 +1716,21 @@ func SubmitConflictResolution(ctx *context.Context) {
 		return
 	}
 
+	if !pull.IsFilesConflicted() {
+		ctx.PlainText(http.StatusBadRequest, "pull request has no conflicts")
+		return
+	}
+	conflictedFileSet := make(map[string]struct{}, len(pull.ConflictedFiles))
+	for _, f := range pull.ConflictedFiles {
+		conflictedFileSet[f] = struct{}{}
+	}
+	for _, fileReq := range req.Files {
+		if _, ok := conflictedFileSet[fileReq.Path]; !ok {
+			ctx.PlainText(http.StatusBadRequest, "invalid conflicted file: "+fileReq.Path)
+			return
+		}
+	}
+
 	// Load the head repo (may differ from base repo for forked PRs)
 	if err := pull.LoadHeadRepo(ctx); err != nil {
 		ctx.ServerError("LoadHeadRepo", err)
