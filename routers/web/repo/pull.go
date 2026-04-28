@@ -1642,7 +1642,9 @@ func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
 // applyConflictTexts builds the resolved file content by replacing each conflicted head range
 // with the text the user confirmed in the editor (which may be the base version, head version,
 // or a manual blend). texts maps conflictGroup index → resolved text from the editor.
-func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[int]string) []byte {
+// Returns an error if a referenced group has no head range to splice into (e.g., a base-only
+// deletion), so the caller can surface a 4xx instead of silently dropping the user's input.
+func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[int]string) ([]byte, error) {
 	headLines := strings.Split(string(headContent), "\n")
 
 	// Process in reverse so earlier indices stay valid after splice operations.
@@ -1653,7 +1655,7 @@ func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[in
 		}
 		g := groups[i]
 		if g.headStart == 0 {
-			continue
+			return nil, fmt.Errorf("conflict group %d cannot be applied (no head range)", i)
 		}
 		resolvedLines := strings.Split(strings.TrimRight(text, "\n"), "\n")
 		hStart := g.headStart - 1
@@ -1665,7 +1667,7 @@ func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[in
 		headLines = newHead
 	}
 
-	return []byte(strings.Join(headLines, "\n"))
+	return []byte(strings.Join(headLines, "\n")), nil
 }
 
 // conflictResolutionRequest is the JSON body for POST /conflicts.
@@ -1822,9 +1824,17 @@ func SubmitConflictResolution(ctx *context.Context) {
 			groups := extractConflictGroups(diffFile)
 			texts := make(map[int]string, len(fileReq.Conflicts))
 			for _, c := range fileReq.Conflicts {
+				if c.Index < 0 || c.Index >= len(groups) {
+					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("conflict index %d out of range for %s", c.Index, fileReq.Path))
+					return
+				}
 				texts[c.Index] = c.Text
 			}
-			resolved = applyConflictTexts(headContent, groups, texts)
+			resolved, err = applyConflictTexts(headContent, groups, texts)
+			if err != nil {
+				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("%s: %v", fileReq.Path, err))
+				return
+			}
 		}
 
 		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, content: resolved})
