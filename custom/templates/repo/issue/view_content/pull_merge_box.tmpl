@@ -9,6 +9,7 @@
 {{- else if .IsPullRequestBroken}}{{$mergeColor = "red"}}
 {{- else if .IsBlockedByApprovals}}{{$mergeColor = "red"}}
 {{- else if .IsBlockedByRejection}}{{$mergeColor = "red"}}
+{{- else if .IsPullFilesConflicted}}{{$mergeColor = "grey"}}
 {{- else if .IsBlockedByOfficialReviewRequests}}{{$mergeColor = "red"}}
 {{- else if .IsBlockedByOutdatedBranch}}{{$mergeColor = "red"}}
 {{- else if .IsBlockedByChangedProtectedFiles}}{{$mergeColor = "red"}}
@@ -93,15 +94,25 @@
 					</div>
 				</div>
 			{{else if .IsPullFilesConflicted}}
-				<div class="item">
-					{{svg "octicon-x"}}
-					{{ctx.Locale.Tr "repo.pulls.files_conflicted"}}
+				<div class="item item-section">
+					<div class="item-section-left flex-text-inline tw-flex-1 tw-gap-3">
+						<div class="circle grey tw-self-start tw-flex-shrink-0">
+							{{svg "octicon-alert"}}
+						</div>
+						<div>
+							<strong>{{ctx.Locale.Tr "repo.pulls.files_conflicted"}}</strong>
+							<div class="tw-text-xs tw-mt-0.5">
+								{{ctx.Locale.Tr "repo.pulls.files_conflicted_help" (print .Issue.Link "/conflicts")}}
+							</div>
+						</div>
+					</div>
+					<div class="item-section-right">
+						<a href="{{.Issue.Link}}/conflicts" class="ui button primary small">Resolve conflicts</a>
+					</div>
 				</div>
-				<ul>
-					{{range .ConflictedFiles}}
-					<li>{{.}}</li>
-					{{end}}
-				</ul>
+				<div class="item tw-mt-4">
+					<button class="ui button small" disabled>{{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}}</button>
+				</div>
 			{{else if .IsPullRequestBroken}}
 				<div class="item">
 					{{svg "octicon-x"}}
@@ -206,20 +217,9 @@
 							<div class="tw-font-semibold">
 								{{ctx.Locale.Tr "repo.pulls.can_auto_merge_desc"}}
 								<div class="tw-text-xs text light-2">
-									{{ctx.Locale.Tr "repo.pulls.can_auto_merge_desc_detail"}}
+									Only those with <a href="{{.Repository.Link}}/settings/collaboration">write access</a> to this repository can merge pull requests.
 								</div>
 							</div>
-						</div>
-					{{end}}
-					{{if .WillSign}}
-						<div class="item">
-							{{svg "octicon-lock" 16 "text green"}}
-							{{ctx.Locale.Tr "repo.signing.will_sign" .SigningKeyMergeDisplay}}
-						</div>
-					{{else if .IsSigned}}
-						<div class="item">
-							{{svg "octicon-unlock"}}
-							{{ctx.Locale.Tr (printf "repo.signing.wont_sign.%s" .WontSignReason)}}
 						</div>
 					{{end}}
 				{{end}}

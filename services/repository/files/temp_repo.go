@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -50,6 +51,26 @@ func (t *TemporaryUploadRepository) Close() {
 	if t.cleanup != nil {
 		t.cleanup()
 	}
+}
+
+// AddObjectAlternates appends the given repo paths to this repo's git object alternates,
+// making their objects reachable. Must be called after Clone.
+func (t *TemporaryUploadRepository) AddObjectAlternates(repoPaths ...string) error {
+	p := filepath.Join(t.basePath, ".git", "objects", "info", "alternates")
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return fmt.Errorf("AddObjectAlternates mkdir: %w", err)
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("AddObjectAlternates open: %w", err)
+	}
+	defer f.Close()
+	for _, rp := range repoPaths {
+		if _, err := fmt.Fprintln(f, filepath.Join(rp, "objects")); err != nil {
+			return fmt.Errorf("AddObjectAlternates write: %w", err)
+		}
+	}
+	return nil
 }
 
 // Clone the base repository to our path and set branch as the HEAD
@@ -229,10 +250,11 @@ func (t *TemporaryUploadRepository) GetLastCommitByRef(ctx context.Context, ref 
 }
 
 type CommitTreeUserOptions struct {
-	ParentCommitID string
-	TreeHash       string
-	CommitMessage  string
-	SignOff        bool
+	ParentCommitID            string
+	AdditionalParentCommitIDs []string // extra -p parents, e.g. for a merge commit
+	TreeHash                  string
+	CommitMessage             string
+	SignOff                   bool
 
 	DoerUser *user_model.User
 
@@ -291,6 +313,11 @@ func (t *TemporaryUploadRepository) CommitTree(ctx context.Context, opts *Commit
 	cmdCommitTree := gitcmd.NewCommand("commit-tree").AddDynamicArguments(opts.TreeHash)
 	if opts.ParentCommitID != "" {
 		cmdCommitTree.AddOptionValues("-p", opts.ParentCommitID)
+	}
+	for _, pid := range opts.AdditionalParentCommitIDs {
+		if pid != "" {
+			cmdCommitTree.AddOptionValues("-p", pid)
+		}
 	}
 
 	var sign bool

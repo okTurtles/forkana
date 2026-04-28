@@ -1,0 +1,85 @@
+{{/* Custom diff box for the conflict resolution page. Based on box.tmpl but simplified:
+     - No file tree toggle / panel
+     - "N Conflicts" header instead of stats
+     - No options dropdown / expand-collapse
+     - No review submit modal
+     - Adds Submit button + fold toggle
+     - Uses conflicts_section_split for rendering */}}
+<div>
+	<div class="diff-detail-box">
+		<div class="tw-flex tw-items-center tw-flex-wrap tw-gap-2 tw-ml-0.5">
+			{{if not .DiffNotAvailable}}
+				<div class="diff-detail-stats conflicts-stats-header tw-flex tw-items-center tw-flex-wrap">
+					<strong class="tw-text-red">{{ctx.Locale.TrN .DiffShortStat.NumFiles "repo.diff.conflicts_count_1" "repo.diff.conflicts_count_n" .DiffShortStat.NumFiles}}</strong>
+				</div>
+			{{end}}
+		</div>
+		<div class="diff-detail-actions tw-flex tw-items-center tw-gap-2">
+			<button type="button" class="ui tiny basic button conflict-fold-toggle-btn" data-tooltip-content="Toggle context lines" title="Toggle context lines">
+				{{svg "octicon-fold" 16}}
+			</button>
+			<button type="button" class="ui tiny primary button conflict-submit-btn" disabled>Submit</button>
+		</div>
+	</div>
+	{{if not .DiffNotAvailable}}
+		<div id="diff-container">
+			<div id="diff-file-boxes" class="sixteen wide column conflict-diff-file-boxes">
+				{{range $i, $file := .Diff.Files}}
+					{{$blobBase := call $.GetBlobByPathForCommit $.BeforeCommit $file.OldName}}
+					{{$blobHead := call $.GetBlobByPathForCommit $.HeadCommit $file.Name}}
+					<div class="diff-file-box file-content {{TabSizeClass $.Editorconfig $file.Name}} tw-mt-0" id="diff-{{$file.NameHash}}" data-old-filename="{{$file.OldName}}" data-new-filename="{{$file.Name}}">
+						<div class="diff-file-body ui attached unstackable table segment">
+							<div id="diff-source-{{$file.NameHash}}" class="file-body file-code unicode-escaped code-diff code-diff-split">
+								{{if or $file.IsIncomplete $file.IsBin}}
+									<div class="diff-file-body binary">
+										{{if $file.IsIncomplete}}
+											{{ctx.Locale.Tr "repo.diff.file_suppressed"}}
+										{{else}}
+											{{ctx.Locale.Tr "repo.diff.bin_not_shown"}}
+										{{end}}
+									</div>
+								{{else}}
+									<table class="chroma" data-path="{{$file.Name}}">
+										{{template "repo/diff/conflicts_section_split" dict "file" . "root" $}}
+									</table>
+								{{end}}
+							</div>
+						</div>
+					</div>
+				{{end}}
+			</div>
+		</div>
+		<div class="tw-flex tw-justify-end tw-mt-4 tw-mb-4">
+			<button type="button" class="ui primary button tiny conflict-submit-btn" disabled>Submit</button>
+		</div>
+	{{else}}
+		<h4>{{ctx.Locale.Tr "repo.diff.data_not_available"}}</h4>
+	{{end}}
+
+	{{if and (not $.Repository.IsArchived) (not .DiffNotAvailable)}}
+		<template id="issue-comment-editor-template">
+			<form class="ui form comment">
+				<div class="field">
+				{{template "shared/toasteditor" (dict
+					"TextareaName" "content"
+					"DropzoneParentContainer" ".ui.form"
+					"PreviewUrl" (print $.Repository.Link "/markup")
+					"PreviewContext" $.Repository.Link
+				)}}
+				{{if .IsAttachmentEnabled}}
+					{{template "repo/upload" .}}
+					<div class="dropzone-hint-text">{{ctx.Locale.Tr "dropzone.default_message"}}</div>
+				{{end}}
+				</div>
+				<div class="field flex-text-block tw-justify-end">
+					<button class="ui cancel button">{{ctx.Locale.Tr "repo.issues.cancel"}}</button>
+					<button class="ui primary button">{{ctx.Locale.Tr "repo.issues.save"}}</button>
+				</div>
+			</form>
+		</template>
+	{{end}}
+	{{if (not .DiffNotAvailable)}}
+		{{template "repo/issue/view_content/reference_issue_dialog" .}}
+		{{template "shared/user/block_user_dialog" .}}
+	{{end}}
+</div>
