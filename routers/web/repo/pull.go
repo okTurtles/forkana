@@ -1589,10 +1589,14 @@ func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
 	for _, section := range diffFile.Sections {
 		for _, line := range section.Lines {
 			switch line.Type {
-			case gitdiff.DiffLinePlain, gitdiff.DiffLineSection:
+			case gitdiff.DiffLinePlain:
 				flush()
+			case gitdiff.DiffLineSection:
+				// Hunk headers (@@) are not rendered in conflicts_section_split.tmpl,
+				// so they must not break a group either - otherwise the per-file
+				// indices the frontend sends would not align with these groups.
 			case gitdiff.DiffLineDel:
-				// DEL line (matched or unmatched) → contributes to conflict group
+				// DEL line (matched or unmatched) -> contributes to conflict group
 				if cur == nil {
 					cur = &conflictGroup{}
 				}
