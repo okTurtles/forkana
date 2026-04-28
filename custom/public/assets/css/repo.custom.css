@@ -522,6 +522,10 @@
   padding-bottom: 8px;
 }
 
+.conflict-diff-file-boxes {
+  gap: 44px !important;
+}
+
 .conflict-diff-file-boxes .diff-file-box {
   border-bottom-left-radius: 0 !important;
   border-bottom-right-radius: 0 !important;
