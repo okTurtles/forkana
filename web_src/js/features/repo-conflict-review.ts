@@ -26,6 +26,12 @@ export async function initConflictReview() {
     if (!table) continue;
 
     const wrappers = await buildConflictWrappers(table);
+    // Per-file index matches the backend's extractConflictGroups output, which is
+    // 0..N-1 within each file. The global data-conflict-index set by numberConflicts
+    // is used only for cross-file navigation.
+    for (const [fileIndex, wrapper] of wrappers.entries()) {
+      wrapper.setAttribute('data-file-conflict-index', String(fileIndex));
+    }
     allConflictWrappers.push(...wrappers);
   }
 
@@ -371,7 +377,7 @@ function initSubmitTracking() {
       const fileMap = new Map<string, Array<{index: number; text: string}>>();
       const allWrappers = document.querySelectorAll<HTMLElement>('.conflict-wrapper');
       for (const wrapper of allWrappers) {
-        const conflictIndex = parseInt(wrapper.getAttribute('data-conflict-index') ?? '0');
+        const conflictIndex = parseInt(wrapper.getAttribute('data-file-conflict-index') ?? '0');
         const toastContainer = wrapper.querySelector<HTMLElement>('.toast-comment-editor');
         const text = getToastCommentEditor(toastContainer)?.value() ?? '';
         if (!text.trim()) continue;
