@@ -1,0 +1,22 @@
+services:
+  # Override the default json-file logging driver per deployment.
+  # Keep this file out of your default compose stack unless you need custom logging.
+
+  registry:
+    logging:
+      # Examples: local, journald, syslog, fluentd, gelf, awslogs, splunk
+      driver: ${DOCKER_LOG_DRIVER:-local}
+      # Add driver-specific options here when needed.
+      options: {}
+
+  postgres:
+    logging:
+      driver: ${DOCKER_LOG_DRIVER:-local}
+      options: {}
+
+  forkana:
+    logging:
+      driver: ${DOCKER_LOG_DRIVER:-local}
+      options: {}
+
+
