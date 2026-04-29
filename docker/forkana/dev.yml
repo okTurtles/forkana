@@ -9,7 +9,7 @@ x-logging-defaults: &logging-defaults
     # Approximate logrotate's "rotate 14" retention.
     max-file: "${DOCKER_LOG_MAX_FILE:-14}"
     # Size-based trigger (Docker does not support time-based daily rotation).
-    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-size: "${DOCKER_LOG_MAX_SIZE:-50m}"
     # Compress rotated files (equivalent to logrotate's `compress`).
     compress: "true"
 

@@ -544,8 +544,17 @@ docker compose --env-file ~/forkana/compose/.env \
 
 ### Use a Different Docker Logging Driver (Optional)
 
-`dev.yml` defaults to `json-file` with rotation (`max-size`, `max-file`,
-`compress`) as a safe baseline. If you need a different driver, include
+`dev.yml` defaults to `json-file` with size-based rotation
+(`max-size: 50m`, `max-file: 14`, `compress: true`) as a safe baseline.
+The default `50m` and `14` align with the daemon-level rotation
+documented in
+`custom/docs/ongoing/deploy/ci-cd/done/research/log-rotation.md`, so an
+unmodified deploy persists roughly 14 × 50 MB of rotated logs per
+service in `/var/lib/docker/containers/<id>/`. Override the values via
+`DOCKER_LOG_MAX_SIZE` / `DOCKER_LOG_MAX_FILE` in `.env` if you need a
+different retention budget.
+
+If you need a different driver entirely, include
 `overrides/logging.override.yml` and set `DOCKER_LOG_DRIVER` in your `.env` or shell.
 See `docker/forkana/overrides/README.md` in the repository for `local`,
 `journald`, and `fluentd` examples.
@@ -570,7 +579,25 @@ To revert to the default logger, remove `overrides/logging.override.yml` from th
 (or set `DOCKER_LOG_DRIVER=json-file` and add json-file options explicitly in
 `overrides/logging.override.yml`).
 
-### Verify Services Are Running
+### Persisting Rotated Logs Across Redeploys
+
+Docker stores `json-file` logs under
+`/var/lib/docker/containers/<container-id>/`. When a container is
+recreated (e.g. by every CI/CD deploy that re-runs `docker compose up`)
+the old container's directory is eligible for removal, which also
+removes its rotated log files. The Forkana defaults bound on-disk
+size per container but do **not** retain history across deploys on
+their own.
+
+If you need rotated logs to survive deploys, pick one of the
+strategies in
+`custom/docs/ongoing/deploy/ci-cd/done/research/log-rotation.md`
+(daemon-level rotation in `/etc/docker/daemon.json`, periodic
+`docker logs --since` exports, or shipping to Loki / fluent-bit).
+The compose-level defaults here are intentionally minimal so they
+compose cleanly with whichever option you choose.
+
+
 
 ```bash
 docker compose --env-file ~/forkana/compose/.env \
@@ -635,18 +662,22 @@ rather than copy-pasting server blocks into this guide. Download it to the
 VPS with `curl`, substitute `dev.forkana.example` for your actual domain, and
 adjust the `proxy_pass` port if you changed `FORKANA_HOST_PORT` in `.env`.
 
-For the initial setup, deploy only the HTTP server block (first 10 lines).
-Certbot will add the HTTPS block automatically when obtaining the certificate.
+For the initial setup, deploy only the HTTP server block. Certbot will add
+the HTTPS block automatically when obtaining the certificate.
 
 ```bash
 FORKANA_DOMAIN="your-actual-domain.com"
 BRANCH="master"
 NGINX_RAW_URL="https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana/nginx.conf"
 
-# Stage the reference config locally, then strip to the HTTP block for the
-# Certbot bootstrap (Certbot rewrites the file to add the HTTPS block).
+# Stage the reference config locally, then strip to the first server { ... }
+# block for the Certbot bootstrap (Certbot rewrites the file to add the HTTPS
+# block). The sed range extracts from the first `server {` line to its
+# matching closing `}` and quits, so reformatting nginx.conf (extra comments,
+# blank lines, additional directives inside the HTTP block) does not break
+# this step.
 curl -fsSL "${NGINX_RAW_URL}" -o /tmp/forkana.nginx.conf
-head -10 /tmp/forkana.nginx.conf \
+sed -n '/^server {/,/^}/{p;/^}/q;}' /tmp/forkana.nginx.conf \
   | sed "s/dev.forkana.example/${FORKANA_DOMAIN}/g" > /tmp/forkana.nginx.http.conf
 ```
 
@@ -1378,8 +1409,8 @@ sudo systemctl start forkana
 
 ---
 
-<summary><h2>Additional Configuration</h2></summary>
 <details>
+<summary><h2>Additional Configuration</h2></summary>
 
 ### Environment Variable Reference
 
