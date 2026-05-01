@@ -11,7 +11,7 @@
 #   ./build-and-push-local.sh mytag        # additionally tags :mytag
 #
 # Env overrides:
-#   REGISTRY       default: localhost:5000
+#   REGISTRY       default: localhost:5000 (host:port, optional http(s)://)
 #   IMAGE_NAME     default: forkana
 #   BUILD_TAGS     default: "sqlite sqlite_unlock_notify"
 #   REGISTRY_NAME  default: registry  (docker container name to auto-start)
@@ -19,12 +19,28 @@
 set -euo pipefail
 
 REGISTRY="${REGISTRY:-localhost:5000}"
+REGISTRY="${REGISTRY#http://}"
+REGISTRY="${REGISTRY#https://}"
+REGISTRY="${REGISTRY%/}"
 IMAGE_NAME="${IMAGE_NAME:-forkana}"
 BUILD_TAGS="${BUILD_TAGS:-sqlite sqlite_unlock_notify}"
 REGISTRY_NAME="${REGISTRY_NAME:-registry}"
 EXTRA_TAG="${1:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-cd "$(dirname "$0")"
+if [[ "${REGISTRY}" == */* || "${REGISTRY}" != *:* ]]; then
+  echo "ERROR: REGISTRY must be host:port, optionally prefixed with http:// or https://" >&2
+  exit 1
+fi
+
+REGISTRY_PORT="${REGISTRY##*:}"
+if [[ -z "${REGISTRY_PORT}" || ! "${REGISTRY_PORT}" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: REGISTRY must include a numeric port" >&2
+  exit 1
+fi
+
+cd "${REPO_ROOT}"
 
 # --- Resolve commit SHA (best-effort; falls back to "local") ------------
 if COMMIT_SHA="$(git rev-parse HEAD 2>/dev/null)"; then
@@ -46,7 +62,7 @@ if ! curl -fsS "http://${REGISTRY}/v2/" >/dev/null 2>&1; then
   if docker inspect "${REGISTRY_NAME}" >/dev/null 2>&1; then
     docker start "${REGISTRY_NAME}" >/dev/null
   else
-    docker run -d --restart=always -p 5000:5000 --name "${REGISTRY_NAME}" registry:2 >/dev/null
+    docker run -d --restart=always -p "${REGISTRY_PORT}:5000" --name "${REGISTRY_NAME}" registry:2 >/dev/null
   fi
   # Wait for it to come up
   for _ in $(seq 1 20); do
@@ -62,7 +78,7 @@ fi
 LOCAL_TAG="${IMAGE_NAME}:${COMMIT_SHA}"
 echo "==> Building ${LOCAL_TAG}"
 docker build \
-  --file ./Dockerfile \
+  --file docker/forkana/Dockerfile \
   --build-arg GOPROXY="${GOPROXY:-https://proxy.golang.org,direct}" \
   --build-arg TAGS="${BUILD_TAGS}" \
   --tag "${LOCAL_TAG}" \
