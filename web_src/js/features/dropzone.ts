@@ -89,9 +89,25 @@ export async function initDropzone(dropzoneEl: HTMLElement) {
   if (dropzoneEl.hasAttribute('data-max-file')) opts.maxFiles = Number(dropzoneEl.getAttribute('data-max-file'));
   if (dropzoneEl.hasAttribute('data-max-size')) opts.maxFilesize = Number(dropzoneEl.getAttribute('data-max-size'));
 
-  // there is a bug in dropzone: if a non-image file is uploaded, then it tries to request the file from server by something like:
-  // "http://localhost:3000/owner/repo/issues/[object%20Event]"
-  // the reason is that the preview "callback(dataURL)" is assign to "img.onerror" then "thumbnail" uses the error object as the dataURL and generates '<img src="[object Event]">'
+  // There is a bug in Dropzone: when a non-image file is uploaded, the thumbnail generation
+  // creates an <img> with onerror=callback. When the image fails to load, the Error event object
+  // is passed as the "dataURL", producing '<img src="[object Event]">'. Browsers (especially Brave)
+  // then try to navigate/download that broken URL instead of uploading the file.
+  // Fix: intercept the thumbnail and replace invalid dataURLs with a transparent pixel.
+  const transparentPixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  opts.thumbnail = (file: any, dataURL: string) => {
+    if (dataURL && !dataURL.startsWith('data:') && !dataURL.startsWith('http:') && !dataURL.startsWith('https:')) {
+      dataURL = transparentPixel;
+    }
+    // Apply the thumbnail to the preview element (Dropzone's default behavior)
+    if (file.previewElement) {
+      file.previewElement.classList.remove('dz-file-preview');
+      for (const thumbnailElement of file.previewElement.querySelectorAll('[data-dz-thumbnail]')) {
+        thumbnailElement.alt = file.name;
+        thumbnailElement.src = dataURL;
+      }
+    }
+  };
   const dzInst = await createDropzone(dropzoneEl, opts);
   dzInst.on('success', (file: CustomDropzoneFile, resp: any) => {
     file.uuid = resp.uuid;
