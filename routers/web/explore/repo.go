@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -702,6 +703,28 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		ctx.Data["FileSize"] = fileSize
 		ctx.Data["CanEditReadmeFile"] = ctx.Repo.Repository.CanEnableEditor()
 	case "edit":
+		// If the user is not the repo owner and has a fork, redirect to their fork's edit page
+		// so the Edit tab shows the same article the user would want to edit (issue #177)
+		if ctx.Doer != nil && ctx.Repo.Repository.OwnerID != ctx.Doer.ID {
+			perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, ctx.Repo.Repository)
+			if err != nil {
+				ctx.ServerError("CheckForkOnEditPermissions", err)
+				return
+			}
+			if perms.HasExistingFork && perms.ExistingFork != nil {
+				if err := perms.ExistingFork.LoadOwner(ctx); err != nil {
+					ctx.ServerError("LoadOwner", err)
+					return
+				}
+				subject := ctx.Repo.Repository.GetSubject(ctx)
+				forkEditURL := setting.AppSubURL + "/article/" +
+					url.PathEscape(perms.ExistingFork.Owner.Name) + "/" +
+					url.PathEscape(subject) + "?view=article&mode=edit"
+				ctx.Redirect(forkEditURL)
+				return
+			}
+		}
+
 		// For edit mode, load raw content
 		buf, dataRc, err := getReadmeContent(blob)
 		if err != nil {
