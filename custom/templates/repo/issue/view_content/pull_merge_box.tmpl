@@ -53,7 +53,6 @@
 							</div>
 						</div>
 						<div class="item-section-right">
-							<button class="delete-button ui button" data-url="{{.DeleteBranchLink}}">{{ctx.Locale.Tr "repo.branch.delete_html"}}</button>
 						</div>
 					</div>
 				{{end}}
@@ -81,9 +80,6 @@
 						{{end}}
 					</div>
 					<div class="item-section-right">
-						{{if and .IsPullBranchDeletable (not .IsPullRequestBroken)}}
-							<button class="delete-button ui button" data-url="{{.DeleteBranchLink}}">{{ctx.Locale.Tr "repo.branch.delete_html"}}</button>
-						{{end}}
 						{{if .CanForkRejectedChanges}}
 							<form class="form-fetch-action" method="post" action="{{.Issue.Link}}/fork_rejected_changes">
 								{{.CsrfTokenHtml}}
@@ -251,7 +247,7 @@
 							const mergeForm = {
 								'baseLink': {{.Issue.Link}},
 								'textCancel': {{ctx.Locale.Tr "cancel"}},
-								'textDeleteBranch': {{ctx.Locale.Tr "repo.branch.delete" .HeadTarget}},
+
 								'textAutoMergeButtonWhenSucceed': {{ctx.Locale.Tr "repo.pulls.auto_merge_button_when_succeed"}},
 								'textAutoMergeWhenSucceed': {{ctx.Locale.Tr "repo.pulls.auto_merge_when_succeed"}},
 								'textAutoMergeCancelSchedule': {{ctx.Locale.Tr "repo.pulls.auto_merge_cancel_schedule"}},

@@ -1970,24 +1970,12 @@ func CleanUpPullRequest(ctx *context.Context) {
 }
 
 func deleteBranch(ctx *context.Context, pr *issues_model.PullRequest, gitRepo *git.Repository) {
-	fullBranchName := pr.HeadRepo.FullName() + ":" + pr.HeadBranch
-
 	if err := repo_service.DeleteBranch(ctx, ctx.Doer, pr.HeadRepo, gitRepo, pr.HeadBranch, pr, nil); err != nil {
-		switch {
-		case git.IsErrBranchNotExist(err):
-			ctx.Flash.Error(ctx.Tr("repo.branch.deletion_failed", fullBranchName))
-		case errors.Is(err, repo_service.ErrBranchIsDefault):
-			ctx.Flash.Error(ctx.Tr("repo.branch.deletion_failed", fullBranchName))
-		case errors.Is(err, git_model.ErrBranchIsProtected):
-			ctx.Flash.Error(ctx.Tr("repo.branch.deletion_failed", fullBranchName))
-		default:
+		if !git.IsErrBranchNotExist(err) && !errors.Is(err, repo_service.ErrBranchIsDefault) && !errors.Is(err, git_model.ErrBranchIsProtected) {
 			log.Error("DeleteBranch: %v", err)
-			ctx.Flash.Error(ctx.Tr("repo.branch.deletion_failed", fullBranchName))
 		}
 		return
 	}
-
-	ctx.Flash.Success(ctx.Tr("repo.branch.deletion_success", fullBranchName))
 }
 
 // DownloadPullDiff render a pull's raw diff
