@@ -107,7 +107,11 @@
 						</div>
 					</div>
 					<div class="item-section-right">
-						<a href="{{.Issue.Link}}/conflicts" class="ui button primary small">Resolve conflicts</a>
+						{{if or .HasIssuesOrPullsWritePermission .IsIssuePoster}}
+							<a href="{{.Issue.Link}}/conflicts" class="ui button primary small">Resolve conflicts</a>
+						{{else}}
+							<button class="ui button small disabled">Resolve conflicts</button>
+						{{end}}
 					</div>
 				</div>
 				<div class="item tw-mt-4">
