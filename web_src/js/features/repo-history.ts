@@ -150,23 +150,24 @@ export function initRepoHistory() {
   const storedSelection = readStoredSelection();
   let initialSelection: RepoSelection | null = null;
 
-  // Only use stored selection if it matches the current page's subject
-  if (storedSelection && initialSubject && storedSelection.subject === initialSubject) {
-    initialSelection = storedSelection;
-  } else if (storedSelection) {
-    // Clear stored selection if subject doesn't match
-    writeStoredSelection(null);
-  }
-
-  if (!initialSelection && initialView === 'article' && initialOwner && (initialRepo || initialSubject)) {
+  // When the URL explicitly specifies an article (via /article/{owner}/{subject}),
+  // always use that as the initial selection instead of localStorage.
+  // This ensures that after a fork redirect, the correct article is shown (issue #177).
+  if (initialView === 'article' && initialOwner && (initialRepo || initialSubject)) {
     initialSelection = {
       owner: initialOwner,
       repo: initialRepo || initialSubject,
       subject: initialSubject || null,
     };
     writeStoredSelection(initialSelection);
-  } else if (!initialSelection) {
-    writeStoredSelection(null);
+  } else {
+    // For non-article views (bubble, table), use stored selection if subject matches
+    if (storedSelection && initialSubject && storedSelection.subject === initialSubject) {
+      initialSelection = storedSelection;
+    } else {
+      // Clear stored selection if subject doesn't match or no stored selection
+      writeStoredSelection(null);
+    }
   }
 
   const activeView = ref<ViewKey>((initialView as ViewKey) || 'bubble');
