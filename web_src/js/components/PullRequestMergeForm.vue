@@ -136,8 +136,6 @@ function clearMergeMessage() {
       <button class="ui button merge-cancel" @click="toggleActionForm(false)">
         {{ mergeForm.textCancel }}
       </button>
-
-
     </form>
 
     <div v-if="!showActionForm" class="tw-flex">
