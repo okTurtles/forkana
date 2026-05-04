@@ -134,7 +134,7 @@
 						</button>
 					{{end}}
 				</div>
-				{{template "repo/issue/view_content/update_branch_by_merge" $}}
+				{{/* template "repo/issue/view_content/update_branch_by_merge" $ */}}
 			{{else if .Issue.PullRequest.IsChecking}}
 				<div class="item">
 					{{svg "octicon-sync" 16 "circular-spin"}}
@@ -228,7 +228,7 @@
 					{{end}}
 				{{end}}
 
-				{{template "repo/issue/view_content/update_branch_by_merge" $}}
+				{{/* template "repo/issue/view_content/update_branch_by_merge" $ */}}
 
 				{{if .Issue.PullRequest.IsEmpty}}
 					<div class="divider"></div>
