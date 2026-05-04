@@ -108,9 +108,9 @@
 					</div>
 					<div class="item-section-right">
 						{{if or .HasIssuesOrPullsWritePermission .IsIssuePoster}}
-							<a href="{{.Issue.Link}}/conflicts" class="ui button primary small">Resolve conflicts</a>
+							<a href="{{.Issue.Link}}/conflicts" class="ui button primary small">{{ctx.Locale.Tr "repo.pulls.resolve_conflicts"}}</a>
 						{{else}}
-							<button class="ui button small disabled">Resolve conflicts</button>
+							<button class="ui button small disabled">{{ctx.Locale.Tr "repo.pulls.resolve_conflicts"}}</button>
 						{{end}}
 					</div>
 				</div>
