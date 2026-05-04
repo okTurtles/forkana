@@ -246,6 +246,7 @@
 							const defaultSquashMergeMessage = {{.DefaultSquashMergeBody}};
 							const mergeForm = {
 								'baseLink': {{.Issue.Link}},
+								'headBranch': '{{.HeadTarget}}',
 								'textCancel': {{ctx.Locale.Tr "cancel"}},
 
 								'textAutoMergeButtonWhenSucceed': {{ctx.Locale.Tr "repo.pulls.auto_merge_button_when_succeed"}},
