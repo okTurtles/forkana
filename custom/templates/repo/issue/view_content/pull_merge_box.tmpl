@@ -221,7 +221,7 @@
 							<div class="tw-font-semibold">
 								{{ctx.Locale.Tr "repo.pulls.can_auto_merge_desc"}}
 								<div class="tw-text-xs text light-2">
-									Only those with <a href="{{.Repository.Link}}/settings/collaboration">write access</a> to this repository can merge pull requests.
+									{{ctx.Locale.Tr "repo.pulls.merge_permission_desc" .Repository.Link}}
 								</div>
 							</div>
 						</div>
