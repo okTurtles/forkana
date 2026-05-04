@@ -373,6 +373,14 @@ function initFoldToggle() {
  */
 function initSubmitTracking() {
   const submitBtns = document.querySelectorAll<HTMLButtonElement>('.conflict-submit-btn');
+
+  const setButtonsState = (disabled: boolean, text?: string) => {
+    for (const btn of submitBtns) {
+      btn.disabled = disabled;
+      if (text !== undefined) btn.textContent = text;
+    }
+  };
+
   for (const btn of submitBtns) {
     btn.addEventListener('click', async () => {
       if (btn.disabled) return;
@@ -400,8 +408,7 @@ function initSubmitTracking() {
 
       const issueLink = window.location.pathname.replace(/\/conflicts$/, '');
 
-      btn.textContent = 'Submitting…';
-      btn.disabled = true;
+      setButtonsState(true, 'Submitting…');
 
       try {
         const resp = await POST(window.location.pathname, {data: {files}});
@@ -414,12 +421,10 @@ function initSubmitTracking() {
           } catch {
             msg = resp.statusText;
           }
-          btn.textContent = `Submit failed: ${msg}`;
-          btn.disabled = false;
+          setButtonsState(false, `Submit failed: ${msg}`);
         }
       } catch {
-        btn.textContent = 'Submit failed';
-        btn.disabled = false;
+        setButtonsState(false, 'Submit failed');
       }
     });
   }
