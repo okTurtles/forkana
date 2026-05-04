@@ -59,23 +59,87 @@ deploy_init() {
   else
     REPO_DIR="${DEPLOY_DIR}/repo"
   fi
-  COMPOSE_DIR="${DEPLOY_DIR}/compose"
+
+  # --- Deploy mode resolution ---
+  # Default to standalone for backward compatibility; forums hosts opt in by
+  # writing ${DEPLOY_DIR}/deploy.conf.  See DEPLOYMENT_GUIDE.md
+  # § "Deployment mode".
+  FORKANA_DEPLOY_MODE="${FORKANA_DEPLOY_MODE:-standalone}"
+  if [[ -f "${DEPLOY_DIR}/deploy.conf" ]]; then
+    # shellcheck source=/dev/null
+    . "${DEPLOY_DIR}/deploy.conf"
+  fi
+
   REGISTRY_PORT="${REGISTRY_PORT:-5000}"
   REGISTRY="localhost:${REGISTRY_PORT}"
   # Use explicit IPv4 for curl checks - avoids IPv6 resolution issues on hosts
   # where "localhost" may resolve to ::1 before 127.0.0.1.
   REGISTRY_HTTP="http://127.0.0.1:${REGISTRY_PORT}"
   IMAGE_NAME="forkana"
-  PROJECT_NAME="forkana"
-  COMPOSE_BASE="${COMPOSE_DIR}/dev.yml"
-  COMPOSE_OVERRIDE="${COMPOSE_DIR}/compose.override.yml"
-  ENV_FILE="${COMPOSE_DIR}/.env"
+
+  case "${FORKANA_DEPLOY_MODE}" in
+    standalone)
+      PROJECT_NAME="forkana"
+      COMPOSE_DIR="${DEPLOY_DIR}/compose"
+      COMPOSE_BASE="${COMPOSE_DIR}/dev.yml"
+      COMPOSE_OVERRIDE="${COMPOSE_DIR}/compose.override.yml"
+      COMPOSE_FILES=( -f "${COMPOSE_BASE}" -f "${COMPOSE_OVERRIDE}" )
+      COMPOSE_PROJECT_DIRECTORY="${COMPOSE_DIR}"
+      ENV_FILE="${COMPOSE_DIR}/.env"
+      SNAPSHOT_DIR="${COMPOSE_DIR}"
+      MANAGE_REGISTRY=1
+      MANAGE_DATA_DIRS=1
+      REQUIRED_VARS=(POSTGRES_PASSWORD FORKANA_DOMAIN FORKANA_SECRET_KEY \
+                     FORKANA_INTERNAL_TOKEN FORKANA_JWT_SECRET)
+      ;;
+    forums)
+      [[ -n "${FORUMS_DIR:-}" ]] || die "FORUMS_DIR not set in ${DEPLOY_DIR}/deploy.conf (required when FORKANA_DEPLOY_MODE=forums)."
+      [[ -d "${FORUMS_DIR}"   ]] || die "FORUMS_DIR does not exist: ${FORUMS_DIR}"
+      # Operator-overridable knobs; defaults are layout-agnostic so the
+      # public code does not bake in any specific external-stack layout.
+      # Relative paths resolve against ${FORUMS_DIR}.  See
+      # DEPLOYMENT_GUIDE.md § "Deployment mode" for the recognised
+      # variables.
+      FORUMS_ENV_FILE="${FORUMS_ENV_FILE:-${FORUMS_DIR}/.env}"
+      [[ "${FORUMS_ENV_FILE}" = /* ]] || FORUMS_ENV_FILE="${FORUMS_DIR}/${FORUMS_ENV_FILE}"
+      FORUMS_OVERRIDE_FILE="${FORUMS_OVERRIDE_FILE:-${FORUMS_DIR}/forkana-override.yml}"
+      [[ "${FORUMS_OVERRIDE_FILE}" = /* ]] || FORUMS_OVERRIDE_FILE="${FORUMS_DIR}/${FORUMS_OVERRIDE_FILE}"
+      PROJECT_NAME="forums"
+      COMPOSE_DIR="${FORUMS_DIR}"
+      COMPOSE_BASE="${FORUMS_DIR}/docker-compose.yml"
+      COMPOSE_OVERRIDE="${FORUMS_OVERRIDE_FILE}"
+      COMPOSE_FILES=( -f "${COMPOSE_BASE}" )
+      # Optional whitespace-separated list of extra compose files to layer
+      # before the digest-pinned override (e.g. a sibling-services file
+      # provided by the external stack).  Relative entries resolve against
+      # ${FORUMS_DIR}.
+      if [[ -n "${FORUMS_EXTRA_COMPOSE_FILES:-}" ]]; then
+        local _extra
+        for _extra in ${FORUMS_EXTRA_COMPOSE_FILES}; do
+          [[ "${_extra}" = /* ]] || _extra="${FORUMS_DIR}/${_extra}"
+          COMPOSE_FILES+=( -f "${_extra}" )
+        done
+      fi
+      COMPOSE_FILES+=( -f "${COMPOSE_OVERRIDE}" )
+      COMPOSE_PROJECT_DIRECTORY="${FORUMS_DIR}"
+      ENV_FILE="${FORUMS_ENV_FILE}"
+      SNAPSHOT_DIR="${DEPLOY_DIR}/snapshots"
+      MANAGE_REGISTRY=0
+      MANAGE_DATA_DIRS=0
+      REQUIRED_VARS=(POSTGRES_FORKANA_PASSWORD FORKANA_DOMAIN FORKANA_ROOT_URL \
+                     FORKANA_SECRET_KEY FORKANA_INTERNAL_TOKEN FORKANA_JWT_SECRET \
+                     FORKANA_HOST_PORT)
+      ;;
+    *)
+      die "Unknown FORKANA_DEPLOY_MODE: '${FORKANA_DEPLOY_MODE}' (expected: standalone | forums)."
+      ;;
+  esac
 
   # Resolve HOST_PORT for the health-check probe.  Prefer the exported shell
   # variable; otherwise read FORKANA_HOST_PORT from ${ENV_FILE} so the probe
-  # targets the same port Compose binds via dev.yml interpolation.  Without
-  # this, setting FORKANA_HOST_PORT only in .env (as documented) caused every
-  # deploy to fail health-check and roll back.
+  # targets the same port Compose binds via interpolation.  Without this,
+  # setting FORKANA_HOST_PORT only in the env file (as documented) caused
+  # every deploy to fail health-check and roll back.
   HOST_PORT="${FORKANA_HOST_PORT:-3000}"
   if [[ -z "${FORKANA_HOST_PORT:-}" ]]; then
     local env_port
@@ -129,56 +193,74 @@ deploy_run() {
   fi
 
   # --- Step 1: Prepare compose directory and base file ---
-  mkdir -p "${COMPOSE_DIR}"
-  if [[ -f "${REPO_DIR}/docker/forkana/dev.yml" ]]; then
-    cp "${REPO_DIR}/docker/forkana/dev.yml" "${COMPOSE_BASE}"
-    log "Copied dev.yml to ${COMPOSE_BASE}"
-  else
-    if [[ ! -f "${COMPOSE_BASE}" ]]; then
-      die "Missing ${COMPOSE_BASE} - ensure dev.yml is deployed to ${COMPOSE_DIR}"
+  # Standalone owns the compose layout under ${COMPOSE_DIR}.  In forums mode
+  # the compose files live inside ${FORUMS_DIR} and are managed by the forums
+  # framework; we only rewrite ${COMPOSE_OVERRIDE} (step 7).
+  if (( MANAGE_DATA_DIRS )); then
+    mkdir -p "${COMPOSE_DIR}"
+    if [[ -f "${REPO_DIR}/docker/forkana/dev.yml" ]]; then
+      cp "${REPO_DIR}/docker/forkana/dev.yml" "${COMPOSE_BASE}"
+      log "Copied dev.yml to ${COMPOSE_BASE}"
+    else
+      if [[ ! -f "${COMPOSE_BASE}" ]]; then
+        die "Missing ${COMPOSE_BASE} - ensure dev.yml is deployed to ${COMPOSE_DIR}"
+      fi
+      log "Using pre-deployed dev.yml at ${COMPOSE_BASE}"
     fi
-    log "Using pre-deployed dev.yml at ${COMPOSE_BASE}"
-  fi
 
-  printf 'services:\n  forkana:\n    image: %s/forkana:latest\n' "${REGISTRY}" \
-    > "${COMPOSE_OVERRIDE}"
-  log "Wrote placeholder ${COMPOSE_OVERRIDE}"
+    printf 'services:\n  forkana:\n    image: %s/forkana:latest\n' "${REGISTRY}" \
+      > "${COMPOSE_OVERRIDE}"
+    log "Wrote placeholder ${COMPOSE_OVERRIDE}"
+  else
+    # Forums mode: compose layout owned by the external stack.  Verify
+    # every -f file we will pass to docker compose exists before any
+    # invocation; the digest-pinned override is created below, so skip it.
+    local _i _f
+    for ((_i = 0; _i < ${#COMPOSE_FILES[@]}; _i++)); do
+      [[ "${COMPOSE_FILES[_i]}" == "-f" ]] || continue
+      _f="${COMPOSE_FILES[_i + 1]}"
+      [[ "${_f}" == "${COMPOSE_OVERRIDE}" ]] && continue
+      [[ -f "${_f}" ]] || die "Missing compose file: ${_f} - the external stack must provide it (see deploy.conf knobs FORUMS_EXTRA_COMPOSE_FILES)."
+    done
+    mkdir -p "$(dirname "${COMPOSE_OVERRIDE}")"
+  fi
 
   # --- Step 1b: Ensure host volume directories exist with correct ownership ---
   # Only chmod when we create the directory: once a container (postgres initdb,
   # gitea entrypoint) has taken ownership of its bind-mounted data dir, a later
   # chmod by the deploying user would return EPERM and break subsequent
-  # redeploys.
-  log "Ensuring volume directories exist with correct ownership..."
-  for dir in \
-    "${DEPLOY_DIR}/data" \
-    "${DEPLOY_DIR}/data/git" \
-    "${DEPLOY_DIR}/data/custom" \
-    "${DEPLOY_DIR}/config" \
-    "${DEPLOY_DIR}/postgres"; do
-    if [[ ! -d "${dir}" ]]; then
-      mkdir -p "${dir}"
-      chmod 0755 "${dir}"
-    fi
-  done
-
-  # --- Step 1c: Verify .env exists before any docker compose invocation ---
-  # This must happen before Step 2 (registry startup) because dev.yml interpolates
-  # environment variables like ${POSTGRES_PASSWORD}. If .env is missing, docker compose
-  # will fail with a confusing error. Validate early to give users a clear message.
-  # ENV_FILE is set in deploy_init so HOST_PORT can be resolved from it.
-  if [[ ! -f "${ENV_FILE}" ]]; then
-    die "Missing ${ENV_FILE} - create it with POSTGRES_PASSWORD, FORKANA_DOMAIN, FORKANA_SECRET_KEY, FORKANA_INTERNAL_TOKEN, and FORKANA_JWT_SECRET (see DEPLOYMENT_GUIDE.md)."
+  # redeploys.  Forums mode skips this entirely: bind-mount roots for the
+  # forkana service are bootstrapped once by the operator with chown 1000:1000.
+  if (( MANAGE_DATA_DIRS )); then
+    log "Ensuring volume directories exist with correct ownership..."
+    for dir in \
+      "${DEPLOY_DIR}/data" \
+      "${DEPLOY_DIR}/data/git" \
+      "${DEPLOY_DIR}/data/custom" \
+      "${DEPLOY_DIR}/config" \
+      "${DEPLOY_DIR}/postgres"; do
+      if [[ ! -d "${dir}" ]]; then
+        mkdir -p "${dir}"
+        chmod 0755 "${dir}"
+      fi
+    done
   fi
 
-  local required_vars=(POSTGRES_PASSWORD FORKANA_DOMAIN FORKANA_SECRET_KEY FORKANA_INTERNAL_TOKEN FORKANA_JWT_SECRET)
-  local missing=()
+  # --- Step 1c: Verify env file exists and required vars are populated ---
+  # This must happen before Step 2 (registry startup) because the compose
+  # files interpolate variables like ${POSTGRES_PASSWORD}.  Validate early
+  # to give a clear error message instead of a confusing compose failure.
+  # REQUIRED_VARS is mode-specific and set in deploy_init.
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    die "Missing ${ENV_FILE} - create it with: ${REQUIRED_VARS[*]} (see DEPLOYMENT_GUIDE.md)."
+  fi
 
+  local missing=()
   # Parse each value through read_env_var so empty quoted forms (FOO="",
   # FOO='') and surrounding whitespace are caught; a bare "[^space#]+" grep
   # would treat a lone quote as a valid value and let an empty secret reach
   # the container.
-  for var in "${required_vars[@]}"; do
+  for var in "${REQUIRED_VARS[@]}"; do
     local val
     val="$(read_env_var "${ENV_FILE}" "${var}")"
     if [[ -z "${val}" ]]; then
@@ -192,21 +274,20 @@ deploy_run() {
 
   # --- Step 2: Ensure the local registry is running ---
   # The registry on 127.0.0.1:${REGISTRY_PORT} may be shared infrastructure
-  # (not owned by Forkana).  Reuse it if already reachable; only start the
-  # compose-managed registry if nothing is listening.
+  # (not owned by Forkana).  In standalone mode, start a compose-managed
+  # registry as a fallback when nothing is listening.  In forums mode the
+  # registry is always external (managed by the surrounding stack outside
+  # this compose project); we only pre-flight that it is reachable.
   log "Ensuring local registry is running..."
   if curl -sf "${REGISTRY_HTTP}/v2/" > /dev/null 2>&1; then
-    # Something is already listening - treat as external/shared and do not
-    # try to (re)create our compose-managed registry in step 8.
     log "Registry already reachable at ${REGISTRY_HTTP} - reusing it."
     REGISTRY_MANAGED_BY_US=false
-  else
+  elif (( MANAGE_REGISTRY )); then
     log "No registry on ${REGISTRY_HTTP} - starting compose-managed registry..."
     docker compose \
       -p "${PROJECT_NAME}" \
-      --project-directory "${COMPOSE_DIR}" \
-      -f "${COMPOSE_BASE}" \
-      -f "${COMPOSE_OVERRIDE}" \
+      --project-directory "${COMPOSE_PROJECT_DIRECTORY}" \
+      "${COMPOSE_FILES[@]}" \
       up -d registry
     REGISTRY_MANAGED_BY_US=true
 
@@ -219,6 +300,8 @@ deploy_run() {
       log "  attempt ${i}/12 - registry not ready yet"
       sleep 5
     done
+  else
+    die "External registry not reachable at ${REGISTRY_HTTP} - start the registry on the host before deploying."
   fi
   log "Registry is ready at ${REGISTRY}."
 
@@ -280,13 +363,17 @@ deploy_run() {
   log "Resolved digest: ${DIGEST}"
   log "Pinned image ref: ${PINNED_REF}"
 
-  # --- Step 7: Generate compose.override.yml (digest-pinned) ---
+  # --- Step 7: Generate the digest-pinned override file ---
   # Snapshot the current override so step 9 can restore it on failure.
-  # On a first deploy the snapshot is the placeholder written in step 1;
-  # on subsequent deploys it is the previous pinned digest.
+  # On a first deploy the snapshot is the placeholder written in step 1
+  # (standalone) or absent (forums); on subsequent deploys it is the
+  # previous pinned digest.  In forums mode the snapshot lives under
+  # ${SNAPSHOT_DIR} (off the forums working tree) so the rollback artefact
+  # never pollutes the shared checkout.
+  mkdir -p "${SNAPSHOT_DIR}"
   PREV_OVERRIDE=""
   if [[ -f "${COMPOSE_OVERRIDE}" ]]; then
-    PREV_OVERRIDE="${COMPOSE_OVERRIDE}.prev"
+    PREV_OVERRIDE="${SNAPSHOT_DIR}/$(basename "${COMPOSE_OVERRIDE}").prev"
     cp -f "${COMPOSE_OVERRIDE}" "${PREV_OVERRIDE}"
   fi
   printf 'services:\n  forkana:\n    image: %s\n' "${PINNED_REF}" \
@@ -294,20 +381,28 @@ deploy_run() {
   log "Wrote ${COMPOSE_OVERRIDE}"
 
   # --- Step 8: Deploy with docker compose ---
-  # Select services explicitly so we do not try to (re)bind port
-  # ${REGISTRY_PORT} when the registry is external/shared.  --remove-orphans
-  # is intentionally omitted here: compose would otherwise interpret unlisted
-  # services (the registry, when external) as "orphans" and stop them.
+  # Select services explicitly so we do not try to (re)bind shared host
+  # ports owned by sibling services.  --remove-orphans is intentionally
+  # omitted: compose would otherwise classify any unlisted service (the
+  # external registry in standalone, or every other forums service in
+  # forums mode) as an "orphan" and stop it.
   log "Running docker compose up..."
-  local compose_services=(postgres forkana)
-  if [[ "${REGISTRY_MANAGED_BY_US}" == "true" ]]; then
-    compose_services=(registry postgres forkana)
+  local compose_services
+  if (( MANAGE_DATA_DIRS )); then
+    # Standalone: bring up the full forkana project on a dedicated host.
+    compose_services=(postgres forkana)
+    if [[ "${REGISTRY_MANAGED_BY_US}" == "true" ]]; then
+      compose_services=(registry postgres forkana)
+    fi
+  else
+    # Forums mode: only recreate forkana; siblings (postgres, nginx, ...)
+    # are owned by the forums stack and must not be touched here.
+    compose_services=(forkana)
   fi
   docker compose \
     -p "${PROJECT_NAME}" \
-    --project-directory "${COMPOSE_DIR}" \
-    -f "${COMPOSE_BASE}" \
-    -f "${COMPOSE_OVERRIDE}" \
+    --project-directory "${COMPOSE_PROJECT_DIRECTORY}" \
+    "${COMPOSE_FILES[@]}" \
     up -d "${compose_services[@]}"
 
   # --- Step 9: Health check ---
@@ -330,21 +425,19 @@ deploy_run() {
 
   docker compose \
     -p "${PROJECT_NAME}" \
-    --project-directory "${COMPOSE_DIR}" \
-    -f "${COMPOSE_BASE}" \
-    -f "${COMPOSE_OVERRIDE}" \
+    --project-directory "${COMPOSE_PROJECT_DIRECTORY}" \
+    "${COMPOSE_FILES[@]}" \
     logs --tail=100 forkana || true
 
   if [[ -n "${PREV_OVERRIDE}" && -f "${PREV_OVERRIDE}" ]]; then
     log "Rolling back to previous pinned image from ${PREV_OVERRIDE}..."
     mv -f "${PREV_OVERRIDE}" "${COMPOSE_OVERRIDE}"
-    # Re-run compose on forkana only; postgres/registry are already healthy
-    # and do not need to be recreated.
+    # Re-run compose on forkana only; siblings are already healthy and
+    # do not need to be recreated.
     if docker compose \
          -p "${PROJECT_NAME}" \
-         --project-directory "${COMPOSE_DIR}" \
-         -f "${COMPOSE_BASE}" \
-         -f "${COMPOSE_OVERRIDE}" \
+         --project-directory "${COMPOSE_PROJECT_DIRECTORY}" \
+         "${COMPOSE_FILES[@]}" \
          up -d forkana; then
       log "Rollback complete - previous image is active again."
     else
