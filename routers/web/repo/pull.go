@@ -1642,10 +1642,31 @@ func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
 // applyConflictTexts builds the resolved file content by replacing each conflicted head range
 // with the text the user confirmed in the editor (which may be the base version, head version,
 // or a manual blend). texts maps conflictGroup index → resolved text from the editor.
-// Returns an error if a referenced group has no head range to splice into (e.g., a base-only
-// deletion), so the caller can surface a 4xx instead of silently dropping the user's input.
+// For groups with no head range, it computes an insertion point while walking the groups in
+// file order so empty-head chunks can still be resolved.
 func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[int]string) ([]byte, error) {
 	headLines := strings.Split(string(headContent), "\n")
+
+	type spliceRange struct {
+		start int
+		end   int
+	}
+
+	splices := make([]spliceRange, len(groups))
+	cursor := 0
+	originalHeadLen := len(headLines)
+	for i, g := range groups {
+		if g.headStart > 0 {
+			hStart := min(max(g.headStart-1, 0), originalHeadLen)
+			hEnd := min(max(g.headEnd, hStart), originalHeadLen)
+			splices[i] = spliceRange{start: hStart, end: hEnd}
+			cursor = hEnd
+			continue
+		}
+
+		insertAt := min(max(cursor, 0), originalHeadLen)
+		splices[i] = spliceRange{start: insertAt, end: insertAt}
+	}
 
 	// Process in reverse so earlier indices stay valid after splice operations.
 	for i := len(groups) - 1; i >= 0; i-- {
@@ -1653,13 +1674,10 @@ func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[in
 		if !ok {
 			continue
 		}
-		g := groups[i]
-		if g.headStart == 0 {
-			return nil, fmt.Errorf("conflict group %d cannot be applied (no head range)", i)
-		}
+
 		resolvedLines := strings.Split(strings.TrimRight(text, "\n"), "\n")
-		hStart := g.headStart - 1
-		hEnd := min(g.headEnd, len(headLines))
+		hStart := splices[i].start
+		hEnd := min(splices[i].end, len(headLines))
 		newHead := make([]string, 0, len(headLines)-hEnd+hStart+len(resolvedLines))
 		newHead = append(newHead, headLines[:hStart]...)
 		newHead = append(newHead, resolvedLines...)
