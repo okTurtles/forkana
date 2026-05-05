@@ -159,7 +159,9 @@ export function initRepoHistory() {
       repo: initialRepo || initialSubject,
       subject: initialSubject,
     };
-    writeStoredSelection(initialSelection);
+    if (!matchesSelection(storedSelection, initialSelection)) {
+      writeStoredSelection(initialSelection);
+    }
   } else {
     // For non-article views (bubble, table), use stored selection if subject matches
     if (storedSelection && initialSubject && storedSelection.subject === initialSubject) {
