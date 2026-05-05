@@ -157,7 +157,7 @@ export function initRepoHistory() {
     initialSelection = {
       owner: initialOwner,
       repo: initialRepo || initialSubject,
-      subject: initialSubject || null,
+      subject: initialSubject,
     };
     writeStoredSelection(initialSelection);
   } else {
