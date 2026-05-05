@@ -47,7 +47,7 @@ func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string) {
 
 	// Validate file size against configured maximum (MaxSize is in MB)
 	if setting.Attachment.MaxSize > 0 && header.Size > setting.Attachment.MaxSize*1024*1024 {
-		ctx.HTTPError(http.StatusBadRequest, fmt.Sprintf("file size exceeds the maximum allowed size of %d MB", setting.Attachment.MaxSize))
+		ctx.HTTPError(http.StatusRequestEntityTooLarge, fmt.Sprintf("file size exceeds the maximum allowed size of %d MB", setting.Attachment.MaxSize))
 		return
 	}
 
