@@ -1972,7 +1972,7 @@ func CleanUpPullRequest(ctx *context.Context) {
 func deleteBranch(ctx *context.Context, pr *issues_model.PullRequest, gitRepo *git.Repository) {
 	if err := repo_service.DeleteBranch(ctx, ctx.Doer, pr.HeadRepo, gitRepo, pr.HeadBranch, pr, nil); err != nil {
 		if !git.IsErrBranchNotExist(err) && !errors.Is(err, repo_service.ErrBranchIsDefault) && !errors.Is(err, git_model.ErrBranchIsProtected) {
-			log.Error("DeleteBranch: %v", err)
+			log.Error("DeleteBranch(%s): %v", pr.HeadBranch, err)
 		}
 		return
 	}
