@@ -1,3 +1,9 @@
+{{/*
+  Forkana custom override of templates/repo/settings/options.tmpl.
+  Change from upstream: removed the "default_delete_branch_after_merge" checkbox
+  (originally ~lines 634-639) because Forkana always auto-deletes branches on merge.
+  When syncing this file with upstream, re-apply that removal.
+*/}}
 {{template "repo/settings/layout_head" (dict "ctxData" . "pageClass" "repository settings options")}}
 	<div class="user-main-content twelve wide column">
 		<h4 class="ui top attached header">
