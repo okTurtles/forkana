@@ -163,11 +163,11 @@ export function initRepoHistory() {
       writeStoredSelection(initialSelection);
     }
   } else {
-    // For non-article views (bubble, table), use stored selection if subject matches
+    // For non-article views (bubble, table): restore stored selection when it matches the current
+    // subject, or clear it when navigating away to a different subject.
     if (storedSelection && initialSubject && storedSelection.subject === initialSubject) {
       initialSelection = storedSelection;
     } else if (storedSelection) {
-      // Clear stored selection only when an existing stored selection doesn't match
       writeStoredSelection(null);
     }
   }
