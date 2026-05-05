@@ -164,8 +164,8 @@ export function initRepoHistory() {
     // For non-article views (bubble, table), use stored selection if subject matches
     if (storedSelection && initialSubject && storedSelection.subject === initialSubject) {
       initialSelection = storedSelection;
-    } else {
-      // Clear stored selection if subject doesn't match or no stored selection
+    } else if (storedSelection) {
+      // Clear stored selection only when an existing stored selection doesn't match
       writeStoredSelection(null);
     }
   }
