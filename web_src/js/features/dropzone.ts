@@ -95,16 +95,21 @@ export async function initDropzone(dropzoneEl: HTMLElement) {
   // then try to navigate/download that broken URL instead of uploading the file.
   // Fix: intercept the thumbnail and replace invalid dataURLs with a transparent pixel.
   const transparentPixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-  opts.thumbnail = (file: any, dataURL: string) => {
-    if (dataURL && !dataURL.startsWith('data:') && !dataURL.startsWith('http:') && !dataURL.startsWith('https:')) {
-      dataURL = transparentPixel;
-    }
+  opts.thumbnail = (file: any, dataURL: unknown) => {
+    const thumbnailURL = typeof dataURL === 'string' && (
+      dataURL.startsWith('data:') ||
+      dataURL.startsWith('http:') ||
+      dataURL.startsWith('https:') ||
+      dataURL.startsWith('blob:') ||
+      dataURL.startsWith('/')
+    ) ? dataURL : transparentPixel;
     // Apply the thumbnail to the preview element (Dropzone's default behavior)
     if (file.previewElement) {
       file.previewElement.classList.remove('dz-file-preview');
+      file.previewElement.classList.add('dz-image-preview');
       for (const thumbnailElement of file.previewElement.querySelectorAll('[data-dz-thumbnail]')) {
         thumbnailElement.alt = file.name;
-        thumbnailElement.src = dataURL;
+        thumbnailElement.src = thumbnailURL;
       }
     }
   };
