@@ -95,7 +95,7 @@ export async function initDropzone(dropzoneEl: HTMLElement) {
   // then try to navigate/download that broken URL instead of uploading the file.
   // Fix: intercept the thumbnail and replace invalid dataURLs with a transparent pixel.
   const transparentPixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-  opts.thumbnail = (file: any, dataURL: unknown) => {
+  opts.thumbnail = (file: DropzoneFile, dataURL: unknown) => {
     const thumbnailURL = typeof dataURL === 'string' && (
       dataURL.startsWith('data:') ||
       dataURL.startsWith('http:') ||
