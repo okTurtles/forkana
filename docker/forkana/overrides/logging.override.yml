@@ -18,5 +18,3 @@ services:
     logging:
       driver: ${DOCKER_LOG_DRIVER:-local}
       options: {}
-
-

@@ -23,4 +23,3 @@ services:
     # For remote DB servers, set FORKANA_DB_HOST to that address instead.
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
