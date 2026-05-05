@@ -434,6 +434,16 @@ The file requires **five** variables (plus one optional):
 | `FORKANA_JWT_SECRET` | OAuth2 JWT signing secret (base64, 32+ chars) |
 | `FORKANA_HOST_PORT` | *(optional)* Host port for the Forkana service (default: `3000`) |
 
+For an external database setup (optional), you can also set:
+
+| Variable | Description |
+|----------|-------------|
+| `FORKANA_DB_HOST` | External Postgres host:port (for example `host.docker.internal:5432` or `db.example.com:5432`) |
+| `FORKANA_DB_NAME` | Database name (defaults to `forkana`) |
+| `FORKANA_DB_USER` | Database user (defaults to `forkana`) |
+| `FORKANA_DB_PASSWORD` | Database password for the external Postgres user |
+| `FORKANA_DB_SSL_MODE` | Postgres SSL mode (`disable`, `require`, etc.; defaults to `disable`) |
+
 Generate the file (replace `dev.forkana.org` with your actual domain):
 
 ```bash
@@ -476,6 +486,15 @@ For manual operations, use:
 - base file: `~/forkana/compose/dev.yml`
 - override file: `~/forkana/compose/compose.override.yml`
 - env file: `~/forkana/compose/.env`
+- optional logging override: `~/forkana/compose/logging.override.yml`
+
+Optional compose override files (e.g. `external-postgres.override.yml`,
+`logging.override.yml`) are not part of the automated deployment. Copy them
+from the repository's `docker/forkana/overrides/` directory to
+`~/forkana/compose/` on the VM once (e.g. via `curl` from raw GitHub, or
+`scp` from a local checkout) before layering them into the manual commands
+below. See `docker/forkana/overrides/README.md` in the repository for
+ready-made examples.
 
 > **User context:** All commands in this section (and in Health Checks,
 > Maintenance, and most of Troubleshooting) should be run **as the deploy
@@ -498,7 +517,87 @@ docker compose --env-file ~/forkana/compose/.env \
   up -d
 ```
 
-### Verify Services Are Running
+### Use an Existing Postgres (Optional)
+
+Use `overrides/external-postgres.override.yml` to point Forkana at an existing Postgres
+instance and keep the bundled `postgres` service disabled by default.
+
+```bash
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  -f ~/forkana/compose/external-postgres.override.yml \
+  up -d
+```
+
+If you also want to start the bundled `postgres` service for debugging, enable
+its profile explicitly:
+
+```bash
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  -f ~/forkana/compose/external-postgres.override.yml \
+  --profile local-db \
+  up -d
+```
+
+### Use a Different Docker Logging Driver (Optional)
+
+`dev.yml` defaults to `json-file` with size-based rotation
+(`max-size: 50m`, `max-file: 14`, `compress: true`) as a safe baseline.
+The default `50m` and `14` align with the daemon-level rotation
+documented in
+`custom/docs/ongoing/deploy/ci-cd/done/research/log-rotation.md`, so an
+unmodified deploy persists roughly 14 × 50 MB of rotated logs per
+service in `/var/lib/docker/containers/<id>/`. Override the values via
+`DOCKER_LOG_MAX_SIZE` / `DOCKER_LOG_MAX_FILE` in `.env` if you need a
+different retention budget.
+
+If you need a different driver entirely, include
+`overrides/logging.override.yml` and set `DOCKER_LOG_DRIVER` in your `.env` or shell.
+See `docker/forkana/overrides/README.md` in the repository for `local`,
+`journald`, and `fluentd` examples.
+
+```bash
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  -f ~/forkana/compose/logging.override.yml \
+  up -d --force-recreate
+```
+
+Important when switching drivers:
+- Keep the same compose file set for `up`, `down`, `logs`, and `exec`.
+- Recreate containers after driver changes (`--force-recreate`) so Docker
+  applies the new logging driver.
+- `json-file` options (`max-size`, `max-file`, `compress`) are driver-specific;
+  if you use another driver, configure only options supported by that driver
+  inside `overrides/logging.override.yml`.
+
+To revert to the default logger, remove `overrides/logging.override.yml` from the command
+(or set `DOCKER_LOG_DRIVER=json-file` and add json-file options explicitly in
+`overrides/logging.override.yml`).
+
+### Persisting Rotated Logs Across Redeploys
+
+Docker stores `json-file` logs under
+`/var/lib/docker/containers/<container-id>/`. When a container is
+recreated (e.g. by every CI/CD deploy that re-runs `docker compose up`)
+the old container's directory is eligible for removal, which also
+removes its rotated log files. The Forkana defaults bound on-disk
+size per container but do **not** retain history across deploys on
+their own.
+
+If you need rotated logs to survive deploys, pick one of the
+strategies in
+`custom/docs/ongoing/deploy/ci-cd/done/research/log-rotation.md`
+(daemon-level rotation in `/etc/docker/daemon.json`, periodic
+`docker logs --since` exports, or shipping to Loki / fluent-bit).
+The compose-level defaults here are intentionally minimal so they
+compose cleanly with whichever option you choose.
+
+
 
 ```bash
 docker compose --env-file ~/forkana/compose/.env \
@@ -563,18 +662,22 @@ rather than copy-pasting server blocks into this guide. Download it to the
 VPS with `curl`, substitute `dev.forkana.example` for your actual domain, and
 adjust the `proxy_pass` port if you changed `FORKANA_HOST_PORT` in `.env`.
 
-For the initial setup, deploy only the HTTP server block (first 10 lines).
-Certbot will add the HTTPS block automatically when obtaining the certificate.
+For the initial setup, deploy only the HTTP server block. Certbot will add
+the HTTPS block automatically when obtaining the certificate.
 
 ```bash
 FORKANA_DOMAIN="your-actual-domain.com"
 BRANCH="master"
 NGINX_RAW_URL="https://raw.githubusercontent.com/okTurtles/forkana/${BRANCH}/docker/forkana/nginx.conf"
 
-# Stage the reference config locally, then strip to the HTTP block for the
-# Certbot bootstrap (Certbot rewrites the file to add the HTTPS block).
+# Stage the reference config locally, then strip to the first server { ... }
+# block for the Certbot bootstrap (Certbot rewrites the file to add the HTTPS
+# block). The sed range extracts from the first `server {` line to its
+# matching closing `}` and quits, so reformatting nginx.conf (extra comments,
+# blank lines, additional directives inside the HTTP block) does not break
+# this step.
 curl -fsSL "${NGINX_RAW_URL}" -o /tmp/forkana.nginx.conf
-head -10 /tmp/forkana.nginx.conf \
+sed -n '/^server {/,/^}/{p;/^}/q;}' /tmp/forkana.nginx.conf \
   | sed "s/dev.forkana.example/${FORKANA_DOMAIN}/g" > /tmp/forkana.nginx.http.conf
 ```
 
@@ -641,6 +744,8 @@ curl -f https://your-domain.example/api/healthz
 
 ### Verify Database Connection
 
+For the default (bundled Postgres) setup:
+
 ```bash
 # Check PostgreSQL is accessible
 docker compose --env-file ~/forkana/compose/.env \
@@ -655,6 +760,24 @@ docker compose --env-file ~/forkana/compose/.env \
   logs forkana | grep -i database
 ```
 
+For an existing external Postgres (with `overrides/external-postgres.override.yml`):
+
+```bash
+# Confirm Forkana is using the external DB host override
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  -f ~/forkana/compose/external-postgres.override.yml \
+  exec forkana printenv GITEA__database__HOST
+
+# Check Forkana DB connection messages
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  -f ~/forkana/compose/external-postgres.override.yml \
+  logs forkana | grep -i database
+```
+
 ### Verify All Services
 
 ```bash
@@ -663,11 +786,14 @@ docker compose --env-file ~/forkana/compose/.env \
   -f ~/forkana/compose/compose.override.yml \
   ps
 
-# Expected output (ports depend on FORKANA_HOST_PORT and REGISTRY_PORT):
+# Expected output (default local DB; ports depend on FORKANA_HOST_PORT and REGISTRY_PORT):
 # NAME               STATUS                   PORTS
 # forkana            Up (healthy)             127.0.0.1:<host-port>->3000/tcp
 # forkana-postgres   Up (healthy)             5432/tcp
 # registry           Up (healthy)             127.0.0.1:<registry-port>->5000/tcp
+
+# With overrides/external-postgres.override.yml, forkana-postgres is typically absent
+# unless you explicitly enable --profile local-db.
 ```
 
 ### Test Web Access
@@ -702,11 +828,18 @@ docker compose --env-file ~/forkana/compose/.env \
   -f ~/forkana/compose/compose.override.yml \
   logs -f forkana
 
-# PostgreSQL only
+# PostgreSQL only (bundled DB mode)
 docker compose --env-file ~/forkana/compose/.env \
   -f ~/forkana/compose/dev.yml \
   -f ~/forkana/compose/compose.override.yml \
   logs -f postgres
+
+# Forkana logs (external DB mode)
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  -f ~/forkana/compose/external-postgres.override.yml \
+  logs -f forkana
 
 # Last 100 lines
 docker compose --env-file ~/forkana/compose/.env \
@@ -854,6 +987,8 @@ getent passwd "${DEPLOY_USER}" | cut -d: -f3
 
 #### Database Connection Failed
 
+For the default (bundled Postgres) setup:
+
 ```bash
 docker compose --env-file ~/forkana/compose/.env \
   -f ~/forkana/compose/dev.yml \
@@ -869,6 +1004,24 @@ docker compose --env-file ~/forkana/compose/.env \
   -f ~/forkana/compose/dev.yml \
   -f ~/forkana/compose/compose.override.yml \
   exec postgres psql -U forkana -d forkana -c "SELECT 1;"
+```
+
+For external Postgres mode (`overrides/external-postgres.override.yml`):
+
+```bash
+# Confirm the DB host/credentials are wired into the running forkana container
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  -f ~/forkana/compose/external-postgres.override.yml \
+  exec forkana printenv GITEA__database__HOST GITEA__database__NAME GITEA__database__USER
+
+# Inspect DB-related startup/runtime errors from forkana
+docker compose --env-file ~/forkana/compose/.env \
+  -f ~/forkana/compose/dev.yml \
+  -f ~/forkana/compose/compose.override.yml \
+  -f ~/forkana/compose/external-postgres.override.yml \
+  logs forkana | grep -Ei "database|postgres|sql|pq|connection"
 ```
 
 #### 502 Bad Gateway from Nginx
@@ -1256,8 +1409,8 @@ sudo systemctl start forkana
 
 ---
 
-<summary><h2>Additional Configuration</h2></summary>
 <details>
+<summary><h2>Additional Configuration</h2></summary>
 
 ### Environment Variable Reference
 
