@@ -199,6 +199,8 @@ func CreateIssueCommentAttachment(ctx *context.APIContext) {
 	if err != nil {
 		if upload.IsErrFileTypeForbidden(err) {
 			ctx.APIError(http.StatusUnprocessableEntity, err)
+		} else if upload.IsErrFileTooLarge(err) {
+			ctx.APIError(http.StatusRequestEntityTooLarge, err)
 		} else {
 			ctx.APIErrorInternal(err)
 		}

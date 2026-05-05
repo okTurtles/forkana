@@ -11,6 +11,7 @@ import (
 
 	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/services/context/upload"
@@ -40,6 +41,15 @@ func NewAttachment(ctx context.Context, attach *repo_model.Attachment, file io.R
 
 // UploadAttachment upload new attachment into storage and update database
 func UploadAttachment(ctx context.Context, file io.Reader, allowedTypes string, fileSize int64, attach *repo_model.Attachment) (*repo_model.Attachment, error) {
+	if setting.Attachment.MaxSize > 0 {
+		maxBytes := setting.Attachment.MaxSize << 20
+		if fileSize > maxBytes {
+			return nil, upload.ErrFileTooLarge{Name: attach.Name, MaxMB: setting.Attachment.MaxSize}
+		}
+		// Wrap with LimitReader as defense-in-depth against spoofed Content-Length
+		file = io.LimitReader(file, maxBytes)
+	}
+
 	buf := make([]byte, 1024)
 	n, _ := util.ReadAtMost(file, buf)
 	buf = buf[:n]
