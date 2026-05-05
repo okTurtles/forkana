@@ -107,7 +107,7 @@ export async function initDropzone(dropzoneEl: HTMLElement) {
     if (file.previewElement) {
       file.previewElement.classList.remove('dz-file-preview');
       file.previewElement.classList.add('dz-image-preview');
-      for (const thumbnailElement of file.previewElement.querySelectorAll('[data-dz-thumbnail]')) {
+      for (const thumbnailElement of file.previewElement.querySelectorAll<HTMLImageElement>('[data-dz-thumbnail]')) {
         thumbnailElement.alt = file.name;
         thumbnailElement.src = thumbnailURL;
       }
