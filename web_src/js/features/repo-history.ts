@@ -150,8 +150,8 @@ export function initRepoHistory() {
   const storedSelection = readStoredSelection();
   let initialSelection: RepoSelection | null = null;
 
-  // When the URL explicitly specifies an article (via /article/{owner}/{subject}),
-  // always use that as the initial selection instead of localStorage.
+  // When rendering the article view with a server-provided initial selection,
+  // always use that selection instead of localStorage.
   // This ensures that after a fork redirect, the correct article is shown (issue #177).
   if (initialView === 'article' && initialOwner && (initialRepo || initialSubject)) {
     initialSelection = {
