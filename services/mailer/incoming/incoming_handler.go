@@ -95,6 +95,10 @@ func (h *ReplyHandler) Handle(ctx context.Context, content *MailContent, doer *u
 					log.Info("Skipping disallowed attachment type: %s", attachment.Name)
 					continue
 				}
+				if upload.IsErrFileTooLarge(err) {
+					log.Info("Skipping oversized attachment: %s", attachment.Name)
+					continue
+				}
 				return err
 			}
 			attachmentIDs = append(attachmentIDs, a.UUID)

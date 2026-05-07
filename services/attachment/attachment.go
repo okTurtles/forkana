@@ -11,12 +11,37 @@ import (
 
 	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/services/context/upload"
 
 	"github.com/google/uuid"
 )
+
+// limitedErrorReader wraps a reader and returns ErrFileTooLarge if more than remaining bytes are read.
+// Unlike io.LimitReader, it errors instead of silently stopping, preventing silent file truncation
+// when fileSize is unknown (-1).
+type limitedErrorReader struct {
+	r         io.Reader
+	remaining int64
+	name      string
+	maxMB     int64
+}
+
+func (l *limitedErrorReader) Read(p []byte) (int, error) {
+	// Request one extra byte beyond the limit. If we get it back, the file exceeds the limit.
+	allowRead := l.remaining + 1
+	if int64(len(p)) > allowRead {
+		p = p[:allowRead]
+	}
+	n, err := l.r.Read(p)
+	if int64(n) > l.remaining {
+		return int(l.remaining), upload.ErrFileTooLarge{Name: l.name, MaxMB: l.maxMB}
+	}
+	l.remaining -= int64(n)
+	return n, err
+}
 
 // NewAttachment creates a new attachment object, but do not verify.
 func NewAttachment(ctx context.Context, attach *repo_model.Attachment, file io.Reader, size int64) (*repo_model.Attachment, error) {
@@ -40,6 +65,16 @@ func NewAttachment(ctx context.Context, attach *repo_model.Attachment, file io.R
 
 // UploadAttachment upload new attachment into storage and update database
 func UploadAttachment(ctx context.Context, file io.Reader, allowedTypes string, fileSize int64, attach *repo_model.Attachment) (*repo_model.Attachment, error) {
+	if setting.Attachment.MaxSize > 0 {
+		maxBytes := setting.Attachment.MaxSize << 20
+		if fileSize > maxBytes {
+			return nil, upload.ErrFileTooLarge{Name: attach.Name, MaxMB: setting.Attachment.MaxSize}
+		}
+		// Wrap with a reader that errors (rather than silently truncates) when the limit is exceeded.
+		// This handles both spoofed Content-Length and unknown size (fileSize == -1).
+		file = &limitedErrorReader{r: file, remaining: maxBytes, name: attach.Name, maxMB: setting.Attachment.MaxSize}
+	}
+
 	buf := make([]byte, 1024)
 	n, _ := util.ReadAtMost(file, buf)
 	buf = buf[:n]

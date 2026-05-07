@@ -245,6 +245,10 @@ func CreateReleaseAttachment(ctx *context.APIContext) {
 			ctx.APIError(http.StatusBadRequest, err)
 			return
 		}
+		if upload.IsErrFileTooLarge(err) {
+			ctx.APIError(http.StatusRequestEntityTooLarge, err)
+			return
+		}
 		ctx.APIErrorInternal(err)
 		return
 	}
