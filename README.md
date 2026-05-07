@@ -174,6 +174,10 @@ $ TEST_MINIO_ENDPOINT=localhost:9000 TEST_PGSQL_HOST=localhost:5432 TEST_PGSQL_D
 
 </details>
 
+### Deployment
+
+For deploying Forkana to a server for private preview, see the [Deployment Guide](docker/forkana/DEPLOYMENT_GUIDE.md).
+
 # Gitea
 
 Forkana is forked from [go-gitea/gitea](https://github.com/go-gitea/gitea).

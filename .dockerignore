@@ -50,6 +50,10 @@ cpu.out
 !/custom/conf
 /custom/conf/*
 !/custom/conf/app.example.ini
+!/custom/options
+!/custom/public
+!/custom/services
+!/custom/templates
 /data
 /indexers
 /log
