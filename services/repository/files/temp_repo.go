@@ -55,7 +55,7 @@ func (t *TemporaryUploadRepository) Close() {
 
 // AddObjectAlternates appends the given repo paths to this repo's git object alternates,
 // making their objects reachable. Must be called after Clone.
-func (t *TemporaryUploadRepository) AddObjectAlternates(repoPaths ...string) error {
+func (t *TemporaryUploadRepository) AddObjectAlternates(repoPaths ...string) (err error) {
 	p := filepath.Join(t.basePath, ".git", "objects", "info", "alternates")
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return fmt.Errorf("AddObjectAlternates mkdir: %w", err)
@@ -64,7 +64,11 @@ func (t *TemporaryUploadRepository) AddObjectAlternates(repoPaths ...string) err
 	if err != nil {
 		return fmt.Errorf("AddObjectAlternates open: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("AddObjectAlternates close: %w", cerr)
+		}
+	}()
 	for _, rp := range repoPaths {
 		if _, err := fmt.Fprintln(f, filepath.Join(rp, "objects")); err != nil {
 			return fmt.Errorf("AddObjectAlternates write: %w", err)

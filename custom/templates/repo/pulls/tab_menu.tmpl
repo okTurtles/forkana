@@ -11,7 +11,7 @@
 				{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_conflicts")}}
 			</a>
 		{{end}}
-		{{if and .IsIssuePoster (not .Issue.IsClosed) (not .Issue.PullRequest.HasMerged) .HasChangesRequested}}
+		{{if and .IsIssuePoster (not .Issue.IsClosed) (not .Issue.PullRequest.HasMerged) .HasChangesRequested (not .IsPullFilesConflicted)}}
 			<a class="item {{if .PageIsPullEdit}}active{{end}}" href="{{.Issue.Link}}/edit">
 				{{svg "octicon-pencil"}}
 				{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.editor.edit_file")}}

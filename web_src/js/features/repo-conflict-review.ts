@@ -245,10 +245,12 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
   const resolveBtn = wrapper.querySelector<HTMLButtonElement>('.conflict-resolve-btn');
   const toastContainer = wrapper.querySelector<HTMLElement>('.toast-comment-editor');
 
+  const isResolveEnabled = () => !!wrapper.getAttribute('data-choice');
+
   const fillEditor = (text: string) => {
     const editor = getToastCommentEditor(toastContainer);
     if (editor) editor.value(text);
-    if (resolveBtn) resolveBtn.disabled = !text.trim();
+    if (resolveBtn) resolveBtn.disabled = !isResolveEnabled();
   };
 
   keepBtn?.addEventListener('click', () => {
@@ -265,11 +267,10 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
     fillEditor(headText);
   });
 
-  // Also enable/disable Resolve when the user edits the editor directly
+  // Re-evaluate Resolve when the user edits the editor directly (choice already set)
   if (toastContainer) {
     toastContainer.addEventListener(EventEditorContentChanged, () => {
-      const editor = getToastCommentEditor(toastContainer);
-      if (resolveBtn) resolveBtn.disabled = !editor?.value().trim();
+      if (resolveBtn) resolveBtn.disabled = !isResolveEnabled();
     });
   }
 
@@ -389,10 +390,10 @@ function initSubmitTracking() {
       const fileMap = new Map<string, Array<{index: number; text: string}>>();
       const allWrappers = document.querySelectorAll<HTMLElement>('.conflict-wrapper');
       for (const wrapper of allWrappers) {
+        if (wrapper.getAttribute('data-resolved') !== 'true') continue;
         const conflictIndex = parseInt(wrapper.getAttribute('data-file-conflict-index') ?? '0');
         const toastContainer = wrapper.querySelector<HTMLElement>('.toast-comment-editor');
         const text = getToastCommentEditor(toastContainer)?.value() ?? '';
-        if (!text.trim()) continue;
         const fileBox = wrapper.closest<HTMLElement>('.diff-file-box');
         if (!fileBox) continue;
         const filePath = fileBox.getAttribute('data-new-filename') ?? '';

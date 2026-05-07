@@ -1446,13 +1446,12 @@ func ViewPullConflicts(ctx *context.Context) {
 	}
 
 	diff, err := gitdiff.GetDiffForRender(ctx, ctx.Repo.RepoLink, gitRepo, &gitdiff.DiffOptions{
-		BeforeCommitID:     beforeCommitID,
-		AfterCommitID:      headCommitID,
-		SkipTo:             ctx.FormString("skip-to"),
-		MaxLines:           maxLines,
-		MaxLineCharacters:  setting.Git.MaxGitDiffLineCharacters,
-		MaxFiles:           maxFiles,
-		WhitespaceBehavior: gitdiff.GetWhitespaceFlag(ctx.Data["WhitespaceBehavior"].(string)),
+		BeforeCommitID:    beforeCommitID,
+		AfterCommitID:     headCommitID,
+		SkipTo:            ctx.FormString("skip-to"),
+		MaxLines:          maxLines,
+		MaxLineCharacters: setting.Git.MaxGitDiffLineCharacters,
+		MaxFiles:          maxFiles,
 	}, files...)
 	if err != nil {
 		ctx.ServerError("GetDiff", err)
@@ -1675,7 +1674,10 @@ func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[in
 			continue
 		}
 
-		resolvedLines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+		var resolvedLines []string
+		if trimmed := strings.TrimRight(text, "\n"); trimmed != "" {
+			resolvedLines = strings.Split(trimmed, "\n")
+		}
 		hStart := splices[i].start
 		hEnd := min(splices[i].end, len(headLines))
 		newHead := make([]string, 0, len(headLines)-hEnd+hStart+len(resolvedLines))
@@ -1725,6 +1727,14 @@ func SubmitConflictResolution(ctx *context.Context) {
 		return
 	}
 
+	if pull.HasMerged {
+		ctx.PlainText(http.StatusBadRequest, "pull request has already been merged")
+		return
+	}
+	if issue.IsClosed {
+		ctx.PlainText(http.StatusBadRequest, "pull request is closed")
+		return
+	}
 	if !pull.IsFilesConflicted() {
 		ctx.PlainText(http.StatusBadRequest, "pull request has no conflicts")
 		return
@@ -1756,9 +1766,17 @@ func SubmitConflictResolution(ctx *context.Context) {
 		ctx.PlainText(http.StatusBadRequest, "no files provided")
 		return
 	}
+	requestedFileSet := make(map[string]struct{}, len(req.Files))
 	for _, fileReq := range req.Files {
 		if _, ok := conflictedFileSet[fileReq.Path]; !ok {
 			ctx.PlainText(http.StatusBadRequest, "invalid conflicted file: "+fileReq.Path)
+			return
+		}
+		requestedFileSet[fileReq.Path] = struct{}{}
+	}
+	for _, f := range pull.ConflictedFiles {
+		if _, ok := requestedFileSet[f]; !ok {
+			ctx.PlainText(http.StatusBadRequest, "missing resolution for conflicted file: "+f)
 			return
 		}
 	}
@@ -1855,6 +1873,12 @@ func SubmitConflictResolution(ctx *context.Context) {
 					return
 				}
 				texts[c.Index] = c.Text
+			}
+			for i := range groups {
+				if _, ok := texts[i]; !ok {
+					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("missing resolution for conflict %d in %s", i, fileReq.Path))
+					return
+				}
 			}
 			resolved, err = applyConflictTexts(headContent, groups, texts)
 			if err != nil {
