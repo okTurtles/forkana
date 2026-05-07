@@ -19,6 +19,30 @@ import (
 	"github.com/google/uuid"
 )
 
+// limitedErrorReader wraps a reader and returns ErrFileTooLarge if more than remaining bytes are read.
+// Unlike io.LimitReader, it errors instead of silently stopping, preventing silent file truncation
+// when fileSize is unknown (-1).
+type limitedErrorReader struct {
+	r         io.Reader
+	remaining int64
+	name      string
+	maxMB     int64
+}
+
+func (l *limitedErrorReader) Read(p []byte) (int, error) {
+	// Request one extra byte beyond the limit. If we get it back, the file exceeds the limit.
+	allowRead := l.remaining + 1
+	if int64(len(p)) > allowRead {
+		p = p[:allowRead]
+	}
+	n, err := l.r.Read(p)
+	if int64(n) > l.remaining {
+		return int(l.remaining), upload.ErrFileTooLarge{Name: l.name, MaxMB: l.maxMB}
+	}
+	l.remaining -= int64(n)
+	return n, err
+}
+
 // NewAttachment creates a new attachment object, but do not verify.
 func NewAttachment(ctx context.Context, attach *repo_model.Attachment, file io.Reader, size int64) (*repo_model.Attachment, error) {
 	if attach.RepoID == 0 {
@@ -46,8 +70,9 @@ func UploadAttachment(ctx context.Context, file io.Reader, allowedTypes string, 
 		if fileSize > maxBytes {
 			return nil, upload.ErrFileTooLarge{Name: attach.Name, MaxMB: setting.Attachment.MaxSize}
 		}
-		// Wrap with LimitReader as defense-in-depth against spoofed Content-Length
-		file = io.LimitReader(file, maxBytes)
+		// Wrap with a reader that errors (rather than silently truncates) when the limit is exceeded.
+		// This handles both spoofed Content-Length and unknown size (fileSize == -1).
+		file = &limitedErrorReader{r: file, remaining: maxBytes, name: attach.Name, maxMB: setting.Attachment.MaxSize}
 	}
 
 	buf := make([]byte, 1024)
