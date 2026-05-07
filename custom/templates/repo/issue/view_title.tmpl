@@ -8,6 +8,7 @@
 	data-issue-dependency-search-type="{{$.IssueDependencySearchType}}"
 	data-issue-repo-link="{{$.RepoLink}}"
 	data-issue-repo-id="{{$.Repository.ID}}"
+	{{if .Issue.IsPull}}data-issue-head-branch="{{.HeadTarget}}"{{end}}
 ></div>
 {{if and .Issue.IsPull .Issue.PullRequest.HeadRepo}}
 <div class="pr-repo-header">
