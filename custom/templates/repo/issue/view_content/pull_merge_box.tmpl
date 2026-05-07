@@ -1,6 +1,3 @@
-{{if and .Issue.PullRequest.HasMerged (not .IsPullBranchDeletable)}}
-{{/* Then the merge box will not be displayed because this page already contains enough information */}}
-{{else}}
 {{$mergeColor := "red"}}
 {{- if .Issue.PullRequest.HasMerged}}{{$mergeColor = "purple"}}
 {{- else if .Issue.IsClosed}}{{$mergeColor = "grey"}}
@@ -42,21 +39,16 @@
 		{{$showGeneralMergeForm := false}}
 		<div class="ui attached segment merge-section {{if not $.LatestCommitStatus}}avatar-content-left-arrow{{end}} flex-items-block border-{{$mergeColor}}">
 			{{if .Issue.PullRequest.HasMerged}}
-				{{if .IsPullBranchDeletable}}
-					<div class="item item-section text tw-flex-1">
-						<div class="item-section-left">
-							<h3 class="tw-mb-2">
-								{{ctx.Locale.Tr "repo.pulls.merged_success"}}
-							</h3>
-							<div class="merge-section-info">
-								{{ctx.Locale.Tr "repo.pulls.merged_info_text" (HTMLFormat "<code>%s</code>" .HeadTarget)}}
-							</div>
-						</div>
-						<div class="item-section-right">
-							<button class="delete-button ui button" data-url="{{.DeleteBranchLink}}">{{ctx.Locale.Tr "repo.branch.delete_html"}}</button>
+				<div class="item item-section text tw-flex-1">
+					<div class="item-section-left">
+						<h3 class="tw-mb-2">
+							{{ctx.Locale.Tr "repo.pulls.merged_success"}}
+						</h3>
+						<div class="merge-section-info">
+							{{ctx.Locale.Tr "repo.pulls.merged_info_text" (HTMLFormat "<code>%s</code>" .HeadTarget)}}
 						</div>
 					</div>
-				{{end}}
+				</div>
 			{{else if .Issue.IsClosed}}
 				<div class="item item-section text tw-flex-1">
 					<div class="item-section-left">
@@ -81,9 +73,6 @@
 						{{end}}
 					</div>
 					<div class="item-section-right">
-						{{if and .IsPullBranchDeletable (not .IsPullRequestBroken)}}
-							<button class="delete-button ui button" data-url="{{.DeleteBranchLink}}">{{ctx.Locale.Tr "repo.branch.delete_html"}}</button>
-						{{end}}
 						{{if .CanForkRejectedChanges}}
 							<form class="form-fetch-action" method="post" action="{{.Issue.Link}}/fork_rejected_changes">
 								{{.CsrfTokenHtml}}
@@ -251,7 +240,6 @@
 							const mergeForm = {
 								'baseLink': {{.Issue.Link}},
 								'textCancel': {{ctx.Locale.Tr "cancel"}},
-								'textDeleteBranch': {{ctx.Locale.Tr "repo.branch.delete" .HeadTarget}},
 								'textAutoMergeButtonWhenSucceed': {{ctx.Locale.Tr "repo.pulls.auto_merge_button_when_succeed"}},
 								'textAutoMergeWhenSucceed': {{ctx.Locale.Tr "repo.pulls.auto_merge_when_succeed"}},
 								'textAutoMergeCancelSchedule': {{ctx.Locale.Tr "repo.pulls.auto_merge_cancel_schedule"}},
@@ -263,7 +251,6 @@
 								'allOverridableChecksOk': {{not $notAllOverridableChecksOk}},
 								'emptyCommit': {{.Issue.PullRequest.IsEmpty}},
 								'pullHeadCommitID': {{.PullHeadCommitID}},
-								'isPullBranchDeletable': {{.IsPullBranchDeletable}},
 								'defaultMergeStyle': {{.MergeStyle}},
 								'mergeMessageFieldPlaceHolder': {{ctx.Locale.Tr "repo.editor.commit_message_desc"}},
 								'defaultMergeMessage': defaultMergeMessage,
@@ -394,4 +381,3 @@
 		</div>
 	</div>
 </div>
-{{end}}

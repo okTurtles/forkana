@@ -136,10 +136,6 @@ function clearMergeMessage() {
       <button class="ui button merge-cancel" @click="toggleActionForm(false)">
         {{ mergeForm.textCancel }}
       </button>
-
-      <template v-if="mergeForm.isPullBranchDeletable">
-        <input name="delete_branch_after_merge" type="hidden" value="true">
-      </template>
     </form>
 
     <div v-if="!showActionForm" class="tw-flex">
