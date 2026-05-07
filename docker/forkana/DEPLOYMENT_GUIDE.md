@@ -4,15 +4,67 @@ This guide covers deploying Forkana to a single Linux VM for private dev instanc
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Server Preparation](#server-preparation)
-3. [Server Setup (CI/CD)](#server-setup-cicd)
-4. [Environment Configuration](#environment-configuration)
-5. [Running Forkana](#running-forkana)
-6. [Reverse Proxy Setup](#reverse-proxy-setup)
-7. [Health Checks & Verification](#health-checks--verification)
-8. [Troubleshooting](#troubleshooting)
-9. [Maintenance](#maintenance)
+1. [Deployment mode](#deployment-mode)
+2. [Prerequisites](#prerequisites)
+3. [Server Preparation](#server-preparation)
+4. [Server Setup (CI/CD)](#server-setup-cicd)
+5. [Environment Configuration](#environment-configuration)
+6. [Running Forkana](#running-forkana)
+7. [Reverse Proxy Setup](#reverse-proxy-setup)
+8. [Health Checks & Verification](#health-checks--verification)
+9. [Troubleshooting](#troubleshooting)
+10. [Maintenance](#maintenance)
+
+---
+
+## Deployment mode
+
+`docker/forkana/deploy_common.sh` supports two deployment layouts, selected at
+run time per host:
+
+- **`standalone`** *(default)* - Forkana owns its compose project on a
+  dedicated VM. The pipeline brings up its own `registry`, `postgres`, and
+  `forkana` services from `docker/forkana/dev.yml` under project name
+  `forkana`. **All instructions in the rest of this guide describe this
+  mode** and continue to work unchanged.
+- **`forums`** - Forkana joins an existing external Compose project as a
+  sibling service. The pipeline reuses that project's `postgres` instance
+  and a host-managed registry, and only writes a digest-pinned override
+  file under the external stack's working tree. The external-stack
+  contract (service block, database bootstrap, secrets layout) is owned
+  and documented by that stack itself.
+
+The mode is resolved by sourcing `~/forkana/deploy.conf` at the start of
+each deploy. **Absence of the file selects `standalone`** - existing
+standalone hosts need no action.
+
+To opt a host into forums mode, create `~/forkana/deploy.conf` with
+permissions `600` and the deploy user as owner:
+
+```bash
+# ~/forkana/deploy.conf - required for forums mode, optional for standalone.
+FORKANA_DEPLOY_MODE=forums              # standalone | forums
+FORUMS_DIR=/path/to/stack               # required iff mode=forums; absolute path
+                                        # to the external Compose project root.
+
+# Optional knobs (defaults are layout-agnostic; relative paths resolve
+# against ${FORUMS_DIR}):
+# FORUMS_ENV_FILE=.env                  # env file passed to docker compose
+# FORUMS_OVERRIDE_FILE=forkana-override.yml  # digest-pinned override path
+# FORUMS_EXTRA_COMPOSE_FILES=""         # whitespace-separated extra -f files
+```
+
+`FORUMS_ENV_FILE` must be provisioned by the external stack with
+`POSTGRES_FORKANA_PASSWORD`, `FORKANA_DOMAIN`, `FORKANA_ROOT_URL`,
+`FORKANA_SECRET_KEY`, `FORKANA_INTERNAL_TOKEN`, `FORKANA_JWT_SECRET`,
+and `FORKANA_HOST_PORT` (typically a non-3000 port to avoid collisions
+with sibling services). These variable names form the integration
+contract with the external stack.
+
+The remainder of this guide covers **standalone** setup. Forums-mode
+host bootstrap (creating the deploy user, provisioning the env file,
+initialising the shared database, and starting the registry) is handled
+by the external stack's own documentation.
 
 ---
 
@@ -723,7 +775,7 @@ docker compose --env-file ~/forkana/compose/.env \
 ```
 
 ```bash
-# Verify permissions (run as root — ~/forkana would expand to /root)
+# Verify permissions (run as root - ~/forkana would expand to /root)
 DEPLOY_USER="forkana-deploy"  # replace with your UID 1000 username
 DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
