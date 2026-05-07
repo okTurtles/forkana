@@ -959,7 +959,8 @@ td .commit-summary {
 }
 
 .repository .diff-file-box .code-diff .lines-num {
-  padding: 0 5px !important;
+  padding: 5px !important;
+  line-height: 28px;
 }
 
 .repository .diff-file-box .code-diff .tag-code .lines-num,
@@ -1757,8 +1758,12 @@ tbody.commit-list {
 .code-diff-split .del-code .add-code.lines-type-marker-new,
 .code-diff-split .del-code .add-code.lines-escape-new,
 .code-diff-split .del-code .add-code.lines-code-new {
-  background: var(--color-diff-added-row-bg);
+  background: var(--color-white);
   border-color: var(--color-diff-added-row-border);
+}
+
+.code-diff-split .del-code .add-code.lines-code-new .code-inner {
+  background: var(--color-diff-added-row-bg);
 }
 
 .code-diff-split .del-code .lines-type-marker-new,
