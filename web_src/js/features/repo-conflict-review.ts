@@ -113,12 +113,10 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
     const innerTable = document.createElement('table');
     innerTable.className = 'chroma conflict-inner-table';
 
-    // Add colgroup matching the visible columns (4 columns: num, code, num, code)
-    // The type marker columns are hidden via display: none, so they are skipped in fixed layout
     // eslint-disable-next-line github/unescaped-html-literal
     innerTable.innerHTML = `<colgroup>
-      <col width="50"><col width="50%">
-      <col width="50"><col width="50%">
+      <col width="50"><col class="col-type-marker" width="10"><col>
+      <col width="50"><col class="col-type-marker" width="10"><col>
     </colgroup>`;
 
     const innerTbody = document.createElement('tbody');
@@ -235,6 +233,129 @@ function numberConflicts(wrappers: HTMLElement[]) {
 }
 
 /**
+ * Builds a read-only "resolved" table view that shows the base content on the
+ * left (del background) and the resolved text on the right (add background).
+ * Includes an Edit footer link for going back to edit mode.
+ */
+function buildResolvedView(wrapper: HTMLElement, resolvedText: string): HTMLElement {
+  // Extract base line numbers and text from the original conflict rows
+  const innerTable = wrapper.querySelector<HTMLElement>('.conflict-inner-table');
+  const baseLineNums: number[] = [];
+  const baseTexts: string[] = [];
+  let headStartLineNum = 0;
+
+  if (innerTable) {
+    for (const row of innerTable.querySelectorAll<HTMLTableRowElement>('tr[data-line-type="conflict"]')) {
+      const oldNum = parseInt(row.querySelector<HTMLElement>('.lines-num-old')?.getAttribute('data-line-num') ?? '0');
+      if (oldNum > 0) {
+        baseLineNums.push(oldNum);
+        baseTexts.push(row.querySelector('.lines-code-old .code-inner')?.textContent ?? '');
+      }
+      if (headStartLineNum === 0) {
+        const newNum = parseInt(row.querySelector<HTMLElement>('.lines-num-new')?.getAttribute('data-line-num') ?? '0');
+        if (newNum > 0) headStartLineNum = newNum;
+      }
+    }
+  }
+  if (headStartLineNum === 0) headStartLineNum = baseLineNums[0] ?? 1;
+
+  const trimmed = resolvedText.replace(/\n+$/, '');
+  const resolvedLines = trimmed.length > 0 ? trimmed.split('\n') : [];
+
+  const container = document.createElement('div');
+  container.className = 'conflict-resolved-view';
+
+  const table = document.createElement('table');
+  table.className = 'chroma conflict-inner-table';
+  // eslint-disable-next-line github/unescaped-html-literal
+  // eslint-disable-next-line github/unescaped-html-literal
+  table.innerHTML = `<colgroup><col width="50"><col class="col-type-marker" width="10"><col><col width="50"><col class="col-type-marker" width="10"><col></colgroup>`;
+
+  const tbody = document.createElement('tbody');
+  const maxRows = Math.max(baseTexts.length, resolvedLines.length);
+
+  for (let i = 0; i < maxRows; i++) {
+    const row = document.createElement('tr');
+
+    // Left: base line
+    const leftNum = document.createElement('td');
+    leftNum.className = 'lines-num lines-num-old';
+    if (i < baseLineNums.length) {
+      leftNum.setAttribute('data-line-num', String(baseLineNums[i]));
+      leftNum.textContent = String(baseLineNums[i]);
+    }
+
+    const leftMarker = document.createElement('td');
+    leftMarker.className = 'lines-type-marker';
+
+    const leftCode = document.createElement('td');
+    leftCode.className = 'lines-code lines-code-old resolved-base';
+    const leftInner = document.createElement('code');
+    leftInner.className = 'code-inner';
+    leftInner.textContent = i < baseTexts.length ? baseTexts[i] : '';
+    leftCode.append(leftInner);
+
+    row.append(leftNum, leftMarker, leftCode);
+
+    // Right: resolved line (only styled green when there is actual content)
+    const hasRight = i < resolvedLines.length;
+    const rightNum = document.createElement('td');
+    rightNum.className = hasRight ? 'lines-num lines-num-new add-code' : 'lines-num lines-num-new';
+    if (hasRight) {
+      rightNum.setAttribute('data-line-num', String(headStartLineNum + i));
+      rightNum.textContent = String(headStartLineNum + i);
+    }
+
+    const rightMarker = document.createElement('td');
+    rightMarker.className = 'lines-type-marker';
+
+    const rightCode = document.createElement('td');
+    rightCode.className = hasRight ? 'lines-code lines-code-new resolved-result' : 'lines-code lines-code-new';
+    const rightInner = document.createElement('code');
+    rightInner.className = 'code-inner';
+    rightInner.textContent = hasRight ? resolvedLines[i] : '';
+    rightCode.append(rightInner);
+
+    row.append(rightNum, rightMarker, rightCode);
+    tbody.append(row);
+  }
+
+  table.append(tbody);
+  container.append(table);
+
+  // Edit footer
+  const footer = document.createElement('div');
+  footer.className = 'conflict-resolved-footer';
+  // eslint-disable-next-line github/unescaped-html-literal
+  footer.innerHTML = `<button type="button" class="conflict-edit-btn"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="12" height="12"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354ZM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064Z"></path></svg> Edit</button>`;
+  container.append(footer);
+
+  return container;
+}
+
+/**
+ * Updates the counter label in every conflict wrapper header to reflect
+ * the current resolved/unresolved state.
+ */
+function updateAllCounters() {
+  const allWrappers = Array.from(document.querySelectorAll<HTMLElement>('.conflict-wrapper'));
+  const total = allWrappers.length;
+  const unresolvedCount = allWrappers.filter((w) => w.getAttribute('data-resolved') !== 'true').length;
+
+  for (const [index, wrapper] of allWrappers.entries()) {
+    const counter = wrapper.querySelector('.conflict-counter');
+    if (!counter) continue;
+    if (wrapper.getAttribute('data-resolved') === 'true') {
+      const rest = unresolvedCount === 0 ? 'Resolved' : `Resolved · ${unresolvedCount} more ${unresolvedCount === 1 ? 'conflict' : 'conflicts'}`;
+      // eslint-disable-next-line github/unescaped-html-literal
+      counter.innerHTML = `<span class="conflict-resolved-check">✓</span> ${rest}`;
+    } else {
+      counter.textContent = `${index + 1} of ${total} conflicts`;
+    }
+  }
+}
+
+/**
  * Sets up Keep/Use/Resolve event listeners for a single conflict wrapper.
  * Keep this → pre-fills editor with base text; Use this → pre-fills with head text.
  * The editor content is what gets submitted as the resolved version.
@@ -274,26 +395,48 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
     });
   }
 
-  // Resolve button
-  resolveBtn?.addEventListener('click', () => {
-    const isResolved = wrapper.getAttribute('data-resolved') === 'true';
+  const innerTable = wrapper.querySelector<HTMLElement>('.conflict-inner-table');
+  const commentSection = wrapper.querySelector<HTMLElement>('.conflict-comment-section');
 
-    if (isResolved) {
-      wrapper.setAttribute('data-resolved', 'false');
-      wrapper.classList.remove('resolved');
-      if (keepBtn) keepBtn.disabled = false;
-      if (useBtn) useBtn.disabled = false;
-      resolveBtn.textContent = 'Resolve';
-      resolveBtn.classList.remove('disabled');
-    } else {
+  const setResolved = (resolved: boolean) => {
+    if (resolved) {
+      const editor = getToastCommentEditor(toastContainer);
+      const resolvedText = editor?.value() ?? '';
+
+      const resolvedView = buildResolvedView(wrapper, resolvedText);
+      resolvedView.querySelector('.conflict-edit-btn')?.addEventListener('click', () => setResolved(false));
+
+      if (innerTable) {
+        innerTable.style.display = 'none';
+        innerTable.after(resolvedView);
+      }
+      if (commentSection) commentSection.style.display = 'none';
+
       wrapper.setAttribute('data-resolved', 'true');
       wrapper.classList.add('resolved');
       if (keepBtn) keepBtn.disabled = true;
       if (useBtn) useBtn.disabled = true;
-      resolveBtn.textContent = '✓ Resolved';
+      if (resolveBtn) resolveBtn.textContent = '✓ Resolved';
+    } else {
+      wrapper.querySelector('.conflict-resolved-view')?.remove();
+      if (innerTable) innerTable.style.display = '';
+      if (commentSection) commentSection.style.display = '';
+
+      wrapper.setAttribute('data-resolved', 'false');
+      wrapper.classList.remove('resolved');
+      if (keepBtn) keepBtn.disabled = false;
+      if (useBtn) useBtn.disabled = false;
+      if (resolveBtn) {
+        resolveBtn.textContent = 'Resolve';
+        resolveBtn.disabled = !isResolveEnabled();
+      }
     }
 
     checkAllResolved();
+  };
+
+  resolveBtn?.addEventListener('click', () => {
+    setResolved(wrapper.getAttribute('data-resolved') !== 'true');
   });
 
   // Navigation
@@ -346,6 +489,8 @@ function checkAllResolved() {
   for (const btn of submitBtns) {
     btn.disabled = !allResolved;
   }
+
+  updateAllCounters();
 }
 
 /**
