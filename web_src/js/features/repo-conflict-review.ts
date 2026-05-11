@@ -139,6 +139,24 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
       innerTbody.append(row);
     }
 
+    // Inject side labels into the first code cells (shown on mobile as pills)
+    const leftHeaderText = table.querySelector<HTMLElement>('.diff-split-header-left')?.textContent?.trim() ?? '';
+    const rightHeaderText = table.querySelector<HTMLElement>('.diff-split-header-right')?.textContent?.trim() ?? '';
+    const firstOldCode = innerTbody.querySelector<HTMLElement>('.lines-code-old');
+    const firstNewCode = innerTbody.querySelector<HTMLElement>('.lines-code-new');
+    if (firstOldCode && leftHeaderText) {
+      const label = document.createElement('div');
+      label.className = 'conflict-side-label conflict-side-label-old';
+      label.textContent = leftHeaderText;
+      firstOldCode.prepend(label);
+    }
+    if (firstNewCode && rightHeaderText) {
+      const label = document.createElement('div');
+      label.className = 'conflict-side-label conflict-side-label-new';
+      label.textContent = rightHeaderText;
+      firstNewCode.prepend(label);
+    }
+
     // SVG icon for circle-down-arrow (stroked, purple outline, transparent fill)
     // eslint-disable-next-line github/unescaped-html-literal
     const arrowIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" class="conflict-choice-icon"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5v5m0 0L5.5 7M8 9.5L10.5 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;

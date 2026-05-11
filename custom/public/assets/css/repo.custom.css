@@ -49,6 +49,11 @@
   .field.footer .flex-text-block {
     align-items: stretch;
   }
+
+  /* Hide SVG icons in PR tab menu items */
+  .ui.pull.tabs .ui.tabular.menu .item svg {
+    display: none !important;
+  }
 }
 
 /* Issue title font size and weight */
@@ -723,31 +728,36 @@ col.col-type-marker {
 }
 
 .conflict-choice-btn {
-  gap: 8px !important;
-  padding: 4px 8px !important;
-  font-size: 0.75rem !important;
-  font-weight: var(--font-weight-semibold) !important;
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  gap: 6px !important;
+  padding: 4px 6px !important;
+  font-size: 0.8rem !important;
+  font-weight: var(--font-weight-normal) !important;
+  color: var(--color-text-secondary) !important;
+  border-radius: 4px !important;
 }
 
-/* Circle-down-arrow icon — purple stroke, transparent fill */
+/* Circle-down-arrow icon — inherits button colour */
 .conflict-choice-icon {
   color: var(--color-primary);
   vertical-align: middle;
 }
 
 .conflict-choice-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  background: var(--color-hover-bg) !important;
+  color: var(--color-primary) !important;
 }
 
 .conflict-choice-btn.selected {
-  background: var(--color-primary) !important;
-  color: var(--color-surface) !important;
-  border-color: var(--color-primary) !important;
+  background: var(--color-primary-light-3) !important;
+  color: var(--color-primary) !important;
+  border: none !important;
 }
 
 .conflict-choice-btn.selected .conflict-choice-icon {
-  color: var(--color-surface);
+  color: var(--color-primary);
 }
 
 .conflict-choice-btn:disabled {
@@ -817,4 +827,127 @@ col.col-type-marker {
 .conflict-edit-btn:hover {
   color: var(--color-primary);
   background: var(--color-hover-bg);
+}
+
+/* Side labels: hidden by default, shown on mobile inside the first code cells */
+.conflict-side-label {
+  display: none;
+}
+
+/* ── Mobile: conflict diff responsive layout ── */
+@media (max-width: 767.98px) {
+  /* Hide the split table header on mobile — labels move inside the code cells */
+  .conflict-diff-file-boxes .diff-split-header {
+    display: none !important;
+  }
+
+  /* Outer conflict table: switch to auto layout so display:none on context
+     code-old cells doesn't mis-place subsequent cells (fixed layout would shift them) */
+  .conflict-diff-file-boxes .code-diff-split table.chroma {
+    table-layout: auto !important;
+  }
+
+  /* Context lines: collapse the left (old) code cell — identical to the right */
+  .conflict-diff-file-boxes tr.context-line .lines-code-old {
+    display: none !important;
+  }
+
+  /* Context lines: match num column width to the inner conflict table (30px) */
+  .conflict-diff-file-boxes tr.context-line .lines-num {
+    min-width: 30px !important;
+    max-width: 30px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    font-size: 0.7rem;
+  }
+
+  /* Context lines: hide type-marker column */
+  .conflict-diff-file-boxes tr.context-line .lines-type-marker {
+    display: none !important;
+  }
+
+  /* Inner conflict table: flatten to a CSS grid on <tbody> so all old-side
+     cells can be grouped before all new-side cells using `order`.
+     This puts "Keep this" at the bottom of the old section and "Use this"
+     at the bottom of the new section — each button next to its own content. */
+  .conflict-inner-table {
+    display: block !important;
+    width: 100%;
+  }
+
+  .conflict-wrapper-row .lines-num-old,
+  .conflict-wrapper-row .lines-num-new {
+    width: 100%;
+  }
+
+  .conflict-inner-table tbody {
+    display: grid !important;
+    /* [num-old 30px] [num-new / indent 30px] [code auto] */
+    grid-template-columns: 30px 30px 1fr;
+    /* Paint col-2 track (x:30px, w:30px) for the full tbody height — covers
+       the empty col-2 slots that old-side rows leave vacant */
+    background: linear-gradient(
+      rgb(from var(--color-diff-removed-row-bg) r g b / 30%),
+      rgb(from var(--color-diff-removed-row-bg) r g b / 30%)
+    ) 30px 0 / 30px 100% no-repeat;
+  }
+
+  .conflict-inner-table .lines-code code.code-inner {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Make <tr> invisible to the grid — its <td>s become direct grid items */
+  .conflict-inner-table tr {
+    display: contents !important;
+  }
+
+  .conflict-inner-table .lines-type-marker {
+    display: none !important;
+  }
+
+  /* Thinner num cells on mobile */
+  .conflict-inner-table .lines-num-old,
+  .conflict-inner-table .lines-num-new {
+    min-width: 0;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    font-size: 0.7rem;
+  }
+
+  /* Old-side cells placed first; num in col 1, code in col 3 (same start as new-side) */
+  .conflict-inner-table .lines-num-old {
+    order: 1;
+    grid-column: 1;
+  }
+  .conflict-inner-table .lines-code-old {
+    order: 1;
+    grid-column: 3;
+    background-color: rgb(from var(--color-diff-removed-row-bg) r g b / 30%);
+  }
+
+  /* New-side cells placed after; num in col 2 (indented), code in col 3 */
+  .conflict-inner-table .lines-num-new {
+    order: 2;
+    grid-column: 2;
+    background-color: rgb(from var(--color-diff-removed-row-bg) r g b / 30%) !important;
+  }
+  .conflict-inner-table .lines-code-new {
+    order: 2;
+    grid-column: 3;
+    background-color: rgb(from var(--color-diff-added-row-bg) r g b / 30%);
+  }
+
+  /* Side labels shown as pills inside the first code cell of each side */
+  .conflict-side-label {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    background: var(--color-body);
+    border: 1px solid var(--color-border-muted);
+    border-radius: 12px;
+    padding: 1px 8px 0 8px;
+    white-space: nowrap;
+  }
 }
