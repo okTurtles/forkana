@@ -7,8 +7,9 @@
 		</a>
 		{{if .IsPullFilesConflicted}}
 			<a class="item {{if .PageIsPullConflicts}}active{{end}}" href="{{.Issue.Link}}/conflicts">
-				{{svg "octicon-git-merge"}}
+				{{svg "octicon-alert"}}
 				{{template "shared/misc/tabtitle" (ctx.Locale.Tr "repo.pulls.tab_conflicts")}}
+				<span class="ui small label">{{len .ConflictedFiles}}</span>
 			</a>
 		{{end}}
 		{{if and .IsIssuePoster (not .Issue.IsClosed) (not .Issue.PullRequest.HasMerged) .HasChangesRequested (not .IsPullFilesConflicted)}}
