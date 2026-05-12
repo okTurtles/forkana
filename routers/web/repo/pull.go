@@ -1819,7 +1819,8 @@ func SubmitConflictResolution(ctx *context.Context) {
 
 	for _, fileReq := range req.Files {
 		if len(fileReq.Conflicts) == 0 {
-			continue
+			ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("no conflicts provided for file: %s", fileReq.Path))
+			return
 		}
 
 		// Get head blob content (the starting point for applying resolutions)
