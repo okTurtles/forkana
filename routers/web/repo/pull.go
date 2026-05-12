@@ -1570,10 +1570,21 @@ type conflictGroup struct {
 	baseEnd   int // LeftIdx of last DEL line (1-based, 0 = none)
 	headStart int // RightIdx of first ADD line (1-based, 0 = none)
 	headEnd   int // RightIdx of last ADD line (1-based, 0 = none)
+	// insertAt is the HEAD line number (1-based RightIdx) of the last context line before
+	// this group. Used as the insertion point for headless groups (headStart == 0) so that
+	// consecutive headless groups each land at the correct position in the file rather than
+	// all stacking at the same cursor position.
+	insertAt int
 }
 
 // extractConflictGroups groups consecutive conflict lines (non-context diff lines) into groups,
 // matching the same grouping that the frontend JavaScript performs on data-line-type="conflict" rows.
+//
+// IMPORTANT — grouping contract: the group indices produced here are sent back by the frontend as
+// conflict indices in the POST payload. The frontend builds its groups in buildConflictWrappers
+// (web_src/js/features/repo-conflict-review.ts) by scanning consecutive data-line-type="conflict"
+// DOM rows. Any change to the conflict template (conflicts_section_split.tmpl) or to the grouping
+// logic here must be reflected in both places simultaneously to keep indices aligned.
 func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
 	var groups []conflictGroup
 	var cur *conflictGroup
@@ -1585,10 +1596,14 @@ func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
 		}
 	}
 
+	lastHeadLine := 0 // RightIdx of last context line seen; used as insertAt for new groups
 	for _, section := range diffFile.Sections {
 		for _, line := range section.Lines {
 			switch line.Type {
 			case gitdiff.DiffLinePlain:
+				if line.RightIdx > 0 {
+					lastHeadLine = line.RightIdx
+				}
 				flush()
 			case gitdiff.DiffLineSection:
 				// Hunk headers (@@) are not rendered in conflicts_section_split.tmpl,
@@ -1597,7 +1612,7 @@ func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
 			case gitdiff.DiffLineDel:
 				// DEL line (matched or unmatched) -> contributes to conflict group
 				if cur == nil {
-					cur = &conflictGroup{}
+					cur = &conflictGroup{insertAt: lastHeadLine}
 				}
 				if line.LeftIdx > 0 {
 					if cur.baseStart == 0 {
@@ -1663,8 +1678,13 @@ func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[in
 			continue
 		}
 
-		insertAt := min(max(cursor, 0), originalHeadLen)
+		// Use the group's pre-computed HEAD insertion point (last context line before the group).
+		// Fall back to cursor only if insertAt would move backwards (shouldn't happen in
+		// well-ordered diffs, but guards against corrupt data).
+		insertAt := min(max(g.insertAt, cursor), originalHeadLen)
 		splices[i] = spliceRange{start: insertAt, end: insertAt}
+		// Do not advance cursor here: consecutive headless groups in the same HEAD gap
+		// each have their own insertAt and should be placed independently.
 	}
 
 	// Process in reverse so earlier indices stay valid after splice operations.
