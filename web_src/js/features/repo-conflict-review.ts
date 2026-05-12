@@ -293,7 +293,6 @@ function buildResolvedView(wrapper: HTMLElement, resolvedText: string): HTMLElem
   const table = document.createElement('table');
   table.className = 'chroma conflict-inner-table';
   // eslint-disable-next-line github/unescaped-html-literal
-  // eslint-disable-next-line github/unescaped-html-literal
   table.innerHTML = `<colgroup><col width="50"><col class="col-type-marker" width="10"><col><col width="50"><col class="col-type-marker" width="10"><col></colgroup>`;
 
   const tbody = document.createElement('tbody');
@@ -391,7 +390,7 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
   const resolveBtn = wrapper.querySelector<HTMLButtonElement>('.conflict-resolve-btn');
   const toastContainer = wrapper.querySelector<HTMLElement>('.toast-comment-editor');
 
-  const isResolveEnabled = () => !!wrapper.getAttribute('data-choice');
+  const isResolveEnabled = () => Boolean(wrapper.getAttribute('data-choice'));
 
   const fillEditor = (text: string) => {
     const editor = getToastCommentEditor(toastContainer);

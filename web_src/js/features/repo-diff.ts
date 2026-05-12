@@ -258,7 +258,7 @@ export function initRepoDiffView() {
 
   // Initialize conflict review UI if on the conflicts page
   if (document.querySelector('.conflict-submit-btn')) {
-    void initConflictReview();
+    initConflictReview();
     return; // conflict page has its own simplified UI, skip standard diff init
   }
 
