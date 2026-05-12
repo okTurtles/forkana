@@ -1661,7 +1661,7 @@ func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
 // or a manual blend). texts maps conflictGroup index → resolved text from the editor.
 // For groups with no head range, it computes an insertion point while walking the groups in
 // file order so empty-head chunks can still be resolved.
-func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[int]string) ([]byte, error) {
+func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[int]string) []byte {
 	headLines := strings.Split(string(headContent), "\n")
 
 	type spliceRange struct {
@@ -1710,7 +1710,7 @@ func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[in
 		headLines = newHead
 	}
 
-	return []byte(strings.Join(headLines, "\n")), nil
+	return []byte(strings.Join(headLines, "\n"))
 }
 
 // conflictResolutionRequest is the JSON body for POST /conflicts.
@@ -1842,7 +1842,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 
 	for _, fileReq := range req.Files {
 		if len(fileReq.Conflicts) == 0 {
-			ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("no conflicts provided for file: %s", fileReq.Path))
+			ctx.PlainText(http.StatusBadRequest, "no conflicts provided for file: "+fileReq.Path)
 			return
 		}
 
@@ -1904,11 +1904,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 					return
 				}
 			}
-			resolved, err = applyConflictTexts(headContent, groups, texts)
-			if err != nil {
-				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("%s: %v", fileReq.Path, err))
-				return
-			}
+			resolved = applyConflictTexts(headContent, groups, texts)
 		}
 
 		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, content: resolved})
