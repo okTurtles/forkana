@@ -272,7 +272,8 @@ col.col-type-marker {
 }
 
 .code-diff-split .del-code .lines-num,
-.code-diff-split .del-code .add-code.lines-code-new {
+.code-diff-split .del-code .add-code.lines-code-new,
+.code-diff .conflict-wrapper-row td.conflict-btn-cell {
   background-color: rgb(from var(--color-diff-added-row-bg) r g b / 30%);
 }
 
@@ -687,6 +688,7 @@ col.col-type-marker {
 }
 
 /* Left code content */
+.repository .diff-file-box .code-diff .conflict-inner-table .lines-code-old.conflict-btn-cell,
 .repository .diff-file-box .code-diff .conflict-inner-table td.lines-code-old.del-code{
   background: rgb(from var(--color-diff-removed-row-bg) r g b / 30%) !important;
 }
