@@ -622,8 +622,8 @@ col.col-type-marker {
   justify-content: center;
   width: 18px;
   height: 18px;
-  background: #54D961;
-  color: #fff;
+  background: var(--color-success);
+  color: var(--color-white);
   border-radius: 50%;
   font-size: 11px;
   font-weight: normal;
@@ -638,7 +638,7 @@ col.col-type-marker {
 }
 
 .conflict-nav a {
-  color: #25292e;
+  color: var(--color-text-primary);
   text-decoration: none;
   font-weight: var(--font-weight-medium);
   font-size: 0.875rem;
@@ -649,7 +649,7 @@ col.col-type-marker {
 }
 
 .conflict-nav a.disabled {
-  color: #818b98;
+  color: var(--color-text-light-2);
   pointer-events: none;
   cursor: default;
 }
