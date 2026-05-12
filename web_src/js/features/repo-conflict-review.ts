@@ -590,7 +590,7 @@ function initSubmitTracking() {
           try {
             msg = await resp.text();
           } catch {
-            msg = resp.statusText;
+            msg = `HTTP ${resp.status}`;
           }
           setButtonsState(false, `Submit failed: ${msg}`);
         }
