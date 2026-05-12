@@ -818,7 +818,7 @@ overflow-menu .ui.label {
 
 .code-diff .lines-num {
   min-width: 50px;
-  color: var(--color-muted-text);
+  color: var(--color-text-light-2);
 }
 
 .lines-num span.bottom-line::after {
