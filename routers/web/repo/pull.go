@@ -1647,7 +1647,10 @@ func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
 				}
 			}
 		}
-		flush()
+		// No per-section flush here: the template emits no separator between sections,
+		// so conflict rows from adjacent sections appear consecutive in the DOM and the
+		// frontend groups them as one conflict. The DiffLinePlain case above already
+		// flushes whenever a context line is encountered, which is the normal separator.
 	}
 	flush()
 	return groups
