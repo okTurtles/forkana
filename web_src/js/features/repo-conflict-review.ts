@@ -50,6 +50,13 @@ export async function initConflictReview() {
 /**
  * Groups consecutive `conflict-line` rows in the table, wraps them in a
  * container `<tr>`, and adds a navigation header and action buttons.
+ *
+ * IMPORTANT — grouping contract: this function groups rows by consecutive
+ * `data-line-type="conflict"` DOM rows, which must stay 1-to-1 with the
+ * conflictGroup objects produced by extractConflictGroups in
+ * routers/web/repo/pull.go. Any change to how the template renders conflict
+ * rows (conflicts_section_split.tmpl) or how the Go backend groups diff lines
+ * must be reflected in both places simultaneously.
  */
 async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLElement[]> {
   const rows = Array.from(table.querySelectorAll<HTMLTableRowElement>('tbody tr, tr'));
