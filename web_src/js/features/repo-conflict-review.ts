@@ -11,6 +11,7 @@
  */
 
 import {POST} from '../modules/fetch.ts';
+import {showErrorToast} from '../modules/toast.ts';
 import {initToastCommentEditor, getToastCommentEditor, EventEditorContentChanged} from './comp/ToastCommentEditor.ts';
 
 export async function initConflictReview() {
@@ -543,11 +544,12 @@ function initFoldToggle() {
  */
 function initSubmitTracking() {
   const submitBtns = document.querySelectorAll<HTMLButtonElement>('.conflict-submit-btn');
+  const originalTexts = new Map(Array.from(submitBtns, (b) => [b, b.textContent ?? '']));
 
   const setButtonsState = (disabled: boolean, text?: string) => {
     for (const btn of submitBtns) {
       btn.disabled = disabled;
-      if (text !== undefined) btn.textContent = text;
+      btn.textContent = text !== undefined ? text : (originalTexts.get(btn) ?? '');
     }
   };
 
@@ -591,10 +593,12 @@ function initSubmitTracking() {
           } catch {
             msg = `HTTP ${resp.status}`;
           }
-          setButtonsState(false, `Submit failed: ${msg}`);
+          setButtonsState(false);
+          showErrorToast(`Submit failed: ${msg}`);
         }
       } catch {
-        setButtonsState(false, 'Submit failed');
+        setButtonsState(false);
+        showErrorToast('Submit failed: network error');
       }
     });
   }
