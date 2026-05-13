@@ -1474,6 +1474,18 @@ func ViewPullConflicts(ctx *context.Context) {
 	diff.Files = filteredFiles
 	ctx.Data["DiffShortStat"] = diffShortStat
 
+	// If any conflicted file is binary or too large to display, the browser-based
+	// resolver cannot build conflict wrappers for it, leaving the submit button
+	// permanently disabled. Detect this early and surface a clear message.
+	for _, file := range diff.Files {
+		if file.IsBin || file.IsIncomplete {
+			ctx.Data["DiffNotAvailable"] = true
+			ctx.Data["ConflictResolutionUnavailableFile"] = file.Name
+			ctx.HTML(http.StatusOK, tplPullConflicts)
+			return
+		}
+	}
+
 	showOutdatedComments, _ := ctx.Data["ShowOutdatedComments"].(bool)
 	if err = diff.LoadComments(ctx, issue, ctx.Doer, showOutdatedComments); err != nil {
 		ctx.ServerError("LoadComments", err)

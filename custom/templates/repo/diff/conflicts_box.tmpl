@@ -14,12 +14,14 @@
 				</div>
 			{{end}}
 		</div>
-		<div class="diff-detail-actions tw-flex tw-items-center tw-gap-2">
-			<button type="button" class="ui tiny basic button conflict-fold-toggle-btn" data-tooltip-content="Toggle context lines" title="Toggle context lines">
-				{{svg "octicon-fold" 16}}
-			</button>
-			<button type="button" class="ui tiny primary button conflict-submit-btn" disabled>Submit</button>
-		</div>
+		{{if not .DiffNotAvailable}}
+			<div class="diff-detail-actions tw-flex tw-items-center tw-gap-2">
+				<button type="button" class="ui tiny basic button conflict-fold-toggle-btn" data-tooltip-content="Toggle context lines" title="Toggle context lines">
+					{{svg "octicon-fold" 16}}
+				</button>
+				<button type="button" class="ui tiny primary button conflict-submit-btn" disabled>Submit</button>
+			</div>
+		{{end}}
 	</div>
 	{{if not .DiffNotAvailable}}
 		<div id="diff-container">
@@ -49,6 +51,10 @@
 		</div>
 		<div class="tw-flex tw-justify-end tw-mt-4 tw-mb-4">
 			<button type="button" class="ui primary button tiny conflict-submit-btn" disabled>Submit</button>
+		</div>
+	{{else if .ConflictResolutionUnavailableFile}}
+		<div class="ui warning message">
+			{{ctx.Locale.Tr "repo.pulls.conflicts_unsupported_file" .ConflictResolutionUnavailableFile}}
 		</div>
 	{{else}}
 		<h4>{{ctx.Locale.Tr "repo.diff.data_not_available"}}</h4>
