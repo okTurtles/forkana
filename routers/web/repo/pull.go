@@ -1718,6 +1718,7 @@ func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[in
 // conflictResolutionRequest is the JSON body for POST /conflicts.
 type conflictResolutionRequest struct {
 	BaseCommitID string `json:"baseCommitID"` // base branch HEAD at page-render time; used to detect stale submissions
+	HeadCommitID string `json:"headCommitID"` // head branch HEAD at page-render time; used to detect stale submissions
 	Files        []struct {
 		Path      string `json:"path"`
 		Conflicts []struct {
@@ -1839,11 +1840,15 @@ func SubmitConflictResolution(ctx *context.Context) {
 		return
 	}
 
-	// Reject stale submissions: if the base branch advanced since the user loaded the
+	// Reject stale submissions: if either branch advanced since the user loaded the
 	// conflict page, the line ranges in the diff have shifted and the resolutions would
 	// be applied at the wrong positions.
 	if req.BaseCommitID != "" && req.BaseCommitID != baseCommitID {
 		ctx.PlainText(http.StatusConflict, "base branch has been updated since you loaded this page, please reload and try again")
+		return
+	}
+	if req.HeadCommitID != "" && req.HeadCommitID != headCommitID {
+		ctx.PlainText(http.StatusConflict, "change request branch has been updated since you loaded this page, please reload and try again")
 		return
 	}
 
