@@ -114,9 +114,14 @@
 						{{end}}
 					</div>
 				</div>
-				<div class="item tw-mt-4">
-					<button class="ui button small" disabled>{{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}}</button>
-				</div>
+				{{if and .AllowMerge .IsBaseRepoOwner}}
+					{{$prUnit := .Repository.MustGetUnit ctx ctx.Consts.RepoUnitTypePullRequests}}
+					{{if $prUnit.PullRequestsConfig.AllowSquash}}
+						<div class="item tw-mt-4">
+							<button class="ui button small" disabled>{{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}}</button>
+						</div>
+					{{end}}
+				{{end}}
 			{{else if .IsPullRequestBroken}}
 				<div class="item">
 					{{svg "octicon-x"}}
