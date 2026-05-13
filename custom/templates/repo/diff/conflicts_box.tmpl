@@ -23,7 +23,7 @@
 	</div>
 	{{if not .DiffNotAvailable}}
 		<div id="diff-container">
-			<div id="diff-file-boxes" class="sixteen wide column conflict-diff-file-boxes">
+			<div id="diff-file-boxes" class="sixteen wide column conflict-diff-file-boxes" data-base-commit-id="{{$.BeforeCommitID}}">
 				{{range $i, $file := .Diff.Files}}
 					<div class="diff-file-box file-content {{TabSizeClass $.Editorconfig $file.Name}} tw-mt-0" id="diff-{{$file.NameHash}}" data-old-filename="{{$file.OldName}}" data-new-filename="{{$file.Name}}">
 						<div class="diff-file-body ui attached unstackable table segment">

@@ -31,6 +31,7 @@ import (
 	"code.gitea.io/gitea/modules/git/gitcmd"
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/glob"
+	"code.gitea.io/gitea/modules/globallock"
 	"code.gitea.io/gitea/modules/graceful"
 	issue_template "code.gitea.io/gitea/modules/issue/template"
 	"code.gitea.io/gitea/modules/json"
@@ -1716,7 +1717,8 @@ func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[in
 
 // conflictResolutionRequest is the JSON body for POST /conflicts.
 type conflictResolutionRequest struct {
-	Files []struct {
+	BaseCommitID string `json:"baseCommitID"` // base branch HEAD at page-render time; used to detect stale submissions
+	Files        []struct {
 		Path      string `json:"path"`
 		Conflicts []struct {
 			Index int    `json:"index"`
@@ -1805,6 +1807,14 @@ func SubmitConflictResolution(ctx *context.Context) {
 		}
 	}
 
+	// Acquire the PR working lock to prevent races with concurrent merges or updates.
+	releaser, err := globallock.Lock(ctx, fmt.Sprintf("pull_working_%d", pull.ID))
+	if err != nil {
+		ctx.ServerError("globallock.Lock", err)
+		return
+	}
+	defer releaser()
+
 	// Load the head repo (may differ from base repo for forked PRs)
 	if err := pull.LoadHeadRepo(ctx); err != nil {
 		ctx.ServerError("LoadHeadRepo", err)
@@ -1826,6 +1836,14 @@ func SubmitConflictResolution(ctx *context.Context) {
 	baseCommitID, err := gitRepo.GetBranchCommitID(pull.BaseBranch)
 	if err != nil {
 		ctx.ServerError("GetBranchCommitID", err)
+		return
+	}
+
+	// Reject stale submissions: if the base branch advanced since the user loaded the
+	// conflict page, the line ranges in the diff have shifted and the resolutions would
+	// be applied at the wrong positions.
+	if req.BaseCommitID != "" && req.BaseCommitID != baseCommitID {
+		ctx.PlainText(http.StatusConflict, "base branch has been updated since you loaded this page, please reload and try again")
 		return
 	}
 

@@ -579,11 +579,12 @@ function initSubmitTracking() {
       }));
 
       const issueLink = window.location.pathname.replace(/\/conflicts$/, '');
+      const baseCommitID = document.querySelector('#diff-file-boxes')?.getAttribute('data-base-commit-id') ?? '';
 
       setButtonsState(true, 'Submitting…');
 
       try {
-        const resp = await POST(window.location.pathname, {data: {files}});
+        const resp = await POST(window.location.pathname, {data: {baseCommitID, files}});
         if (resp.ok) {
           window.location.href = issueLink;
         } else {
