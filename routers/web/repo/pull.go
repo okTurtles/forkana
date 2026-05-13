@@ -1436,12 +1436,11 @@ func ViewPullConflicts(ctx *context.Context) {
 	ctx.Data["IsShowingOnlySingleCommit"] = false
 	ctx.Data["IsShowingAllCommits"] = true
 
-	maxLines, maxFiles := setting.Git.MaxGitDiffLines, -1
+	maxLines, maxFiles := -1, -1
 	files := conflictedFiles
 	fileOnly := ctx.FormBool("file-only")
 	requestedFiles := ctx.FormStrings("files")
 	if fileOnly && (len(requestedFiles) == 2 || len(requestedFiles) == 1) {
-		maxLines, maxFiles = -1, -1
 		files = requestedFiles
 	}
 
