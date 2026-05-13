@@ -1974,6 +1974,10 @@ func SubmitConflictResolution(ctx *context.Context) {
 	}
 
 	if err := t.PushWithOptions(ctx, ctx.Doer, mergeCommitID, pull.HeadBranch, true); err != nil {
+		if git.IsErrPushOutOfDate(err) {
+			ctx.PlainText(http.StatusConflict, "head branch was updated concurrently, please reload and try again")
+			return
+		}
 		ctx.ServerError("PushWithOptions", err)
 		return
 	}
