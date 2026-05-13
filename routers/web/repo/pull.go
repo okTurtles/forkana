@@ -1860,6 +1860,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 	// Resolve each conflicted file and collect the resulting content.
 	type resolvedFile struct {
 		path    string
+		mode    string // git object mode, e.g. "100644" or "100755"
 		content []byte
 	}
 	var resolvedFiles []resolvedFile
@@ -1870,22 +1871,37 @@ func SubmitConflictResolution(ctx *context.Context) {
 			return
 		}
 
-		// Get head blob content (the starting point for applying resolutions)
-		headBlob, err := headCommit.GetBlobByPath(fileReq.Path)
+		// Get the tree entry to preserve the file mode and handle delete conflicts.
+		headEntry, err := headCommit.GetTreeEntryByPath(fileReq.Path)
+		var headContent []byte
+		var fileMode string
 		if err != nil {
-			ctx.ServerError("GetBlobByPath(head)", err)
-			return
-		}
-		headReader, err := headBlob.DataAsync()
-		if err != nil {
-			ctx.ServerError("headBlob.DataAsync", err)
-			return
-		}
-		headContent, err := io.ReadAll(headReader)
-		headReader.Close()
-		if err != nil {
-			ctx.ServerError("read head blob", err)
-			return
+			if !git.IsErrNotExist(err) {
+				ctx.ServerError("GetTreeEntryByPath(head)", err)
+				return
+			}
+			// Delete conflict: the head side removed this file.
+			// Use empty content as the starting point; the user's resolution
+			// (choosing the base version) will be applied over it.
+			fileMode = git.EntryModeBlob.String()
+		} else {
+			entryMode := headEntry.Mode()
+			if entryMode != git.EntryModeBlob && entryMode != git.EntryModeExec {
+				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("unsupported file mode for %s: only regular files can be resolved in the browser", fileReq.Path))
+				return
+			}
+			fileMode = entryMode.String()
+			headReader, err := headEntry.Blob().DataAsync()
+			if err != nil {
+				ctx.ServerError("headBlob.DataAsync", err)
+				return
+			}
+			headContent, err = io.ReadAll(headReader)
+			headReader.Close()
+			if err != nil {
+				ctx.ServerError("read head blob", err)
+				return
+			}
 		}
 
 		// Compute diff to identify which line ranges in HEAD correspond to each conflict
@@ -1933,7 +1949,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 			resolved = applyConflictTexts(headContent, groups, texts)
 		}
 
-		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, content: resolved})
+		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, mode: fileMode, content: resolved})
 	}
 
 	if len(resolvedFiles) == 0 {
@@ -1976,7 +1992,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 			ctx.ServerError("HashObjectAndWrite", err)
 			return
 		}
-		if err := t.AddObjectToIndex(ctx, "100644", blobHash, rf.path); err != nil {
+		if err := t.AddObjectToIndex(ctx, rf.mode, blobHash, rf.path); err != nil {
 			ctx.ServerError("AddObjectToIndex", err)
 			return
 		}
