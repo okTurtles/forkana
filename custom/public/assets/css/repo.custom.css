@@ -770,9 +770,7 @@ col.col-type-marker {
 }
 
 .conflict-choice-btn.selected {
-  background: var(--color-primary-light-3) !important;
   color: var(--color-primary) !important;
-  border: none !important;
 }
 
 .conflict-choice-btn.selected .conflict-choice-icon {
