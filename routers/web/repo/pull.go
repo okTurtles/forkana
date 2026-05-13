@@ -1444,13 +1444,15 @@ func ViewPullConflicts(ctx *context.Context) {
 		files = requestedFiles
 	}
 
+	whitespaceBehavior, _ := ctx.Data["WhitespaceBehavior"].(string)
 	diff, err := gitdiff.GetDiffForRender(ctx, ctx.Repo.RepoLink, gitRepo, &gitdiff.DiffOptions{
-		BeforeCommitID:    beforeCommitID,
-		AfterCommitID:     headCommitID,
-		SkipTo:            ctx.FormString("skip-to"),
-		MaxLines:          maxLines,
-		MaxLineCharacters: setting.Git.MaxGitDiffLineCharacters,
-		MaxFiles:          maxFiles,
+		BeforeCommitID:     beforeCommitID,
+		AfterCommitID:      headCommitID,
+		SkipTo:             ctx.FormString("skip-to"),
+		MaxLines:           maxLines,
+		MaxLineCharacters:  setting.Git.MaxGitDiffLineCharacters,
+		MaxFiles:           maxFiles,
+		WhitespaceBehavior: gitdiff.GetWhitespaceFlag(whitespaceBehavior),
 	}, files...)
 	if err != nil {
 		ctx.ServerError("GetDiff", err)
@@ -1864,12 +1866,14 @@ func SubmitConflictResolution(ctx *context.Context) {
 		}
 
 		// Compute diff to identify which line ranges in HEAD correspond to each conflict
+		submitWhitespaceBehavior, _ := ctx.Data["WhitespaceBehavior"].(string)
 		diff, err := gitdiff.GetDiffForRender(ctx, ctx.Repo.RepoLink, gitRepo, &gitdiff.DiffOptions{
-			BeforeCommitID:    baseCommitID,
-			AfterCommitID:     headCommitID,
-			MaxLines:          -1,
-			MaxLineCharacters: setting.Git.MaxGitDiffLineCharacters,
-			MaxFiles:          1,
+			BeforeCommitID:     baseCommitID,
+			AfterCommitID:      headCommitID,
+			MaxLines:           -1,
+			MaxLineCharacters:  setting.Git.MaxGitDiffLineCharacters,
+			MaxFiles:           1,
+			WhitespaceBehavior: gitdiff.GetWhitespaceFlag(submitWhitespaceBehavior),
 		}, fileReq.Path)
 		if err != nil {
 			ctx.ServerError("GetDiff", err)
