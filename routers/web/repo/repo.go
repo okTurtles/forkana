@@ -740,7 +740,7 @@ func CreateFirstArticle(ctx *context.Context) {
 	if branch == "" {
 		branch = setting.Repository.DefaultBranch
 	}
-	editorURL := fmt.Sprintf("%s/%s/%s/_new/%s/README.md",
+	editorURL := fmt.Sprintf("%s/%s/%s/_new/%s/README.md?redirect_to_article=1",
 		setting.AppSubURL,
 		util.PathEscapeSegments(ctx.Doer.Name),
 		util.PathEscapeSegments(repo.Name),

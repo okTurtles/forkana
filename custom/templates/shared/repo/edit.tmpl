@@ -65,6 +65,7 @@
               data-has-existing-fork="{{if .HasExistingFork}}true{{else}}false{{end}}"
               data-needs-fork="{{if .NeedsFork}}true{{else}}false{{end}}">
             {{.CsrfTokenHtml}}
+            <input type="hidden" name="redirect_to_article" value="true">
             <input type="hidden" name="last_commit" value="{{.LastCommitID}}">
             <input type="hidden" name="tree_path" value="{{.ReadmeTreePath}}">
             {{/* Required commit choice field - default to direct commit */}}

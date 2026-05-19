@@ -240,12 +240,8 @@ func redirectForCommitChoice[T any](ctx *context.Context, parsed *preparedEditor
 		}
 	}
 
-	// Check if the request came from an edit or new to the article route
-	// If so, redirect to the article view instead of the file view
-	articleEditPath := path.Join("_edit", parsed.NewBranchName, treePath)
-	articleNewPath := path.Join("_new", parsed.NewBranchName, treePath)
-	if strings.Contains(ctx.Req.URL.Path, articleEditPath) || strings.Contains(ctx.Req.URL.Path, articleNewPath) {
-		ctx.JSONRedirect(ctx.Repo.RepoLink + "?view=article")
+	if ctx.FormBool("redirect_to_article") {
+		ctx.JSONRedirect(ctx.Repo.RepoLink)
 		return
 	}
 
