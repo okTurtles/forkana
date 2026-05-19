@@ -477,3 +477,29 @@
   border-radius: 0 0 .5rem .5rem;
   display: block; /* Ensure it behaves like a block for borders/padding */
 }
+
+/* Upload indicator shown at the bottom of the editor during file uploads */
+.editor-upload-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--color-text-light-2);
+  background: var(--color-body);
+  border-top: 1px solid var(--color-secondary);
+}
+
+.editor-upload-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-secondary);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: editor-spin 0.6s linear infinite;
+}
+
+@keyframes editor-spin {
+  to { transform: rotate(360deg); }
+}

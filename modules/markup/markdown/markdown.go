@@ -240,6 +240,12 @@ func Render(ctx *markup.RenderContext, input io.Reader, output io.Writer) error 
 func RenderString(ctx *markup.RenderContext, content string) (template.HTML, error) {
 	var buf strings.Builder
 	if err := Render(ctx, strings.NewReader(content), &buf); err != nil {
+		// If the content was truncated due to render size limit, return
+		// what we have instead of crashing with a 500 error.
+		if strings.Contains(err.Error(), "rendered content too large") {
+			log.Warn("RenderString: %v", err)
+			return template.HTML(buf.String()), nil
+		}
 		return "", err
 	}
 	return template.HTML(buf.String()), nil

@@ -6,12 +6,20 @@
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
 import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
-import {hideElem, generateElemId} from '../../utils/dom.ts';
+import {hideElem, generateElemId, createElementFromHTML} from '../../utils/dom.ts';
+import {imageInfo} from '../../utils/image.ts';
 import {
   EventUploadStateChanged,
   triggerUploadStateChanged,
+  removeAttachmentLinksFromMarkdown,
 } from './EditorUpload.ts';
-import {DropzoneCustomEventReloadFiles, initDropzone} from '../dropzone.ts';
+import {
+  DropzoneCustomEventReloadFiles,
+  DropzoneCustomEventRemovedFile,
+  DropzoneCustomEventUploadDone,
+  generateMarkdownLinkForAttachment,
+  initDropzone,
+} from '../dropzone.ts';
 
 // Event dispatched when editor content changes
 export const EventEditorContentChanged = 'ce-editor-content-changed';
@@ -133,6 +141,97 @@ export class ToastCommentEditor {
     if (defaultUI && hintText) {
       defaultUI.append(hintText);
     }
+
+    // GitHub-style file drop: insert a markdown placeholder in the editor,
+    // show a loading indicator, and replace with the real link on completion.
+    if (this.attachedDropzoneInst) {
+      this.editorWrapper.addEventListener('drop', (e: DragEvent) => {
+        if (!e.dataTransfer?.files.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleDroppedFiles(e.dataTransfer.files);
+      });
+      this.editorWrapper.addEventListener('dragover', (e: DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      });
+
+      // Clean up markdown links when an attachment is removed from the Dropzone
+      this.attachedDropzoneInst.on(DropzoneCustomEventRemovedFile, ({fileUuid}: {fileUuid: string}) => {
+        if (!this.editor) return;
+        const oldText = this.editor.getMarkdown();
+        const newText = removeAttachmentLinksFromMarkdown(oldText, fileUuid);
+        if (oldText !== newText) {
+          this.editor.setMarkdown(newText);
+        }
+      });
+    }
+  }
+
+  private async handleDroppedFiles(files: FileList) {
+    for (const file of files) {
+      const indicator = this.showUploadIndicator(file.name);
+      const {width, dppx} = await imageInfo(file);
+      const uploaded = await this.uploadFileViaDropzone(file);
+      indicator?.remove();
+      if (this.editor && uploaded) {
+        this.editor.insertText(generateMarkdownLinkForAttachment(uploaded, {width, dppx}));
+      }
+    }
+  }
+
+  private uploadFileViaDropzone(file: File): Promise<any> {
+    return new Promise((resolve) => {
+      const dzInst = this.attachedDropzoneInst;
+
+      // Hide the preview as soon as Dropzone creates it, before it becomes visible.
+      // The UUID hidden input is written by the success handler separately, so removing
+      // the preview element is safe — it does not lose the attachment reference.
+      const onAdded = (addedFile: any) => {
+        if (addedFile === file) {
+          dzInst.off('addedfile', onAdded);
+          addedFile.previewElement?.remove();
+          if (!this.dropzone?.querySelector('.dz-preview')) {
+            this.dropzone?.classList.remove('dz-started');
+          }
+        }
+      };
+      dzInst.on('addedfile', onAdded);
+
+      const cleanup = () => {
+        dzInst.off(DropzoneCustomEventUploadDone, onDone);
+        dzInst.off('error', onError);
+      };
+      const onDone = ({file: doneFile}: {file: any}) => {
+        if (doneFile === file || doneFile._giteaOriginalFile === file) {
+          cleanup();
+          resolve(doneFile);
+        }
+      };
+      const onError = (errFile: any) => {
+        if (errFile === file || errFile._giteaOriginalFile === file) {
+          cleanup();
+          resolve(null);
+        }
+      };
+      dzInst.on(DropzoneCustomEventUploadDone, onDone);
+      dzInst.on('error', onError);
+      (file as any)._giteaOriginalFile = file;
+      dzInst.addFile(file);
+    });
+  }
+
+  private showUploadIndicator(filename: string): HTMLElement | null {
+    const defaultUI = this.editorWrapper.querySelector('.toastui-editor-defaultUI');
+    if (!defaultUI) return null;
+    const indicator = createElementFromHTML(
+      `<div class="editor-upload-indicator">
+        <span class="editor-upload-spinner"></span>
+        Uploading <strong>${filename}</strong>…
+      </div>`,
+    );
+    defaultUI.append(indicator);
+    return indicator;
   }
 
   async setupDropzone() {
