@@ -6,7 +6,7 @@
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
 import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
-import {hideElem, generateElemId, createElementFromHTML} from '../../utils/dom.ts';
+import {hideElem, generateElemId} from '../../utils/dom.ts';
 import {imageInfo} from '../../utils/image.ts';
 import {
   EventUploadStateChanged,
@@ -171,7 +171,7 @@ export class ToastCommentEditor {
   private async handleDroppedFiles(files: FileList) {
     for (const file of files) {
       const indicator = this.showUploadIndicator(file.name);
-      const {width, dppx} = await imageInfo(file);
+      const {width, dppx} = file.size <= 10 * 1024 * 1024 ? await imageInfo(file) : {};
       const uploaded = await this.uploadFileViaDropzone(file);
       indicator?.remove();
       if (this.editor && uploaded) {
@@ -201,19 +201,18 @@ export class ToastCommentEditor {
       };
       dzInst.on('addedfile', onAdded);
 
-      const cleanup = () => {
-        dzInst.off(DropzoneCustomEventUploadDone, onDone);
-        dzInst.off('error', onError);
-      };
+      let onError: (errFile: any) => void;
       const onDone = ({file: doneFile}: {file: any}) => {
         if (doneFile === file || doneFile._giteaOriginalFile === file) {
-          cleanup();
+          dzInst.off(DropzoneCustomEventUploadDone, onDone);
+          dzInst.off('error', onError);
           resolve(doneFile);
         }
       };
-      const onError = (errFile: any) => {
+      onError = (errFile: any) => {
         if (errFile === file || errFile._giteaOriginalFile === file) {
-          cleanup();
+          dzInst.off(DropzoneCustomEventUploadDone, onDone);
+          dzInst.off('error', onError);
           resolve(null);
         }
       };
@@ -227,12 +226,13 @@ export class ToastCommentEditor {
   private showUploadIndicator(filename: string): HTMLElement | null {
     const defaultUI = this.editorWrapper.querySelector('.toastui-editor-defaultUI');
     if (!defaultUI) return null;
-    const indicator = createElementFromHTML(
-      `<div class="editor-upload-indicator">
-        <span class="editor-upload-spinner"></span>
-        Uploading <strong>${filename}</strong>…
-      </div>`,
-    );
+    const indicator = document.createElement('div');
+    indicator.className = 'editor-upload-indicator';
+    const spinner = document.createElement('span');
+    spinner.className = 'editor-upload-spinner';
+    const strong = document.createElement('strong');
+    strong.textContent = filename;
+    indicator.append(spinner, 'Uploading ', strong, '…');
     defaultUI.append(indicator);
     return indicator;
   }

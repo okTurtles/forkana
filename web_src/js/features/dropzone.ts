@@ -36,11 +36,12 @@ let pageDropPreventionInstalled = false;
 function setupPageDropPrevention() {
   if (pageDropPreventionInstalled) return;
   pageDropPreventionInstalled = true;
+  const isFileDrag = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
   document.addEventListener('dragover', (e: DragEvent) => {
-    e.preventDefault();
+    if (isFileDrag(e)) e.preventDefault();
   });
   document.addEventListener('drop', (e: DragEvent) => {
-    e.preventDefault();
+    if (isFileDrag(e)) e.preventDefault();
   });
 }
 
