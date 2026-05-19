@@ -175,7 +175,10 @@ export class ToastCommentEditor {
       const uploaded = await this.uploadFileViaDropzone(file);
       indicator?.remove();
       if (this.editor && uploaded) {
-        this.editor.insertText(generateMarkdownLinkForAttachment(uploaded, {width, dppx}));
+        const link = generateMarkdownLinkForAttachment(uploaded, {width, dppx});
+        const current = this.editor.getMarkdown().trimEnd();
+        this.editor.setMarkdown(current ? `${current}\n\n${link}` : link);
+        this.editor.moveCursorToEnd();
       }
     }
   }
