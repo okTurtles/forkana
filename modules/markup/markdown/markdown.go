@@ -31,6 +31,8 @@ import (
 var (
 	renderContextKey = parser.NewContextKey()
 	renderConfigKey  = parser.NewContextKey()
+
+	errRenderedContentTooLarge = errors.New("rendered content too large - truncating render")
 )
 
 type limitWriter struct {
@@ -48,7 +50,7 @@ func (l *limitWriter) Write(data []byte) (int, error) {
 		if err != nil {
 			return n, err
 		}
-		return n, errors.New("rendered content too large - truncating render")
+		return n, errRenderedContentTooLarge
 	}
 	n, err := l.w.Write(data)
 	l.sum += int64(n)
@@ -188,6 +190,10 @@ func render(ctx *markup.RenderContext, input io.Reader, output io.Writer) error 
 	pc.Set(renderConfigKey, rc)
 
 	if err := converter.Convert(buf, lw, parser.WithContext(pc)); err != nil {
+		if errors.Is(err, errRenderedContentTooLarge) {
+			log.Warn("render: %v", err)
+			return nil
+		}
 		log.Error("Unable to render: %v", err)
 		return err
 	}

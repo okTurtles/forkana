@@ -25,6 +25,26 @@ async function createDropzone(el: HTMLElement, opts: DropzoneOptions) {
   return new Dropzone(el, opts);
 }
 
+// Prevent the browser from opening files dropped anywhere on the page.
+// Without this, dropping a PDF (or any file) onto the comment editor area
+// causes the browser to navigate to the file instead of uploading it.
+// This is the standard Dropzone recommendation: unconditionally prevent the
+// browser's default drag-and-drop behavior at the document level. Child
+// element handlers (textarea, Dropzone) still fire first during event
+// bubbling and can process files normally.
+let pageDropPreventionInstalled = false;
+function setupPageDropPrevention() {
+  if (pageDropPreventionInstalled) return;
+  pageDropPreventionInstalled = true;
+  const isFileDrag = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  document.addEventListener('dragover', (e: DragEvent) => {
+    if (isFileDrag(e)) e.preventDefault();
+  });
+  document.addEventListener('drop', (e: DragEvent) => {
+    if (isFileDrag(e)) e.preventDefault();
+  });
+}
+
 export function generateMarkdownLinkForAttachment(file: Partial<CustomDropzoneFile>, {width, dppx}: {width?: number, dppx?: number} = {}) {
   let fileMarkdown = `[${file.name}](/attachments/${file.uuid})`;
   if (isImageFile(file)) {
@@ -66,6 +86,7 @@ type FileUuidDict = Record<string, {submitted: boolean}>;
  * @param {HTMLElement} dropzoneEl
  */
 export async function initDropzone(dropzoneEl: HTMLElement) {
+  setupPageDropPrevention();
   const listAttachmentsUrl = dropzoneEl.closest('[data-attachment-url]')?.getAttribute('data-attachment-url');
   const removeAttachmentUrl = dropzoneEl.getAttribute('data-remove-url');
   const attachmentBaseLinkUrl = dropzoneEl.getAttribute('data-link-url');
