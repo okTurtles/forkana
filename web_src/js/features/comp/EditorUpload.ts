@@ -100,10 +100,14 @@ class CodeMirrorEditor {
 
 async function handleUploadFiles(editor: CodeMirrorEditor | TextareaEditor, dropzoneEl: HTMLElement, files: Array<File> | FileList, e: Event) {
   e.preventDefault();
-  for (const file of files) {
+  // Convert FileList to Array before any await: browsers invalidate DataTransfer
+  // after the synchronous event handler returns, so lazy FileList iteration fails
+  // on the second file when the loop resumes after an await.
+  for (const file of Array.from(files)) {
     const name = file.name.slice(0, file.name.lastIndexOf('.'));
     const {width, dppx} = await imageInfo(file);
-    const placeholder = `[${name}](uploading ...)`;
+    // Include the upload ID in the placeholder to keep same-name files distinct.
+    const placeholder = `[${name}](uploading ...${uploadIdCounter})`;
 
     editor.insertPlaceholder(placeholder);
     await uploadFile(dropzoneEl, file); // the "file" will get its "uuid" during the upload
