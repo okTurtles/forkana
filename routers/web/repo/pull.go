@@ -1393,18 +1393,6 @@ func ViewPullConflicts(ctx *context.Context) {
 		return
 	}
 
-	conflictedFiles, _ := ctx.Data["ConflictedFiles"].([]string)
-	if len(conflictedFiles) == 0 {
-		ctx.Redirect(issue.Link() + "/files")
-		return
-	}
-
-	conflictedFileSet := make(map[string]bool, len(conflictedFiles))
-	for _, file := range conflictedFiles {
-		conflictedFileSet[file] = true
-	}
-	ctx.Data["ConflictedFileSet"] = conflictedFileSet
-
 	gitRepo := ctx.Repo.GitRepo
 	headCommitID, err := gitRepo.GetRefCommitID(pull.GetGitHeadRefName())
 	if err != nil {
@@ -1417,6 +1405,67 @@ func ViewPullConflicts(ctx *context.Context) {
 		ctx.ServerError("GetBranchCommitID", err)
 		return
 	}
+
+	headRepo := pull.HeadRepo
+	if headRepo == nil {
+		ctx.Redirect(issue.Link() + "/files")
+		return
+	}
+
+	// Render only the paths that Git's merge engine leaves unmerged. The stored
+	// conflict list can be stale or over-broad, so it is not authoritative here.
+	t, err := files_service.NewTemporaryUploadRepository(headRepo)
+	if err != nil {
+		ctx.ServerError("NewTemporaryUploadRepository", err)
+		return
+	}
+	defer t.Close()
+
+	if err := t.Clone(ctx, pull.HeadBranch, false); err != nil {
+		ctx.ServerError("Clone", err)
+		return
+	}
+
+	// For fork PRs the base commit lives in a different repo; make it reachable via alternates.
+	if headRepo.ID != pull.BaseRepoID {
+		if err := t.AddObjectAlternates(ctx.Repo.Repository.RepoPath()); err != nil {
+			ctx.ServerError("AddObjectAlternates", err)
+			return
+		}
+	}
+
+	hadConflicts, err := t.MergeNoCommitAllowConflicts(ctx, baseCommitID)
+	if err != nil {
+		ctx.ServerError("MergeNoCommitAllowConflicts", err)
+		return
+	}
+	if !hadConflicts {
+		ctx.Redirect(issue.Link() + "/files")
+		return
+	}
+
+	unmergedEntries, err := t.ListUnmergedIndexEntries(ctx)
+	if err != nil {
+		ctx.ServerError("ListUnmergedIndexEntries", err)
+		return
+	}
+	_, conflictedFiles, err := unmergedRegularFileModes(unmergedEntries)
+	if err != nil {
+		ctx.PlainText(http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(conflictedFiles) == 0 {
+		ctx.Redirect(issue.Link() + "/files")
+		return
+	}
+
+	conflictedFileSet := make(map[string]bool, len(conflictedFiles))
+	for _, file := range conflictedFiles {
+		conflictedFileSet[file] = true
+	}
+	ctx.Data["IsPullFilesConflicted"] = true
+	ctx.Data["ConflictedFiles"] = conflictedFiles
+	ctx.Data["ConflictedFileSet"] = conflictedFileSet
 
 	beforeCommitID := baseCommitID
 	headCommit, err := gitRepo.GetCommit(headCommitID)
@@ -1817,20 +1866,17 @@ func SubmitConflictResolution(ctx *context.Context) {
 		ctx.PlainText(http.StatusBadRequest, "pull request is closed")
 		return
 	}
-	if !pull.IsFilesConflicted() {
-		ctx.PlainText(http.StatusBadRequest, "pull request has no conflicts")
-		return
-	}
-	conflictedFileSet := make(map[string]struct{}, len(pull.ConflictedFiles))
-	for _, f := range pull.ConflictedFiles {
-		conflictedFileSet[f] = struct{}{}
-	}
-
 	// Cap the request body to bound memory: each conflicted file may carry at
 	// most one fully-resolved blob, so MaxDisplayFileSize per file is the
-	// natural upper bound, plus a fixed envelope for JSON framing.
+	// natural upper bound, plus a fixed envelope for JSON framing. The database
+	// conflict list is advisory only; the actual conflict set is validated below
+	// against a real merge index.
 	const conflictBodyEnvelopeOverhead = 64 * 1024
-	maxBytes := int64(len(pull.ConflictedFiles))*setting.UI.MaxDisplayFileSize + conflictBodyEnvelopeOverhead
+	conflictFileCount := len(pull.ConflictedFiles)
+	if conflictFileCount == 0 {
+		conflictFileCount = 10
+	}
+	maxBytes := int64(conflictFileCount)*setting.UI.MaxDisplayFileSize + conflictBodyEnvelopeOverhead
 	bodyReader := http.MaxBytesReader(ctx.Resp, ctx.Req.Body, maxBytes)
 	defer bodyReader.Close()
 
@@ -1850,17 +1896,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 	}
 	requestedFileSet := make(map[string]struct{}, len(req.Files))
 	for _, fileReq := range req.Files {
-		if _, ok := conflictedFileSet[fileReq.Path]; !ok {
-			ctx.PlainText(http.StatusBadRequest, "invalid conflicted file: "+fileReq.Path)
-			return
-		}
 		requestedFileSet[fileReq.Path] = struct{}{}
-	}
-	for _, f := range pull.ConflictedFiles {
-		if _, ok := requestedFileSet[f]; !ok {
-			ctx.PlainText(http.StatusBadRequest, "missing resolution for conflicted file: "+f)
-			return
-		}
 	}
 
 	// Acquire the PR working lock to prevent races with concurrent merges or updates.

@@ -627,6 +627,12 @@ func TestSubmitConflictResolutionPreservesBaseOnlyChanges(t *testing.T) {
 		require.Equal(t, issues_model.PullRequestStatusConflict, issue.PullRequest.Status)
 		require.Equal(t, []string{"README.md"}, issue.PullRequest.ConflictedFiles)
 
+		// Simulate a stale/over-broad stored conflict list. The conflict page and
+		// submit handler must use the real unmerged index instead, so auto-mergeable
+		// base-only.txt is not rendered or required in the POST payload.
+		issue.PullRequest.ConflictedFiles = []string{"README.md", "base-only.txt"}
+		require.NoError(t, issue.PullRequest.UpdateCols(t.Context(), "conflicted_files"))
+
 		gitRepo, err := gitrepo.OpenRepository(t.Context(), baseRepo)
 		require.NoError(t, err)
 		headCommitID, err := gitRepo.GetRefCommitID(issue.PullRequest.GetGitHeadRefName())
@@ -638,6 +644,8 @@ func TestSubmitConflictResolutionPreservesBaseOnlyChanges(t *testing.T) {
 		session := loginUser(t, user.Name)
 		conflictsURL := fmt.Sprintf("/%s/%s/pulls/%d/conflicts", user.Name, baseRepo.Name, issue.Index)
 		resp := session.MakeRequest(t, NewRequest(t, http.MethodGet, conflictsURL), http.StatusOK)
+		assert.Contains(t, resp.Body.String(), "README.md")
+		assert.NotContains(t, resp.Body.String(), "base-only.txt")
 		csrf := NewHTMLParser(t, resp.Body).GetCSRF()
 
 		req := NewRequestWithJSON(t, http.MethodPost, conflictsURL, map[string]any{
