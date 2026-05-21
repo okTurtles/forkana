@@ -25,6 +25,26 @@ async function createDropzone(el: HTMLElement, opts: DropzoneOptions) {
   return new Dropzone(el, opts);
 }
 
+// Prevent the browser from opening files dropped anywhere on the page.
+// Without this, dropping a PDF (or any file) onto the comment editor area
+// causes the browser to navigate to the file instead of uploading it.
+// This is the standard Dropzone recommendation: unconditionally prevent the
+// browser's default drag-and-drop behavior at the document level. Child
+// element handlers (textarea, Dropzone) still fire first during event
+// bubbling and can process files normally.
+let pageDropPreventionInstalled = false;
+function setupPageDropPrevention() {
+  if (pageDropPreventionInstalled) return;
+  pageDropPreventionInstalled = true;
+  const isFileDrag = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  document.addEventListener('dragover', (e: DragEvent) => {
+    if (isFileDrag(e)) e.preventDefault();
+  });
+  document.addEventListener('drop', (e: DragEvent) => {
+    if (isFileDrag(e)) e.preventDefault();
+  });
+}
+
 export function generateMarkdownLinkForAttachment(file: Partial<CustomDropzoneFile>, {width, dppx}: {width?: number, dppx?: number} = {}) {
   let fileMarkdown = `[${file.name}](/attachments/${file.uuid})`;
   if (isImageFile(file)) {
@@ -66,6 +86,7 @@ type FileUuidDict = Record<string, {submitted: boolean}>;
  * @param {HTMLElement} dropzoneEl
  */
 export async function initDropzone(dropzoneEl: HTMLElement) {
+  setupPageDropPrevention();
   const listAttachmentsUrl = dropzoneEl.closest('[data-attachment-url]')?.getAttribute('data-attachment-url');
   const removeAttachmentUrl = dropzoneEl.getAttribute('data-remove-url');
   const attachmentBaseLinkUrl = dropzoneEl.getAttribute('data-link-url');
@@ -89,9 +110,30 @@ export async function initDropzone(dropzoneEl: HTMLElement) {
   if (dropzoneEl.hasAttribute('data-max-file')) opts.maxFiles = Number(dropzoneEl.getAttribute('data-max-file'));
   if (dropzoneEl.hasAttribute('data-max-size')) opts.maxFilesize = Number(dropzoneEl.getAttribute('data-max-size'));
 
-  // there is a bug in dropzone: if a non-image file is uploaded, then it tries to request the file from server by something like:
-  // "http://localhost:3000/owner/repo/issues/[object%20Event]"
-  // the reason is that the preview "callback(dataURL)" is assign to "img.onerror" then "thumbnail" uses the error object as the dataURL and generates '<img src="[object Event]">'
+  // There is a bug in Dropzone: when a non-image file is uploaded, the thumbnail generation
+  // creates an <img> with onerror=callback. When the image fails to load, the Error event object
+  // is passed as the "dataURL", producing '<img src="[object Event]">'. Browsers (especially Brave)
+  // then try to navigate/download that broken URL instead of uploading the file.
+  // Fix: intercept the thumbnail and replace invalid dataURLs with a transparent pixel.
+  const transparentPixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  opts.thumbnail = (file: DropzoneFile, dataURL: unknown) => {
+    const thumbnailURL = typeof dataURL === 'string' && (
+      dataURL.startsWith('data:') ||
+      dataURL.startsWith('http:') ||
+      dataURL.startsWith('https:') ||
+      dataURL.startsWith('blob:') ||
+      dataURL.startsWith('/')
+    ) ? dataURL : transparentPixel;
+    // Apply the thumbnail to the preview element (Dropzone's default behavior)
+    if (file.previewElement) {
+      file.previewElement.classList.remove('dz-file-preview');
+      file.previewElement.classList.add('dz-image-preview');
+      for (const thumbnailElement of file.previewElement.querySelectorAll<HTMLImageElement>('[data-dz-thumbnail]')) {
+        thumbnailElement.alt = file.name;
+        thumbnailElement.src = thumbnailURL;
+      }
+    }
+  };
   const dzInst = await createDropzone(dropzoneEl, opts);
   dzInst.on('success', (file: CustomDropzoneFile, resp: any) => {
     file.uuid = resp.uuid;

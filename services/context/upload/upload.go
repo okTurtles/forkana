@@ -4,6 +4,7 @@
 package upload
 
 import (
+	"fmt"
 	"mime"
 	"net/http"
 	"net/url"
@@ -17,6 +18,22 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/services/context"
 )
+
+// ErrFileTooLarge file exceeds the configured maximum upload size
+type ErrFileTooLarge struct {
+	Name  string
+	MaxMB int64
+}
+
+// IsErrFileTooLarge checks if an error is ErrFileTooLarge.
+func IsErrFileTooLarge(err error) bool {
+	_, ok := err.(ErrFileTooLarge)
+	return ok
+}
+
+func (err ErrFileTooLarge) Error() string {
+	return fmt.Sprintf("file size exceeds the maximum allowed size of %d MB", err.MaxMB)
+}
 
 // ErrFileTypeForbidden not allowed file type error
 type ErrFileTypeForbidden struct {

@@ -55,6 +55,10 @@ func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string) {
 			ctx.HTTPError(http.StatusBadRequest, err.Error())
 			return
 		}
+		if upload.IsErrFileTooLarge(err) {
+			ctx.HTTPError(http.StatusRequestEntityTooLarge, err.Error())
+			return
+		}
 		ctx.HTTPError(http.StatusInternalServerError, fmt.Sprintf("NewAttachment: %v", err))
 		return
 	}

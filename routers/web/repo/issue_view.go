@@ -871,7 +871,6 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 						log.Error("IsProtectedBranch: %v", err)
 					} else if !protected {
 						canDelete = true
-						ctx.Data["DeleteBranchLink"] = issue.Link() + "/cleanup"
 					}
 				}
 				canWriteToHeadRepo = true
