@@ -1454,7 +1454,7 @@ func ViewPullConflicts(ctx *context.Context) {
 		var unsupportedModeErr *unsupportedUnmergedFileModeError
 		if errors.As(err, &unsupportedModeErr) {
 			ctx.Data["DiffNotAvailable"] = true
-			ctx.Data["ConflictResolutionUnavailableMessage"] = unsupportedModeErr.Error()
+			ctx.Data["ConflictResolutionUnavailable"] = true
 			ctx.HTML(http.StatusOK, tplPullConflicts)
 			return
 		}
@@ -1537,7 +1537,7 @@ func ViewPullConflicts(ctx *context.Context) {
 	for _, file := range diff.Files {
 		if file.IsBin || file.IsIncomplete {
 			ctx.Data["DiffNotAvailable"] = true
-			ctx.Data["ConflictResolutionUnavailableFile"] = file.Name
+			ctx.Data["ConflictResolutionUnavailable"] = true
 			ctx.HTML(http.StatusOK, tplPullConflicts)
 			return
 		}
@@ -1817,7 +1817,7 @@ type unsupportedUnmergedFileModeError struct {
 }
 
 func (e *unsupportedUnmergedFileModeError) Error() string {
-	return fmt.Sprintf("browser-based conflict resolution is not available for %s because it has a %s conflict; please resolve this conflict locally", e.Path, unmergedFileModeDescription(e.Mode))
+	return fmt.Sprintf("conflict resolution is not available for one or more files because of a %s conflict; please contact support or a moderator for assistance", unmergedFileModeDescription(e.Mode))
 }
 
 func unmergedFileModeDescription(mode string) string {

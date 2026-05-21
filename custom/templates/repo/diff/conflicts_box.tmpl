@@ -52,13 +52,15 @@
 		<div class="tw-flex tw-justify-end tw-mt-4 tw-mb-4">
 			<button type="button" class="ui primary button tiny conflict-submit-btn" disabled>Submit</button>
 		</div>
+	{{/* General diff/render failures may provide a complete message. */}}
 	{{else if .ConflictResolutionUnavailableMessage}}
 		<div class="ui warning message">
 			{{.ConflictResolutionUnavailableMessage}}
 		</div>
-	{{else if .ConflictResolutionUnavailableFile}}
+	{{/* Unsupported conflicts use localized support/moderator guidance without exposing filenames. */}}
+	{{else if .ConflictResolutionUnavailable}}
 		<div class="ui warning message">
-			{{ctx.Locale.Tr "repo.pulls.conflicts_unsupported_file" .ConflictResolutionUnavailableFile}}
+			{{ctx.Locale.Tr "repo.pulls.conflicts_unsupported_file"}}
 		</div>
 	{{else}}
 		<h4>{{ctx.Locale.Tr "repo.diff.data_not_available"}}</h4>
