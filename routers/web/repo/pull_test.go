@@ -33,7 +33,7 @@ func TestUnmergedRegularFileModesRejectsNonRegularStages(t *testing.T) {
 
 			var modeErr *unsupportedUnmergedFileModeError
 			require.Error(t, err)
-			require.True(t, errors.As(err, &modeErr))
+			require.ErrorAs(t, err, &modeErr)
 			assert.Equal(t, "conflict", modeErr.Path)
 			assert.Equal(t, tt.mode, modeErr.Mode)
 		})

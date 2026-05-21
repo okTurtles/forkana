@@ -274,7 +274,7 @@ func (t *TemporaryUploadRepository) ListUnmergedIndexEntries(ctx context.Context
 	}
 
 	entries := make([]UnmergedIndexEntry, 0)
-	for _, record := range bytes.Split(stdOut.Bytes(), []byte{'\000'}) {
+	for record := range bytes.SplitSeq(stdOut.Bytes(), []byte{'\000'}) {
 		if len(record) == 0 {
 			continue
 		}
