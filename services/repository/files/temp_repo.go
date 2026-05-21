@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -221,6 +222,111 @@ func (t *TemporaryUploadRepository) AddObjectToIndex(ctx context.Context, mode, 
 		}
 		log.Error("Unable to add object to index: %s %s %s in temporary repo %s(%s) Error: %v", mode, objectHash, objectPath, t.repo.FullName(), t.basePath, err)
 		return fmt.Errorf("Unable to add object to index at %s in temporary repo %s Error: %w", objectPath, t.repo.FullName(), err)
+	}
+	return nil
+}
+
+// UnmergedIndexEntry is one stage entry from `git ls-files -u`.
+type UnmergedIndexEntry struct {
+	Mode     string
+	ObjectID string
+	Stage    int
+	Path     string
+}
+
+// MergeNoCommitAllowConflicts merges commitID into the checked-out branch without
+// committing. It returns true when Git stopped on conflicts and left an unmerged
+// index that the caller can resolve.
+func (t *TemporaryUploadRepository) MergeNoCommitAllowConflicts(ctx context.Context, commitID string) (bool, error) {
+	stdOut := new(bytes.Buffer)
+	stdErr := new(bytes.Buffer)
+	err := gitcmd.NewCommand("merge", "--no-ff", "--no-commit").AddDynamicArguments(commitID).
+		Run(ctx, &gitcmd.RunOpts{Dir: t.basePath, Stdout: stdOut, Stderr: stdErr})
+	if err == nil {
+		return false, nil
+	}
+
+	unmerged, listErr := t.ListUnmergedIndexEntries(ctx)
+	if listErr == nil && len(unmerged) > 0 {
+		if _, statErr := os.Stat(filepath.Join(t.basePath, ".git", "MERGE_HEAD")); statErr == nil {
+			return true, nil
+		}
+	}
+	if listErr != nil {
+		return false, fmt.Errorf("MergeNoCommitAllowConflicts: %w\nstdout: %s\nstderr: %s\nlist unmerged: %v", err, stdOut.String(), stdErr.String(), listErr)
+	}
+	return false, fmt.Errorf("MergeNoCommitAllowConflicts: %w\nstdout: %s\nstderr: %s", err, stdOut.String(), stdErr.String())
+}
+
+// ListUnmergedIndexEntries returns all unmerged index stages, optionally limited
+// to the provided filenames.
+func (t *TemporaryUploadRepository) ListUnmergedIndexEntries(ctx context.Context, filenames ...string) ([]UnmergedIndexEntry, error) {
+	stdOut := new(bytes.Buffer)
+	stdErr := new(bytes.Buffer)
+	if err := gitcmd.NewCommand("ls-files", "-u", "-z").AddDashesAndList(filenames...).Run(ctx, &gitcmd.RunOpts{
+		Dir:    t.basePath,
+		Stdout: stdOut,
+		Stderr: stdErr,
+	}); err != nil {
+		return nil, fmt.Errorf("git ls-files -u -z: %w\nstderr: %s", err, stdErr.String())
+	}
+
+	entries := make([]UnmergedIndexEntry, 0)
+	for _, record := range bytes.Split(stdOut.Bytes(), []byte{'\000'}) {
+		if len(record) == 0 {
+			continue
+		}
+		parts := strings.SplitN(string(record), " ", 3)
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("malformed ls-files -u record: %q", string(record))
+		}
+		stageAndPath := strings.SplitN(parts[2], "\t", 2)
+		if len(stageAndPath) != 2 {
+			return nil, fmt.Errorf("malformed ls-files -u stage/path: %q", string(record))
+		}
+		stage, err := strconv.Atoi(stageAndPath[0])
+		if err != nil {
+			return nil, fmt.Errorf("malformed ls-files -u stage %q: %w", stageAndPath[0], err)
+		}
+		entries = append(entries, UnmergedIndexEntry{
+			Mode:     parts[0],
+			ObjectID: parts[1],
+			Stage:    stage,
+			Path:     stageAndPath[1],
+		})
+	}
+	return entries, nil
+}
+
+// ResolveIndexPath clears all unmerged stages for objectPath and installs the
+// provided blob as the resolved stage-0 index entry.
+func (t *TemporaryUploadRepository) ResolveIndexPath(ctx context.Context, mode, objectHash, objectPath string) error {
+	objFmt, err := t.gitRepo.GetObjectFormat()
+	if err != nil {
+		return fmt.Errorf("unable to get object format for temporary repo: %q, error: %w", t.repo.FullName(), err)
+	}
+
+	stdIn := new(bytes.Buffer)
+	_, _ = fmt.Fprintf(stdIn, "0 %s\t%s\x00", objFmt.EmptyObjectID(), objectPath)
+	_, _ = fmt.Fprintf(stdIn, "%s %s\t%s\x00", mode, objectHash, objectPath)
+
+	stdOut := new(bytes.Buffer)
+	stdErr := new(bytes.Buffer)
+	if err := gitcmd.NewCommand("update-index", "-z", "--index-info").Run(ctx, &gitcmd.RunOpts{
+		Dir:    t.basePath,
+		Stdin:  stdIn,
+		Stdout: stdOut,
+		Stderr: stdErr,
+	}); err != nil {
+		return fmt.Errorf("ResolveIndexPath update-index for %s: %w\nstdout: %s\nstderr: %s", objectPath, err, stdOut.String(), stdErr.String())
+	}
+
+	remaining, err := t.ListUnmergedIndexEntries(ctx, objectPath)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("ResolveIndexPath left %d unmerged entries for %s", len(remaining), objectPath)
 	}
 	return nil
 }

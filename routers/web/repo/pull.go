@@ -12,6 +12,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1740,6 +1741,48 @@ type conflictResolutionRequest struct {
 	} `json:"files"`
 }
 
+func unmergedEntryPaths(entries []files_service.UnmergedIndexEntry) []string {
+	seen := make(map[string]struct{}, len(entries))
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if _, ok := seen[entry.Path]; ok {
+			continue
+		}
+		seen[entry.Path] = struct{}{}
+		paths = append(paths, entry.Path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func unmergedRegularFileModes(entries []files_service.UnmergedIndexEntry) (map[string]string, []string, error) {
+	stagesByPath := make(map[string]map[int]string, len(entries))
+	for _, entry := range entries {
+		if _, ok := stagesByPath[entry.Path]; !ok {
+			stagesByPath[entry.Path] = map[int]string{}
+		}
+		stagesByPath[entry.Path][entry.Stage] = entry.Mode
+	}
+
+	paths := unmergedEntryPaths(entries)
+	modes := make(map[string]string, len(paths))
+	for _, path := range paths {
+		stages := stagesByPath[path]
+		mode := stages[2] // ours: the PR head branch checked out in the temp repo
+		if mode == "" {
+			mode = stages[3] // theirs: the base branch being merged in
+		}
+		if mode == "" {
+			mode = stages[1]
+		}
+		if mode != git.EntryModeBlob.String() && mode != git.EntryModeExec.String() {
+			return nil, nil, fmt.Errorf("unsupported file mode for %s: only regular files can be resolved in the browser", path)
+		}
+		modes[path] = mode
+	}
+	return modes, paths, nil
+}
+
 // SubmitConflictResolution handles POST /{owner}/{repo}/pulls/{index}/conflicts.
 // It reads the user's keep/use choices, applies them to each conflicted file,
 // commits the result to the head branch, and returns 200 so the frontend can redirect.
@@ -1826,16 +1869,17 @@ func SubmitConflictResolution(ctx *context.Context) {
 		ctx.ServerError("globallock.Lock", err)
 		return
 	}
-	defer releaser()
 
 	// Load the head repo (may differ from base repo for forked PRs)
 	if err := pull.LoadHeadRepo(ctx); err != nil {
 		ctx.ServerError("LoadHeadRepo", err)
+		releaser()
 		return
 	}
 	headRepo := pull.HeadRepo
 	if headRepo == nil {
 		ctx.PlainText(http.StatusBadRequest, "head repository not found")
+		releaser()
 		return
 	}
 
@@ -1844,11 +1888,13 @@ func SubmitConflictResolution(ctx *context.Context) {
 	headCommitID, err := gitRepo.GetRefCommitID(pull.GetGitHeadRefName())
 	if err != nil {
 		ctx.ServerError("GetRefCommitID", err)
+		releaser()
 		return
 	}
 	baseCommitID, err := gitRepo.GetBranchCommitID(pull.BaseBranch)
 	if err != nil {
 		ctx.ServerError("GetBranchCommitID", err)
+		releaser()
 		return
 	}
 
@@ -1857,16 +1903,19 @@ func SubmitConflictResolution(ctx *context.Context) {
 	// be applied at the wrong positions.
 	if req.BaseCommitID != "" && req.BaseCommitID != baseCommitID {
 		ctx.PlainText(http.StatusConflict, "base branch has been updated since you loaded this page, please reload and try again")
+		releaser()
 		return
 	}
 	if req.HeadCommitID != "" && req.HeadCommitID != headCommitID {
 		ctx.PlainText(http.StatusConflict, "change request branch has been updated since you loaded this page, please reload and try again")
+		releaser()
 		return
 	}
 
 	headCommit, err := gitRepo.GetCommit(headCommitID)
 	if err != nil {
 		ctx.ServerError("GetCommit(head)", err)
+		releaser()
 		return
 	}
 	// Resolve each conflicted file and collect the resulting content.
@@ -1880,6 +1929,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 	for _, fileReq := range req.Files {
 		if len(fileReq.Conflicts) == 0 {
 			ctx.PlainText(http.StatusBadRequest, "no conflicts provided for file: "+fileReq.Path)
+			releaser()
 			return
 		}
 
@@ -1890,6 +1940,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 		if err != nil {
 			if !git.IsErrNotExist(err) {
 				ctx.ServerError("GetTreeEntryByPath(head)", err)
+				releaser()
 				return
 			}
 			// Delete conflict: the head side removed this file.
@@ -1900,18 +1951,21 @@ func SubmitConflictResolution(ctx *context.Context) {
 			entryMode := headEntry.Mode()
 			if entryMode != git.EntryModeBlob && entryMode != git.EntryModeExec {
 				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("unsupported file mode for %s: only regular files can be resolved in the browser", fileReq.Path))
+				releaser()
 				return
 			}
 			fileMode = entryMode.String()
 			headReader, err := headEntry.Blob().DataAsync()
 			if err != nil {
 				ctx.ServerError("headBlob.DataAsync", err)
+				releaser()
 				return
 			}
 			headContent, err = io.ReadAll(headReader)
 			headReader.Close()
 			if err != nil {
 				ctx.ServerError("read head blob", err)
+				releaser()
 				return
 			}
 		}
@@ -1928,6 +1982,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 		}, fileReq.Path)
 		if err != nil {
 			ctx.ServerError("GetDiff", err)
+			releaser()
 			return
 		}
 
@@ -1948,6 +2003,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 			for _, c := range fileReq.Conflicts {
 				if c.Index < 0 || c.Index >= len(groups) {
 					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("conflict index %d out of range for %s", c.Index, fileReq.Path))
+					releaser()
 					return
 				}
 				texts[c.Index] = c.Text
@@ -1955,6 +2011,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 			for i := range groups {
 				if _, ok := texts[i]; !ok {
 					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("missing resolution for conflict %d in %s", i, fileReq.Path))
+					releaser()
 					return
 				}
 			}
@@ -1966,22 +2023,26 @@ func SubmitConflictResolution(ctx *context.Context) {
 
 	if len(resolvedFiles) == 0 {
 		ctx.Status(http.StatusOK)
+		releaser()
 		return
 	}
 
-	// Create a merge commit on the head branch.
-	// Using two parents [headCommit, baseCommit] reconciles the diverged histories so that:
-	//   - "This branch is out-of-date" disappears (CommitsBehind becomes 0)
-	//   - "This will be an empty commit" disappears (the PR is no longer empty after merge)
+	// Create a merge commit on the head branch. The temporary repository starts at
+	// the PR head, performs a real no-commit merge of the base branch, then replaces
+	// only the remaining unmerged paths with the user's resolved blobs. This keeps
+	// Git's automatically merged index entries, including non-conflicting base-side
+	// changes, in the tree committed below.
 	t, err := files_service.NewTemporaryUploadRepository(headRepo)
 	if err != nil {
 		ctx.ServerError("NewTemporaryUploadRepository", err)
+		releaser()
 		return
 	}
 	defer t.Close()
 
 	if err := t.Clone(ctx, pull.HeadBranch, false); err != nil {
 		ctx.ServerError("Clone", err)
+		releaser()
 		return
 	}
 
@@ -1989,30 +2050,86 @@ func SubmitConflictResolution(ctx *context.Context) {
 	if headRepo.ID != pull.BaseRepoID {
 		if err := t.AddObjectAlternates(ctx.Repo.Repository.RepoPath()); err != nil {
 			ctx.ServerError("AddObjectAlternates", err)
+			releaser()
 			return
 		}
 	}
 
-	if err := t.SetDefaultIndex(ctx); err != nil {
-		ctx.ServerError("SetDefaultIndex", err)
+	hadConflicts, err := t.MergeNoCommitAllowConflicts(ctx, baseCommitID)
+	if err != nil {
+		ctx.ServerError("MergeNoCommitAllowConflicts", err)
+		releaser()
 		return
+	}
+	if !hadConflicts {
+		ctx.PlainText(http.StatusConflict, "pull request no longer has conflicts, please reload and try again")
+		releaser()
+		return
+	}
+
+	unmergedEntries, err := t.ListUnmergedIndexEntries(ctx)
+	if err != nil {
+		ctx.ServerError("ListUnmergedIndexEntries", err)
+		releaser()
+		return
+	}
+	unmergedModes, unmergedPaths, err := unmergedRegularFileModes(unmergedEntries)
+	if err != nil {
+		ctx.PlainText(http.StatusBadRequest, err.Error())
+		releaser()
+		return
+	}
+	unmergedFileSet := make(map[string]struct{}, len(unmergedPaths))
+	for _, path := range unmergedPaths {
+		unmergedFileSet[path] = struct{}{}
+		if _, ok := requestedFileSet[path]; !ok {
+			ctx.PlainText(http.StatusBadRequest, "missing resolution for conflicted file: "+path)
+			releaser()
+			return
+		}
+	}
+	for _, rf := range resolvedFiles {
+		if _, ok := unmergedFileSet[rf.path]; !ok {
+			ctx.PlainText(http.StatusBadRequest, "submitted file is no longer conflicted: "+rf.path)
+			releaser()
+			return
+		}
 	}
 
 	for _, rf := range resolvedFiles {
 		blobHash, err := t.HashObjectAndWrite(ctx, bytes.NewReader(rf.content))
 		if err != nil {
 			ctx.ServerError("HashObjectAndWrite", err)
+			releaser()
 			return
 		}
-		if err := t.AddObjectToIndex(ctx, rf.mode, blobHash, rf.path); err != nil {
-			ctx.ServerError("AddObjectToIndex", err)
+		mode := rf.mode
+		if unmergedMode, ok := unmergedModes[rf.path]; ok {
+			mode = unmergedMode
+		}
+		if err := t.ResolveIndexPath(ctx, mode, blobHash, rf.path); err != nil {
+			ctx.ServerError("ResolveIndexPath", err)
+			releaser()
 			return
 		}
+	}
+
+	remainingUnmerged, err := t.ListUnmergedIndexEntries(ctx)
+	if err != nil {
+		ctx.ServerError("ListUnmergedIndexEntries", err)
+		releaser()
+		return
+	}
+	if len(remainingUnmerged) > 0 {
+		ctx.PlainText(http.StatusBadRequest, "unresolved conflicted files remain: "+strings.Join(unmergedEntryPaths(remainingUnmerged), ", "))
+		releaser()
+		return
 	}
 
 	treeHash, err := t.WriteTree(ctx)
 	if err != nil {
 		ctx.ServerError("WriteTree", err)
+		releaser()
 		return
 	}
 
@@ -2025,17 +2142,24 @@ func SubmitConflictResolution(ctx *context.Context) {
 	})
 	if err != nil {
 		ctx.ServerError("CommitTree", err)
+		releaser()
 		return
 	}
 
 	if err := t.PushWithOptions(ctx, ctx.Doer, mergeCommitID, pull.HeadBranch, true); err != nil {
 		if git.IsErrPushOutOfDate(err) {
 			ctx.PlainText(http.StatusConflict, "head branch was updated concurrently, please reload and try again")
+			releaser()
 			return
 		}
 		ctx.ServerError("PushWithOptions", err)
+		releaser()
 		return
 	}
+
+	// Release before the synchronous pull-request check below. In tests this can
+	// run in the same goroutine, and the checker acquires the same pull_working lock.
+	releaser()
 
 	// Trigger re-check so IsPullFilesConflicted and CommitsBehind update.
 	// Passing NewCommitID causes GetDiverging to run synchronously, so CommitsBehind = 0

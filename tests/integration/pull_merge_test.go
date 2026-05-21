@@ -42,6 +42,7 @@ import (
 	files_service "code.gitea.io/gitea/services/repository/files"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testPullMerge(t *testing.T, session *TestSession, user, repo, pullnum string, mergeStyle repo_model.MergeStyle, deleteBranch bool) *httptest.ResponseRecorder {
@@ -544,6 +545,133 @@ func TestConflictChecking(t *testing.T) {
 		assert.Equal(t, issues_model.PullRequestStatusConflict, conflictingPR.Status)
 		// Ensure that mergeable returns false
 		assert.False(t, conflictingPR.Mergeable(t.Context()))
+	})
+}
+
+func TestSubmitConflictResolutionPreservesBaseOnlyChanges(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+		baseRepo, err := repo_service.CreateRepository(t.Context(), user, user, repo_service.CreateRepoOptions{
+			Name:          "conflict-ui-merge-tree",
+			Description:   "Temporary repo",
+			AutoInit:      true,
+			Readme:        "Default",
+			DefaultBranch: "main",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{{
+				Operation:     "update",
+				TreePath:      "README.md",
+				ContentReader: strings.NewReader("before\noriginal\nafter\n"),
+			}},
+			Message:   "Set common README content",
+			OldBranch: "main",
+			NewBranch: "main",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{{
+				Operation:     "update",
+				TreePath:      "README.md",
+				ContentReader: strings.NewReader("before\nhead change\nafter\n"),
+			}},
+			Message:   "Change README on head branch",
+			OldBranch: "main",
+			NewBranch: "feature-conflict",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{
+				{
+					Operation:     "update",
+					TreePath:      "README.md",
+					ContentReader: strings.NewReader("before\nbase change\nafter\n"),
+				},
+				{
+					Operation:     "create",
+					TreePath:      "base-only.txt",
+					ContentReader: strings.NewReader("base branch only\n"),
+				},
+			},
+			Message:   "Change base branch with unrelated file",
+			OldBranch: "main",
+			NewBranch: "main",
+		})
+		require.NoError(t, err)
+
+		pullIssue := &issues_model.Issue{
+			RepoID:   baseRepo.ID,
+			Title:    "PR with UI-resolvable conflict",
+			PosterID: user.ID,
+			Poster:   user,
+			IsPull:   true,
+		}
+		pullRequest := &issues_model.PullRequest{
+			HeadRepoID: baseRepo.ID,
+			BaseRepoID: baseRepo.ID,
+			HeadBranch: "feature-conflict",
+			BaseBranch: "main",
+			HeadRepo:   baseRepo,
+			BaseRepo:   baseRepo,
+			Type:       issues_model.PullRequestGitea,
+		}
+		require.NoError(t, pull_service.NewPullRequest(t.Context(), &pull_service.NewPullRequestOptions{Repo: baseRepo, Issue: pullIssue, PullRequest: pullRequest}))
+
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{Title: "PR with UI-resolvable conflict"})
+		require.NoError(t, issue.LoadPullRequest(t.Context()))
+		require.Equal(t, issues_model.PullRequestStatusConflict, issue.PullRequest.Status)
+		require.Equal(t, []string{"README.md"}, issue.PullRequest.ConflictedFiles)
+
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), baseRepo)
+		require.NoError(t, err)
+		headCommitID, err := gitRepo.GetRefCommitID(issue.PullRequest.GetGitHeadRefName())
+		require.NoError(t, err)
+		baseCommitID, err := gitRepo.GetBranchCommitID("main")
+		require.NoError(t, err)
+		gitRepo.Close()
+
+		session := loginUser(t, user.Name)
+		conflictsURL := fmt.Sprintf("/%s/%s/pulls/%d/conflicts", user.Name, baseRepo.Name, issue.Index)
+		resp := session.MakeRequest(t, NewRequest(t, http.MethodGet, conflictsURL), http.StatusOK)
+		csrf := NewHTMLParser(t, resp.Body).GetCSRF()
+
+		req := NewRequestWithJSON(t, http.MethodPost, conflictsURL, map[string]any{
+			"baseCommitID": baseCommitID,
+			"headCommitID": headCommitID,
+			"files": []map[string]any{{
+				"path": "README.md",
+				"conflicts": []map[string]any{{
+					"index": 0,
+					"text":  "resolved manually\n",
+				}},
+			}},
+		}).SetHeader("X-Csrf-Token", csrf)
+		session.MakeRequest(t, req, http.StatusOK)
+
+		gitRepo, err = gitrepo.OpenRepository(t.Context(), baseRepo)
+		require.NoError(t, err)
+		defer gitRepo.Close()
+		mergeCommit, err := gitRepo.GetBranchCommit("feature-conflict")
+		require.NoError(t, err)
+		require.Equal(t, 2, mergeCommit.ParentCount())
+		firstParentID, err := mergeCommit.ParentID(0)
+		require.NoError(t, err)
+		secondParentID, err := mergeCommit.ParentID(1)
+		require.NoError(t, err)
+		assert.Equal(t, headCommitID, firstParentID.String())
+		assert.Equal(t, baseCommitID, secondParentID.String())
+
+		readmeContent, err := mergeCommit.GetFileContent("README.md", 0)
+		require.NoError(t, err)
+		assert.Equal(t, "before\nresolved manually\nafter\n", readmeContent)
+		baseOnlyContent, err := mergeCommit.GetFileContent("base-only.txt", 0)
+		require.NoError(t, err)
+		assert.Equal(t, "base branch only\n", baseOnlyContent)
 	})
 }
 
