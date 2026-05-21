@@ -178,7 +178,10 @@ export function isImageFile({name, type}: {name?: string, type?: string}): boole
 }
 
 export function isVideoFile({name, type}: {name?: string, type?: string}): boolean {
-  return /\.(mpe?g|mp4|mkv|webm)$/i.test(name || '') || type?.startsWith('video/');
+  // Only mp4 and webm have reliable cross-browser support; other video/* MIME types
+  // (e.g. video/quicktime for .mov, video/x-matroska for .mkv) produce blank <video>
+  // elements in most browsers, so we fall back to a plain download link for those.
+  return /\.(mp4|webm)$/i.test(name || '') || /^video\/(mp4|webm)$/i.test(type || '');
 }
 
 export function toggleFullScreen(fullscreenElementsSelector: string, isFullScreen: boolean, sourceParentSelector?: string): void {
