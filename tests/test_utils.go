@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"code.gitea.io/gitea/models/db"
@@ -184,6 +185,58 @@ func PrepareGitRepoDirectory(t testing.TB) {
 		return
 	}
 	assert.NoError(t, unittest.SyncDirs(filepath.Join(filepath.Dir(setting.AppPath), "tests/gitea-repositories-meta"), setting.RepoRootPath))
+	assert.NoError(t, ensureDelegateHooksExecutable(setting.RepoRootPath))
+}
+
+func ensureDelegateHooksExecutable(repoRootPath string) error {
+	files, err := util.ListDirRecursively(repoRootPath, &util.ListDirOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		if !isDelegateHookPath(file) {
+			continue
+		}
+		path := filepath.Join(repoRootPath, file)
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if info.Mode()&0o100 != 0 {
+			continue
+		}
+		if err := os.Chmod(path, info.Mode()|0o100); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func isDelegateHookPath(path string) bool {
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		if part != "hooks" || i+1 >= len(parts) {
+			continue
+		}
+
+		if i+2 == len(parts) && isDelegateHookName(parts[i+1]) {
+			return true
+		}
+		if i+3 == len(parts) && parts[i+2] == "gitea" && strings.HasSuffix(parts[i+1], ".d") {
+			return isDelegateHookName(strings.TrimSuffix(parts[i+1], ".d"))
+		}
+	}
+	return false
+}
+
+func isDelegateHookName(name string) bool {
+	switch name {
+	case "pre-receive", "update", "post-receive", "proc-receive":
+		return true
+	default:
+		return false
+	}
 }
 
 func PrepareArtifactsStorage(t testing.TB) {
