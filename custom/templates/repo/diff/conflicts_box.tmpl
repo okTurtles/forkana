@@ -52,6 +52,10 @@
 		<div class="tw-flex tw-justify-end tw-mt-4 tw-mb-4">
 			<button type="button" class="ui primary button tiny conflict-submit-btn" disabled>Submit</button>
 		</div>
+	{{else if .ConflictResolutionUnavailableMessage}}
+		<div class="ui warning message">
+			{{.ConflictResolutionUnavailableMessage}}
+		</div>
 	{{else if .ConflictResolutionUnavailableFile}}
 		<div class="ui warning message">
 			{{ctx.Locale.Tr "repo.pulls.conflicts_unsupported_file" .ConflictResolutionUnavailableFile}}

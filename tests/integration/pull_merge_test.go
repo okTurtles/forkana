@@ -648,6 +648,30 @@ func TestSubmitConflictResolutionPreservesBaseOnlyChanges(t *testing.T) {
 		assert.NotContains(t, resp.Body.String(), "base-only.txt")
 		csrf := NewHTMLParser(t, resp.Body).GetCSRF()
 
+		missingCommitIDsReq := NewRequestWithJSON(t, http.MethodPost, conflictsURL, map[string]any{
+			"files": []map[string]any{{
+				"path": "README.md",
+				"conflicts": []map[string]any{{
+					"index": 0,
+					"text":  "resolved manually\n",
+				}},
+			}},
+		}).SetHeader("X-Csrf-Token", csrf)
+		session.MakeRequest(t, missingCommitIDsReq, http.StatusBadRequest)
+
+		staleCommitIDReq := NewRequestWithJSON(t, http.MethodPost, conflictsURL, map[string]any{
+			"baseCommitID": strings.Repeat("0", 40),
+			"headCommitID": headCommitID,
+			"files": []map[string]any{{
+				"path": "README.md",
+				"conflicts": []map[string]any{{
+					"index": 0,
+					"text":  "resolved manually\n",
+				}},
+			}},
+		}).SetHeader("X-Csrf-Token", csrf)
+		session.MakeRequest(t, staleCommitIDReq, http.StatusConflict)
+
 		req := NewRequestWithJSON(t, http.MethodPost, conflictsURL, map[string]any{
 			"baseCommitID": baseCommitID,
 			"headCommitID": headCommitID,

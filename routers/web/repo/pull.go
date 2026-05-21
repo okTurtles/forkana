@@ -1451,6 +1451,13 @@ func ViewPullConflicts(ctx *context.Context) {
 	}
 	_, conflictedFiles, err := unmergedRegularFileModes(unmergedEntries)
 	if err != nil {
+		var unsupportedModeErr *unsupportedUnmergedFileModeError
+		if errors.As(err, &unsupportedModeErr) {
+			ctx.Data["DiffNotAvailable"] = true
+			ctx.Data["ConflictResolutionUnavailableMessage"] = unsupportedModeErr.Error()
+			ctx.HTML(http.StatusOK, tplPullConflicts)
+			return
+		}
 		ctx.PlainText(http.StatusBadRequest, err.Error())
 		return
 	}
@@ -1804,6 +1811,34 @@ func unmergedEntryPaths(entries []files_service.UnmergedIndexEntry) []string {
 	return paths
 }
 
+type unsupportedUnmergedFileModeError struct {
+	Path string
+	Mode string
+}
+
+func (e *unsupportedUnmergedFileModeError) Error() string {
+	return fmt.Sprintf("browser-based conflict resolution is not available for %s because it has a %s conflict; please resolve this conflict locally", e.Path, unmergedFileModeDescription(e.Mode))
+}
+
+func unmergedFileModeDescription(mode string) string {
+	switch mode {
+	case git.EntryModeSymlink.String():
+		return "symlink"
+	case git.EntryModeCommit.String():
+		return "submodule"
+	case git.EntryModeTree.String(), "040000":
+		return "directory"
+	case "":
+		return "missing file mode"
+	default:
+		return "non-regular file mode " + mode
+	}
+}
+
+func isBrowserResolvableFileMode(mode string) bool {
+	return mode == git.EntryModeBlob.String() || mode == git.EntryModeExec.String()
+}
+
 func unmergedRegularFileModes(entries []files_service.UnmergedIndexEntry) (map[string]string, []string, error) {
 	stagesByPath := make(map[string]map[int]string, len(entries))
 	for _, entry := range entries {
@@ -1817,6 +1852,11 @@ func unmergedRegularFileModes(entries []files_service.UnmergedIndexEntry) (map[s
 	modes := make(map[string]string, len(paths))
 	for _, path := range paths {
 		stages := stagesByPath[path]
+		for _, stageMode := range stages {
+			if !isBrowserResolvableFileMode(stageMode) {
+				return nil, nil, &unsupportedUnmergedFileModeError{Path: path, Mode: stageMode}
+			}
+		}
 		mode := stages[2] // ours: the PR head branch checked out in the temp repo
 		if mode == "" {
 			mode = stages[3] // theirs: the base branch being merged in
@@ -1824,8 +1864,8 @@ func unmergedRegularFileModes(entries []files_service.UnmergedIndexEntry) (map[s
 		if mode == "" {
 			mode = stages[1]
 		}
-		if mode != git.EntryModeBlob.String() && mode != git.EntryModeExec.String() {
-			return nil, nil, fmt.Errorf("unsupported file mode for %s: only regular files can be resolved in the browser", path)
+		if !isBrowserResolvableFileMode(mode) {
+			return nil, nil, &unsupportedUnmergedFileModeError{Path: path, Mode: mode}
 		}
 		modes[path] = mode
 	}
@@ -1937,12 +1977,22 @@ func SubmitConflictResolution(ctx *context.Context) {
 	// Reject stale submissions: if either branch advanced since the user loaded the
 	// conflict page, the line ranges in the diff have shifted and the resolutions would
 	// be applied at the wrong positions.
-	if req.BaseCommitID != "" && req.BaseCommitID != baseCommitID {
+	if req.BaseCommitID == "" {
+		ctx.PlainText(http.StatusBadRequest, "missing baseCommitID")
+		releaser()
+		return
+	}
+	if req.HeadCommitID == "" {
+		ctx.PlainText(http.StatusBadRequest, "missing headCommitID")
+		releaser()
+		return
+	}
+	if req.BaseCommitID != baseCommitID {
 		ctx.PlainText(http.StatusConflict, "base branch has been updated since you loaded this page, please reload and try again")
 		releaser()
 		return
 	}
-	if req.HeadCommitID != "" && req.HeadCommitID != headCommitID {
+	if req.HeadCommitID != headCommitID {
 		ctx.PlainText(http.StatusConflict, "change request branch has been updated since you loaded this page, please reload and try again")
 		releaser()
 		return
