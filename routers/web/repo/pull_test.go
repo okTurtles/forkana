@@ -4,7 +4,6 @@
 package repo
 
 import (
-	"errors"
 	"testing"
 
 	"code.gitea.io/gitea/modules/git"
