@@ -355,6 +355,15 @@
   cursor: pointer;
 }
 
+.review-radio-option.disabled {
+  cursor: not-allowed;
+}
+
+.review-radio-option.disabled .review-radio-label,
+.review-radio-option.disabled .review-radio-desc {
+  color: var(--color-text-tertiary);
+}
+
 .review-radio-option input[type="radio"] {
   margin-top: 4px;
   transform: scale(1.2);
