@@ -1906,6 +1906,10 @@ func SubmitConflictResolution(ctx *context.Context) {
 		ctx.PlainText(http.StatusBadRequest, "pull request is closed")
 		return
 	}
+	if !pull.IsFilesConflicted() {
+		ctx.PlainText(http.StatusBadRequest, "pull request has no conflicts")
+		return
+	}
 	// Cap the request body to bound memory: each conflicted file may carry at
 	// most one fully-resolved blob, so MaxDisplayFileSize per file is the
 	// natural upper bound, plus a fixed envelope for JSON framing. The database
