@@ -80,6 +80,70 @@ func (t *TemporaryUploadRepository) AddObjectAlternates(repoPaths ...string) (er
 	return nil
 }
 
+func readAllAtMost(r io.Reader, maxSize int64) ([]byte, error) {
+	if maxSize <= 0 {
+		return io.ReadAll(r)
+	}
+	data, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxSize {
+		return nil, fmt.Errorf("content exceeds %d bytes", maxSize)
+	}
+	return data, nil
+}
+
+func cleanTemporaryRepoPath(filename string) (string, error) {
+	cleaned := filepath.Clean(filename)
+	if cleaned == "." || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
+		return "", util.NewInvalidArgumentErrorf("invalid temporary repo path: %q", filename)
+	}
+	return cleaned, nil
+}
+
+// ReadWorkingTreeFile reads a file from this temporary repository's working tree.
+func (t *TemporaryUploadRepository) ReadWorkingTreeFile(filename string, maxSize int64) ([]byte, error) {
+	cleaned, err := cleanTemporaryRepoPath(filename)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(filepath.Join(t.basePath, cleaned))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return readAllAtMost(f, maxSize)
+}
+
+// ReadObjectBlob reads a blob object reachable from this temporary repository.
+func (t *TemporaryUploadRepository) ReadObjectBlob(ctx context.Context, objectID string, maxSize int64) ([]byte, error) {
+	if maxSize > 0 {
+		objectSize, stderr, err := gitcmd.NewCommand("cat-file", "-s").AddDynamicArguments(objectID).RunStdString(ctx, &gitcmd.RunOpts{Dir: t.basePath})
+		if err != nil {
+			return nil, fmt.Errorf("cat-file -s %s: %w\nstderr: %s", objectID, err, stderr)
+		}
+		size, parseErr := strconv.ParseInt(strings.TrimSpace(objectSize), 10, 64)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse blob size for %s: %w", objectID, parseErr)
+		}
+		if size > maxSize {
+			return nil, fmt.Errorf("content exceeds %d bytes", maxSize)
+		}
+	}
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	if err := gitcmd.NewCommand("cat-file", "blob").AddDynamicArguments(objectID).Run(ctx, &gitcmd.RunOpts{
+		Dir:    t.basePath,
+		Stdout: stdout,
+		Stderr: stderr,
+	}); err != nil {
+		return nil, fmt.Errorf("cat-file blob %s: %w\nstderr: %s", objectID, err, stderr.String())
+	}
+	return readAllAtMost(stdout, maxSize)
+}
+
 // Clone the base repository to our path and set branch as the HEAD
 func (t *TemporaryUploadRepository) Clone(ctx context.Context, branch string, bare bool) error {
 	cmd := gitcmd.NewCommand("clone", "-s", "-b").AddDynamicArguments(branch, t.repo.RepoPath(), t.basePath)

@@ -707,6 +707,117 @@ func TestSubmitConflictResolutionPreservesBaseOnlyChanges(t *testing.T) {
 	})
 }
 
+func TestSubmitConflictResolutionPreservesAutoMergedHunksInConflictedFile(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+		baseRepo, err := repo_service.CreateRepository(t.Context(), user, user, repo_service.CreateRepoOptions{
+			Name:          "conflict-ui-auto-merged-hunk",
+			Description:   "Temporary repo",
+			AutoInit:      true,
+			Readme:        "Default",
+			DefaultBranch: "main",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{{
+				Operation:     "update",
+				TreePath:      "README.md",
+				ContentReader: strings.NewReader("top\noriginal conflict\nmiddle\nbase editable\nbottom\n"),
+			}},
+			Message:   "Set common README content",
+			OldBranch: "main",
+			NewBranch: "main",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{{
+				Operation:     "update",
+				TreePath:      "README.md",
+				ContentReader: strings.NewReader("top\nhead conflict\nmiddle\nbase editable\nbottom\n"),
+			}},
+			Message:   "Change conflict line on head branch",
+			OldBranch: "main",
+			NewBranch: "feature-conflict-with-auto-hunk",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{{
+				Operation:     "update",
+				TreePath:      "README.md",
+				ContentReader: strings.NewReader("top\nbase conflict\nmiddle\nbase auto-merged\nbottom\n"),
+			}},
+			Message:   "Change conflict line and separate base hunk",
+			OldBranch: "main",
+			NewBranch: "main",
+		})
+		require.NoError(t, err)
+
+		pullIssue := &issues_model.Issue{
+			RepoID:   baseRepo.ID,
+			Title:    "PR preserving auto-merged hunk in conflicted file",
+			PosterID: user.ID,
+			Poster:   user,
+			IsPull:   true,
+		}
+		pullRequest := &issues_model.PullRequest{
+			HeadRepoID: baseRepo.ID,
+			BaseRepoID: baseRepo.ID,
+			HeadBranch: "feature-conflict-with-auto-hunk",
+			BaseBranch: "main",
+			HeadRepo:   baseRepo,
+			BaseRepo:   baseRepo,
+			Type:       issues_model.PullRequestGitea,
+		}
+		require.NoError(t, pull_service.NewPullRequest(t.Context(), &pull_service.NewPullRequestOptions{Repo: baseRepo, Issue: pullIssue, PullRequest: pullRequest}))
+
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{Title: "PR preserving auto-merged hunk in conflicted file"})
+		require.NoError(t, issue.LoadPullRequest(t.Context()))
+		require.Equal(t, issues_model.PullRequestStatusConflict, issue.PullRequest.Status)
+		require.Equal(t, []string{"README.md"}, issue.PullRequest.ConflictedFiles)
+
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), baseRepo)
+		require.NoError(t, err)
+		headCommitID, err := gitRepo.GetRefCommitID(issue.PullRequest.GetGitHeadRefName())
+		require.NoError(t, err)
+		baseCommitID, err := gitRepo.GetBranchCommitID("main")
+		require.NoError(t, err)
+		gitRepo.Close()
+
+		session := loginUser(t, user.Name)
+		conflictsURL := fmt.Sprintf("/%s/%s/pulls/%d/conflicts", user.Name, baseRepo.Name, issue.Index)
+		resp := session.MakeRequest(t, NewRequest(t, http.MethodGet, conflictsURL), http.StatusOK)
+		assert.Contains(t, resp.Body.String(), "base auto-merged")
+		csrf := NewHTMLParser(t, resp.Body).GetCSRF()
+
+		req := NewRequestWithJSON(t, http.MethodPost, conflictsURL, map[string]any{
+			"baseCommitID": baseCommitID,
+			"headCommitID": headCommitID,
+			"files": []map[string]any{{
+				"path": "README.md",
+				"conflicts": []map[string]any{{
+					"index": 0,
+					"text":  "manual resolution\n",
+				}},
+			}},
+		}).SetHeader("X-Csrf-Token", csrf)
+		session.MakeRequest(t, req, http.StatusOK)
+
+		gitRepo, err = gitrepo.OpenRepository(t.Context(), baseRepo)
+		require.NoError(t, err)
+		defer gitRepo.Close()
+		mergeCommit, err := gitRepo.GetBranchCommit("feature-conflict-with-auto-hunk")
+		require.NoError(t, err)
+
+		readmeContent, err := mergeCommit.GetFileContent("README.md", 0)
+		require.NoError(t, err)
+		assert.Equal(t, "top\nmanual resolution\nmiddle\nbase auto-merged\nbottom\n", readmeContent)
+	})
+}
+
 func TestSubmitConflictResolutionCanDeleteModifyDeleteConflict(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
 		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})

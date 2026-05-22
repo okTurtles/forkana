@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -1494,7 +1493,6 @@ func ViewPullConflicts(ctx *context.Context) {
 	ctx.Data["IsShowingOnlySingleCommit"] = false
 	ctx.Data["IsShowingAllCommits"] = true
 
-	maxLines, maxFiles := -1, -1
 	files := conflictedFiles
 	fileOnly := ctx.FormBool("file-only")
 	requestedFiles := ctx.FormStrings("files")
@@ -1502,45 +1500,30 @@ func ViewPullConflicts(ctx *context.Context) {
 		files = requestedFiles
 	}
 
-	whitespaceBehavior, _ := ctx.Data["WhitespaceBehavior"].(string)
-	diff, err := gitdiff.GetDiffForRender(ctx, ctx.Repo.RepoLink, gitRepo, &gitdiff.DiffOptions{
-		BeforeCommitID:     beforeCommitID,
-		AfterCommitID:      headCommitID,
-		SkipTo:             ctx.FormString("skip-to"),
-		MaxLines:           maxLines,
-		MaxLineCharacters:  setting.Git.MaxGitDiffLineCharacters,
-		MaxFiles:           maxFiles,
-		WhitespaceBehavior: gitdiff.GetWhitespaceFlag(whitespaceBehavior),
-	}, files...)
-	if err != nil {
-		ctx.ServerError("GetDiff", err)
-		return
-	}
-
-	filteredFiles := make([]*gitdiff.DiffFile, 0, len(diff.Files))
+	unmergedByPath := entriesByPath(unmergedEntries)
+	diff := &gitdiff.Diff{Files: make([]*gitdiff.DiffFile, 0, len(files))}
 	diffShortStat := &gitdiff.DiffShortStat{}
-	for _, file := range diff.Files {
-		if !conflictedFileSet[file.Name] && !conflictedFileSet[file.OldName] {
+	for _, file := range files {
+		if !conflictedFileSet[file] {
 			continue
 		}
-		filteredFiles = append(filteredFiles, file)
-		diffShortStat.NumFiles++
-		diffShortStat.TotalAddition += file.Addition
-		diffShortStat.TotalDeletion += file.Deletion
-	}
-	diff.Files = filteredFiles
-	ctx.Data["DiffShortStat"] = diffShortStat
-
-	// If any conflicted file is binary or too large to display, the browser-based
-	// resolver cannot build conflict wrappers for it, leaving the submit button
-	// permanently disabled. Detect this early and surface a clear message.
-	for _, file := range diff.Files {
-		if file.IsBin || file.IsIncomplete {
+		mergeConflictFile, err := buildMergeConflictFile(ctx, t, file, unmergedByPath[file], int64(setting.UI.MaxDisplayFileSize))
+		if err != nil {
 			ctx.Data["DiffNotAvailable"] = true
 			ctx.Data["ConflictResolutionUnavailable"] = true
 			ctx.HTML(http.StatusOK, tplPullConflicts)
 			return
 		}
+		diffFile := buildConflictDiffFile(mergeConflictFile)
+		diff.Files = append(diff.Files, diffFile)
+		diffShortStat.NumFiles++
+		diffShortStat.TotalAddition += diffFile.Addition
+		diffShortStat.TotalDeletion += diffFile.Deletion
+	}
+	ctx.Data["DiffShortStat"] = diffShortStat
+	if len(diff.Files) == 0 {
+		ctx.Redirect(issue.Link() + "/files")
+		return
 	}
 
 	showOutdatedComments, _ := ctx.Data["ShowOutdatedComments"].(bool)
@@ -1635,131 +1618,239 @@ func ViewPullConflicts(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplPullConflicts)
 }
 
-// conflictGroup represents a group of consecutive conflict lines in a diff (one "conflict" in the UI).
+type mergeConflictFile struct {
+	path      string
+	mode      string
+	content   []byte
+	groups    []conflictGroup
+	isDeleted bool
+	isCreated bool
+}
+
+// conflictGroup represents one unresolved hunk from Git's real merge result.
 type conflictGroup struct {
-	baseStart int // LeftIdx of first DEL line (1-based, 0 = none)
-	baseEnd   int // LeftIdx of last DEL line (1-based, 0 = none)
-	headStart int // RightIdx of first ADD line (1-based, 0 = none)
-	headEnd   int // RightIdx of last ADD line (1-based, 0 = none)
-	// insertAt is the HEAD line number (1-based RightIdx) of the last context line before
-	// this group. Used as the insertion point for headless groups (headStart == 0) so that
-	// consecutive headless groups each land at the correct position in the file rather than
-	// all stacking at the same cursor position.
-	insertAt int
+	markerStart int
+	markerEnd   int
+	baseLines   []string
+	headLines   []string
 }
 
-// extractConflictGroups groups consecutive conflict lines (non-context diff lines) into groups,
-// matching the same grouping that the frontend JavaScript performs on data-line-type="conflict" rows.
-//
-// IMPORTANT — grouping contract: the group indices produced here are sent back by the frontend as
-// conflict indices in the POST payload. The frontend builds its groups in buildConflictWrappers
-// (web_src/js/features/repo-conflict-review.ts) by scanning consecutive data-line-type="conflict"
-// DOM rows. Any change to the conflict template (conflicts_section_split.tmpl) or to the grouping
-// logic here must be reflected in both places simultaneously to keep indices aligned.
-func extractConflictGroups(diffFile *gitdiff.DiffFile) []conflictGroup {
-	var groups []conflictGroup
-	var cur *conflictGroup
-
-	flush := func() {
-		if cur != nil {
-			groups = append(groups, *cur)
-			cur = nil
-		}
+func splitConflictSideLines(content []byte) []string {
+	text := strings.TrimRight(string(content), "\n")
+	if text == "" {
+		return nil
 	}
-
-	lastHeadLine := 0 // RightIdx of last context line seen; used as insertAt for new groups
-	for _, section := range diffFile.Sections {
-		for _, line := range section.Lines {
-			switch line.Type {
-			case gitdiff.DiffLinePlain:
-				if line.RightIdx > 0 {
-					lastHeadLine = line.RightIdx
-				}
-				flush()
-			case gitdiff.DiffLineSection:
-				// Hunk headers (@@) are not rendered in conflicts_section_split.tmpl,
-				// so they must not break a group either - otherwise the per-file
-				// indices the frontend sends would not align with these groups.
-			case gitdiff.DiffLineDel:
-				// DEL line (matched or unmatched) -> contributes to conflict group
-				if cur == nil {
-					cur = &conflictGroup{insertAt: lastHeadLine}
-				}
-				if line.LeftIdx > 0 {
-					if cur.baseStart == 0 {
-						cur.baseStart = line.LeftIdx
-					}
-					cur.baseEnd = line.LeftIdx
-				}
-				// If this DEL has a match, record the matched ADD's RightIdx as the head range
-				if line.Match >= 0 && line.Match < len(section.Lines) {
-					matchLine := section.Lines[line.Match]
-					if matchLine.RightIdx > 0 {
-						if cur.headStart == 0 {
-							cur.headStart = matchLine.RightIdx
-						}
-						cur.headEnd = matchLine.RightIdx
-					}
-				}
-			case gitdiff.DiffLineAdd:
-				// Only unmatched ADD lines produce a separate conflict row in the template.
-				// Matched ADD lines are rendered within their paired DEL row and are skipped.
-				if line.Match != -1 {
-					continue
-				}
-				if cur == nil {
-					cur = &conflictGroup{}
-				}
-				if line.RightIdx > 0 {
-					if cur.headStart == 0 {
-						cur.headStart = line.RightIdx
-					}
-					cur.headEnd = line.RightIdx
-				}
-			}
-		}
-		// No per-section flush here: the template emits no separator between sections,
-		// so conflict rows from adjacent sections appear consecutive in the DOM and the
-		// frontend groups them as one conflict. The DiffLinePlain case above already
-		// flushes whenever a context line is encountered, which is the normal separator.
-	}
-	flush()
-	return groups
+	return strings.Split(text, "\n")
 }
 
-// applyConflictTexts builds the resolved file content by replacing each conflicted head range
-// with the text the user confirmed in the editor (which may be the base version, head version,
-// or a manual blend). texts maps conflictGroup index → resolved text from the editor.
-// For groups with no head range, it computes an insertion point while walking the groups in
-// file order so empty-head chunks can still be resolved.
-func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[int]string) []byte {
-	headLines := strings.Split(string(headContent), "\n")
+func splitFileLines(content []byte) []string {
+	return strings.Split(string(content), "\n")
+}
 
-	type spliceRange struct {
-		start int
-		end   int
-	}
-
-	splices := make([]spliceRange, len(groups))
-	cursor := 0
-	originalHeadLen := len(headLines)
-	for i, g := range groups {
-		if g.headStart > 0 {
-			hStart := min(max(g.headStart-1, 0), originalHeadLen)
-			hEnd := min(max(g.headEnd, hStart), originalHeadLen)
-			splices[i] = spliceRange{start: hStart, end: hEnd}
-			cursor = hEnd
+func parseMergeConflictGroups(content []byte) ([]conflictGroup, error) {
+	lines := splitFileLines(content)
+	groups := make([]conflictGroup, 0)
+	for i := 0; i < len(lines); i++ {
+		if !strings.HasPrefix(lines[i], "<<<<<<<") {
 			continue
 		}
 
-		// Use the group's pre-computed HEAD insertion point (last context line before the group).
-		// Fall back to cursor only if insertAt would move backwards (shouldn't happen in
-		// well-ordered diffs, but guards against corrupt data).
-		insertAt := min(max(g.insertAt, cursor), originalHeadLen)
-		splices[i] = spliceRange{start: insertAt, end: insertAt}
-		// Do not advance cursor here: consecutive headless groups in the same HEAD gap
-		// each have their own insertAt and should be placed independently.
+		start := i
+		i++
+		headStart := i
+		for i < len(lines) && !strings.HasPrefix(lines[i], "|||||||") && !strings.HasPrefix(lines[i], "=======") {
+			i++
+		}
+		headLines := append([]string(nil), lines[headStart:i]...)
+
+		if i < len(lines) && strings.HasPrefix(lines[i], "|||||||") {
+			for i < len(lines) && !strings.HasPrefix(lines[i], "=======") {
+				i++
+			}
+		}
+		if i >= len(lines) || !strings.HasPrefix(lines[i], "=======") {
+			return nil, fmt.Errorf("malformed conflict markers: missing separator")
+		}
+
+		i++
+		baseStart := i
+		for i < len(lines) && !strings.HasPrefix(lines[i], ">>>>>>>") {
+			i++
+		}
+		if i >= len(lines) {
+			return nil, fmt.Errorf("malformed conflict markers: missing end marker")
+		}
+		baseLines := append([]string(nil), lines[baseStart:i]...)
+		groups = append(groups, conflictGroup{
+			markerStart: start,
+			markerEnd:   i + 1,
+			baseLines:   baseLines,
+			headLines:   headLines,
+		})
 	}
+	return groups, nil
+}
+
+func entriesByStage(entries []files_service.UnmergedIndexEntry) map[int]files_service.UnmergedIndexEntry {
+	byStage := make(map[int]files_service.UnmergedIndexEntry, len(entries))
+	for _, entry := range entries {
+		byStage[entry.Stage] = entry
+	}
+	return byStage
+}
+
+func entriesByPath(entries []files_service.UnmergedIndexEntry) map[string][]files_service.UnmergedIndexEntry {
+	byPath := make(map[string][]files_service.UnmergedIndexEntry)
+	for _, entry := range entries {
+		byPath[entry.Path] = append(byPath[entry.Path], entry)
+	}
+	return byPath
+}
+
+func buildMergeConflictFile(ctx *context.Context, t *files_service.TemporaryUploadRepository, path string, entries []files_service.UnmergedIndexEntry, maxSize int64) (*mergeConflictFile, error) {
+	stages := entriesByStage(entries)
+	stage2, hasHead := stages[2]
+	stage3, hasBase := stages[3]
+
+	mode := ""
+	if hasHead {
+		mode = stage2.Mode
+	} else if hasBase {
+		mode = stage3.Mode
+	} else if stage1, ok := stages[1]; ok {
+		mode = stage1.Mode
+	}
+
+	content, err := t.ReadWorkingTreeFile(path, maxSize)
+	if err != nil {
+		content = nil
+	}
+	groups, err := parseMergeConflictGroups(content)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(groups) == 0 {
+		if hasHead && hasBase {
+			return nil, fmt.Errorf("conflicted file %s does not contain conflict markers", path)
+		}
+
+		var baseContent, headContent []byte
+		if hasBase {
+			baseContent, err = t.ReadObjectBlob(ctx, stage3.ObjectID, maxSize)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if hasHead {
+			headContent, err = t.ReadObjectBlob(ctx, stage2.ObjectID, maxSize)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if content == nil {
+			if hasHead {
+				content = headContent
+			} else {
+				content = baseContent
+			}
+		}
+		groups = []conflictGroup{{
+			markerStart: 0,
+			markerEnd:   len(splitFileLines(content)),
+			baseLines:   splitConflictSideLines(baseContent),
+			headLines:   splitConflictSideLines(headContent),
+		}}
+	}
+
+	return &mergeConflictFile{
+		path:      path,
+		mode:      mode,
+		content:   content,
+		groups:    groups,
+		isDeleted: !hasHead && hasBase,
+		isCreated: hasHead && !hasBase,
+	}, nil
+}
+
+func appendConflictDiffLines(lines []*gitdiff.DiffLine, baseLines, headLines []string, leftLine, rightLine *int) []*gitdiff.DiffLine {
+	maxLines := max(len(baseLines), len(headLines))
+	for i := 0; i < maxLines; i++ {
+		var delLine *gitdiff.DiffLine
+		if i < len(baseLines) {
+			delLine = &gitdiff.DiffLine{LeftIdx: *leftLine, Type: gitdiff.DiffLineDel, Content: "-" + baseLines[i], Match: -1}
+			(*leftLine)++
+		}
+		var addLine *gitdiff.DiffLine
+		if i < len(headLines) {
+			addLine = &gitdiff.DiffLine{RightIdx: *rightLine, Type: gitdiff.DiffLineAdd, Content: "+" + headLines[i], Match: -1}
+			(*rightLine)++
+		}
+		if delLine != nil && addLine != nil {
+			delLine.Match = len(lines) + 1
+			addLine.Match = len(lines)
+		}
+		if delLine != nil {
+			lines = append(lines, delLine)
+		}
+		if addLine != nil {
+			lines = append(lines, addLine)
+		}
+	}
+	return lines
+}
+
+func buildConflictDiffFile(file *mergeConflictFile) *gitdiff.DiffFile {
+	contentLines := splitFileLines(file.content)
+	leftLine, rightLine := 1, 1
+	lines := make([]*gitdiff.DiffLine, 0, len(contentLines))
+	cursor := 0
+	for _, group := range file.groups {
+		for cursor < group.markerStart && cursor < len(contentLines) {
+			lines = append(lines, &gitdiff.DiffLine{LeftIdx: leftLine, RightIdx: rightLine, Type: gitdiff.DiffLinePlain, Content: " " + contentLines[cursor]})
+			leftLine++
+			rightLine++
+			cursor++
+		}
+		lines = appendConflictDiffLines(lines, group.baseLines, group.headLines, &leftLine, &rightLine)
+		cursor = group.markerEnd
+	}
+	for cursor < len(contentLines) {
+		lines = append(lines, &gitdiff.DiffLine{LeftIdx: leftLine, RightIdx: rightLine, Type: gitdiff.DiffLinePlain, Content: " " + contentLines[cursor]})
+		leftLine++
+		rightLine++
+		cursor++
+	}
+
+	section := &gitdiff.DiffSection{FileName: file.path, Lines: lines}
+	diffFile := &gitdiff.DiffFile{
+		Name:      file.path,
+		OldName:   file.path,
+		NameHash:  git.HashFilePathForWebUI(file.path),
+		Type:      gitdiff.DiffFileChange,
+		Mode:      file.mode,
+		OldMode:   file.mode,
+		IsDeleted: file.isDeleted,
+		IsCreated: file.isCreated,
+		Sections:  []*gitdiff.DiffSection{section},
+	}
+	for _, line := range lines {
+		switch line.Type {
+		case gitdiff.DiffLineAdd:
+			diffFile.Addition++
+		case gitdiff.DiffLineDel:
+			diffFile.Deletion++
+		}
+	}
+	return diffFile
+}
+
+// applyConflictTexts builds the resolved file content by replacing Git conflict
+// marker blocks with the text the user confirmed in the editor. Content outside
+// marker blocks is the actual merge result and is preserved, including hunks Git
+// merged automatically within an otherwise conflicted file.
+func applyConflictTexts(mergedContent []byte, groups []conflictGroup, texts map[int]string) []byte {
+	mergedLines := splitFileLines(mergedContent)
 
 	// Process in reverse so earlier indices stay valid after splice operations.
 	for i := len(groups) - 1; i >= 0; i-- {
@@ -1772,16 +1863,16 @@ func applyConflictTexts(headContent []byte, groups []conflictGroup, texts map[in
 		if trimmed := strings.TrimRight(text, "\n"); trimmed != "" {
 			resolvedLines = strings.Split(trimmed, "\n")
 		}
-		hStart := splices[i].start
-		hEnd := min(splices[i].end, len(headLines))
-		newHead := make([]string, 0, len(headLines)-hEnd+hStart+len(resolvedLines))
-		newHead = append(newHead, headLines[:hStart]...)
-		newHead = append(newHead, resolvedLines...)
-		newHead = append(newHead, headLines[hEnd:]...)
-		headLines = newHead
+		start := min(max(groups[i].markerStart, 0), len(mergedLines))
+		end := min(max(groups[i].markerEnd, start), len(mergedLines))
+		newLines := make([]string, 0, len(mergedLines)-end+start+len(resolvedLines))
+		newLines = append(newLines, mergedLines[:start]...)
+		newLines = append(newLines, resolvedLines...)
+		newLines = append(newLines, mergedLines[end:]...)
+		mergedLines = newLines
 	}
 
-	return []byte(strings.Join(headLines, "\n"))
+	return []byte(strings.Join(mergedLines, "\n"))
 }
 
 // conflictResolutionRequest is the JSON body for POST /conflicts.
@@ -2003,18 +2094,6 @@ func SubmitConflictResolution(ctx *context.Context) {
 		return
 	}
 
-	headCommit, err := gitRepo.GetCommit(headCommitID)
-	if err != nil {
-		ctx.ServerError("GetCommit(head)", err)
-		releaser()
-		return
-	}
-	baseCommit, err := gitRepo.GetCommit(baseCommitID)
-	if err != nil {
-		ctx.ServerError("GetCommit(base)", err)
-		releaser()
-		return
-	}
 	// Resolve each conflicted file and collect the resulting content.
 	type resolvedFile struct {
 		path    string
@@ -2023,135 +2102,6 @@ func SubmitConflictResolution(ctx *context.Context) {
 		delete  bool
 	}
 	var resolvedFiles []resolvedFile
-
-	for _, fileReq := range req.Files {
-		if len(fileReq.Conflicts) == 0 {
-			ctx.PlainText(http.StatusBadRequest, "no conflicts provided for file: "+fileReq.Path)
-			releaser()
-			return
-		}
-
-		// Get the tree entry to preserve the file mode and handle delete conflicts.
-		headEntry, err := headCommit.GetTreeEntryByPath(fileReq.Path)
-		var headContent []byte
-		var fileMode string
-		headDeleted := false
-		if err != nil {
-			if !git.IsErrNotExist(err) {
-				ctx.ServerError("GetTreeEntryByPath(head)", err)
-				releaser()
-				return
-			}
-			// Delete conflict: the head side removed this file.
-			// Use empty content as the starting point; the user's resolution
-			// (choosing the base version) will be applied over it.
-			headDeleted = true
-			fileMode = git.EntryModeBlob.String()
-		} else {
-			entryMode := headEntry.Mode()
-			if entryMode != git.EntryModeBlob && entryMode != git.EntryModeExec {
-				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("unsupported file mode for %s: only regular files can be resolved in the browser", fileReq.Path))
-				releaser()
-				return
-			}
-			fileMode = entryMode.String()
-			headReader, err := headEntry.Blob().DataAsync()
-			if err != nil {
-				ctx.ServerError("headBlob.DataAsync", err)
-				releaser()
-				return
-			}
-			headContent, err = io.ReadAll(headReader)
-			headReader.Close()
-			if err != nil {
-				ctx.ServerError("read head blob", err)
-				releaser()
-				return
-			}
-		}
-		baseDeleted := false
-		if _, err := baseCommit.GetTreeEntryByPath(fileReq.Path); err != nil {
-			if !git.IsErrNotExist(err) {
-				ctx.ServerError("GetTreeEntryByPath(base)", err)
-				releaser()
-				return
-			}
-			baseDeleted = true
-		}
-
-		// Compute diff to identify which line ranges in HEAD correspond to each conflict
-		submitWhitespaceBehavior, _ := ctx.Data["WhitespaceBehavior"].(string)
-		diff, err := gitdiff.GetDiffForRender(ctx, ctx.Repo.RepoLink, gitRepo, &gitdiff.DiffOptions{
-			BeforeCommitID:     baseCommitID,
-			AfterCommitID:      headCommitID,
-			MaxLines:           -1,
-			MaxLineCharacters:  setting.Git.MaxGitDiffLineCharacters,
-			MaxFiles:           1,
-			WhitespaceBehavior: gitdiff.GetWhitespaceFlag(submitWhitespaceBehavior),
-		}, fileReq.Path)
-		if err != nil {
-			ctx.ServerError("GetDiff", err)
-			releaser()
-			return
-		}
-
-		var diffFile *gitdiff.DiffFile
-		for _, f := range diff.Files {
-			if f.Name == fileReq.Path || f.OldName == fileReq.Path {
-				diffFile = f
-				break
-			}
-		}
-
-		var resolved []byte
-		deleteFile := false
-		if diffFile == nil {
-			resolved = headContent
-		} else {
-			groups := extractConflictGroups(diffFile)
-			texts := make(map[int]string, len(fileReq.Conflicts))
-			for _, c := range fileReq.Conflicts {
-				if c.Index < 0 || c.Index >= len(groups) {
-					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("conflict index %d out of range for %s", c.Index, fileReq.Path))
-					releaser()
-					return
-				}
-				if c.DeleteFile {
-					if strings.TrimRight(c.Text, "\n") != "" {
-						ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("delete resolution for %s must not include file content", fileReq.Path))
-						releaser()
-						return
-					}
-					deleteFile = true
-				}
-				texts[c.Index] = c.Text
-			}
-			for i := range groups {
-				if _, ok := texts[i]; !ok {
-					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("missing resolution for conflict %d in %s", i, fileReq.Path))
-					releaser()
-					return
-				}
-			}
-			if deleteFile {
-				if !headDeleted && !baseDeleted {
-					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("delete resolution is only valid for a modify/delete conflict: %s", fileReq.Path))
-					releaser()
-					return
-				}
-			} else {
-				resolved = applyConflictTexts(headContent, groups, texts)
-			}
-		}
-
-		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, mode: fileMode, content: resolved, delete: deleteFile})
-	}
-
-	if len(resolvedFiles) == 0 {
-		ctx.Status(http.StatusOK)
-		releaser()
-		return
-	}
 
 	// Create a merge commit on the head branch. The temporary repository starts at
 	// the PR head, performs a real no-commit merge of the base branch, then replaces
@@ -2214,12 +2164,69 @@ func SubmitConflictResolution(ctx *context.Context) {
 			return
 		}
 	}
-	for _, rf := range resolvedFiles {
-		if _, ok := unmergedFileSet[rf.path]; !ok {
-			ctx.PlainText(http.StatusBadRequest, "submitted file is no longer conflicted: "+rf.path)
+	unmergedByPath := entriesByPath(unmergedEntries)
+	for _, fileReq := range req.Files {
+		if len(fileReq.Conflicts) == 0 {
+			ctx.PlainText(http.StatusBadRequest, "no conflicts provided for file: "+fileReq.Path)
 			releaser()
 			return
 		}
+		if _, ok := unmergedFileSet[fileReq.Path]; !ok {
+			ctx.PlainText(http.StatusBadRequest, "submitted file is no longer conflicted: "+fileReq.Path)
+			releaser()
+			return
+		}
+
+		mergeConflictFile, err := buildMergeConflictFile(ctx, t, fileReq.Path, unmergedByPath[fileReq.Path], int64(setting.UI.MaxDisplayFileSize))
+		if err != nil {
+			ctx.PlainText(http.StatusBadRequest, err.Error())
+			releaser()
+			return
+		}
+
+		resolved := mergeConflictFile.content
+		deleteFile := false
+		texts := make(map[int]string, len(fileReq.Conflicts))
+		for _, c := range fileReq.Conflicts {
+			if c.Index < 0 || c.Index >= len(mergeConflictFile.groups) {
+				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("conflict index %d out of range for %s", c.Index, fileReq.Path))
+				releaser()
+				return
+			}
+			if c.DeleteFile {
+				if strings.TrimRight(c.Text, "\n") != "" {
+					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("delete resolution for %s must not include file content", fileReq.Path))
+					releaser()
+					return
+				}
+				deleteFile = true
+			}
+			texts[c.Index] = c.Text
+		}
+		for i := range mergeConflictFile.groups {
+			if _, ok := texts[i]; !ok {
+				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("missing resolution for conflict %d in %s", i, fileReq.Path))
+				releaser()
+				return
+			}
+		}
+		if deleteFile {
+			if !mergeConflictFile.isDeleted && !mergeConflictFile.isCreated {
+				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("delete resolution is only valid for a modify/delete conflict: %s", fileReq.Path))
+				releaser()
+				return
+			}
+		} else {
+			resolved = applyConflictTexts(mergeConflictFile.content, mergeConflictFile.groups, texts)
+		}
+
+		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, mode: mergeConflictFile.mode, content: resolved, delete: deleteFile})
+	}
+
+	if len(resolvedFiles) == 0 {
+		ctx.Status(http.StatusOK)
+		releaser()
+		return
 	}
 
 	for _, rf := range resolvedFiles {
