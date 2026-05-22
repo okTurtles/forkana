@@ -1507,7 +1507,7 @@ func ViewPullConflicts(ctx *context.Context) {
 		if !conflictedFileSet[file] {
 			continue
 		}
-		mergeConflictFile, err := buildMergeConflictFile(ctx, t, file, unmergedByPath[file], int64(setting.UI.MaxDisplayFileSize))
+		mergeConflictFile, err := buildMergeConflictFile(ctx, t, file, unmergedByPath[file], setting.UI.MaxDisplayFileSize)
 		if err != nil {
 			ctx.Data["DiffNotAvailable"] = true
 			ctx.Data["ConflictResolutionUnavailable"] = true
@@ -1669,7 +1669,7 @@ func parseMergeConflictGroups(content []byte) ([]conflictGroup, error) {
 			}
 		}
 		if i >= len(lines) || !strings.HasPrefix(lines[i], "=======") {
-			return nil, fmt.Errorf("malformed conflict markers: missing separator")
+			return nil, errors.New("malformed conflict markers: missing separator")
 		}
 
 		i++
@@ -1678,7 +1678,7 @@ func parseMergeConflictGroups(content []byte) ([]conflictGroup, error) {
 			i++
 		}
 		if i >= len(lines) {
-			return nil, fmt.Errorf("malformed conflict markers: missing end marker")
+			return nil, errors.New("malformed conflict markers: missing end marker")
 		}
 		baseLines := append([]string(nil), lines[baseStart:i]...)
 		groups = append(groups, conflictGroup{
@@ -1775,7 +1775,7 @@ func buildMergeConflictFile(ctx *context.Context, t *files_service.TemporaryUplo
 
 func appendConflictDiffLines(lines []*gitdiff.DiffLine, baseLines, headLines []string, leftLine, rightLine *int) []*gitdiff.DiffLine {
 	maxLines := max(len(baseLines), len(headLines))
-	for i := 0; i < maxLines; i++ {
+	for i := range maxLines {
 		var delLine *gitdiff.DiffLine
 		if i < len(baseLines) {
 			delLine = &gitdiff.DiffLine{LeftIdx: *leftLine, Type: gitdiff.DiffLineDel, Content: "-" + baseLines[i], Match: -1}
@@ -1800,29 +1800,82 @@ func appendConflictDiffLines(lines []*gitdiff.DiffLine, baseLines, headLines []s
 	return lines
 }
 
-func buildConflictDiffFile(file *mergeConflictFile) *gitdiff.DiffFile {
-	contentLines := splitFileLines(file.content)
-	leftLine, rightLine := 1, 1
-	lines := make([]*gitdiff.DiffLine, 0, len(contentLines))
-	cursor := 0
-	for _, group := range file.groups {
-		for cursor < group.markerStart && cursor < len(contentLines) {
-			lines = append(lines, &gitdiff.DiffLine{LeftIdx: leftLine, RightIdx: rightLine, Type: gitdiff.DiffLinePlain, Content: " " + contentLines[cursor]})
-			leftLine++
-			rightLine++
-			cursor++
+type conflictDiffWindow struct {
+	start  int
+	end    int
+	groups []conflictGroup
+}
+
+func buildConflictDiffWindows(groups []conflictGroup, contentLineCount int) []conflictDiffWindow {
+	const contextLines = 3
+
+	windows := make([]conflictDiffWindow, 0, len(groups))
+	for _, group := range groups {
+		start := max(group.markerStart-contextLines, 0)
+		end := min(group.markerEnd+contextLines, contentLineCount)
+		if len(windows) > 0 && start <= windows[len(windows)-1].end {
+			last := &windows[len(windows)-1]
+			last.end = max(last.end, end)
+			last.groups = append(last.groups, group)
+			continue
 		}
-		lines = appendConflictDiffLines(lines, group.baseLines, group.headLines, &leftLine, &rightLine)
+		windows = append(windows, conflictDiffWindow{start: start, end: end, groups: []conflictGroup{group}})
+	}
+	return windows
+}
+
+func conflictDiffLineNumbersAt(contentIndex int, groups []conflictGroup) (leftLine, rightLine int) {
+	leftLine, rightLine = 1, 1
+	cursor := 0
+	for _, group := range groups {
+		if contentIndex <= group.markerStart {
+			plainLines := max(contentIndex-cursor, 0)
+			return leftLine + plainLines, rightLine + plainLines
+		}
+
+		plainLines := max(group.markerStart-cursor, 0)
+		leftLine += plainLines
+		rightLine += plainLines
+
+		if contentIndex < group.markerEnd {
+			return leftLine, rightLine
+		}
+
+		leftLine += len(group.baseLines)
+		rightLine += len(group.headLines)
 		cursor = group.markerEnd
 	}
-	for cursor < len(contentLines) {
-		lines = append(lines, &gitdiff.DiffLine{LeftIdx: leftLine, RightIdx: rightLine, Type: gitdiff.DiffLinePlain, Content: " " + contentLines[cursor]})
-		leftLine++
-		rightLine++
-		cursor++
+
+	plainLines := max(contentIndex-cursor, 0)
+	return leftLine + plainLines, rightLine + plainLines
+}
+
+func appendConflictPlainLines(lines []*gitdiff.DiffLine, contentLines []string, start, end int, leftLine, rightLine *int) []*gitdiff.DiffLine {
+	for i := start; i < end && i < len(contentLines); i++ {
+		lines = append(lines, &gitdiff.DiffLine{LeftIdx: *leftLine, RightIdx: *rightLine, Type: gitdiff.DiffLinePlain, Content: " " + contentLines[i]})
+		(*leftLine)++
+		(*rightLine)++
+	}
+	return lines
+}
+
+func buildConflictDiffFile(file *mergeConflictFile) *gitdiff.DiffFile {
+	contentLines := splitFileLines(file.content)
+	windows := buildConflictDiffWindows(file.groups, len(contentLines))
+	sections := make([]*gitdiff.DiffSection, 0, len(windows))
+	for _, window := range windows {
+		leftLine, rightLine := conflictDiffLineNumbersAt(window.start, file.groups)
+		lines := make([]*gitdiff.DiffLine, 0, window.end-window.start)
+		cursor := window.start
+		for _, group := range window.groups {
+			lines = appendConflictPlainLines(lines, contentLines, cursor, group.markerStart, &leftLine, &rightLine)
+			lines = appendConflictDiffLines(lines, group.baseLines, group.headLines, &leftLine, &rightLine)
+			cursor = group.markerEnd
+		}
+		lines = appendConflictPlainLines(lines, contentLines, cursor, window.end, &leftLine, &rightLine)
+		sections = append(sections, &gitdiff.DiffSection{FileName: file.path, Lines: lines})
 	}
 
-	section := &gitdiff.DiffSection{FileName: file.path, Lines: lines}
 	diffFile := &gitdiff.DiffFile{
 		Name:      file.path,
 		OldName:   file.path,
@@ -1832,14 +1885,16 @@ func buildConflictDiffFile(file *mergeConflictFile) *gitdiff.DiffFile {
 		OldMode:   file.mode,
 		IsDeleted: file.isDeleted,
 		IsCreated: file.isCreated,
-		Sections:  []*gitdiff.DiffSection{section},
+		Sections:  sections,
 	}
-	for _, line := range lines {
-		switch line.Type {
-		case gitdiff.DiffLineAdd:
-			diffFile.Addition++
-		case gitdiff.DiffLineDel:
-			diffFile.Deletion++
+	for _, section := range sections {
+		for _, line := range section.Lines {
+			switch line.Type {
+			case gitdiff.DiffLineAdd:
+				diffFile.Addition++
+			case gitdiff.DiffLineDel:
+				diffFile.Deletion++
+			}
 		}
 	}
 	return diffFile
@@ -2177,7 +2232,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 			return
 		}
 
-		mergeConflictFile, err := buildMergeConflictFile(ctx, t, fileReq.Path, unmergedByPath[fileReq.Path], int64(setting.UI.MaxDisplayFileSize))
+		mergeConflictFile, err := buildMergeConflictFile(ctx, t, fileReq.Path, unmergedByPath[fileReq.Path], setting.UI.MaxDisplayFileSize)
 		if err != nil {
 			ctx.PlainText(http.StatusBadRequest, err.Error())
 			releaser()
@@ -2212,7 +2267,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 		}
 		if deleteFile {
 			if !mergeConflictFile.isDeleted && !mergeConflictFile.isCreated {
-				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("delete resolution is only valid for a modify/delete conflict: %s", fileReq.Path))
+				ctx.PlainText(http.StatusBadRequest, "delete resolution is only valid for a modify/delete conflict: "+fileReq.Path)
 				releaser()
 				return
 			}

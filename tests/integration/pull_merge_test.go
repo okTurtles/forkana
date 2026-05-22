@@ -724,7 +724,7 @@ func TestSubmitConflictResolutionPreservesAutoMergedHunksInConflictedFile(t *tes
 			Files: []*files_service.ChangeRepoFile{{
 				Operation:     "update",
 				TreePath:      "README.md",
-				ContentReader: strings.NewReader("top\noriginal conflict\nmiddle\nbase editable\nbottom\n"),
+				ContentReader: strings.NewReader("far before clipped\nctx before 3\nctx before 2\nctx before 1\noriginal conflict\nctx after 1\nctx after 2\nctx after 3\nfar gap before auto\nbase editable\nfar gap after auto\n"),
 			}},
 			Message:   "Set common README content",
 			OldBranch: "main",
@@ -736,7 +736,7 @@ func TestSubmitConflictResolutionPreservesAutoMergedHunksInConflictedFile(t *tes
 			Files: []*files_service.ChangeRepoFile{{
 				Operation:     "update",
 				TreePath:      "README.md",
-				ContentReader: strings.NewReader("top\nhead conflict\nmiddle\nbase editable\nbottom\n"),
+				ContentReader: strings.NewReader("far before clipped\nctx before 3\nctx before 2\nctx before 1\nhead conflict\nctx after 1\nctx after 2\nctx after 3\nfar gap before auto\nbase editable\nfar gap after auto\n"),
 			}},
 			Message:   "Change conflict line on head branch",
 			OldBranch: "main",
@@ -748,7 +748,7 @@ func TestSubmitConflictResolutionPreservesAutoMergedHunksInConflictedFile(t *tes
 			Files: []*files_service.ChangeRepoFile{{
 				Operation:     "update",
 				TreePath:      "README.md",
-				ContentReader: strings.NewReader("top\nbase conflict\nmiddle\nbase auto-merged\nbottom\n"),
+				ContentReader: strings.NewReader("far before clipped\nctx before 3\nctx before 2\nctx before 1\nbase conflict\nctx after 1\nctx after 2\nctx after 3\nfar gap before auto\nbase auto-merged\nfar gap after auto\n"),
 			}},
 			Message:   "Change conflict line and separate base hunk",
 			OldBranch: "main",
@@ -790,7 +790,10 @@ func TestSubmitConflictResolutionPreservesAutoMergedHunksInConflictedFile(t *tes
 		session := loginUser(t, user.Name)
 		conflictsURL := fmt.Sprintf("/%s/%s/pulls/%d/conflicts", user.Name, baseRepo.Name, issue.Index)
 		resp := session.MakeRequest(t, NewRequest(t, http.MethodGet, conflictsURL), http.StatusOK)
-		assert.Contains(t, resp.Body.String(), "base auto-merged")
+		assert.Contains(t, resp.Body.String(), "ctx before 3")
+		assert.Contains(t, resp.Body.String(), "ctx after 3")
+		assert.NotContains(t, resp.Body.String(), "far before clipped")
+		assert.NotContains(t, resp.Body.String(), "base auto-merged")
 		csrf := NewHTMLParser(t, resp.Body).GetCSRF()
 
 		req := NewRequestWithJSON(t, http.MethodPost, conflictsURL, map[string]any{
@@ -814,7 +817,7 @@ func TestSubmitConflictResolutionPreservesAutoMergedHunksInConflictedFile(t *tes
 
 		readmeContent, err := mergeCommit.GetFileContent("README.md", 0)
 		require.NoError(t, err)
-		assert.Equal(t, "top\nmanual resolution\nmiddle\nbase auto-merged\nbottom\n", readmeContent)
+		assert.Equal(t, "far before clipped\nctx before 3\nctx before 2\nctx before 1\nmanual resolution\nctx after 1\nctx after 2\nctx after 3\nfar gap before auto\nbase auto-merged\nfar gap after auto\n", readmeContent)
 	})
 }
 
