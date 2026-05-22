@@ -1934,6 +1934,7 @@ func applyConflictTexts(mergedContent []byte, groups []conflictGroup, texts map[
 type conflictResolutionRequest struct {
 	BaseCommitID string `json:"baseCommitID"` // base branch HEAD at page-render time; used to detect stale submissions
 	HeadCommitID string `json:"headCommitID"` // head branch HEAD at page-render time; used to detect stale submissions
+	Whitespace   string `json:"whitespace"`
 	Files        []struct {
 		Path      string `json:"path"`
 		Conflicts []struct {
@@ -2085,6 +2086,17 @@ func SubmitConflictResolution(ctx *context.Context) {
 		ctx.PlainText(http.StatusBadRequest, "no files provided")
 		return
 	}
+
+	whitespace := req.Whitespace
+	switch whitespace {
+	case "", "show-all", "ignore-all", "ignore-change", "ignore-eol":
+		// known, accepted as-is
+	default:
+		log.Warn("SubmitConflictResolution: unknown whitespace mode %q for CR #%d, normalising to show-all", whitespace, pull.Index)
+		whitespace = "show-all"
+	}
+	_ = whitespace // marker-based parser does not consume whitespace flags; retained for future use
+
 	requestedFileSet := make(map[string]struct{}, len(req.Files))
 	for _, fileReq := range req.Files {
 		requestedFileSet[fileReq.Path] = struct{}{}
