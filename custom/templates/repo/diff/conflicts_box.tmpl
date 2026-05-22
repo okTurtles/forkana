@@ -27,7 +27,7 @@
 		<div id="diff-container">
 			<div id="diff-file-boxes" class="sixteen wide column conflict-diff-file-boxes" data-base-commit-id="{{$.BeforeCommitID}}" data-head-commit-id="{{$.AfterCommitID}}">
 				{{range $i, $file := .Diff.Files}}
-					<div class="diff-file-box file-content {{TabSizeClass $.Editorconfig $file.Name}} tw-mt-0" id="diff-{{$file.NameHash}}" data-old-filename="{{$file.OldName}}" data-new-filename="{{$file.Name}}">
+					<div class="diff-file-box file-content {{TabSizeClass $.Editorconfig $file.Name}} tw-mt-0" id="diff-{{$file.NameHash}}" data-old-filename="{{$file.OldName}}" data-new-filename="{{$file.Name}}" data-file-delete-choice="{{if $file.IsDeleted}}use{{else if $file.IsCreated}}keep{{else}}none{{end}}">
 						<div class="diff-file-body ui attached unstackable table segment">
 							<div id="diff-source-{{$file.NameHash}}" class="file-body file-code unicode-escaped code-diff code-diff-split">
 								{{if or $file.IsIncomplete $file.IsBin}}

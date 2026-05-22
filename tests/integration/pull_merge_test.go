@@ -707,6 +707,118 @@ func TestSubmitConflictResolutionPreservesBaseOnlyChanges(t *testing.T) {
 	})
 }
 
+func TestSubmitConflictResolutionCanDeleteModifyDeleteConflict(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+		baseRepo, err := repo_service.CreateRepository(t.Context(), user, user, repo_service.CreateRepoOptions{
+			Name:          "conflict-ui-delete-file",
+			Description:   "Temporary repo",
+			AutoInit:      true,
+			Readme:        "Default",
+			DefaultBranch: "main",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{{
+				Operation:     "create",
+				TreePath:      "article.md",
+				ContentReader: strings.NewReader("original article\n"),
+			}},
+			Message:   "Create article",
+			OldBranch: "main",
+			NewBranch: "main",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{{
+				Operation: "delete",
+				TreePath:  "article.md",
+			}},
+			Message:   "Delete article on head branch",
+			OldBranch: "main",
+			NewBranch: "feature-delete-article",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{{
+				Operation:     "update",
+				TreePath:      "article.md",
+				ContentReader: strings.NewReader("updated live article\n"),
+			}},
+			Message:   "Update article on base branch",
+			OldBranch: "main",
+			NewBranch: "main",
+		})
+		require.NoError(t, err)
+
+		pullIssue := &issues_model.Issue{
+			RepoID:   baseRepo.ID,
+			Title:    "PR with delete-side conflict resolution",
+			PosterID: user.ID,
+			Poster:   user,
+			IsPull:   true,
+		}
+		pullRequest := &issues_model.PullRequest{
+			HeadRepoID: baseRepo.ID,
+			BaseRepoID: baseRepo.ID,
+			HeadBranch: "feature-delete-article",
+			BaseBranch: "main",
+			HeadRepo:   baseRepo,
+			BaseRepo:   baseRepo,
+			Type:       issues_model.PullRequestGitea,
+		}
+		require.NoError(t, pull_service.NewPullRequest(t.Context(), &pull_service.NewPullRequestOptions{Repo: baseRepo, Issue: pullIssue, PullRequest: pullRequest}))
+
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{Title: "PR with delete-side conflict resolution"})
+		require.NoError(t, issue.LoadPullRequest(t.Context()))
+		require.Equal(t, issues_model.PullRequestStatusConflict, issue.PullRequest.Status)
+		require.Equal(t, []string{"article.md"}, issue.PullRequest.ConflictedFiles)
+
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), baseRepo)
+		require.NoError(t, err)
+		headCommitID, err := gitRepo.GetRefCommitID(issue.PullRequest.GetGitHeadRefName())
+		require.NoError(t, err)
+		baseCommitID, err := gitRepo.GetBranchCommitID("main")
+		require.NoError(t, err)
+		gitRepo.Close()
+
+		session := loginUser(t, user.Name)
+		conflictsURL := fmt.Sprintf("/%s/%s/pulls/%d/conflicts", user.Name, baseRepo.Name, issue.Index)
+		resp := session.MakeRequest(t, NewRequest(t, http.MethodGet, conflictsURL), http.StatusOK)
+		assert.Contains(t, resp.Body.String(), `data-file-delete-choice="use"`)
+		csrf := NewHTMLParser(t, resp.Body).GetCSRF()
+
+		req := NewRequestWithJSON(t, http.MethodPost, conflictsURL, map[string]any{
+			"baseCommitID": baseCommitID,
+			"headCommitID": headCommitID,
+			"files": []map[string]any{{
+				"path": "article.md",
+				"conflicts": []map[string]any{{
+					"index":      0,
+					"text":       "",
+					"deleteFile": true,
+				}},
+			}},
+		}).SetHeader("X-Csrf-Token", csrf)
+		session.MakeRequest(t, req, http.StatusOK)
+
+		gitRepo, err = gitrepo.OpenRepository(t.Context(), baseRepo)
+		require.NoError(t, err)
+		defer gitRepo.Close()
+		mergeCommit, err := gitRepo.GetBranchCommit("feature-delete-article")
+		require.NoError(t, err)
+		require.Equal(t, 2, mergeCommit.ParentCount())
+
+		_, err = mergeCommit.GetTreeEntryByPath("article.md")
+		require.Error(t, err)
+		assert.True(t, git.IsErrNotExist(err), "expected article.md to be deleted, got %v", err)
+	})
+}
+
 func TestPullRetargetChildOnBranchDelete(t *testing.T) {
 	t.Skip("Skipping for Forkana - needs investigation")
 	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {

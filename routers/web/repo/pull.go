@@ -1791,8 +1791,9 @@ type conflictResolutionRequest struct {
 	Files        []struct {
 		Path      string `json:"path"`
 		Conflicts []struct {
-			Index int    `json:"index"`
-			Text  string `json:"text"` // resolved text from the editor
+			Index      int    `json:"index"`
+			Text       string `json:"text"`                 // resolved text from the editor
+			DeleteFile bool   `json:"deleteFile,omitempty"` // true when the user chose the deleted side of a modify/delete conflict
 		} `json:"conflicts"`
 	} `json:"files"`
 }
@@ -2008,11 +2009,18 @@ func SubmitConflictResolution(ctx *context.Context) {
 		releaser()
 		return
 	}
+	baseCommit, err := gitRepo.GetCommit(baseCommitID)
+	if err != nil {
+		ctx.ServerError("GetCommit(base)", err)
+		releaser()
+		return
+	}
 	// Resolve each conflicted file and collect the resulting content.
 	type resolvedFile struct {
 		path    string
 		mode    string // git object mode, e.g. "100644" or "100755"
 		content []byte
+		delete  bool
 	}
 	var resolvedFiles []resolvedFile
 
@@ -2027,6 +2035,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 		headEntry, err := headCommit.GetTreeEntryByPath(fileReq.Path)
 		var headContent []byte
 		var fileMode string
+		headDeleted := false
 		if err != nil {
 			if !git.IsErrNotExist(err) {
 				ctx.ServerError("GetTreeEntryByPath(head)", err)
@@ -2036,6 +2045,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 			// Delete conflict: the head side removed this file.
 			// Use empty content as the starting point; the user's resolution
 			// (choosing the base version) will be applied over it.
+			headDeleted = true
 			fileMode = git.EntryModeBlob.String()
 		} else {
 			entryMode := headEntry.Mode()
@@ -2058,6 +2068,15 @@ func SubmitConflictResolution(ctx *context.Context) {
 				releaser()
 				return
 			}
+		}
+		baseDeleted := false
+		if _, err := baseCommit.GetTreeEntryByPath(fileReq.Path); err != nil {
+			if !git.IsErrNotExist(err) {
+				ctx.ServerError("GetTreeEntryByPath(base)", err)
+				releaser()
+				return
+			}
+			baseDeleted = true
 		}
 
 		// Compute diff to identify which line ranges in HEAD correspond to each conflict
@@ -2085,6 +2104,7 @@ func SubmitConflictResolution(ctx *context.Context) {
 		}
 
 		var resolved []byte
+		deleteFile := false
 		if diffFile == nil {
 			resolved = headContent
 		} else {
@@ -2096,6 +2116,14 @@ func SubmitConflictResolution(ctx *context.Context) {
 					releaser()
 					return
 				}
+				if c.DeleteFile {
+					if strings.TrimRight(c.Text, "\n") != "" {
+						ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("delete resolution for %s must not include file content", fileReq.Path))
+						releaser()
+						return
+					}
+					deleteFile = true
+				}
 				texts[c.Index] = c.Text
 			}
 			for i := range groups {
@@ -2105,10 +2133,18 @@ func SubmitConflictResolution(ctx *context.Context) {
 					return
 				}
 			}
-			resolved = applyConflictTexts(headContent, groups, texts)
+			if deleteFile {
+				if !headDeleted && !baseDeleted {
+					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("delete resolution is only valid for a modify/delete conflict: %s", fileReq.Path))
+					releaser()
+					return
+				}
+			} else {
+				resolved = applyConflictTexts(headContent, groups, texts)
+			}
 		}
 
-		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, mode: fileMode, content: resolved})
+		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, mode: fileMode, content: resolved, delete: deleteFile})
 	}
 
 	if len(resolvedFiles) == 0 {
@@ -2187,6 +2223,14 @@ func SubmitConflictResolution(ctx *context.Context) {
 	}
 
 	for _, rf := range resolvedFiles {
+		if rf.delete {
+			if err := t.RemoveFilesFromIndex(ctx, rf.path); err != nil {
+				ctx.ServerError("RemoveFilesFromIndex", err)
+				releaser()
+				return
+			}
+			continue
+		}
 		blobHash, err := t.HashObjectAndWrite(ctx, bytes.NewReader(rf.content))
 		if err != nil {
 			ctx.ServerError("HashObjectAndWrite", err)

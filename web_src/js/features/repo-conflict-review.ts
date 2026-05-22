@@ -61,6 +61,7 @@ export async function initConflictReview() {
  */
 async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLElement[]> {
   const rows = Array.from(table.querySelectorAll<HTMLTableRowElement>('tbody tr, tr'));
+  const fileDeleteChoice = table.closest<HTMLElement>('.diff-file-box')?.getAttribute('data-file-delete-choice') ?? 'none';
   const conflictGroups: HTMLTableRowElement[][] = [];
   let currentGroup: HTMLTableRowElement[] = [];
 
@@ -226,7 +227,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
     wrapper.append(commentSection);
 
     // Setup event listeners for this wrapper
-    setupWrapperEvents(wrapper, baseText, headText);
+    setupWrapperEvents(wrapper, baseText, headText, fileDeleteChoice);
 
     wrappers.push(wrapper);
   }
@@ -385,7 +386,7 @@ function updateAllCounters() {
  * Keep this → pre-fills editor with base text; Use this → pre-fills with head text.
  * The editor content is what gets submitted as the resolved version.
  */
-function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: string) {
+function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: string, fileDeleteChoice: string) {
   const keepBtn = wrapper.querySelector<HTMLButtonElement>('.conflict-keep-btn');
   const useBtn = wrapper.querySelector<HTMLButtonElement>('.conflict-use-btn');
   const resolveBtn = wrapper.querySelector<HTMLButtonElement>('.conflict-resolve-btn');
@@ -393,9 +394,15 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
 
   const isResolveEnabled = () => Boolean(wrapper.getAttribute('data-choice'));
 
-  const fillEditor = (text: string) => {
+  const updateDeleteIntent = (choice: string | null, text: string) => {
+    const deletesFile = choice !== null && fileDeleteChoice === choice && text.replace(/\n+$/, '') === '';
+    wrapper.setAttribute('data-delete-file', String(deletesFile));
+  };
+
+  const fillEditor = (choice: string, text: string) => {
     const editor = getToastCommentEditor(toastContainer);
     if (editor) editor.value(text);
+    updateDeleteIntent(choice, text);
     if (resolveBtn) resolveBtn.disabled = !isResolveEnabled();
   };
 
@@ -403,19 +410,21 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
     keepBtn.classList.add('selected');
     useBtn?.classList.remove('selected');
     wrapper.setAttribute('data-choice', 'keep');
-    fillEditor(baseText);
+    fillEditor('keep', baseText);
   });
 
   useBtn?.addEventListener('click', () => {
     useBtn.classList.add('selected');
     keepBtn?.classList.remove('selected');
     wrapper.setAttribute('data-choice', 'use');
-    fillEditor(headText);
+    fillEditor('use', headText);
   });
 
   // Re-evaluate Resolve when the user edits the editor directly (choice already set)
   if (toastContainer) {
     toastContainer.addEventListener(EventEditorContentChanged, () => {
+      const choice = wrapper.getAttribute('data-choice');
+      updateDeleteIntent(choice, getToastCommentEditor(toastContainer)?.value() ?? '');
       if (resolveBtn) resolveBtn.disabled = !isResolveEnabled();
     });
   }
@@ -558,19 +567,20 @@ function initSubmitTracking() {
       if (btn.disabled) return;
 
       // Collect resolved editor text grouped by file
-      const fileMap = new Map<string, Array<{index: number; text: string}>>();
+      const fileMap = new Map<string, Array<{index: number; text: string; deleteFile?: boolean}>>();
       const allWrappers = document.querySelectorAll<HTMLElement>('.conflict-wrapper');
       for (const wrapper of allWrappers) {
         if (wrapper.getAttribute('data-resolved') !== 'true') continue;
         const conflictIndex = parseInt(wrapper.getAttribute('data-file-conflict-index') ?? '0');
         const toastContainer = wrapper.querySelector<HTMLElement>('.toast-comment-editor');
         const text = getToastCommentEditor(toastContainer)?.value() ?? '';
+        const deleteFile = wrapper.getAttribute('data-delete-file') === 'true';
         const fileBox = wrapper.closest<HTMLElement>('.diff-file-box');
         if (!fileBox) continue;
         const filePath = fileBox.getAttribute('data-new-filename') ?? '';
         if (!filePath) continue;
         if (!fileMap.has(filePath)) fileMap.set(filePath, []);
-        fileMap.get(filePath).push({index: conflictIndex, text});
+        fileMap.get(filePath).push({index: conflictIndex, text, ...(deleteFile ? {deleteFile} : {})});
       }
 
       const files = Array.from(fileMap, ([path, conflicts]) => ({
