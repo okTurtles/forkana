@@ -610,7 +610,7 @@ function initSubmitTracking() {
             msg = `HTTP ${resp.status}`;
           }
           setButtonsState(false);
-          showErrorToast(`Submit failed: ${msg}`);
+          showErrorToast(`Submit failed: ${msg}. Your resolutions have not been saved — you will need to redo them after reloading.`);
         }
       } catch {
         setButtonsState(false);
