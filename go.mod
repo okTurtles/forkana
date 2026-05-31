@@ -53,7 +53,7 @@ require (
 	github.com/go-ap/jsonld v0.0.0-20221030091449-f2a191312c73
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/cors v1.2.2
-	github.com/go-co-op/gocron v1.37.0
+	github.com/go-co-op/gocron/v2 v2.19.1
 	github.com/go-enry/go-enry/v2 v2.9.2
 	github.com/go-git/go-billy/v5 v5.6.2
 	github.com/go-git/go-git/v5 v5.16.2
@@ -195,7 +195,6 @@ require (
 	github.com/git-lfs/pktline v0.0.0-20230103162542-ca444d533ef1 // indirect
 	github.com/go-ap/errors v0.0.0-20250527110557-c8db454e53fd // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8-0.20250403174932-29230038a667 // indirect
-	github.com/go-co-op/gocron/v2 v2.19.1 // indirect
 	github.com/go-enry/go-oniguruma v1.2.1 // indirect
 	github.com/go-fed/httpsig v1.1.1-0.20201223112313-55836744818e // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
