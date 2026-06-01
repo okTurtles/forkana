@@ -112,7 +112,7 @@ export class ToastCommentEditor {
         },
       },
       widgetRules: [
-        createBase64WidgetRule(() => this.editor, () => this.editorWrapper),
+        createBase64WidgetRule(() => this.editor),
       ],
     });
 

@@ -60,7 +60,7 @@ export async function createToastEditor(
       },
     },
     widgetRules: [
-      createBase64WidgetRule(() => editor, () => container),
+      createBase64WidgetRule(() => editor),
     ],
   });
 

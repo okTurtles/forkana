@@ -18,7 +18,6 @@ export function formatBytes(bytes: number, decimals = 1): string {
 
 export function createBase64WidgetRule(
   getEditor: () => Editor | null,
-  getContainer: () => HTMLElement | null,
 ) {
   return {
     rule: /!\[([^\]]*)\]\((data:image\/[a-zA-Z+.-]+;base64,[A-Za-z0-9+/=\s]{50,})\)/,
@@ -30,14 +29,6 @@ export function createBase64WidgetRule(
           isWysiwyg = editor.isWysiwygMode();
         }
       } catch {}
-
-      if (!isWysiwyg) {
-        const container = getContainer();
-        const activeTab = container?.querySelector('.toastui-editor-mode-switch .tab-item.active');
-        if (activeTab && (activeTab.textContent?.includes('Visual') || activeTab.textContent?.includes('WYSIWYG'))) {
-          isWysiwyg = true;
-        }
-      }
 
       const match = /!\[([^\]]*)\]\((data:image\/[a-zA-Z+.-]+;base64,[A-Za-z0-9+/=\s]+)\)/.exec(text);
       const altText = match ? match[1] : '';
