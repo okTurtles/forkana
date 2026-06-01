@@ -46,6 +46,9 @@ export async function initConflictReview() {
 
   // Setup submit button tracking
   initSubmitTracking();
+
+  // Check for and offer to restore draft
+  checkForDraft();
 }
 
 /**
@@ -420,6 +423,7 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
     useBtn?.classList.remove('selected');
     wrapper.setAttribute('data-choice', 'keep');
     fillEditor('keep', baseText);
+    saveDraft();
   });
 
   useBtn?.addEventListener('click', () => {
@@ -427,6 +431,7 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
     keepBtn?.classList.remove('selected');
     wrapper.setAttribute('data-choice', 'use');
     fillEditor('use', headText);
+    saveDraft();
   });
 
   // Re-evaluate Resolve when the user edits the editor directly (choice already set)
@@ -435,6 +440,7 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
       const choice = wrapper.getAttribute('data-choice');
       updateDeleteIntent(choice, getToastCommentEditor(toastContainer)?.value() ?? '');
       if (resolveBtn) resolveBtn.disabled = !isResolveEnabled();
+      saveDraft();
     });
   }
 
@@ -476,6 +482,7 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
     }
 
     checkAllResolved();
+    saveDraft();
   };
 
   resolveBtn?.addEventListener('click', () => {
@@ -612,6 +619,7 @@ function initSubmitTracking() {
       try {
         const resp = await POST(window.location.pathname, {data: {baseCommitID, headCommitID, whitespace, files}});
         if (resp.ok) {
+          sessionStorage.removeItem(`conflict_draft_${window.location.pathname}_${headCommitID}`);
           window.location.href = issueLink;
         } else {
           let msg: string;
@@ -629,4 +637,110 @@ function initSubmitTracking() {
       }
     });
   }
+}
+
+function saveDraft() {
+  const diffBoxes = document.querySelector('#diff-file-boxes');
+  const headCommitID = diffBoxes?.getAttribute('data-head-commit-id') ?? '';
+  if (!headCommitID) return;
+
+  const allWrappers = document.querySelectorAll<HTMLElement>('.conflict-wrapper');
+  const draftData: Record<string, {choice: string | null; text: string; resolved: boolean}> = {};
+
+  for (const wrapper of allWrappers) {
+    const index = wrapper.getAttribute('data-conflict-index');
+    if (!index) continue;
+
+    const choice = wrapper.getAttribute('data-choice');
+    const resolved = wrapper.getAttribute('data-resolved') === 'true';
+    const toastContainer = wrapper.querySelector<HTMLElement>('.toast-comment-editor');
+    const text = getToastCommentEditor(toastContainer)?.value() ?? '';
+
+    if (choice || resolved) {
+      draftData[index] = {choice, text, resolved};
+    }
+  }
+
+  const key = `conflict_draft_${window.location.pathname}_${headCommitID}`;
+  if (Object.keys(draftData).length > 0) {
+    sessionStorage.setItem(key, JSON.stringify(draftData));
+  } else {
+    sessionStorage.removeItem(key);
+  }
+}
+
+function restoreDraft(draftData: Record<string, {choice: string | null; text: string; resolved: boolean}>) {
+  const allWrappers = document.querySelectorAll<HTMLElement>('.conflict-wrapper');
+
+  for (const wrapper of allWrappers) {
+    const index = wrapper.getAttribute('data-conflict-index');
+    if (!index || !draftData[index]) continue;
+
+    const draft = draftData[index];
+    const toastContainer = wrapper.querySelector<HTMLElement>('.toast-comment-editor');
+
+    // 1. Select the choice if any
+    if (draft.choice === 'keep') {
+      wrapper.querySelector<HTMLButtonElement>('.conflict-keep-btn')?.click();
+    } else if (draft.choice === 'use') {
+      wrapper.querySelector<HTMLButtonElement>('.conflict-use-btn')?.click();
+    }
+
+    // 2. Set the custom editor text if different
+    const editor = getToastCommentEditor(toastContainer);
+    if (editor && draft.text !== undefined && draft.text !== editor.value()) {
+      editor.value(draft.text);
+      toastContainer?.dispatchEvent(new Event(EventEditorContentChanged));
+    }
+
+    // 3. Mark as resolved if saved as resolved
+    const isCurrentlyResolved = wrapper.getAttribute('data-resolved') === 'true';
+    if (draft.resolved && !isCurrentlyResolved) {
+      wrapper.querySelector<HTMLButtonElement>('.conflict-resolve-btn')?.click();
+    }
+  }
+}
+
+function checkForDraft() {
+  const diffBoxes = document.querySelector('#diff-file-boxes');
+  const headCommitID = diffBoxes?.getAttribute('data-head-commit-id') ?? '';
+  if (!headCommitID) return;
+
+  const key = `conflict_draft_${window.location.pathname}_${headCommitID}`;
+  const draftRaw = sessionStorage.getItem(key);
+  if (!draftRaw) return;
+
+  let draftData: Record<string, {choice: string | null; text: string; resolved: boolean}>;
+  try {
+    draftData = JSON.parse(draftRaw);
+  } catch {
+    return;
+  }
+
+  if (Object.keys(draftData).length === 0) return;
+
+  // Render dismissible Semantic UI message box matching Gitea
+  const banner = document.createElement('div');
+  banner.className = 'ui info message conflict-draft-banner';
+  banner.style.marginBottom = '1.5em';
+  banner.innerHTML = `
+    <div class="header">Restore conflict resolution draft?</div>
+    <p>We found a saved draft of your resolutions for this conflict. Would you like to restore it?</p>
+    <div style="margin-top: 1em;">
+      <button type="button" class="ui tiny primary button conflict-draft-restore-btn">Restore Draft</button>
+      <button type="button" class="ui tiny basic button conflict-draft-dismiss-btn">Dismiss</button>
+    </div>
+  `;
+
+  banner.querySelector('.conflict-draft-restore-btn')?.addEventListener('click', () => {
+    restoreDraft(draftData);
+    banner.remove();
+  });
+
+  banner.querySelector('.conflict-draft-dismiss-btn')?.addEventListener('click', () => {
+    sessionStorage.removeItem(key);
+    banner.remove();
+  });
+
+  diffBoxes.prepend(banner);
 }
