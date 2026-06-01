@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/url"
 	"regexp"
+	"strings"
 
 	"code.gitea.io/gitea/modules/setting"
 
@@ -42,7 +43,35 @@ func (st *Sanitizer) createDefaultPolicy() *bluemonday.Policy {
 		}
 		policy.AllowURLSchemeWithCustomPolicy("javascript", disallowScheme)
 		policy.AllowURLSchemeWithCustomPolicy("vbscript", disallowScheme)
-		policy.AllowURLSchemeWithCustomPolicy("data", disallowScheme)
+
+		allowDataURIImages := false
+		for _, rule := range setting.ExternalSanitizerRules {
+			if rule.AllowDataURIImages {
+				allowDataURIImages = true
+				break
+			}
+		}
+		if !allowDataURIImages {
+			for _, renderer := range setting.ExternalMarkupRenderers {
+				for _, rule := range renderer.MarkupSanitizerRules {
+					if rule.AllowDataURIImages {
+						allowDataURIImages = true
+						break
+					}
+				}
+				if allowDataURIImages {
+					break
+				}
+			}
+		}
+
+		if allowDataURIImages {
+			policy.AllowURLSchemeWithCustomPolicy("data", func(u *url.URL) bool {
+				return strings.HasPrefix(u.Opaque, "image/")
+			})
+		} else {
+			policy.AllowURLSchemeWithCustomPolicy("data", disallowScheme)
+		}
 	}
 
 	// Allow classes for org mode list item status.

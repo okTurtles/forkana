@@ -7,6 +7,7 @@ package markup
 import (
 	"testing"
 
+	"code.gitea.io/gitea/modules/setting"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -71,4 +72,21 @@ func TestSanitizer(t *testing.T) {
 	for i := 0; i < len(testCases); i += 2 {
 		assert.Equal(t, testCases[i+1], string(Sanitize(testCases[i])))
 	}
+}
+
+func TestSanitizerAllowDataURIImages(t *testing.T) {
+	setting.ExternalSanitizerRules = []setting.MarkupSanitizerRule{
+		{
+			AllowDataURIImages: true,
+		},
+	}
+	ResetDefaultSanitizerForTesting()
+	defer func() {
+		setting.ExternalSanitizerRules = nil
+		ResetDefaultSanitizerForTesting()
+	}()
+
+	input := `<img src="data:image/png;base64,iVBORw0KGgoAAAANS">`
+	output := string(Sanitize(input))
+	assert.Contains(t, output, `src="data:image/png;base64,iVBORw0KGgoAAAANS"`)
 }

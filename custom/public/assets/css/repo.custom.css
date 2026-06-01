@@ -503,3 +503,38 @@
 @keyframes editor-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Base64 Image Widget in Toast UI Editor */
+.base64-image-widget {
+  background: var(--color-surface-muted, #f6f8fa) !important;
+  color: var(--color-text-secondary, #57606a) !important;
+  border: 1px solid var(--color-border, #d0d7de) !important;
+  border-radius: 6px !important;
+  font-family: var(--fonts-monospace, monospace) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 2px 6px !important;
+  margin: 0 2px !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.base64-image-widget:hover {
+  background: var(--color-surface-hover, #eaeef2) !important;
+  color: var(--color-text-primary, #24292f) !important;
+  border-color: var(--color-primary, #0969da) !important;
+}
+
+.base64-image-widget .base64-image-icon {
+  flex-shrink: 0;
+  color: var(--color-text-secondary, #57606a);
+}
+
+.base64-image-widget:hover .base64-image-icon {
+  color: var(--color-primary, #0969da);
+}
