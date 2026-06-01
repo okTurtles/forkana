@@ -160,11 +160,11 @@ export class ToastCommentEditor {
         e.preventDefault();
         e.stopPropagation();
         this.handleDroppedFiles(e.dataTransfer.files);
-      });
+      }, true);
       this.editorWrapper.addEventListener('dragover', (e: DragEvent) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
-      });
+      }, true);
 
       // Clean up markdown links when an attachment is removed from the Dropzone
       this.attachedDropzoneInst.on(DropzoneCustomEventRemovedFile, ({fileUuid}: {fileUuid: string}) => {
