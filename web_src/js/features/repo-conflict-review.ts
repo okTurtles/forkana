@@ -137,8 +137,16 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
     for (const row of group) {
       const oldLineNum = parseInt(row.querySelector('.lines-num-old')?.getAttribute('data-line-num') ?? '0');
       const newLineNum = parseInt(row.querySelector('.lines-num-new')?.getAttribute('data-line-num') ?? '0');
-      if (oldLineNum > 0) baseLines.push(row.querySelector('.lines-code-old .code-inner')?.textContent ?? '');
-      if (newLineNum > 0) headLines.push(row.querySelector('.lines-code-new .code-inner')?.textContent ?? '');
+      if (oldLineNum > 0) {
+        const cell = row.querySelector('.lines-code-old');
+        const content = cell?.getAttribute('data-line-content') ?? cell?.querySelector('.code-inner')?.textContent ?? '';
+        baseLines.push(content);
+      }
+      if (newLineNum > 0) {
+        const cell = row.querySelector('.lines-code-new');
+        const content = cell?.getAttribute('data-line-content') ?? cell?.querySelector('.code-inner')?.textContent ?? '';
+        headLines.push(content);
+      }
     }
     const baseText = baseLines.join('\n');
     const headText = headLines.join('\n');

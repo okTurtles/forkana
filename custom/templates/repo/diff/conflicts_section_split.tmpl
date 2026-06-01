@@ -36,7 +36,7 @@
 				<tr class="conflict-line del-code nl-{{$k}} ol-{{$k}}" data-line-type="conflict">
 					<td class="lines-num lines-num-old" data-line-num="{{$line.LeftIdx}}"><span>{{$line.LeftIdx}}</span></td>
 					<td class="lines-type-marker lines-type-marker-old del-code"><span class="tw-font-mono" data-type-marker="{{$line.GetLineTypeMarker}}"></span></td>
-					<td class="lines-code lines-code-old del-code">
+					<td class="lines-code lines-code-old del-code" data-line-content="{{slice $line.Content 1}}">
 						{{- if $line.LeftIdx -}}
 							{{- template "repo/diff/section_code" dict "diff" $leftDiff -}}
 						{{- else -}}
@@ -45,7 +45,7 @@
 					</td>
 					<td class="lines-num lines-num-new add-code" data-line-num="{{if $match.RightIdx}}{{$match.RightIdx}}{{end}}"><span>{{if $match.RightIdx}}{{$match.RightIdx}}{{end}}</span></td>
 					<td class="lines-type-marker lines-type-marker-new add-code">{{if $match.RightIdx}}<span class="tw-font-mono" data-type-marker="{{$match.GetLineTypeMarker}}"></span>{{end}}</td>
-					<td class="lines-code lines-code-new add-code">
+					<td class="lines-code lines-code-new add-code" data-line-content="{{if $match.RightIdx}}{{slice $match.Content 1}}{{end}}">
 						{{- if $match.RightIdx -}}
 							{{- template "repo/diff/section_code" dict "diff" $rightDiff -}}
 						{{- else -}}
@@ -82,7 +82,7 @@
 				<tr class="conflict-line {{if eq .GetType 2}}add-code{{else}}del-code{{end}} nl-{{$k}} ol-{{$k}}" data-line-type="conflict">
 					<td class="lines-num lines-num-old" data-line-num="{{if $line.LeftIdx}}{{$line.LeftIdx}}{{end}}"><span>{{if $line.LeftIdx}}{{$line.LeftIdx}}{{end}}</span></td>
 					<td class="lines-type-marker lines-type-marker-old {{if eq .GetType 3}}del-code{{end}}">{{if $line.LeftIdx}}<span class="tw-font-mono" data-type-marker="{{$line.GetLineTypeMarker}}"></span>{{end}}</td>
-					<td class="lines-code lines-code-old {{if eq .GetType 3}}del-code{{end}}">
+					<td class="lines-code lines-code-old {{if eq .GetType 3}}del-code{{end}}" data-line-content="{{if $line.LeftIdx}}{{slice $line.Content 1}}{{end}}">
 						{{- if $line.LeftIdx -}}
 							{{- template "repo/diff/section_code" dict "diff" $inlineDiff -}}
 						{{- else -}}
@@ -91,7 +91,7 @@
 					</td>
 					<td class="lines-num lines-num-new {{if eq .GetType 2}}add-code{{end}}" data-line-num="{{if $line.RightIdx}}{{$line.RightIdx}}{{end}}"><span>{{if $line.RightIdx}}{{$line.RightIdx}}{{end}}</span></td>
 					<td class="lines-type-marker lines-type-marker-new {{if eq .GetType 2}}add-code{{end}}">{{if $line.RightIdx}}<span class="tw-font-mono" data-type-marker="{{$line.GetLineTypeMarker}}"></span>{{end}}</td>
-					<td class="lines-code lines-code-new {{if eq .GetType 2}}add-code{{end}}">
+					<td class="lines-code lines-code-new {{if eq .GetType 2}}add-code{{end}}" data-line-content="{{if $line.RightIdx}}{{slice $line.Content 1}}{{end}}">
 						{{- if $line.RightIdx -}}
 							{{- template "repo/diff/section_code" dict "diff" $inlineDiff -}}
 						{{- else -}}
