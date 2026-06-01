@@ -364,6 +364,11 @@
   color: var(--color-text-tertiary);
 }
 
+.review-radio-option.disabled input[type="radio"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .review-radio-option input[type="radio"] {
   margin-top: 4px;
   transform: scale(1.2);
