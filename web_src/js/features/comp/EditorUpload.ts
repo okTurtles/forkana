@@ -18,9 +18,9 @@ export function triggerUploadStateChanged(target: HTMLElement) {
   target.dispatchEvent(new CustomEvent(EventUploadStateChanged, {bubbles: true}));
 }
 
-function uploadFile(dropzoneEl: HTMLElement, file: File) {
+function uploadFile(dropzoneEl: HTMLElement, file: File, uploadId: number) {
   return new Promise((resolve) => {
-    const curUploadId = uploadIdCounter++;
+    const curUploadId = uploadId;
     (file as any)._giteaUploadId = curUploadId;
     const dropzoneInst = dropzoneEl.dropzone;
     const onUploadDone = ({file}: {file: any}) => {
@@ -103,16 +103,21 @@ async function handleUploadFiles(editor: CodeMirrorEditor | TextareaEditor, drop
   // Convert FileList to Array before any await: browsers invalidate DataTransfer
   // after the synchronous event handler returns, so lazy FileList iteration fails
   // on the second file when the loop resumes after an await.
-  for (const file of Array.from(files)) {
+  const filesArray = Array.from(files);
+  const entries = [];
+  for (const file of filesArray) {
+    const uploadId = uploadIdCounter++;
     const name = file.name.slice(0, file.name.lastIndexOf('.'));
-    const {width, dppx} = await imageInfo(file);
-    // Include the upload ID in the placeholder to keep same-name files distinct.
-    const placeholder = `[${name}](uploading ...${uploadIdCounter})`;
-
+    const placeholder = `[${name}](uploading ...${uploadId})`;
     editor.insertPlaceholder(placeholder);
-    await uploadFile(dropzoneEl, file); // the "file" will get its "uuid" during the upload
-    editor.replacePlaceholder(placeholder, generateMarkdownLinkForAttachment(file, {width, dppx}));
+    entries.push({file, placeholder, uploadId});
   }
+
+  await Promise.all(entries.map(async ({file, placeholder, uploadId}) => {
+    const {width, dppx} = await imageInfo(file);
+    await uploadFile(dropzoneEl, file, uploadId); // the "file" will get its "uuid" during the upload
+    editor.replacePlaceholder(placeholder, generateMarkdownLinkForAttachment(file, {width, dppx}));
+  }));
 }
 
 export function removeAttachmentLinksFromMarkdown(text: string, fileUuid: string) {

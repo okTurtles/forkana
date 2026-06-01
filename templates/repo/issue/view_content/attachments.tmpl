@@ -4,7 +4,7 @@
 	{{end}}
 	{{$hasThumbnails := false}}
 	{{- range .Attachments -}}
-		{{if FilenameIsImage .Name}}
+		{{if and (FilenameIsImage .Name) (not (StringUtils.Contains (StringUtils.ToString $.RenderedContent) .UUID))}}
 			{{$hasThumbnails = true}}
 		{{end}}
 	{{- end -}}
@@ -30,7 +30,7 @@
 		<div class="divider"></div>
 		<div class="ui small thumbnails">
 			{{- range .Attachments -}}
-				{{if FilenameIsImage .Name}}
+				{{if and (FilenameIsImage .Name) (not (StringUtils.Contains (StringUtils.ToString $.RenderedContent) .UUID))}}
 				<a target="_blank" rel="noopener noreferrer" href="{{.DownloadURL}}">
 					<img loading="lazy" alt="{{.Name}}" src="{{.DownloadURL}}" title="{{ctx.Locale.Tr "repo.issues.attachment.open_tab" .Name}}">
 				</a>

@@ -178,10 +178,10 @@ export function isImageFile({name, type}: {name?: string, type?: string}): boole
 }
 
 export function isVideoFile({name, type}: {name?: string, type?: string}): boolean {
-  // Only mp4 and webm have reliable cross-browser support; other video/* MIME types
-  // (e.g. video/quicktime for .mov, video/x-matroska for .mkv) produce blank <video>
-  // elements in most browsers, so we fall back to a plain download link for those.
-  return /\.(mp4|webm)$/i.test(name || '') || /^video\/(mp4|webm)$/i.test(type || '');
+  // Only mp4, webm, and mov (QuickTime) have reliable support. While mov playback
+  // has limited support outside Safari/macOS/iOS, we generate a <video> element with a
+  // fallback download link so Apple users get inline preview, and others see a clear download message.
+  return /\.(mp4|webm|mov)$/i.test(name || '') || /^video\/(mp4|webm|quicktime)$/i.test(type || '');
 }
 
 export function toggleFullScreen(fullscreenElementsSelector: string, isFullScreen: boolean, sourceParentSelector?: string): void {

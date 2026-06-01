@@ -60,7 +60,7 @@ export function generateMarkdownLinkForAttachment(file: Partial<CustomDropzoneFi
       fileMarkdown = `![${file.name}](/attachments/${file.uuid})`;
     }
   } else if (isVideoFile(file)) {
-    fileMarkdown = html`<video src="attachments/${file.uuid}" title="${file.name}" controls></video>`;
+    fileMarkdown = html`<video src="attachments/${file.uuid}" title="${file.name}" controls>Your browser does not support this video format. <a href="/attachments/${file.uuid}">Download</a></video>`;
   }
   return fileMarkdown;
 }
