@@ -113,7 +113,11 @@ export async function createToastEditor(
           const el = document.createElement('span');
           el.className = 'base64-image-widget';
           el.title = `Alt: ${altText} | Base64 Encoded Image - Click to copy original data URI`;
-          el.innerHTML = `${imageIconSvg} <span>Base64 Image (${extension}, ${formattedSize}${altText ? ` - ${altText}` : ''})</span>`;
+          el.innerHTML = imageIconSvg.trim();
+
+          const label = document.createElement('span');
+          label.textContent = `Base64 Image (${extension}, ${formattedSize}${altText ? ` - ${altText}` : ''})`;
+          el.append(label);
 
           el.addEventListener('click', async (e) => {
             e.preventDefault();
