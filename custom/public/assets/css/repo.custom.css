@@ -564,7 +564,7 @@ col.col-type-marker {
 }
 
 .conflict-diff-file-boxes {
-  gap: 44px !important;
+  gap: 8px !important;
 }
 
 .conflict-diff-file-boxes .diff-file-box {

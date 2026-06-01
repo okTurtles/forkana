@@ -722,7 +722,6 @@ function checkForDraft() {
   // Render dismissible Semantic UI message box matching Gitea
   const banner = document.createElement('div');
   banner.className = 'ui info message conflict-draft-banner';
-  banner.style.marginBottom = '1.5em';
   banner.innerHTML = `
     <div class="header">Restore conflict resolution draft?</div>
     <p>We found a saved draft of your resolutions for this conflict. Would you like to restore it?</p>
