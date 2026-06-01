@@ -479,11 +479,13 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
 
   prevLink?.addEventListener('click', (e) => {
     e.preventDefault();
+    if (prevLink.classList.contains('disabled')) return;
     navigateConflict(wrapper, -1);
   });
 
   nextLink?.addEventListener('click', (e) => {
     e.preventDefault();
+    if (nextLink.classList.contains('disabled')) return;
     navigateConflict(wrapper, 1);
   });
 }
