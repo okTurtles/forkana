@@ -228,6 +228,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
           await initToastCommentEditor(toastEditorContainer);
         } catch (err) {
           console.error('failed to init conflict editor', err);
+          showErrorToast('Failed to initialize the conflict editor. Please try reloading the page.');
         }
       }
     }
