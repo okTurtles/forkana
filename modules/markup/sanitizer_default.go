@@ -44,6 +44,9 @@ func (st *Sanitizer) createDefaultPolicy() *bluemonday.Policy {
 		policy.AllowURLSchemeWithCustomPolicy("javascript", disallowScheme)
 		policy.AllowURLSchemeWithCustomPolicy("vbscript", disallowScheme)
 
+		// Allow data:image/... URIs (e.g. base64-encoded images) only if explicitly
+		// requested by external sanitizer rules or markup renderers configuration,
+		// preventing arbitrary data URIs from being processed otherwise.
 		allowDataURIImages := false
 		for _, rule := range setting.ExternalSanitizerRules {
 			if rule.AllowDataURIImages {

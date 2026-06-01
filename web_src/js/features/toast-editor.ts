@@ -44,7 +44,9 @@ export async function createToastEditor(
   }
 
   // Initialize Toast UI Editor
-  const editor = new Editor({
+  /* eslint-disable prefer-const */
+  let editor: Editor;
+  editor = new Editor({
     el: container,
     height,
     initialEditType,
@@ -60,9 +62,10 @@ export async function createToastEditor(
       },
     },
     widgetRules: [
-      createBase64WidgetRule(() => editor),
+      createBase64WidgetRule((): Editor => editor),
     ],
   });
+  /* eslint-enable prefer-const */
 
   // Override getMarkdown to strip internal $$widget placeholders
   const originalGetMarkdown = editor.getMarkdown.bind(editor);

@@ -1,5 +1,5 @@
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
-import Editor from '@toast-ui/editor';
+import type Editor from '@toast-ui/editor';
 
 export const imageIconSvg = `
 <svg class="base64-image-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle;">
@@ -17,6 +17,7 @@ export function formatBytes(bytes: number, decimals = 1): string {
 }
 
 export function createBase64WidgetRule(
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- Editor type has issues
   getEditor: () => Editor | null,
 ) {
   return {
