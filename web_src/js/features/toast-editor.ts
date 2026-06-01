@@ -132,6 +132,8 @@ export async function createToastEditor(
               console.error('Failed to copy to clipboard', err);
             }
           });
+
+          return el;
         },
       },
     ],
