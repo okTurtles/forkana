@@ -20,6 +20,7 @@ import {
   generateMarkdownLinkForAttachment,
   initDropzone,
 } from '../dropzone.ts';
+import {createBase64WidgetRule, installBase64WidgetPatch} from './base64ImageWidget.ts';
 
 // Event dispatched when editor content changes
 export const EventEditorContentChanged = 'ce-editor-content-changed';
@@ -110,8 +111,13 @@ export class ToastCommentEditor {
           }
         },
       },
+      widgetRules: [
+        createBase64WidgetRule(() => this.editor),
+      ],
     });
 
+    // Override getMarkdown to strip internal $$widget placeholders
+    installBase64WidgetPatch(this.editor);
     // Set initial content from textarea
     if (this.textarea.value) {
       this.editor.setMarkdown(this.textarea.value);
@@ -150,11 +156,11 @@ export class ToastCommentEditor {
         e.preventDefault();
         e.stopPropagation();
         this.handleDroppedFiles(e.dataTransfer.files);
-      });
+      }, false);
       this.editorWrapper.addEventListener('dragover', (e: DragEvent) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
-      });
+      }, false);
 
       // Clean up markdown links when an attachment is removed from the Dropzone
       this.attachedDropzoneInst.on(DropzoneCustomEventRemovedFile, ({fileUuid}: {fileUuid: string}) => {

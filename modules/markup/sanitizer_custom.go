@@ -15,7 +15,7 @@ import (
 func (st *Sanitizer) addSanitizerRules(policy *bluemonday.Policy, rules []setting.MarkupSanitizerRule) {
 	for _, rule := range rules {
 		if rule.AllowDataURIImages {
-			policy.AllowDataURIImages()
+			policy.AllowURLSchemeWithCustomPolicy("data", allowDataURIImagesPolicy)
 		}
 		if rule.Element != "" {
 			if rule.Regexp != "" {

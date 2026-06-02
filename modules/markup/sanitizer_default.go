@@ -42,7 +42,36 @@ func (st *Sanitizer) createDefaultPolicy() *bluemonday.Policy {
 		}
 		policy.AllowURLSchemeWithCustomPolicy("javascript", disallowScheme)
 		policy.AllowURLSchemeWithCustomPolicy("vbscript", disallowScheme)
-		policy.AllowURLSchemeWithCustomPolicy("data", disallowScheme)
+
+		// Allow data:image/... URIs (e.g. base64-encoded images) only if explicitly
+		// requested by external sanitizer rules or markup renderers configuration,
+		// preventing arbitrary data URIs from being processed otherwise.
+		allowDataURIImages := false
+		for _, rule := range setting.ExternalSanitizerRules {
+			if rule.AllowDataURIImages {
+				allowDataURIImages = true
+				break
+			}
+		}
+		if !allowDataURIImages {
+			for _, renderer := range setting.ExternalMarkupRenderers {
+				for _, rule := range renderer.MarkupSanitizerRules {
+					if rule.AllowDataURIImages {
+						allowDataURIImages = true
+						break
+					}
+				}
+				if allowDataURIImages {
+					break
+				}
+			}
+		}
+
+		if allowDataURIImages {
+			policy.AllowURLSchemeWithCustomPolicy("data", allowDataURIImagesPolicy)
+		} else {
+			policy.AllowURLSchemeWithCustomPolicy("data", disallowScheme)
+		}
 	}
 
 	// Allow classes for org mode list item status.

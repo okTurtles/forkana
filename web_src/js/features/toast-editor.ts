@@ -1,6 +1,7 @@
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
 import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
+import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 
 export type ToastEditorOptions = {
   height?: string;
@@ -43,7 +44,12 @@ export async function createToastEditor(
   }
 
   // Initialize Toast UI Editor
-  const editor = new Editor({
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- Editor type has issues
+  const editorRef = {current: null as Editor | null};
+  const widgetRules = [
+    createBase64WidgetRule((): Editor => editorRef.current!),
+  ];
+  const editor: Editor = new Editor({
     el: container,
     height,
     initialEditType,
@@ -53,12 +59,17 @@ export async function createToastEditor(
     toolbarItems,
     events: {
       change: () => {
-        const content = editor.getMarkdown();
+        const content = editorRef.current!.getMarkdown();
         textarea.value = content;
         textarea.dispatchEvent(new Event('change'));
       },
     },
+    widgetRules,
   });
+  editorRef.current = editor;
+
+  // Override getMarkdown to strip internal $$widget placeholders
+  installBase64WidgetPatch(editor);
 
   // Set initial content
   if (textarea.value) {

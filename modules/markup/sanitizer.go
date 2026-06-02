@@ -5,7 +5,9 @@
 package markup
 
 import (
+	"net/url"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/microcosm-cc/bluemonday"
@@ -48,4 +50,35 @@ func GetDefaultSanitizer() *Sanitizer {
 func ResetDefaultSanitizerForTesting() {
 	defaultSanitizer = nil
 	defaultSanitizerOnce = sync.Once{}
+}
+
+func allowDataURIImagesPolicy(u *url.URL) bool {
+	// Enforce a size limit of 2MB to protect against storage bloat and slow decoding (Issue 11)
+	if len(u.Opaque) > 2*1024*1024 {
+		return false
+	}
+	// Replicate bluemonday's strict validation (Issue 2)
+	// It must start with one of the allowed mime types followed by ;base64,
+	parts := strings.SplitN(u.Opaque, ";base64,", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	mimeType := parts[0]
+	if mimeType != "image/gif" && mimeType != "image/jpeg" && mimeType != "image/png" &&
+		mimeType != "image/webp" && mimeType != "image/svg+xml" {
+		return false
+	}
+	// Validate that the remaining data is valid base64 (only alphanumeric, +, /, and =)
+	payload := parts[1]
+	if len(payload) == 0 {
+		return false
+	}
+	for _, char := range payload {
+		if !((char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') ||
+			(char >= '0' && char <= '9') || char == '+' || char == '/' || char == '=' ||
+			char == '\r' || char == '\n' || char == '\t' || char == ' ') {
+			return false
+		}
+	}
+	return true
 }
