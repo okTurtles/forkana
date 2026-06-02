@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/test"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -76,18 +77,61 @@ func TestSanitizer(t *testing.T) {
 }
 
 func TestSanitizerAllowDataURIImages(t *testing.T) {
-	setting.ExternalSanitizerRules = []setting.MarkupSanitizerRule{
+	defer test.MockVariableValue(&setting.ExternalSanitizerRules, []setting.MarkupSanitizerRule{
 		{
 			AllowDataURIImages: true,
 		},
-	}
+	})()
+	defer test.MockVariableValue(&setting.ExternalMarkupRenderers, nil)()
 	ResetDefaultSanitizerForTesting()
-	defer func() {
-		setting.ExternalSanitizerRules = nil
-		ResetDefaultSanitizerForTesting()
-	}()
+	defer ResetDefaultSanitizerForTesting()
 
+	// Positive case: valid base64 PNG image remains
 	input := `<img src="data:image/png;base64,iVBORw0KGgoAAAANS">`
 	output := string(Sanitize(input))
 	assert.Contains(t, output, `src="data:image/png;base64,iVBORw0KGgoAAAANS"`)
+
+	// Negative case: non-image data URI is stripped
+	input = `<img src="data:text/html;base64,PGh0bWw+aGVsbG88L2h0bWw+">`
+	output = string(Sanitize(input))
+	assert.NotContains(t, output, `src=`)
+
+	// Negative case: un-encoded SVG / raw SVG (non-base64) is stripped
+	input = `<img src="data:image/svg+xml,<svg/onload=alert(1)>">`
+	output = string(Sanitize(input))
+	assert.NotContains(t, output, `src=`)
+
+	// Negative case: invalid base64 payload is stripped
+	input = `<img src="data:image/png;base64,###not-base64###">`
+	output = string(Sanitize(input))
+	assert.NotContains(t, output, `src=`)
+
+	// Negative case: unknown/unsupported image subtype is stripped
+	input = `<img src="data:image/foo;base64,AAAA">`
+	output = string(Sanitize(input))
+	assert.NotContains(t, output, `src=`)
+
+	// Negative case: image exceeding 2MB size cap is stripped
+	largePayload := make([]byte, 2*1024*1024+100)
+	for i := range largePayload {
+		largePayload[i] = 'A'
+	}
+	input = `<img src="data:image/png;base64,` + string(largePayload) + `">`
+	output = string(Sanitize(input))
+	assert.NotContains(t, output, `src=`)
+
+	// Verify that when the rule is NOT set, the valid base64 PNG is stripped
+	func() {
+		defer test.MockVariableValue(&setting.ExternalSanitizerRules, nil)()
+		ResetDefaultSanitizerForTesting()
+		defer ResetDefaultSanitizerForTesting()
+
+		input := `<img src="data:image/png;base64,iVBORw0KGgoAAAANS">`
+		output := string(Sanitize(input))
+		assert.NotContains(t, output, `src=`)
+
+		input = `<a href="data:1234">bad</a>`
+		output = string(Sanitize(input))
+		assert.NotContains(t, output, `href=`)
+	}()
 }

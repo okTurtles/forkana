@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/url"
 	"regexp"
-	"strings"
 
 	"code.gitea.io/gitea/modules/setting"
 
