@@ -69,9 +69,7 @@ func (st *Sanitizer) createDefaultPolicy() *bluemonday.Policy {
 		}
 
 		if allowDataURIImages {
-			policy.AllowURLSchemeWithCustomPolicy("data", func(u *url.URL) bool {
-				return strings.HasPrefix(u.Opaque, "image/")
-			})
+			policy.AllowURLSchemeWithCustomPolicy("data", allowDataURIImagesPolicy)
 		} else {
 			policy.AllowURLSchemeWithCustomPolicy("data", disallowScheme)
 		}
