@@ -1,7 +1,7 @@
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
 import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
-import {createBase64WidgetRule} from './comp/base64ImageWidget.ts';
+import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 
 export type ToastEditorOptions = {
   height?: string;
@@ -44,9 +44,10 @@ export async function createToastEditor(
   }
 
   // Initialize Toast UI Editor
-  /* eslint-disable prefer-const */
-  let editor: Editor;
-  editor = new Editor({
+  const widgetRules = [
+    createBase64WidgetRule((): Editor => editor),
+  ];
+  const editor: Editor = new Editor({
     el: container,
     height,
     initialEditType,
@@ -61,18 +62,11 @@ export async function createToastEditor(
         textarea.dispatchEvent(new Event('change'));
       },
     },
-    widgetRules: [
-      createBase64WidgetRule((): Editor => editor),
-    ],
+    widgetRules,
   });
-  /* eslint-enable prefer-const */
 
   // Override getMarkdown to strip internal $$widget placeholders
-  const originalGetMarkdown = editor.getMarkdown.bind(editor);
-  editor.getMarkdown = () => {
-    const content = originalGetMarkdown();
-    return content.replace(/\$\$widget\d+\s+(!\[[^\]]*\]\(data:image\/[a-zA-Z+.-]+;base64,[A-Za-z0-9+/=\s]{50,}\))\$\$/g, '$1');
-  };
+  installBase64WidgetPatch(editor);
 
   // Set initial content
   if (textarea.value) {
