@@ -134,10 +134,16 @@ test('file detection', () => {
   for (const name of ['', 'a.jpg.x', '/path.png/x', 'webp']) {
     expect(isImageFile({name})).toBeFalsy();
   }
-  for (const name of ['a.mpg', '/a.mpeg', '.file.mp4', '.webm', 'file.mkv']) {
+  for (const name of ['.file.mp4', '.webm', '.mov', 'VIDEO.MOV', 'clip.MP4']) {
     expect(isVideoFile({name})).toBeTruthy();
   }
-  for (const name of ['', 'a.mpg.x', '/path.mp4/x', 'webm']) {
+  expect(isVideoFile({type: 'video/mp4'})).toBeTruthy();
+  expect(isVideoFile({type: 'video/webm'})).toBeTruthy();
+  expect(isVideoFile({type: 'video/quicktime'})).toBeTruthy();
+  expect(isVideoFile({name: 'test.mp4', type: 'video/quicktime'})).toBeTruthy();
+
+  for (const name of ['', 'a.mpg', '/a.mpeg', 'file.mkv', 'a.mpg.x', '/path.mp4/x', 'webm']) {
     expect(isVideoFile({name})).toBeFalsy();
   }
+  expect(isVideoFile({type: 'video/x-matroska'})).toBeFalsy();
 });
