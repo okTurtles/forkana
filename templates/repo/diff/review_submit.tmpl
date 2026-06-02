@@ -45,7 +45,7 @@
 						</div>
 					</label>
 					{{if not $.Issue.IsClosed}}
-						<label class="review-radio-option" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_approve"}}"{{end}}>
+						<label class="review-radio-option{{if $showSelfTooltip}} disabled{{end}}" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_approve"}}"{{end}}>
 							<input type="radio" name="type" value="approve" {{if $showSelfTooltip}}disabled{{end}}>
 							<div class="review-radio-content">
 								<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.approve"}}</span>
@@ -54,7 +54,7 @@
 						</label>
 					{{end}}
 					{{if not $.Issue.IsClosed}}
-						<label class="review-radio-option" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_reject"}}"{{end}}>
+						<label class="review-radio-option{{if $showSelfTooltip}} disabled{{end}}" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_reject"}}"{{end}}>
 							<input type="radio" name="type" value="reject" {{if $showSelfTooltip}}disabled{{end}}>
 							<div class="review-radio-content">
 								<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.reject"}}</span>
