@@ -1188,3 +1188,63 @@ func TestSubmitPullEditPostStaleCommitID(t *testing.T) {
 			"Error response should contain the stale-commit error message")
 	})
 }
+
+// TestSubmitConflictResolutionAuth verifies the authorization gating in
+// SubmitConflictResolution: anonymous users get 401, signed-in users who are
+// neither the PR creator nor a site admin nor write-allowed get 403, while
+// the creator (even without base-repo write access) and site admins bypass
+// the IsUserAllowedToUpdate restriction and reach the next gate (here the
+// no-conflicts 400, since the fixture PR has no recorded conflicts).
+func TestSubmitConflictResolutionAuth(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// Fixture PR 3: index 1 in repo10 (owner user12), poster user11. user11
+	// is neither admin nor a collaborator on repo10, so they exercise the
+	// "creator with no base-repo write access" branch of the auth check.
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 3})
+	require.NoError(t, pr.LoadIssue(t.Context()))
+	poster := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: pr.Issue.PosterID})
+	admin := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	require.True(t, admin.IsAdmin, "fixture user1 must be a site admin")
+	other := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+	conflictsURL := fmt.Sprintf("/%s/%s/pulls/%d/conflicts", owner.Name, repo.Name, pr.Index)
+	emptyBody := map[string]any{"files": []any{}}
+
+	t.Run("Anonymous401", func(t *testing.T) {
+		session := emptyTestSession(t)
+		req := NewRequestWithJSON(t, "POST", conflictsURL, emptyBody).
+			SetHeader("X-Csrf-Token", GetAnonymousCSRFToken(t, session))
+		resp := session.MakeRequest(t, req, http.StatusUnauthorized)
+		assert.Contains(t, resp.Body.String(), "sign in required")
+	})
+
+	t.Run("SignedInNonPosterNonAdmin403", func(t *testing.T) {
+		session := loginUser(t, other.Name)
+		req := NewRequestWithJSON(t, "POST", conflictsURL, emptyBody).
+			SetHeader("X-Csrf-Token", GetUserCSRFToken(t, session))
+		resp := session.MakeRequest(t, req, http.StatusForbidden)
+		assert.Contains(t, resp.Body.String(), "not allowed to resolve conflicts")
+	})
+
+	t.Run("PosterBypassesIsUserAllowedToUpdate", func(t *testing.T) {
+		session := loginUser(t, poster.Name)
+		req := NewRequestWithJSON(t, "POST", conflictsURL, emptyBody).
+			SetHeader("X-Csrf-Token", GetUserCSRFToken(t, session))
+		// The poster lacks base-repo write access but must still pass the
+		// auth gate; the next check (IsFilesConflicted) returns 400 since
+		// the fixture PR is not actually conflicted.
+		resp := session.MakeRequest(t, req, http.StatusBadRequest)
+		assert.Contains(t, resp.Body.String(), "pull request has no conflicts")
+	})
+
+	t.Run("AdminBypassesIsUserAllowedToUpdate", func(t *testing.T) {
+		session := loginUser(t, admin.Name)
+		req := NewRequestWithJSON(t, "POST", conflictsURL, emptyBody).
+			SetHeader("X-Csrf-Token", GetUserCSRFToken(t, session))
+		resp := session.MakeRequest(t, req, http.StatusBadRequest)
+		assert.Contains(t, resp.Body.String(), "pull request has no conflicts")
+	})
+}

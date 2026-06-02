@@ -6,10 +6,12 @@
 package repo
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"html"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,8 +31,10 @@ import (
 	"code.gitea.io/gitea/modules/git/gitcmd"
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/glob"
+	"code.gitea.io/gitea/modules/globallock"
 	"code.gitea.io/gitea/modules/graceful"
 	issue_template "code.gitea.io/gitea/modules/issue/template"
+	"code.gitea.io/gitea/modules/json"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/optional"
 	repo_module "code.gitea.io/gitea/modules/repository"
@@ -55,10 +59,11 @@ import (
 )
 
 const (
-	tplCompareDiff templates.TplName = "repo/diff/compare"
-	tplPullCommits templates.TplName = "repo/pulls/commits"
-	tplPullFiles   templates.TplName = "repo/pulls/files"
-	tplPullEdit    templates.TplName = "repo/pulls/edit"
+	tplCompareDiff   templates.TplName = "repo/diff/compare"
+	tplPullCommits   templates.TplName = "repo/pulls/commits"
+	tplPullFiles     templates.TplName = "repo/pulls/files"
+	tplPullConflicts templates.TplName = "repo/pulls/conflicts"
+	tplPullEdit      templates.TplName = "repo/pulls/edit"
 
 	pullRequestTemplateKey = "PullRequestTemplate"
 )
@@ -1366,6 +1371,1017 @@ func viewPullFiles(ctx *context.Context, beforeCommitID, afterCommitID string) {
 	}
 
 	ctx.HTML(http.StatusOK, tplPullFiles)
+}
+
+// ViewPullConflicts renders the conflicted files diff for a pull request.
+func ViewPullConflicts(ctx *context.Context) {
+	ctx.Data["PageIsPullList"] = true
+	ctx.Data["PageIsPullConflicts"] = true
+
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+	pull := issue.PullRequest
+
+	prInfo := preparePullViewPullInfo(ctx, issue)
+	if ctx.Written() {
+		return
+	} else if prInfo == nil {
+		ctx.NotFound(nil)
+		return
+	}
+
+	gitRepo := ctx.Repo.GitRepo
+	headCommitID, err := gitRepo.GetRefCommitID(pull.GetGitHeadRefName())
+	if err != nil {
+		ctx.ServerError("GetRefCommitID", err)
+		return
+	}
+
+	baseCommitID, err := gitRepo.GetBranchCommitID(pull.BaseBranch)
+	if err != nil {
+		ctx.ServerError("GetBranchCommitID", err)
+		return
+	}
+
+	headRepo := pull.HeadRepo
+	if headRepo == nil {
+		ctx.Redirect(issue.Link() + "/files")
+		return
+	}
+
+	// Render only the paths that Git's merge engine leaves unmerged. The stored
+	// conflict list can be stale or over-broad, so it is not authoritative here.
+	t, err := files_service.NewTemporaryUploadRepository(headRepo)
+	if err != nil {
+		ctx.ServerError("NewTemporaryUploadRepository", err)
+		return
+	}
+	defer t.Close()
+
+	if err := t.Clone(ctx, pull.HeadBranch, false); err != nil {
+		ctx.ServerError("Clone", err)
+		return
+	}
+
+	// For fork PRs the base commit lives in a different repo; make it reachable via alternates.
+	if headRepo.ID != pull.BaseRepoID {
+		if err := t.AddObjectAlternates(ctx.Repo.Repository.RepoPath()); err != nil {
+			ctx.ServerError("AddObjectAlternates", err)
+			return
+		}
+	}
+
+	hadConflicts, err := t.MergeNoCommitAllowConflicts(ctx, baseCommitID)
+	if err != nil {
+		ctx.ServerError("MergeNoCommitAllowConflicts", err)
+		return
+	}
+	if !hadConflicts {
+		ctx.Redirect(issue.Link() + "/files")
+		return
+	}
+
+	unmergedEntries, err := t.ListUnmergedIndexEntries(ctx)
+	if err != nil {
+		ctx.ServerError("ListUnmergedIndexEntries", err)
+		return
+	}
+	_, conflictedFiles, err := unmergedRegularFileModes(unmergedEntries)
+	if err != nil {
+		var unsupportedModeErr *unsupportedUnmergedFileModeError
+		if errors.As(err, &unsupportedModeErr) {
+			ctx.Data["DiffNotAvailable"] = true
+			ctx.Data["ConflictResolutionUnavailable"] = true
+			ctx.HTML(http.StatusOK, tplPullConflicts)
+			return
+		}
+		ctx.PlainText(http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(conflictedFiles) == 0 {
+		ctx.Redirect(issue.Link() + "/files")
+		return
+	}
+
+	conflictedFileSet := make(map[string]bool, len(conflictedFiles))
+	for _, file := range conflictedFiles {
+		conflictedFileSet[file] = true
+	}
+	ctx.Data["IsPullFilesConflicted"] = true
+	ctx.Data["ConflictedFiles"] = conflictedFiles
+	ctx.Data["ConflictedFileSet"] = conflictedFileSet
+
+	beforeCommitID := baseCommitID
+	headCommit, err := gitRepo.GetCommit(headCommitID)
+	if err != nil {
+		ctx.ServerError("GetCommit(head)", err)
+		return
+	}
+	beforeCommit, err := gitRepo.GetCommit(beforeCommitID)
+	if err != nil {
+		ctx.ServerError("GetCommit(base)", err)
+		return
+	}
+
+	ctx.Data["Username"] = ctx.Repo.Owner.Name
+	ctx.Data["Reponame"] = ctx.Repo.Repository.Name
+	ctx.Data["MergeBase"] = prInfo.MergeBase
+	ctx.Data["BeforeCommitID"] = beforeCommitID
+	ctx.Data["AfterCommitID"] = headCommitID
+	ctx.Data["IsShowingOnlySingleCommit"] = false
+	ctx.Data["IsShowingAllCommits"] = true
+
+	files := conflictedFiles
+	fileOnly := ctx.FormBool("file-only")
+	requestedFiles := ctx.FormStrings("files")
+	if fileOnly && (len(requestedFiles) == 2 || len(requestedFiles) == 1) {
+		files = requestedFiles
+	}
+
+	unmergedByPath := entriesByPath(unmergedEntries)
+	diff := &gitdiff.Diff{Files: make([]*gitdiff.DiffFile, 0, len(files))}
+	diffShortStat := &gitdiff.DiffShortStat{}
+	for _, file := range files {
+		if !conflictedFileSet[file] {
+			continue
+		}
+		mergeConflictFile, err := buildMergeConflictFile(ctx, t, file, unmergedByPath[file], setting.UI.MaxDisplayFileSize)
+		if err != nil {
+			ctx.Data["DiffNotAvailable"] = true
+			ctx.Data["ConflictResolutionUnavailable"] = true
+			ctx.HTML(http.StatusOK, tplPullConflicts)
+			return
+		}
+		diffFile := buildConflictDiffFile(mergeConflictFile)
+		diff.Files = append(diff.Files, diffFile)
+		diffShortStat.NumFiles++
+		diffShortStat.TotalAddition += diffFile.Addition
+		diffShortStat.TotalDeletion += diffFile.Deletion
+	}
+	ctx.Data["DiffShortStat"] = diffShortStat
+	if len(diff.Files) == 0 {
+		ctx.Redirect(issue.Link() + "/files")
+		return
+	}
+
+	showOutdatedComments, _ := ctx.Data["ShowOutdatedComments"].(bool)
+	if err = diff.LoadComments(ctx, issue, ctx.Doer, showOutdatedComments); err != nil {
+		ctx.ServerError("LoadComments", err)
+		return
+	}
+
+	allComments := issues_model.CommentList{}
+	for _, file := range diff.Files {
+		for _, section := range file.Sections {
+			for _, line := range section.Lines {
+				allComments = append(allComments, line.Comments...)
+			}
+		}
+	}
+	if err := allComments.LoadAttachments(ctx); err != nil {
+		ctx.ServerError("LoadAttachments", err)
+		return
+	}
+
+	pb, err := git_model.GetFirstMatchProtectedBranchRule(ctx, pull.BaseRepoID, pull.BaseBranch)
+	if err != nil {
+		ctx.ServerError("LoadProtectedBranch", err)
+		return
+	}
+
+	if pb != nil {
+		glob := pb.GetProtectedFilePatterns()
+		if len(glob) != 0 {
+			for _, file := range diff.Files {
+				file.IsProtected = pb.IsProtectedFile(glob, file.Name)
+			}
+		}
+	}
+
+	if !fileOnly {
+		diffTree, err := gitdiff.GetDiffTree(ctx, gitRepo, false, beforeCommitID, headCommitID)
+		if err != nil {
+			ctx.ServerError("GetDiffTree", err)
+			return
+		}
+
+		filteredTreeFiles := make([]*gitdiff.DiffTreeRecord, 0, len(diffTree.Files))
+		for _, file := range diffTree.Files {
+			if !conflictedFileSet[file.HeadPath] && !conflictedFileSet[file.BasePath] {
+				continue
+			}
+			filteredTreeFiles = append(filteredTreeFiles, file)
+		}
+		diffTree.Files = filteredTreeFiles
+
+		renderedIconPool := fileicon.NewRenderedIconPool()
+		ctx.PageData["DiffFileTree"] = transformDiffTreeForWeb(renderedIconPool, diffTree, nil)
+		ctx.PageData["FolderIcon"] = fileicon.RenderEntryIconHTML(renderedIconPool, fileicon.EntryInfoFolder())
+		ctx.PageData["FolderOpenIcon"] = fileicon.RenderEntryIconHTML(renderedIconPool, fileicon.EntryInfoFolderOpen())
+		ctx.Data["FileIconPoolHTML"] = renderedIconPool.RenderToHTML()
+	}
+
+	ctx.Data["Diff"] = diff
+	ctx.Data["DiffNotAvailable"] = diffShortStat.NumFiles == 0
+	ctx.Data["NumCommits"] = len(prInfo.Commits)
+
+	if ctx.IsSigned && ctx.Doer != nil {
+		if ctx.Data["CanMarkConversation"], err = issues_model.CanMarkConversation(ctx, issue, ctx.Doer); err != nil {
+			ctx.ServerError("CanMarkConversation", err)
+			return
+		}
+	}
+
+	setCompareContext(ctx, beforeCommit, headCommit, ctx.Repo.Owner.Name, ctx.Repo.Repository.Name)
+	getBranchData(ctx, issue)
+	ctx.Data["IsIssuePoster"] = ctx.IsSigned && issue.IsPoster(ctx.Doer.ID)
+	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
+	ctx.Data["IsAttachmentEnabled"] = setting.Attachment.Enabled
+
+	PrepareBranchList(ctx)
+	if ctx.Written() {
+		return
+	}
+	upload.AddUploadContext(ctx, "comment")
+
+	ctx.Data["CanBlockUser"] = func(blocker, blockee *user_model.User) bool {
+		return user_service.CanBlockUser(ctx, ctx.Doer, blocker, blockee)
+	}
+
+	preparePullEditTabVisibility(ctx, issue)
+	if ctx.Written() {
+		return
+	}
+
+	ctx.HTML(http.StatusOK, tplPullConflicts)
+}
+
+type mergeConflictFile struct {
+	path      string
+	mode      string
+	content   []byte
+	groups    []conflictGroup
+	isDeleted bool
+	isCreated bool
+}
+
+// conflictGroup represents one unresolved hunk from Git's real merge result.
+type conflictGroup struct {
+	markerStart int
+	markerEnd   int
+	baseLines   []string
+	headLines   []string
+}
+
+func splitConflictSideLines(content []byte) []string {
+	text := strings.TrimRight(string(content), "\n")
+	if text == "" {
+		return nil
+	}
+	return strings.Split(text, "\n")
+}
+
+func splitFileLines(content []byte) []string {
+	return strings.Split(string(content), "\n")
+}
+
+func parseMergeConflictGroups(content []byte) ([]conflictGroup, error) {
+	lines := splitFileLines(content)
+	groups := make([]conflictGroup, 0)
+	for i := 0; i < len(lines); i++ {
+		if !strings.HasPrefix(lines[i], "<<<<<<<") {
+			continue
+		}
+
+		start := i
+		i++
+		headStart := i
+		for i < len(lines) && !strings.HasPrefix(lines[i], "|||||||") && !strings.HasPrefix(lines[i], "=======") {
+			i++
+		}
+		headLines := append([]string(nil), lines[headStart:i]...)
+
+		if i < len(lines) && strings.HasPrefix(lines[i], "|||||||") {
+			for i < len(lines) && !strings.HasPrefix(lines[i], "=======") {
+				i++
+			}
+		}
+		if i >= len(lines) || !strings.HasPrefix(lines[i], "=======") {
+			return nil, errors.New("malformed conflict markers: missing separator")
+		}
+
+		i++
+		baseStart := i
+		for i < len(lines) && !strings.HasPrefix(lines[i], ">>>>>>>") {
+			i++
+		}
+		if i >= len(lines) {
+			return nil, errors.New("malformed conflict markers: missing end marker")
+		}
+		baseLines := append([]string(nil), lines[baseStart:i]...)
+		groups = append(groups, conflictGroup{
+			markerStart: start,
+			markerEnd:   i + 1,
+			baseLines:   baseLines,
+			headLines:   headLines,
+		})
+	}
+	return groups, nil
+}
+
+func entriesByStage(entries []files_service.UnmergedIndexEntry) map[int]files_service.UnmergedIndexEntry {
+	byStage := make(map[int]files_service.UnmergedIndexEntry, len(entries))
+	for _, entry := range entries {
+		byStage[entry.Stage] = entry
+	}
+	return byStage
+}
+
+func entriesByPath(entries []files_service.UnmergedIndexEntry) map[string][]files_service.UnmergedIndexEntry {
+	byPath := make(map[string][]files_service.UnmergedIndexEntry)
+	for _, entry := range entries {
+		byPath[entry.Path] = append(byPath[entry.Path], entry)
+	}
+	return byPath
+}
+
+func buildMergeConflictFile(ctx *context.Context, t *files_service.TemporaryUploadRepository, path string, entries []files_service.UnmergedIndexEntry, maxSize int64) (*mergeConflictFile, error) {
+	stages := entriesByStage(entries)
+	stage2, hasHead := stages[2]
+	stage3, hasBase := stages[3]
+
+	mode := ""
+	if hasHead {
+		mode = stage2.Mode
+	} else if hasBase {
+		mode = stage3.Mode
+	} else if stage1, ok := stages[1]; ok {
+		mode = stage1.Mode
+	}
+
+	content, err := t.ReadWorkingTreeFile(path, maxSize)
+	if err != nil {
+		content = nil
+	}
+	groups, err := parseMergeConflictGroups(content)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(groups) == 0 {
+		if hasHead && hasBase {
+			return nil, fmt.Errorf("conflicted file %s does not contain conflict markers", path)
+		}
+
+		var baseContent, headContent []byte
+		if hasBase {
+			baseContent, err = t.ReadObjectBlob(ctx, stage3.ObjectID, maxSize)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if hasHead {
+			headContent, err = t.ReadObjectBlob(ctx, stage2.ObjectID, maxSize)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if content == nil {
+			if hasHead {
+				content = headContent
+			} else {
+				content = baseContent
+			}
+		}
+		groups = []conflictGroup{{
+			markerStart: 0,
+			markerEnd:   len(splitFileLines(content)),
+			baseLines:   splitConflictSideLines(baseContent),
+			headLines:   splitConflictSideLines(headContent),
+		}}
+	}
+
+	return &mergeConflictFile{
+		path:      path,
+		mode:      mode,
+		content:   content,
+		groups:    groups,
+		isDeleted: !hasHead && hasBase,
+		isCreated: hasHead && !hasBase,
+	}, nil
+}
+
+func appendConflictDiffLines(lines []*gitdiff.DiffLine, baseLines, headLines []string, leftLine, rightLine *int) []*gitdiff.DiffLine {
+	maxLines := max(len(baseLines), len(headLines))
+	for i := range maxLines {
+		var delLine *gitdiff.DiffLine
+		if i < len(baseLines) {
+			delLine = &gitdiff.DiffLine{LeftIdx: *leftLine, Type: gitdiff.DiffLineDel, Content: "-" + baseLines[i], Match: -1}
+			(*leftLine)++
+		}
+		var addLine *gitdiff.DiffLine
+		if i < len(headLines) {
+			addLine = &gitdiff.DiffLine{RightIdx: *rightLine, Type: gitdiff.DiffLineAdd, Content: "+" + headLines[i], Match: -1}
+			(*rightLine)++
+		}
+		if delLine != nil && addLine != nil {
+			delLine.Match = len(lines) + 1
+			addLine.Match = len(lines)
+		}
+		if delLine != nil {
+			lines = append(lines, delLine)
+		}
+		if addLine != nil {
+			lines = append(lines, addLine)
+		}
+	}
+	return lines
+}
+
+type conflictDiffWindow struct {
+	start  int
+	end    int
+	groups []conflictGroup
+}
+
+func buildConflictDiffWindows(groups []conflictGroup, contentLineCount int) []conflictDiffWindow {
+	const contextLines = 3
+
+	windows := make([]conflictDiffWindow, 0, len(groups))
+	for _, group := range groups {
+		start := max(group.markerStart-contextLines, 0)
+		end := min(group.markerEnd+contextLines, contentLineCount)
+		if len(windows) > 0 && start <= windows[len(windows)-1].end {
+			last := &windows[len(windows)-1]
+			last.end = max(last.end, end)
+			last.groups = append(last.groups, group)
+			continue
+		}
+		windows = append(windows, conflictDiffWindow{start: start, end: end, groups: []conflictGroup{group}})
+	}
+	return windows
+}
+
+func conflictDiffLineNumbersAt(contentIndex int, groups []conflictGroup) (leftLine, rightLine int) {
+	leftLine, rightLine = 1, 1
+	cursor := 0
+	for _, group := range groups {
+		if contentIndex <= group.markerStart {
+			plainLines := max(contentIndex-cursor, 0)
+			return leftLine + plainLines, rightLine + plainLines
+		}
+
+		plainLines := max(group.markerStart-cursor, 0)
+		leftLine += plainLines
+		rightLine += plainLines
+
+		if contentIndex < group.markerEnd {
+			return leftLine, rightLine
+		}
+
+		leftLine += len(group.baseLines)
+		rightLine += len(group.headLines)
+		cursor = group.markerEnd
+	}
+
+	plainLines := max(contentIndex-cursor, 0)
+	return leftLine + plainLines, rightLine + plainLines
+}
+
+func appendConflictPlainLines(lines []*gitdiff.DiffLine, contentLines []string, start, end int, leftLine, rightLine *int) []*gitdiff.DiffLine {
+	for i := start; i < end && i < len(contentLines); i++ {
+		lines = append(lines, &gitdiff.DiffLine{LeftIdx: *leftLine, RightIdx: *rightLine, Type: gitdiff.DiffLinePlain, Content: " " + contentLines[i]})
+		(*leftLine)++
+		(*rightLine)++
+	}
+	return lines
+}
+
+func buildConflictDiffFile(file *mergeConflictFile) *gitdiff.DiffFile {
+	contentLines := splitFileLines(file.content)
+	windows := buildConflictDiffWindows(file.groups, len(contentLines))
+	sections := make([]*gitdiff.DiffSection, 0, len(windows))
+	for _, window := range windows {
+		leftLine, rightLine := conflictDiffLineNumbersAt(window.start, file.groups)
+		lines := make([]*gitdiff.DiffLine, 0, window.end-window.start)
+		cursor := window.start
+		for _, group := range window.groups {
+			lines = appendConflictPlainLines(lines, contentLines, cursor, group.markerStart, &leftLine, &rightLine)
+			lines = appendConflictDiffLines(lines, group.baseLines, group.headLines, &leftLine, &rightLine)
+			cursor = group.markerEnd
+		}
+		lines = appendConflictPlainLines(lines, contentLines, cursor, window.end, &leftLine, &rightLine)
+		sections = append(sections, &gitdiff.DiffSection{FileName: file.path, Lines: lines})
+	}
+
+	diffFile := &gitdiff.DiffFile{
+		Name:      file.path,
+		OldName:   file.path,
+		NameHash:  git.HashFilePathForWebUI(file.path),
+		Type:      gitdiff.DiffFileChange,
+		Mode:      file.mode,
+		OldMode:   file.mode,
+		IsDeleted: file.isDeleted,
+		IsCreated: file.isCreated,
+		Sections:  sections,
+	}
+	for _, section := range sections {
+		for _, line := range section.Lines {
+			switch line.Type {
+			case gitdiff.DiffLineAdd:
+				diffFile.Addition++
+			case gitdiff.DiffLineDel:
+				diffFile.Deletion++
+			}
+		}
+	}
+	return diffFile
+}
+
+// applyConflictTexts builds the resolved file content by replacing Git conflict
+// marker blocks with the text the user confirmed in the editor. Content outside
+// marker blocks is the actual merge result and is preserved, including hunks Git
+// merged automatically within an otherwise conflicted file.
+func applyConflictTexts(mergedContent []byte, groups []conflictGroup, texts map[int]string) []byte {
+	mergedLines := splitFileLines(mergedContent)
+
+	// Process in reverse so earlier indices stay valid after splice operations.
+	for i := len(groups) - 1; i >= 0; i-- {
+		text, ok := texts[i]
+		if !ok {
+			continue
+		}
+
+		var resolvedLines []string
+		if trimmed := strings.TrimRight(text, "\n"); trimmed != "" {
+			resolvedLines = strings.Split(trimmed, "\n")
+		}
+		start := min(max(groups[i].markerStart, 0), len(mergedLines))
+		end := min(max(groups[i].markerEnd, start), len(mergedLines))
+		newLines := make([]string, 0, len(mergedLines)-end+start+len(resolvedLines))
+		newLines = append(newLines, mergedLines[:start]...)
+		newLines = append(newLines, resolvedLines...)
+		newLines = append(newLines, mergedLines[end:]...)
+		mergedLines = newLines
+	}
+
+	return []byte(strings.Join(mergedLines, "\n"))
+}
+
+// conflictResolutionRequest is the JSON body for POST /conflicts.
+type conflictResolutionRequest struct {
+	BaseCommitID string `json:"baseCommitID"` // base branch HEAD at page-render time; used to detect stale submissions
+	HeadCommitID string `json:"headCommitID"` // head branch HEAD at page-render time; used to detect stale submissions
+	Whitespace   string `json:"whitespace"`
+	Files        []struct {
+		Path      string `json:"path"`
+		Conflicts []struct {
+			Index      int    `json:"index"`
+			Text       string `json:"text"`                 // resolved text from the editor
+			DeleteFile bool   `json:"deleteFile,omitempty"` // true when the user chose the deleted side of a modify/delete conflict
+		} `json:"conflicts"`
+	} `json:"files"`
+}
+
+func unmergedEntryPaths(entries []files_service.UnmergedIndexEntry) []string {
+	seen := make(map[string]struct{}, len(entries))
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if _, ok := seen[entry.Path]; ok {
+			continue
+		}
+		seen[entry.Path] = struct{}{}
+		paths = append(paths, entry.Path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+type unsupportedUnmergedFileModeError struct {
+	Path string
+	Mode string
+}
+
+func (e *unsupportedUnmergedFileModeError) Error() string {
+	return fmt.Sprintf("conflict resolution is not available for one or more files because of a %s conflict; please contact support or a moderator for assistance", unmergedFileModeDescription(e.Mode))
+}
+
+func unmergedFileModeDescription(mode string) string {
+	switch mode {
+	case git.EntryModeSymlink.String():
+		return "symlink"
+	case git.EntryModeCommit.String():
+		return "submodule"
+	case git.EntryModeTree.String(), "040000":
+		return "directory"
+	case "":
+		return "missing file mode"
+	default:
+		return "non-regular file mode " + mode
+	}
+}
+
+func isBrowserResolvableFileMode(mode string) bool {
+	return mode == git.EntryModeBlob.String() || mode == git.EntryModeExec.String()
+}
+
+func unmergedRegularFileModes(entries []files_service.UnmergedIndexEntry) (map[string]string, []string, error) {
+	stagesByPath := make(map[string]map[int]string, len(entries))
+	for _, entry := range entries {
+		if _, ok := stagesByPath[entry.Path]; !ok {
+			stagesByPath[entry.Path] = map[int]string{}
+		}
+		stagesByPath[entry.Path][entry.Stage] = entry.Mode
+	}
+
+	paths := unmergedEntryPaths(entries)
+	modes := make(map[string]string, len(paths))
+	for _, path := range paths {
+		stages := stagesByPath[path]
+		for _, stageMode := range stages {
+			if !isBrowserResolvableFileMode(stageMode) {
+				return nil, nil, &unsupportedUnmergedFileModeError{Path: path, Mode: stageMode}
+			}
+		}
+		mode := stages[2] // ours: the PR head branch checked out in the temp repo
+		if mode == "" {
+			mode = stages[3] // theirs: the base branch being merged in
+		}
+		if mode == "" {
+			mode = stages[1]
+		}
+		if !isBrowserResolvableFileMode(mode) {
+			return nil, nil, &unsupportedUnmergedFileModeError{Path: path, Mode: mode}
+		}
+		modes[path] = mode
+	}
+	return modes, paths, nil
+}
+
+// SubmitConflictResolution handles POST /{owner}/{repo}/pulls/{index}/conflicts.
+// It reads the user's keep/use choices, applies them to each conflicted file,
+// commits the result to the head branch, and returns 200 so the frontend can redirect.
+func SubmitConflictResolution(ctx *context.Context) {
+	issue, ok := getPullInfo(ctx)
+	if !ok {
+		return
+	}
+	pull := issue.PullRequest
+
+	if !ctx.IsSigned || ctx.Doer == nil {
+		ctx.PlainText(http.StatusUnauthorized, "sign in required")
+		return
+	}
+
+	allowedUpdateByMerge, _, err := pull_service.IsUserAllowedToUpdate(ctx, pull, ctx.Doer)
+	if err != nil {
+		ctx.ServerError("IsUserAllowedToUpdate", err)
+		return
+	}
+	isPosterOrAdmin := ctx.Doer.ID == issue.PosterID || ctx.Doer.IsAdmin
+	if !isPosterOrAdmin && !allowedUpdateByMerge {
+		ctx.PlainText(http.StatusForbidden, "not allowed to resolve conflicts")
+		return
+	}
+
+	if pull.HasMerged {
+		ctx.PlainText(http.StatusBadRequest, "pull request has already been merged")
+		return
+	}
+	if issue.IsClosed {
+		ctx.PlainText(http.StatusBadRequest, "pull request is closed")
+		return
+	}
+	if !pull.IsFilesConflicted() {
+		ctx.PlainText(http.StatusBadRequest, "pull request has no conflicts")
+		return
+	}
+	// Cap the request body to bound memory: each conflicted file may carry at
+	// most one fully-resolved blob, so MaxDisplayFileSize per file is the
+	// natural upper bound, plus a fixed envelope for JSON framing. The database
+	// conflict list is advisory only; the actual conflict set is validated below
+	// against a real merge index.
+	const conflictBodyEnvelopeOverhead = 64 * 1024
+	conflictFileCount := len(pull.ConflictedFiles)
+	if conflictFileCount == 0 {
+		conflictFileCount = 10
+	}
+	maxBytes := int64(conflictFileCount)*setting.UI.MaxDisplayFileSize + conflictBodyEnvelopeOverhead
+	bodyReader := http.MaxBytesReader(ctx.Resp, ctx.Req.Body, maxBytes)
+	defer bodyReader.Close()
+
+	var req conflictResolutionRequest
+	if err := json.NewDecoder(bodyReader).Decode(&req); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			ctx.PlainText(http.StatusRequestEntityTooLarge, fmt.Sprintf("request body exceeds %d bytes", maxBytes))
+			return
+		}
+		ctx.PlainText(http.StatusBadRequest, "parse body: "+err.Error())
+		return
+	}
+	if len(req.Files) == 0 {
+		ctx.PlainText(http.StatusBadRequest, "no files provided")
+		return
+	}
+
+	whitespace := req.Whitespace
+	switch whitespace {
+	case "", "show-all", "ignore-all", "ignore-change", "ignore-eol":
+		// known, accepted as-is
+	default:
+		log.Warn("SubmitConflictResolution: unknown whitespace mode %q for CR #%d, normalising to show-all", whitespace, pull.Index)
+		whitespace = "show-all"
+	}
+	_ = whitespace // marker-based parser does not consume whitespace flags; retained for future use
+
+	requestedFileSet := make(map[string]struct{}, len(req.Files))
+	for _, fileReq := range req.Files {
+		requestedFileSet[fileReq.Path] = struct{}{}
+	}
+
+	// Acquire the PR working lock to prevent races with concurrent merges or updates.
+	releaser, err := globallock.Lock(ctx, fmt.Sprintf("pull_working_%d", pull.ID))
+	if err != nil {
+		ctx.ServerError("globallock.Lock", err)
+		return
+	}
+
+	// Load the head repo (may differ from base repo for forked PRs)
+	if err := pull.LoadHeadRepo(ctx); err != nil {
+		ctx.ServerError("LoadHeadRepo", err)
+		releaser()
+		return
+	}
+	headRepo := pull.HeadRepo
+	if headRepo == nil {
+		ctx.PlainText(http.StatusBadRequest, "head repository not found")
+		releaser()
+		return
+	}
+
+	gitRepo := ctx.Repo.GitRepo
+
+	headCommitID, err := gitRepo.GetRefCommitID(pull.GetGitHeadRefName())
+	if err != nil {
+		ctx.ServerError("GetRefCommitID", err)
+		releaser()
+		return
+	}
+	baseCommitID, err := gitRepo.GetBranchCommitID(pull.BaseBranch)
+	if err != nil {
+		ctx.ServerError("GetBranchCommitID", err)
+		releaser()
+		return
+	}
+
+	// Reject stale submissions: if either branch advanced since the user loaded the
+	// conflict page, the line ranges in the diff have shifted and the resolutions would
+	// be applied at the wrong positions.
+	if req.BaseCommitID == "" {
+		ctx.PlainText(http.StatusBadRequest, "missing baseCommitID")
+		releaser()
+		return
+	}
+	if req.HeadCommitID == "" {
+		ctx.PlainText(http.StatusBadRequest, "missing headCommitID")
+		releaser()
+		return
+	}
+	if req.BaseCommitID != baseCommitID {
+		ctx.PlainText(http.StatusConflict, "base branch has been updated since you loaded this page, please reload and try again")
+		releaser()
+		return
+	}
+	if req.HeadCommitID != headCommitID {
+		ctx.PlainText(http.StatusConflict, "change request branch has been updated since you loaded this page, please reload and try again")
+		releaser()
+		return
+	}
+
+	// Resolve each conflicted file and collect the resulting content.
+	type resolvedFile struct {
+		path    string
+		mode    string // git object mode, e.g. "100644" or "100755"
+		content []byte
+		delete  bool
+	}
+	var resolvedFiles []resolvedFile
+
+	// Create a merge commit on the head branch. The temporary repository starts at
+	// the PR head, performs a real no-commit merge of the base branch, then replaces
+	// only the remaining unmerged paths with the user's resolved blobs. This keeps
+	// Git's automatically merged index entries, including non-conflicting base-side
+	// changes, in the tree committed below.
+	t, err := files_service.NewTemporaryUploadRepository(headRepo)
+	if err != nil {
+		ctx.ServerError("NewTemporaryUploadRepository", err)
+		releaser()
+		return
+	}
+	defer t.Close()
+
+	if err := t.Clone(ctx, pull.HeadBranch, false); err != nil {
+		ctx.ServerError("Clone", err)
+		releaser()
+		return
+	}
+
+	// For fork PRs the base commit lives in a different repo; make it reachable via alternates.
+	if headRepo.ID != pull.BaseRepoID {
+		if err := t.AddObjectAlternates(ctx.Repo.Repository.RepoPath()); err != nil {
+			ctx.ServerError("AddObjectAlternates", err)
+			releaser()
+			return
+		}
+	}
+
+	hadConflicts, err := t.MergeNoCommitAllowConflicts(ctx, baseCommitID)
+	if err != nil {
+		ctx.ServerError("MergeNoCommitAllowConflicts", err)
+		releaser()
+		return
+	}
+	if !hadConflicts {
+		ctx.PlainText(http.StatusConflict, "pull request no longer has conflicts, please reload and try again")
+		releaser()
+		return
+	}
+
+	unmergedEntries, err := t.ListUnmergedIndexEntries(ctx)
+	if err != nil {
+		ctx.ServerError("ListUnmergedIndexEntries", err)
+		releaser()
+		return
+	}
+	unmergedModes, unmergedPaths, err := unmergedRegularFileModes(unmergedEntries)
+	if err != nil {
+		ctx.PlainText(http.StatusBadRequest, err.Error())
+		releaser()
+		return
+	}
+	unmergedFileSet := make(map[string]struct{}, len(unmergedPaths))
+	for _, path := range unmergedPaths {
+		unmergedFileSet[path] = struct{}{}
+		if _, ok := requestedFileSet[path]; !ok {
+			ctx.PlainText(http.StatusBadRequest, "missing resolution for conflicted file: "+path)
+			releaser()
+			return
+		}
+	}
+	unmergedByPath := entriesByPath(unmergedEntries)
+	for _, fileReq := range req.Files {
+		if len(fileReq.Conflicts) == 0 {
+			ctx.PlainText(http.StatusBadRequest, "no conflicts provided for file: "+fileReq.Path)
+			releaser()
+			return
+		}
+		if _, ok := unmergedFileSet[fileReq.Path]; !ok {
+			ctx.PlainText(http.StatusBadRequest, "submitted file is no longer conflicted: "+fileReq.Path)
+			releaser()
+			return
+		}
+
+		mergeConflictFile, err := buildMergeConflictFile(ctx, t, fileReq.Path, unmergedByPath[fileReq.Path], setting.UI.MaxDisplayFileSize)
+		if err != nil {
+			ctx.PlainText(http.StatusBadRequest, err.Error())
+			releaser()
+			return
+		}
+
+		resolved := mergeConflictFile.content
+		deleteFile := false
+		texts := make(map[int]string, len(fileReq.Conflicts))
+		for _, c := range fileReq.Conflicts {
+			if c.Index < 0 || c.Index >= len(mergeConflictFile.groups) {
+				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("conflict index %d out of range for %s", c.Index, fileReq.Path))
+				releaser()
+				return
+			}
+			if c.DeleteFile {
+				if strings.TrimRight(c.Text, "\n") != "" {
+					ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("delete resolution for %s must not include file content", fileReq.Path))
+					releaser()
+					return
+				}
+				deleteFile = true
+			}
+			texts[c.Index] = c.Text
+		}
+		for i := range mergeConflictFile.groups {
+			if _, ok := texts[i]; !ok {
+				ctx.PlainText(http.StatusBadRequest, fmt.Sprintf("missing resolution for conflict %d in %s", i, fileReq.Path))
+				releaser()
+				return
+			}
+		}
+		if deleteFile {
+			if !mergeConflictFile.isDeleted && !mergeConflictFile.isCreated {
+				ctx.PlainText(http.StatusBadRequest, "delete resolution is only valid for a modify/delete conflict: "+fileReq.Path)
+				releaser()
+				return
+			}
+		} else {
+			resolved = applyConflictTexts(mergeConflictFile.content, mergeConflictFile.groups, texts)
+		}
+
+		resolvedFiles = append(resolvedFiles, resolvedFile{path: fileReq.Path, mode: mergeConflictFile.mode, content: resolved, delete: deleteFile})
+	}
+
+	if len(resolvedFiles) == 0 {
+		ctx.Status(http.StatusOK)
+		releaser()
+		return
+	}
+
+	for _, rf := range resolvedFiles {
+		if rf.delete {
+			if err := t.RemoveFilesFromIndex(ctx, rf.path); err != nil {
+				ctx.ServerError("RemoveFilesFromIndex", err)
+				releaser()
+				return
+			}
+			continue
+		}
+		blobHash, err := t.HashObjectAndWrite(ctx, bytes.NewReader(rf.content))
+		if err != nil {
+			ctx.ServerError("HashObjectAndWrite", err)
+			releaser()
+			return
+		}
+		mode := rf.mode
+		if unmergedMode, ok := unmergedModes[rf.path]; ok {
+			mode = unmergedMode
+		}
+		if err := t.ResolveIndexPath(ctx, mode, blobHash, rf.path); err != nil {
+			ctx.ServerError("ResolveIndexPath", err)
+			releaser()
+			return
+		}
+	}
+
+	remainingUnmerged, err := t.ListUnmergedIndexEntries(ctx)
+	if err != nil {
+		ctx.ServerError("ListUnmergedIndexEntries", err)
+		releaser()
+		return
+	}
+	if len(remainingUnmerged) > 0 {
+		ctx.PlainText(http.StatusBadRequest, "unresolved conflicted files remain: "+strings.Join(unmergedEntryPaths(remainingUnmerged), ", "))
+		releaser()
+		return
+	}
+
+	treeHash, err := t.WriteTree(ctx)
+	if err != nil {
+		ctx.ServerError("WriteTree", err)
+		releaser()
+		return
+	}
+
+	mergeCommitID, err := t.CommitTree(ctx, &files_service.CommitTreeUserOptions{
+		ParentCommitID:            headCommitID,
+		AdditionalParentCommitIDs: []string{baseCommitID},
+		TreeHash:                  treeHash,
+		CommitMessage:             "Resolve merge conflicts",
+		DoerUser:                  ctx.Doer,
+	})
+	if err != nil {
+		ctx.ServerError("CommitTree", err)
+		releaser()
+		return
+	}
+
+	if err := t.PushWithOptions(ctx, ctx.Doer, mergeCommitID, pull.HeadBranch, true); err != nil {
+		if git.IsErrPushOutOfDate(err) {
+			ctx.PlainText(http.StatusConflict, "head branch was updated concurrently, please reload and try again")
+			releaser()
+			return
+		}
+		ctx.ServerError("PushWithOptions", err)
+		releaser()
+		return
+	}
+
+	// Release before the synchronous pull-request check below. In tests this can
+	// run in the same goroutine, and the checker acquires the same pull_working lock.
+	releaser()
+
+	// Trigger re-check so IsPullFilesConflicted and CommitsBehind update.
+	// Passing NewCommitID causes GetDiverging to run synchronously, so CommitsBehind = 0
+	// is written to the database before we return — the PR page never shows "out-of-date".
+	pull_service.AddTestPullRequestTask(pull_service.TestPullRequestOptions{
+		RepoID:      headRepo.ID,
+		Branch:      pull.HeadBranch,
+		Doer:        ctx.Doer,
+		IsSync:      true,
+		OldCommitID: headCommitID,
+		NewCommitID: mergeCommitID,
+	})
+
+	ctx.Status(http.StatusOK)
 }
 
 func ViewPullFilesForSingleCommit(ctx *context.Context) {

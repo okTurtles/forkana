@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,10 +48,100 @@ func NewTemporaryUploadRepository(repo *repo_model.Repository) (*TemporaryUpload
 
 // Close the repository cleaning up all files
 func (t *TemporaryUploadRepository) Close() {
-	defer t.gitRepo.Close()
+	if t.gitRepo != nil {
+		defer t.gitRepo.Close()
+	}
 	if t.cleanup != nil {
 		t.cleanup()
 	}
+}
+
+// AddObjectAlternates appends the given repo paths to this repo's git object alternates,
+// making their objects reachable. Must be called after Clone.
+func (t *TemporaryUploadRepository) AddObjectAlternates(repoPaths ...string) (err error) {
+	p := filepath.Join(t.basePath, ".git", "objects", "info", "alternates")
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return fmt.Errorf("AddObjectAlternates mkdir: %w", err)
+	}
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("AddObjectAlternates open: %w", err)
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("AddObjectAlternates close: %w", cerr)
+		}
+	}()
+	for _, rp := range repoPaths {
+		if _, err := fmt.Fprintln(f, filepath.Join(rp, "objects")); err != nil {
+			return fmt.Errorf("AddObjectAlternates write: %w", err)
+		}
+	}
+	return nil
+}
+
+func readAllAtMost(r io.Reader, maxSize int64) ([]byte, error) {
+	if maxSize <= 0 {
+		return io.ReadAll(r)
+	}
+	data, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxSize {
+		return nil, fmt.Errorf("content exceeds %d bytes", maxSize)
+	}
+	return data, nil
+}
+
+func cleanTemporaryRepoPath(filename string) (string, error) {
+	cleaned := filepath.Clean(filename)
+	if cleaned == "." || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
+		return "", util.NewInvalidArgumentErrorf("invalid temporary repo path: %q", filename)
+	}
+	return cleaned, nil
+}
+
+// ReadWorkingTreeFile reads a file from this temporary repository's working tree.
+func (t *TemporaryUploadRepository) ReadWorkingTreeFile(filename string, maxSize int64) ([]byte, error) {
+	cleaned, err := cleanTemporaryRepoPath(filename)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(filepath.Join(t.basePath, cleaned))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return readAllAtMost(f, maxSize)
+}
+
+// ReadObjectBlob reads a blob object reachable from this temporary repository.
+func (t *TemporaryUploadRepository) ReadObjectBlob(ctx context.Context, objectID string, maxSize int64) ([]byte, error) {
+	if maxSize > 0 {
+		objectSize, stderr, err := gitcmd.NewCommand("cat-file", "-s").AddDynamicArguments(objectID).RunStdString(ctx, &gitcmd.RunOpts{Dir: t.basePath})
+		if err != nil {
+			return nil, fmt.Errorf("cat-file -s %s: %w\nstderr: %s", objectID, err, stderr)
+		}
+		size, parseErr := strconv.ParseInt(strings.TrimSpace(objectSize), 10, 64)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse blob size for %s: %w", objectID, parseErr)
+		}
+		if size > maxSize {
+			return nil, fmt.Errorf("content exceeds %d bytes", maxSize)
+		}
+	}
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	if err := gitcmd.NewCommand("cat-file", "blob").AddDynamicArguments(objectID).Run(ctx, &gitcmd.RunOpts{
+		Dir:    t.basePath,
+		Stdout: stdout,
+		Stderr: stderr,
+	}); err != nil {
+		return nil, fmt.Errorf("cat-file blob %s: %w\nstderr: %s", objectID, err, stderr.String())
+	}
+	return readAllAtMost(stdout, maxSize)
 }
 
 // Clone the base repository to our path and set branch as the HEAD
@@ -200,6 +292,111 @@ func (t *TemporaryUploadRepository) AddObjectToIndex(ctx context.Context, mode, 
 	return nil
 }
 
+// UnmergedIndexEntry is one stage entry from `git ls-files -u`.
+type UnmergedIndexEntry struct {
+	Mode     string
+	ObjectID string
+	Stage    int
+	Path     string
+}
+
+// MergeNoCommitAllowConflicts merges commitID into the checked-out branch without
+// committing. It returns true when Git stopped on conflicts and left an unmerged
+// index that the caller can resolve.
+func (t *TemporaryUploadRepository) MergeNoCommitAllowConflicts(ctx context.Context, commitID string) (bool, error) {
+	stdOut := new(bytes.Buffer)
+	stdErr := new(bytes.Buffer)
+	err := gitcmd.NewCommand("merge", "--no-ff", "--no-commit").AddDynamicArguments(commitID).
+		Run(ctx, &gitcmd.RunOpts{Dir: t.basePath, Stdout: stdOut, Stderr: stdErr})
+	if err == nil {
+		return false, nil
+	}
+
+	unmerged, listErr := t.ListUnmergedIndexEntries(ctx)
+	if listErr == nil && len(unmerged) > 0 {
+		if _, statErr := os.Stat(filepath.Join(t.basePath, ".git", "MERGE_HEAD")); statErr == nil {
+			return true, nil
+		}
+	}
+	if listErr != nil {
+		return false, fmt.Errorf("MergeNoCommitAllowConflicts: %w\nstdout: %s\nstderr: %s\nlist unmerged: %v", err, stdOut.String(), stdErr.String(), listErr)
+	}
+	return false, fmt.Errorf("MergeNoCommitAllowConflicts: %w\nstdout: %s\nstderr: %s", err, stdOut.String(), stdErr.String())
+}
+
+// ListUnmergedIndexEntries returns all unmerged index stages, optionally limited
+// to the provided filenames.
+func (t *TemporaryUploadRepository) ListUnmergedIndexEntries(ctx context.Context, filenames ...string) ([]UnmergedIndexEntry, error) {
+	stdOut := new(bytes.Buffer)
+	stdErr := new(bytes.Buffer)
+	if err := gitcmd.NewCommand("ls-files", "-u", "-z").AddDashesAndList(filenames...).Run(ctx, &gitcmd.RunOpts{
+		Dir:    t.basePath,
+		Stdout: stdOut,
+		Stderr: stdErr,
+	}); err != nil {
+		return nil, fmt.Errorf("git ls-files -u -z: %w\nstderr: %s", err, stdErr.String())
+	}
+
+	entries := make([]UnmergedIndexEntry, 0)
+	for record := range bytes.SplitSeq(stdOut.Bytes(), []byte{'\000'}) {
+		if len(record) == 0 {
+			continue
+		}
+		parts := strings.SplitN(string(record), " ", 3)
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("malformed ls-files -u record: %q", string(record))
+		}
+		stageAndPath := strings.SplitN(parts[2], "\t", 2)
+		if len(stageAndPath) != 2 {
+			return nil, fmt.Errorf("malformed ls-files -u stage/path: %q", string(record))
+		}
+		stage, err := strconv.Atoi(stageAndPath[0])
+		if err != nil {
+			return nil, fmt.Errorf("malformed ls-files -u stage %q: %w", stageAndPath[0], err)
+		}
+		entries = append(entries, UnmergedIndexEntry{
+			Mode:     parts[0],
+			ObjectID: parts[1],
+			Stage:    stage,
+			Path:     stageAndPath[1],
+		})
+	}
+	return entries, nil
+}
+
+// ResolveIndexPath clears all unmerged stages for objectPath and installs the
+// provided blob as the resolved stage-0 index entry.
+func (t *TemporaryUploadRepository) ResolveIndexPath(ctx context.Context, mode, objectHash, objectPath string) error {
+	objFmt, err := t.gitRepo.GetObjectFormat()
+	if err != nil {
+		return fmt.Errorf("unable to get object format for temporary repo: %q, error: %w", t.repo.FullName(), err)
+	}
+
+	stdIn := new(bytes.Buffer)
+	_, _ = fmt.Fprintf(stdIn, "0 %s\t%s\x00", objFmt.EmptyObjectID(), objectPath)
+	_, _ = fmt.Fprintf(stdIn, "%s %s\t%s\x00", mode, objectHash, objectPath)
+
+	stdOut := new(bytes.Buffer)
+	stdErr := new(bytes.Buffer)
+	if err := gitcmd.NewCommand("update-index", "-z", "--index-info").Run(ctx, &gitcmd.RunOpts{
+		Dir:    t.basePath,
+		Stdin:  stdIn,
+		Stdout: stdOut,
+		Stderr: stdErr,
+	}); err != nil {
+		return fmt.Errorf("ResolveIndexPath update-index for %s: %w\nstdout: %s\nstderr: %s", objectPath, err, stdOut.String(), stdErr.String())
+	}
+
+	remaining, err := t.ListUnmergedIndexEntries(ctx, objectPath)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("ResolveIndexPath left %d unmerged entries for %s", len(remaining), objectPath)
+	}
+	return nil
+}
+
 // WriteTree writes the current index as a tree to the object db and returns its hash
 func (t *TemporaryUploadRepository) WriteTree(ctx context.Context) (string, error) {
 	stdout, _, err := gitcmd.NewCommand("write-tree").RunStdString(ctx, &gitcmd.RunOpts{Dir: t.basePath})
@@ -229,10 +426,11 @@ func (t *TemporaryUploadRepository) GetLastCommitByRef(ctx context.Context, ref 
 }
 
 type CommitTreeUserOptions struct {
-	ParentCommitID string
-	TreeHash       string
-	CommitMessage  string
-	SignOff        bool
+	ParentCommitID            string
+	AdditionalParentCommitIDs []string // extra -p parents, e.g. for a merge commit
+	TreeHash                  string
+	CommitMessage             string
+	SignOff                   bool
 
 	DoerUser *user_model.User
 
@@ -291,6 +489,11 @@ func (t *TemporaryUploadRepository) CommitTree(ctx context.Context, opts *Commit
 	cmdCommitTree := gitcmd.NewCommand("commit-tree").AddDynamicArguments(opts.TreeHash)
 	if opts.ParentCommitID != "" {
 		cmdCommitTree.AddOptionValues("-p", opts.ParentCommitID)
+	}
+	for _, pid := range opts.AdditionalParentCommitIDs {
+		if pid != "" {
+			cmdCommitTree.AddOptionValues("-p", pid)
+		}
 	}
 
 	var sign bool

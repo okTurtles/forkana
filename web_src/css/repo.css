@@ -940,7 +940,6 @@ td .commit-summary {
 }
 
 .repository .diff-file-box .file-body.file-code {
-  background: var(--color-code-bg);
   border-radius: var(--border-radius);
 }
 
@@ -956,10 +955,12 @@ td .commit-summary {
 .repository .diff-file-box .code-diff td {
   padding: 0 0 0 10px !important;
   border-top: 0;
+  border-left: 0;
 }
 
 .repository .diff-file-box .code-diff .lines-num {
-  padding: 0 5px !important;
+  padding: 5px !important;
+  line-height: 28px;
 }
 
 .repository .diff-file-box .code-diff .tag-code .lines-num,
@@ -1757,8 +1758,12 @@ tbody.commit-list {
 .code-diff-split .del-code .add-code.lines-type-marker-new,
 .code-diff-split .del-code .add-code.lines-escape-new,
 .code-diff-split .del-code .add-code.lines-code-new {
-  background: var(--color-diff-added-row-bg);
+  background: var(--color-white);
   border-color: var(--color-diff-added-row-border);
+}
+
+.code-diff-split .del-code .add-code.lines-code-new .added-code {
+  background: var(--color-diff-added-row-bg);
 }
 
 .code-diff-split .del-code .lines-type-marker-new,
@@ -1775,6 +1780,10 @@ tbody.commit-list {
   background: var(--color-diff-inactive);
 }
 
+.lines-num.lines-num-new {
+  border-left: 1px solid var(--color-secondary) !important;
+}
+
 .code-diff-unified .del-code .lines-num,
 .code-diff-split .del-code .lines-num {
   background: var(--color-diff-removed-linenum-bg);
@@ -1786,11 +1795,6 @@ tbody.commit-list {
 .code-diff-split .del-code .add-code.lines-num {
   background: var(--color-diff-added-linenum-bg);
   color: var(--color-text-light-3);
-}
-
-.code-diff-split tbody tr td:nth-child(5),
-.code-diff-split tbody tr td.add-comment-right {
-  border-left: 1px solid var(--color-secondary);
 }
 
 .migrate-entries {

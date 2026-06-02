@@ -255,9 +255,9 @@ func TestGiteaUploadUpdateGitForPullRequest(t *testing.T) {
 	}))
 	fromGitRepo, err := gitrepo.OpenRepository(t.Context(), fromRepo)
 	assert.NoError(t, err)
-	defer fromGitRepo.Close()
 	baseSHA, err := fromGitRepo.GetBranchCommitID(baseRef)
 	assert.NoError(t, err)
+	fromGitRepo.Close()
 
 	//
 	// fromRepo branch1
@@ -273,9 +273,11 @@ func TestGiteaUploadUpdateGitForPullRequest(t *testing.T) {
 		Author:    &signature,
 		Message:   "Pull request",
 	}))
+	fromGitRepo, err = gitrepo.OpenRepository(t.Context(), fromRepo)
 	assert.NoError(t, err)
 	headSHA, err := fromGitRepo.GetBranchCommitID(headRef)
 	assert.NoError(t, err)
+	fromGitRepo.Close()
 
 	fromRepoOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: fromRepo.OwnerID})
 

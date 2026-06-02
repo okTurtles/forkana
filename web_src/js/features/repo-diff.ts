@@ -11,6 +11,7 @@ import {createTippy} from '../modules/tippy.ts';
 import {invertFileFolding} from './file-fold.ts';
 import {parseDom} from '../utils.ts';
 import {registerGlobalSelectorFunc} from '../modules/observer.ts';
+import {initConflictReview} from './repo-conflict-review.ts';
 
 const {i18n} = window.config;
 
@@ -254,6 +255,13 @@ export function initRepoDiffView() {
   initRepoDiffConversationForm(); // such form appears on the "conversation" page and "diff" page
 
   if (!document.querySelector('#diff-file-boxes')) return;
+
+  // Initialize conflict review UI if on the conflicts page
+  if (document.querySelector('.conflict-submit-btn')) {
+    initConflictReview();
+    return; // conflict page has its own simplified UI, skip standard diff init
+  }
+
   initRepoDiffConversationNav(); // "previous" and "next" buttons only appear on "diff" page
   initDiffFileTree();
   initDiffCommitSelect();

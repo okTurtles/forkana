@@ -42,12 +42,30 @@
 
 @media (max-width: 767.98px) {
   .repository.view.issue .comment-list .comment .content .form .button:not(:last-child) {
-      margin-bottom: 0 !important;
+    margin-bottom: 0 !important;
   }
 
   /* Make footer buttons equal height when text wraps */
   .field.footer .flex-text-block {
     align-items: stretch;
+  }
+
+  /* Hide SVG icons in PR tab menu items */
+  .ui.pull.tabs .ui.tabular.menu .item svg {
+    display: none !important;
+  }
+
+  .issue-title-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: .5rem;
+  }
+}
+
+@media (max-width: 450px) {
+  /* Hide labels in PR tab menu items */
+  .ui.pull.tabs .ui.tabular.menu .item .label {
+    display: none !important;
   }
 }
 
@@ -59,7 +77,7 @@
 
 /* More padding on diff detail box and ensure high z-index for sticky header and contained modal */
 .diff-detail-box {
-  padding: .8rem .4rem .8rem .4rem !important;
+  padding: .8rem .4rem !important;
   z-index: 105 !important;
   margin-bottom: .5rem !important;
 }
@@ -111,7 +129,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  margin: 0 0 12px 0;
+  margin: 0 0 12px;
   background: var(--color-banner-bg);
   border: 1px solid var(--color-banner-border);
   border-radius: 8px;
@@ -185,19 +203,14 @@
 }
 
 .diff-split-header th {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
   font-weight: var(--font-weight-medium);
   font-size: 0.875rem;
   text-align: center;
-  color: var(--color-text-primary);
 }
 
 .diff-split-header-left {
   border-right: 1px solid var(--color-border-light);
-}
-
-.diff-split-header-right {
-  background: var(--color-surface-subtle);
 }
 
 /* Hide the collapsible file header for changes */
@@ -225,6 +238,18 @@
   border: none !important;
 }
 
+/* Hide type-marker (+/-/ ) and escape-toggle columns — line colour conveys the same info.
+   Setting width:0 on the <col> shrinks the column in table-layout:fixed without shifting
+   subsequent cells (unlike display:none on <td>). overflow:hidden clips any content. */
+col.col-escape,
+col.col-type-marker {
+  width: 0 !important;
+}
+.lines-escape,
+.lines-type-marker {
+  overflow: hidden !important;
+  padding: 0 !important;
+}
 
 /* #9 — Hide hunk header rows (@@ ... @@) */
 .code-diff-split tr[data-line-type="tag"],
@@ -242,10 +267,16 @@
   border-color: var(--color-border-muted) !important;
 }
 
-.code-diff-unified .del-code .lines-num,
-.code-diff-split .del-code .lines-num {
+.code-diff-unified .del-code .lines-num {
   background: var(--color-surface-muted) !important;
 }
+
+.code-diff-split .del-code .lines-num,
+.code-diff-split .del-code .add-code.lines-code-new,
+.code-diff .conflict-wrapper-row td.conflict-btn-cell {
+  background-color: rgb(from var(--color-diff-added-row-bg) r g b / 30%);
+}
+
 
 /* Addition lines: light lavender background per design */
 .code-diff-unified .add-code,
@@ -340,7 +371,6 @@
   margin-bottom: 16px;
 }
 
-
 .review-radio-options {
   display: flex;
   flex-direction: column;
@@ -414,7 +444,7 @@
 /* PR diff file comment styling */
 .pull.files.diff .comment {
   border: 1px solid var(--color-secondary);
-  padding: 0rem .4rem;
+  padding: 0 .4rem;
   border-radius: .5rem;
 }
 
@@ -432,7 +462,7 @@
   .combo-markdown-editor markdown-toolbar {
     border-right: 1px solid var(--color-border-input);
     border-left: 1px solid var(--color-border-input);
-    padding: 0.5rem .5rem 0 .5rem;
+    padding: 0.5rem .5rem 0;
   }
 }
 
@@ -476,6 +506,473 @@
   border-top: 0;
   border-radius: 0 0 .5rem .5rem;
   display: block; /* Ensure it behaves like a block for borders/padding */
+}
+
+/* ===== Conflict Resolution Page ===== */
+
+/* Conflicts count header */
+.conflicts-stats-header strong {
+  font-size: 1rem;
+  color: var(--color-error);
+}
+
+.conflict-diff-file-boxes .diff-split-header th {
+  text-align: left !important;
+  color: var(--color-muted-text);
+}
+
+/* Submit button styling */
+.conflict-submit-btn {
+  border-radius: 8px !important;
+  font-weight: var(--font-weight-semibold) !important;
+  font-size: 0.85rem !important;
+  white-space: nowrap;
+}
+
+.conflict-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Fold/unfold toggle button */
+.conflict-fold-toggle-btn {
+  border-radius: 6px !important;
+}
+
+/* Conflict wrapper row (contains the full conflict region) */
+.conflict-wrapper-row {
+  border: none !important;
+}
+
+.repository .diff-file-box .code-diff .conflict-wrapper-cell {
+  padding: 0 !important;
+  border: none !important;
+}
+
+.conflict-wrapper-row .toast-comment-editor .toastui-editor-mode-switch {
+  border-top: none;
+  border-radius: 0;
+}
+
+.conflict-wrapper-row .ui .field .dropzone {
+  margin: 0 4px;
+}
+
+.conflict-comment-form .flex-text-block {
+  padding-right: 4px;
+  padding-bottom: 8px;
+}
+
+.conflict-diff-file-boxes {
+  gap: 8px !important;
+}
+
+.conflict-diff-file-boxes .diff-file-box {
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+/* Main conflict wrapper - colored border that changes when resolved.
+   The border is a ::before pseudo-element (position:absolute, z-index:1) so it:
+   - doesn't shrink the content area (avoids column misalignment with context rows)
+   - paints on top of inner table cell backgrounds (never obscured) */
+.conflict-wrapper {
+  position: relative;
+  margin: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.conflict-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--color-red);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.conflict-wrapper.resolved::before {
+  border-color: var(--color-green);
+}
+
+/* Conflict header: counter and navigation */
+.conflict-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.875rem;
+  font-weight: var(--font-weight-medium);
+}
+
+.conflict-counter {
+  color: var(--color-red);
+  font-weight: var(--font-weight-semibold);
+}
+
+.conflict-wrapper.resolved .conflict-counter {
+  color: var(--color-success);
+}
+
+.conflict-resolved-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: var(--color-success);
+  color: var(--color-white);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: normal;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+.conflict-nav {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.conflict-nav a {
+  color: var(--color-text-primary);
+  text-decoration: none;
+  font-weight: var(--font-weight-medium);
+  font-size: 0.875rem;
+}
+
+.conflict-nav a:hover {
+  color: var(--color-primary);
+}
+
+.conflict-nav a.disabled {
+  color: var(--color-text-light-2);
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Inner table for conflict lines - full width, standard split diff layout */
+.conflict-inner-table {
+  width: 100% !important;
+  border-collapse: collapse;
+  table-layout: fixed !important;
+}
+
+/* Conflict line content: text wraps as paragraphs */
+.conflict-inner-table .lines-code code.code-inner {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+  font-family: inherit !important;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  padding: 8px 12px !important;
+  display: block !important;
+}
+
+/* Left side (del/current) */
+.conflict-inner-table .lines-num.lines-num-old {
+  background: var(--color-diff-removed-row-bg) !important;
+  color: var(--color-text-light-3) !important;
+  padding-top: 10px;
+}
+
+/* Right side (add/proposed) */
+.conflict-inner-table .lines-num.lines-num-new.add-code {
+  background: var(--color-diff-added-row-bg) !important;
+  color: var(--color-text-light-3) !important;
+  padding-top: 10px;
+}
+
+/* Left code content */
+.repository .diff-file-box .code-diff .conflict-inner-table .lines-code-old.conflict-btn-cell,
+.repository .diff-file-box .code-diff .conflict-inner-table td.lines-code-old.del-code{
+  background: rgb(from var(--color-diff-removed-row-bg) r g b / 30%) !important;
+}
+
+.conflict-inner-table .lines-num.lines-num-new {
+  border-left: 1px solid var(--color-secondary) !important;
+  border-right: 0 !important;
+}
+
+.conflict-inner-table .lines-num.lines-num-old {
+  border-left: 1px solid var(--color-secondary) !important;
+  border-right: 1px solid var(--color-secondary) !important;
+}
+
+.repository .diff-file-box .code-diff td {
+  padding: 8px 12px !important;
+}
+
+.repository .diff-file-box .code-diff .conflict-btn-cell {
+  padding-top: 0 !important;
+}
+
+.repository .diff-file-box .code-diff td.lines-code-old.del-code {
+  background: var(--color-muted) !important;
+}
+
+.repository .diff-file-box .code-diff td.lines-num-old.del-code {
+  background: var(--color-muted-1) !important;
+}
+
+.repository .diff-file-box .code-diff .conflict-wrapper-row td {
+  border-right: 0 !important;
+}
+
+.repository .diff-file-box .code-diff .conflict-wrapper-row td.lines-num-old {
+  border-left: 0 !important;
+}
+
+/* Right code content */
+.conflict-inner-table .add-code .lines-code-new {
+  background: var(--color-diff-added-row-bg) !important;
+}
+
+
+.conflict-buttons-row .conflict-btn-gutter {
+  vertical-align: middle;
+}
+
+.conflict-buttons-row .conflict-btn-gutter.lines-num-new.add-code {
+  background: #e5e9ff !important;
+}
+
+.conflict-btn-cell {
+  padding: 8px 12px !important;
+  text-align: right !important;
+}
+
+.conflict-choice-btn {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  gap: 6px !important;
+  padding: 4px 6px !important;
+  font-size: 0.8rem !important;
+  font-weight: var(--font-weight-normal) !important;
+  color: var(--color-text-secondary) !important;
+  border-radius: 4px !important;
+}
+
+/* Circle-down-arrow icon — inherits button colour */
+.conflict-choice-icon {
+  color: var(--color-primary);
+  vertical-align: middle;
+}
+
+.conflict-choice-btn:hover {
+  background: var(--color-hover-bg) !important;
+  color: var(--color-primary) !important;
+}
+
+.conflict-choice-btn.selected {
+  color: var(--color-primary) !important;
+}
+
+.conflict-choice-btn.selected .conflict-choice-icon {
+  color: var(--color-primary);
+}
+
+.conflict-choice-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Comment section */
+.conflict-comment-section .ui.form.comment {
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+}
+
+.conflict-comment-form {
+  padding: 0;
+}
+
+.conflict-resolve-btn {
+  border-radius: 6px !important;
+  font-size: 0.8rem !important;
+  white-space: nowrap;
+}
+
+.conflict-resolve-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Resolved view — shown in place of the conflict diff + editor after Resolve */
+.conflict-wrapper.resolved .lines-num.lines-num-new.add-code,
+.conflict-wrapper.resolved .lines-code-new.resolved-result {
+  background: var(--color-success-bg) !important;
+}
+
+.conflict-wrapper.resolved .lines-num.lines-num-old {
+  background: transparent !important;
+}
+
+.conflict-wrapper.resolved .code-inner {
+  background: transparent !important;
+}
+
+.conflict-resolved-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  width: 50%;
+  margin-left: auto;
+  background: var(--color-success-bg);
+}
+
+.conflict-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-light-2);
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.conflict-edit-btn:hover {
+  color: var(--color-primary);
+  background: var(--color-hover-bg);
+}
+
+/* Side labels: hidden by default, shown on mobile inside the first code cells */
+.conflict-side-label {
+  display: none;
+}
+
+/* ── Mobile: conflict diff responsive layout ── */
+@media (max-width: 767.98px) {
+  .pr-back-link {
+    visibility: hidden;
+    margin: 0;
+  }
+  /* Hide the split table header on mobile — labels move inside the code cells */
+  .conflict-diff-file-boxes .diff-split-header {
+    display: none !important;
+  }
+
+  /* Outer conflict table: switch to auto layout so display:none on context
+     code-old cells doesn't mis-place subsequent cells (fixed layout would shift them) */
+  .conflict-diff-file-boxes .code-diff-split table.chroma {
+    table-layout: auto !important;
+  }
+
+  /* Context lines: collapse the left (old) code cell — identical to the right */
+  .conflict-diff-file-boxes tr.context-line .lines-code-old {
+    display: none !important;
+  }
+
+  /* Context lines: match num column width to the inner conflict table (30px) */
+  .conflict-diff-file-boxes tr.context-line .lines-num {
+    min-width: 30px !important;
+    max-width: 30px !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    font-size: 0.7rem;
+  }
+
+  /* Context lines: hide type-marker column */
+  .conflict-diff-file-boxes tr.context-line .lines-type-marker {
+    display: none !important;
+  }
+
+  /* Inner conflict table: flatten to a CSS grid on <tbody> so all old-side
+     cells can be grouped before all new-side cells using `order`.
+     This puts "Keep this" at the bottom of the old section and "Use this"
+     at the bottom of the new section — each button next to its own content. */
+  .conflict-inner-table {
+    display: block !important;
+    width: 100%;
+  }
+
+  .conflict-wrapper-row .lines-num-old,
+  .conflict-wrapper-row .lines-num-new {
+    width: 100%;
+  }
+
+  .conflict-inner-table tbody {
+    display: grid !important;
+    /* [num-old 30px] [num-new / indent 30px] [code auto] */
+    grid-template-columns: 30px 30px 1fr;
+    /* Paint col-2 track (x:30px, w:30px) for the full tbody height — covers
+       the empty col-2 slots that old-side rows leave vacant */
+    background: linear-gradient(
+      rgb(from var(--color-diff-removed-row-bg) r g b / 30%),
+      rgb(from var(--color-diff-removed-row-bg) r g b / 30%)
+    ) 30px 0 / 30px 100% no-repeat;
+  }
+
+  .conflict-inner-table .lines-code code.code-inner {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Make <tr> invisible to the grid — its <td>s become direct grid items */
+  .conflict-inner-table tr {
+    display: contents !important;
+  }
+
+  .conflict-inner-table .lines-type-marker {
+    display: none !important;
+  }
+
+  /* Thinner num cells on mobile */
+  .conflict-inner-table .lines-num-old,
+  .conflict-inner-table .lines-num-new {
+    min-width: 0;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    font-size: 0.7rem;
+  }
+
+  /* Old-side cells placed first; num in col 1, code in col 3 (same start as new-side) */
+  .conflict-inner-table .lines-num-old {
+    order: 1;
+    grid-column: 1;
+  }
+  .conflict-inner-table .lines-code-old {
+    order: 1;
+    grid-column: 3;
+    background-color: rgb(from var(--color-diff-removed-row-bg) r g b / 30%);
+  }
+
+  /* New-side cells placed after; num in col 2 (indented), code in col 3 */
+  .conflict-inner-table .lines-num-new {
+    order: 2;
+    grid-column: 2;
+    background-color: rgb(from var(--color-diff-removed-row-bg) r g b / 30%) !important;
+  }
+  .conflict-inner-table .lines-code-new {
+    order: 2;
+    grid-column: 3;
+    background-color: rgb(from var(--color-diff-added-row-bg) r g b / 30%);
+  }
+
+  /* Side labels shown as pills inside the first code cell of each side */
+  .conflict-side-label {
+    display: inline-block;
+    font-size: 0.625rem;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-primary);
+    background: var(--color-body);
+    border: 1px solid var(--color-border-light);
+    border-radius: 12px;
+    padding: 1px 8px 0 8px;
+    margin-bottom: 4px;
+    white-space: nowrap;
+  }
 }
 
 /* Upload indicator shown at the bottom of the editor during file uploads */
