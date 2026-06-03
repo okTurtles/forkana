@@ -1,7 +1,5 @@
 # Contribution Guidelines
 
-<details><summary>Table of Contents</summary>
-
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
@@ -15,8 +13,6 @@
 - [Original Gitea Contributing Guidelines](#original-gitea-contributing-guidelines)
 
 <!-- END doctoc -->
-
-</details>
 
 
 ## How to contribute code
