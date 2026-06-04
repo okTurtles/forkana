@@ -1,3 +1,7 @@
+# Standalone compose entry point for Forkana (FORKANA_DEPLOY_MODE=standalone).
+# Forums-mode deployments use the external stack's own docker-compose.yml
+# layered with a digest-pinned override file instead; see
+# DEPLOYMENT_GUIDE.md § "Deployment mode".
 name: forkana
 
 services:
