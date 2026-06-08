@@ -8,19 +8,18 @@
   - [2. Create a fork of the repo, or work in a topic branch](#2-create-a-fork-of-the-repo-or-work-in-a-topic-branch)
   - [3. Follow this Contribution Policy](#3-follow-this-contribution-policy)
     - [Licensing and Ownership](#licensing-and-ownership)
-    - [Pull Request Requirements (❗️)](#pull-request-requirements-)
+    - [Pull Request Requirements](#pull-request-requirements)
 - [AI Usage Policy](#ai-usage-policy)
 - [Original Gitea Contributing Guidelines](#original-gitea-contributing-guidelines)
 
 <!-- END doctoc -->
-
 
 ## How to contribute code
 
 ### 1. Decide what to work on
 
 - Check the [open issues](https://github.com/okTurtles/group-income/issues).
-- Read some docs like __[the deep wiki](https://deepwiki.com/okTurtles/forkana)__ (although be careful, it might be out of date, so we also recommend using a local coding agent to explore the codebase and answer questions).
+- Read some docs like **[the deep wiki](https://deepwiki.com/okTurtles/forkana)** (although be careful, it might be out of date, so we also recommend using a local coding agent to explore the codebase and answer questions).
 
 We recommend [joining `#forkana` on Slack](https://join.slack.com/t/okturtles/shared_invite/zt-10jmpfgxj-tXQ1MKW7t8qqdyY6fB7uyQ) and telling folks what you're interested in working on.
 
@@ -31,7 +30,7 @@ Our process for submitting code is inspired by the [C4.1](https://web.archive.or
 1. **Always** either work in your own fork or a topic-branch and submit pull requests (PRs) to `master`.
 2. **Always** add/update tests for any new/modified functionality. (:exclamation:)
 3. **Always** make sure your PR passes all tests (`grunt test`).
-4. **Always** ensure your PR adheres to the **[Contribution Policy](#contribution-policy)** described below.
+4. **Always** ensure your PR adheres to the **[Contribution Policy](#3-follow-this-contribution-policy)** described below.
 
 ### 3. Follow this Contribution Policy
 
@@ -43,7 +42,7 @@ This contribution policy will evolve over time. For now it is based on a slightl
 2. All patches are owned by their authors. There SHALL NOT be any copyright assignment process.
 3. Each Contributor SHALL be responsible for identifying themselves in the project Contributor list.
 
-#### Pull Request Requirements (❗️)
+#### Pull Request Requirements
 
 Pull requests (PRs) must adhere to the following requirements (unless the Founation is organizing a special hackathon, in which case, hackathon-rules apply).
 
