@@ -5,6 +5,7 @@ package repo
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -33,6 +34,11 @@ func UploadFileToServer(ctx *context.Context) {
 		return
 	}
 	defer file.Close()
+
+	if header.Size > setting.UI.MaxDisplayFileSize {
+		ctx.HTTPError(http.StatusRequestEntityTooLarge, fmt.Sprintf("File size exceeds the limit of %d MB", setting.UI.MaxDisplayFileSize/(1024*1024)))
+		return
+	}
 
 	buf := make([]byte, 1024)
 	n, _ := util.ReadAtMost(file, buf)

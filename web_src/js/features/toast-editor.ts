@@ -2,6 +2,9 @@
 import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
+import {showErrorToast} from '../modules/toast.ts';
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
 export type ToastEditorOptions = {
   height?: string;
@@ -64,9 +67,51 @@ export async function createToastEditor(
         textarea.dispatchEvent(new Event('change'));
       },
     },
+    hooks: {
+      addImageBlobHook: (blob: Blob, callback: (url: string, text?: string) => void) => {
+        if (blob.size > MAX_FILE_SIZE) {
+          showErrorToast(`File exceeds the limit of 20MB and cannot be saved.`);
+          return;
+        }
+        const reader = new FileReader();
+        reader.addEventListener('load', () => {
+          callback(reader.result as string, (blob as File).name || 'image');
+        });
+        reader.readAsDataURL(blob);
+      },
+    },
     widgetRules,
   });
   editorRef.current = editor;
+
+  // Intercept drop and paste events in the capture phase to block files > 20MB
+  container.addEventListener('drop', (e: DragEvent) => {
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+          e.preventDefault();
+          e.stopPropagation();
+          showErrorToast(`File "${file.name}" exceeds the limit of 20MB and cannot be saved.`);
+          return;
+        }
+      }
+    }
+  }, true);
+
+  container.addEventListener('paste', (e: ClipboardEvent) => {
+    const files = e.clipboardData?.files;
+    if (files && files.length > 0) {
+      for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+          e.preventDefault();
+          e.stopPropagation();
+          showErrorToast(`File "${file.name}" exceeds the limit of 20MB and cannot be saved.`);
+          return;
+        }
+      }
+    }
+  }, true);
 
   // Override getMarkdown to strip internal $$widget placeholders
   installBase64WidgetPatch(editor);
