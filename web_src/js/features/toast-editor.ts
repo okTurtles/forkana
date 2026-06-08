@@ -3,8 +3,7 @@ import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 import {showErrorToast} from '../modules/toast.ts';
-
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+import {ensureFilesWithinLimit, getMaxAttachmentSize} from './comp/editorFileLimit.ts';
 
 export type ToastEditorOptions = {
   height?: string;
@@ -15,31 +14,18 @@ export type ToastEditorOptions = {
   toolbarItems?: string[][];
 };
 
-function getRawUrl(src: string): string {
-  const parts = window.location.pathname.split('/');
-  if (parts.length < 5) return src;
-  const owner = parts[1];
-  const repo = parts[2];
-  const branch = parts[4];
-
-  const dirPathParts = parts.slice(5, -1);
-
-  let relativePath = src;
-  if (relativePath.startsWith('./')) {
-    relativePath = relativePath.substring(2);
+// resolveRelativeSrc resolves a relative image path (e.g. "./img/a.png", "../b.png")
+// against the raw URL of the file being edited. The base URL is provided by the server
+// (data-raw-file-url), so it already accounts for appSubUrl and branch names containing
+// slashes; native URL resolution handles "./" and "../" segments correctly.
+function resolveRelativeSrc(src: string, baseFileUrl: string): string {
+  if (!baseFileUrl) return src;
+  try {
+    const base = new URL(baseFileUrl, window.location.origin);
+    return new URL(src, base).href;
+  } catch {
+    return src;
   }
-
-  let dirParts = dirPathParts;
-  while (relativePath.startsWith('../')) {
-    relativePath = relativePath.substring(3);
-    if (dirParts.length > 0) {
-      dirParts = dirParts.slice(0, -1);
-    }
-  }
-  const cleanDirPath = dirParts.length > 0 ? `${dirParts.join('/')}/` : '';
-
-  const subUrl = window.config.appSubUrl || '';
-  return `${subUrl}/${owner}/${repo}/raw/branch/${branch}/${cleanDirPath}${relativePath}`;
 }
 
 export async function createToastEditor(
@@ -73,6 +59,9 @@ export async function createToastEditor(
     container.style.height = height;
   }
 
+  // Server-provided raw URL of the file being edited, used to resolve relative image paths.
+  const rawFileUrl = textarea.getAttribute('data-raw-file-url') || '';
+
   // Initialize Toast UI Editor
   // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- Editor type has issues
   const editorRef = {current: null as Editor | null};
@@ -96,13 +85,17 @@ export async function createToastEditor(
     },
     hooks: {
       addImageBlobHook: (blob: Blob, callback: (url: string, text?: string) => void) => {
-        if (blob.size > MAX_FILE_SIZE) {
-          showErrorToast(`File exceeds the limit of 20MB and cannot be saved.`);
+        const max = getMaxAttachmentSize();
+        if (max && blob.size > max) {
+          showErrorToast(`Image exceeds the limit of ${Math.floor(max / (1024 * 1024))} MB and cannot be saved.`);
           return;
         }
         const reader = new FileReader();
         reader.addEventListener('load', () => {
           callback(reader.result as string, (blob as File).name || 'image');
+        });
+        reader.addEventListener('error', () => {
+          showErrorToast('Failed to read the image file.');
         });
         reader.readAsDataURL(blob);
       },
@@ -114,7 +107,7 @@ export async function createToastEditor(
         const altText = getChildrenText(node);
         let src = node.destination;
         if (src && !src.startsWith('data:') && !src.startsWith('http:') && !src.startsWith('https:') && !src.startsWith('/') && !src.startsWith('#')) {
-          src = getRawUrl(src);
+          src = resolveRelativeSrc(src, rawFileUrl);
         }
         return [
           {type: 'openTag', tagName: 'img', attributes: {src, alt: altText}},
@@ -126,32 +119,18 @@ export async function createToastEditor(
   });
   editorRef.current = editor;
 
-  // Intercept drop and paste events in the capture phase to block files > 20MB
+  // Intercept drop and paste events in the capture phase to block oversized files
   container.addEventListener('drop', (e: DragEvent) => {
-    const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
-      for (const file of files) {
-        if (file.size > MAX_FILE_SIZE) {
-          e.preventDefault();
-          e.stopPropagation();
-          showErrorToast(`File "${file.name}" exceeds the limit of 20MB and cannot be saved.`);
-          return;
-        }
-      }
+    if (!ensureFilesWithinLimit(e.dataTransfer?.files)) {
+      e.preventDefault();
+      e.stopPropagation();
     }
   }, true);
 
   container.addEventListener('paste', (e: ClipboardEvent) => {
-    const files = e.clipboardData?.files;
-    if (files && files.length > 0) {
-      for (const file of files) {
-        if (file.size > MAX_FILE_SIZE) {
-          e.preventDefault();
-          e.stopPropagation();
-          showErrorToast(`File "${file.name}" exceeds the limit of 20MB and cannot be saved.`);
-          return;
-        }
-      }
+    if (!ensureFilesWithinLimit(e.clipboardData?.files)) {
+      e.preventDefault();
+      e.stopPropagation();
     }
   }, true);
 

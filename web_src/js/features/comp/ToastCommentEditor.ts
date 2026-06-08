@@ -21,6 +21,7 @@ import {
   initDropzone,
 } from '../dropzone.ts';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './base64ImageWidget.ts';
+import {ensureFilesWithinLimit} from './editorFileLimit.ts';
 
 // Event dispatched when editor content changes
 export const EventEditorContentChanged = 'ce-editor-content-changed';
@@ -182,6 +183,7 @@ export class ToastCommentEditor {
   }
 
   private async handleDroppedFiles(files: FileList) {
+    if (!ensureFilesWithinLimit(files)) return;
     for (const file of files) {
       const indicator = this.showUploadIndicator(file.name);
       const {width, dppx} = file.size <= 10 * 1024 * 1024 ? await imageInfo(file) : {};

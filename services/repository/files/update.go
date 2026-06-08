@@ -530,8 +530,9 @@ func modifyFile(ctx context.Context, t *TemporaryUploadRepository, file *ChangeR
 		if err != nil {
 			return nil, fmt.Errorf("SeekStart: %w", err)
 		}
-		if size > setting.UI.MaxDisplayFileSize {
-			return nil, ErrFileTooLarge{Size: size, MaxSize: setting.UI.MaxDisplayFileSize, Filename: file.TreePath}
+		maxSize := setting.Attachment.MaxSize << 20 // Attachment.MaxSize is configured in MB
+		if size > maxSize {
+			return nil, ErrFileTooLarge{Size: size, MaxSize: maxSize, Filename: file.TreePath}
 		}
 	}
 

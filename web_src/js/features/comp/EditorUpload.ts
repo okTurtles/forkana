@@ -31,10 +31,12 @@ function uploadFile(dropzoneEl: HTMLElement, file: File, uploadId: number) {
       }
     }
 
-    function onUploadError(errFile: any, message: string) {
+    function onUploadError(errFile: any, message: any) {
       if (errFile._giteaUploadId === curUploadId) {
         cleanup();
-        reject(new Error(message));
+        // Dropzone may pass a string, a server JSON object, or an Error here.
+        const text = typeof message === 'string' ? message : (message?.message ?? JSON.stringify(message));
+        reject(new Error(text));
       }
     }
 

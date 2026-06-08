@@ -44,33 +44,9 @@ func (st *Sanitizer) createDefaultPolicy() *bluemonday.Policy {
 		policy.AllowURLSchemeWithCustomPolicy("vbscript", disallowScheme)
 
 		// Allow data:image/... URIs (e.g. base64-encoded images) by default in Forkana,
-		// preventing them from being stripped in read/edit views.
-		allowDataURIImages := true
-		for _, rule := range setting.ExternalSanitizerRules {
-			if rule.AllowDataURIImages {
-				allowDataURIImages = true
-				break
-			}
-		}
-		if !allowDataURIImages {
-			for _, renderer := range setting.ExternalMarkupRenderers {
-				for _, rule := range renderer.MarkupSanitizerRules {
-					if rule.AllowDataURIImages {
-						allowDataURIImages = true
-						break
-					}
-				}
-				if allowDataURIImages {
-					break
-				}
-			}
-		}
-
-		if allowDataURIImages {
-			policy.AllowURLSchemeWithCustomPolicy("data", allowDataURIImagesPolicy)
-		} else {
-			policy.AllowURLSchemeWithCustomPolicy("data", disallowScheme)
-		}
+		// so they are not stripped in read/edit views. allowDataURIImagesPolicy still
+		// restricts them to known image MIME types, valid base64 and a size cap.
+		policy.AllowURLSchemeWithCustomPolicy("data", allowDataURIImagesPolicy)
 	}
 
 	// Allow classes for org mode list item status.
