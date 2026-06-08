@@ -19,17 +19,32 @@ export function triggerUploadStateChanged(target: HTMLElement) {
 }
 
 function uploadFile(dropzoneEl: HTMLElement, file: File, uploadId: number) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const curUploadId = uploadId;
     (file as any)._giteaUploadId = curUploadId;
     const dropzoneInst = dropzoneEl.dropzone;
-    const onUploadDone = ({file}: {file: any}) => {
-      if (file._giteaUploadId === curUploadId) {
-        dropzoneInst.off(DropzoneCustomEventUploadDone, onUploadDone);
-        resolve(file);
+
+    function onUploadDone({file: doneFile}: {file: any}) {
+      if (doneFile._giteaUploadId === curUploadId) {
+        cleanup();
+        resolve(doneFile);
       }
-    };
+    }
+
+    function onUploadError(errFile: any, message: string) {
+      if (errFile._giteaUploadId === curUploadId) {
+        cleanup();
+        reject(new Error(message));
+      }
+    }
+
+    function cleanup() {
+      dropzoneInst.off(DropzoneCustomEventUploadDone, onUploadDone);
+      dropzoneInst.off('error', onUploadError);
+    }
+
     dropzoneInst.on(DropzoneCustomEventUploadDone, onUploadDone);
+    dropzoneInst.on('error', onUploadError);
     // FIXME: this is not entirely correct because `file` does not satisfy DropzoneFile (we have abused the Dropzone for long time)
     dropzoneInst.addFile(file as DropzoneFile);
   });
@@ -114,9 +129,14 @@ async function handleUploadFiles(editor: CodeMirrorEditor | TextareaEditor, drop
   }
 
   await Promise.all(entries.map(async ({file, placeholder, uploadId}) => {
-    const {width, dppx} = await imageInfo(file);
-    await uploadFile(dropzoneEl, file, uploadId); // the "file" will get its "uuid" during the upload
-    editor.replacePlaceholder(placeholder, generateMarkdownLinkForAttachment(file, {width, dppx}));
+    try {
+      const {width, dppx} = await imageInfo(file);
+      await uploadFile(dropzoneEl, file, uploadId); // the "file" will get its "uuid" during the upload
+      editor.replacePlaceholder(placeholder, generateMarkdownLinkForAttachment(file, {width, dppx}));
+    } catch (err) {
+      console.error(err);
+      editor.replacePlaceholder(placeholder, '');
+    }
   }));
 }
 

@@ -4,7 +4,10 @@
 package repo
 
 import (
+	"errors"
+	"io"
 	"net/http"
+	"strings"
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/setting"
@@ -18,6 +21,14 @@ import (
 func UploadFileToServer(ctx *context.Context) {
 	file, header, err := ctx.Req.FormFile("file")
 	if err != nil {
+		if strings.Contains(err.Error(), "multipart: NextPart: EOF") ||
+			strings.Contains(err.Error(), "request body too large") ||
+			strings.Contains(err.Error(), "unexpected EOF") ||
+			errors.Is(err, io.ErrUnexpectedEOF) ||
+			errors.Is(err, io.EOF) {
+			ctx.HTTPError(http.StatusRequestEntityTooLarge, err.Error())
+			return
+		}
 		ctx.ServerError("FormFile", err)
 		return
 	}
