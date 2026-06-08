@@ -15,6 +15,33 @@ export type ToastEditorOptions = {
   toolbarItems?: string[][];
 };
 
+function getRawUrl(src: string): string {
+  const parts = window.location.pathname.split('/');
+  if (parts.length < 5) return src;
+  const owner = parts[1];
+  const repo = parts[2];
+  const branch = parts[4];
+
+  const dirPathParts = parts.slice(5, -1);
+
+  let relativePath = src;
+  if (relativePath.startsWith('./')) {
+    relativePath = relativePath.substring(2);
+  }
+
+  let dirParts = dirPathParts;
+  while (relativePath.startsWith('../')) {
+    relativePath = relativePath.substring(3);
+    if (dirParts.length > 0) {
+      dirParts = dirParts.slice(0, -1);
+    }
+  }
+  const cleanDirPath = dirParts.length > 0 ? `${dirParts.join('/')}/` : '';
+
+  const subUrl = window.config.appSubUrl || '';
+  return `${subUrl}/${owner}/${repo}/raw/branch/${branch}/${cleanDirPath}${relativePath}`;
+}
+
 export async function createToastEditor(
   textarea: HTMLTextAreaElement,
   options: ToastEditorOptions = {},
@@ -78,6 +105,21 @@ export async function createToastEditor(
           callback(reader.result as string, (blob as File).name || 'image');
         });
         reader.readAsDataURL(blob);
+      },
+    },
+    customHTMLRenderer: {
+      image(node: any, context: any) {
+        const {skipChildren, getChildrenText} = context;
+        skipChildren();
+        const altText = getChildrenText(node);
+        let src = node.destination;
+        if (src && !src.startsWith('data:') && !src.startsWith('http:') && !src.startsWith('https:') && !src.startsWith('/') && !src.startsWith('#')) {
+          src = getRawUrl(src);
+        }
+        return [
+          {type: 'openTag', tagName: 'img', attributes: {src, alt: altText}},
+          {type: 'closeTag', tagName: 'img'},
+        ];
       },
     },
     widgetRules,
