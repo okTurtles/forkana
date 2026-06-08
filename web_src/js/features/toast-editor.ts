@@ -3,7 +3,7 @@ import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 import {showErrorToast} from '../modules/toast.ts';
-import {ensureFilesWithinLimit, getMaxAttachmentSize} from './comp/editorFileLimit.ts';
+import {ensureFilesWithinLimit, getMaxAttachmentSize, showFileTooLargeError} from './comp/editorFileLimit.ts';
 
 export type ToastEditorOptions = {
   height?: string;
@@ -87,7 +87,7 @@ export async function createToastEditor(
       addImageBlobHook: (blob: Blob, callback: (url: string, text?: string) => void) => {
         const max = getMaxAttachmentSize();
         if (max && blob.size > max) {
-          showErrorToast(`Image exceeds the limit of ${Math.floor(max / (1024 * 1024))} MB and cannot be saved.`);
+          showFileTooLargeError((blob as File).name || 'image');
           return;
         }
         const reader = new FileReader();
@@ -95,7 +95,7 @@ export async function createToastEditor(
           callback(reader.result as string, (blob as File).name || 'image');
         });
         reader.addEventListener('error', () => {
-          showErrorToast('Failed to read the image file.');
+          showErrorToast(window.config.i18n.editor_image_read_failed || 'Failed to read the image file.');
         });
         reader.readAsDataURL(blob);
       },

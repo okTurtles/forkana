@@ -16,12 +16,19 @@ export function findOversizedFile(files: FileList | File[] | null | undefined): 
   return null;
 }
 
+// showFileTooLargeError shows a localized "file too large" error toast for the named file.
+export function showFileTooLargeError(name: string): void {
+  const maxMb = Math.floor(getMaxAttachmentSize() / (1024 * 1024));
+  const tmpl = window.config.i18n.editor_file_too_large || 'File "%s" exceeds the limit of %d MB and cannot be saved.';
+  // Replace %d (a number) before %s so a filename containing "%d" can't be corrupted.
+  showErrorToast(tmpl.replace('%d', String(maxMb)).replace('%s', name));
+}
+
 // ensureFilesWithinLimit returns true when every file is within the limit. Otherwise it
 // shows an error toast naming the offending file and returns false.
 export function ensureFilesWithinLimit(files: FileList | File[] | null | undefined): boolean {
   const oversized = findOversizedFile(files);
   if (!oversized) return true;
-  const maxMb = Math.floor(getMaxAttachmentSize() / (1024 * 1024));
-  showErrorToast(`File "${oversized.name}" exceeds the limit of ${maxMb} MB and cannot be saved.`);
+  showFileTooLargeError(oversized.name);
   return false;
 }
