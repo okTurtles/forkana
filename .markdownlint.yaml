@@ -2,7 +2,7 @@ commands-show-output: false
 fenced-code-language: false
 first-line-h1: false
 heading-increment: false
-line-length: {code_blocks: false, tables: false, stern: true, line_length: -1}
+line-length: false
 no-alt-text: false
 no-bare-urls: false
 no-emphasis-as-heading: false
@@ -13,3 +13,6 @@ no-space-in-code: false
 no-space-in-emphasis: false
 no-trailing-spaces: {br_spaces: 0}
 single-h1: false
+link-fragments: false
+no-multiple-blanks: false
+strong-style: false

@@ -8,7 +8,7 @@
   - [2. Create a fork of the repo, or work in a topic branch](#2-create-a-fork-of-the-repo-or-work-in-a-topic-branch)
   - [3. Follow this Contribution Policy](#3-follow-this-contribution-policy)
     - [Licensing and Ownership](#licensing-and-ownership)
-    - [Pull Request Requirements](#pull-request-requirements)
+    - [Pull Request Requirements (❗️)](#pull-request-requirements-)
 - [AI Usage Policy](#ai-usage-policy)
 - [Original Gitea Contributing Guidelines](#original-gitea-contributing-guidelines)
 
@@ -19,7 +19,7 @@
 ### 1. Decide what to work on
 
 - Check the [open issues](https://github.com/okTurtles/group-income/issues).
-- Read some docs like **[the deep wiki](https://deepwiki.com/okTurtles/forkana)** (although be careful, it might be out of date, so we also recommend using a local coding agent to explore the codebase and answer questions).
+- Read some docs like __[the deep wiki](https://deepwiki.com/okTurtles/forkana)__ (although be careful, it might be out of date, so we also recommend using a local coding agent to explore the codebase and answer questions).
 
 We recommend [joining `#forkana` on Slack](https://join.slack.com/t/okturtles/shared_invite/zt-10jmpfgxj-tXQ1MKW7t8qqdyY6fB7uyQ) and telling folks what you're interested in working on.
 
@@ -42,14 +42,14 @@ This contribution policy will evolve over time. For now it is based on a slightl
 2. All patches are owned by their authors. There SHALL NOT be any copyright assignment process.
 3. Each Contributor SHALL be responsible for identifying themselves in the project Contributor list.
 
-#### Pull Request Requirements
+#### Pull Request Requirements (❗️)
 
 Pull requests (PRs) must adhere to the following requirements (unless the Founation is organizing a special hackathon, in which case, hackathon-rules apply).
 
 1. A PR **SHOULD** be a minimal and accurate answer to exactly one identified and agreed problem.
 2. A PR **SHOULD** follow [the boy scout rule](https://github.com/okTurtles/group-income/issues/383#issuecomment-383381863): leave the code cleaner than you found it when the refactor effort is not too big.
 3. A PR **MAY NOT** include non-trivial code from other projects unless the Contributor is the original author of that code. The exception being new dependencies, however in that case you **MUST** receive approval from a maintainer to use the third-party dependency.
-4. A PR **MUST** pass all tests on at least the principle target platform.
+4. A PR **MUST** pass all tests on at least the principal target platform.
 5. A PR **MUST** include new tests for any new functionality introduced.
 6. Follow existing style and code structure (we don't have a style guide yet and Gitea didn't provide one). TBD
 7. A PR **MUST** document any AI-assistance, by specifying the precise modules used. See [AI Usage Policy](#ai-usage-policy) for details.
