@@ -2,6 +2,8 @@
 import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
+import {showErrorToast} from '../modules/toast.ts';
+import {ensureFilesWithinLimit, getMaxAttachmentSize, showFileTooLargeError} from './comp/editorFileLimit.ts';
 
 export type ToastEditorOptions = {
   height?: string;
@@ -11,6 +13,20 @@ export type ToastEditorOptions = {
   hideModeSwitch?: boolean;
   toolbarItems?: string[][];
 };
+
+// resolveRelativeSrc resolves a relative image path (e.g. "./img/a.png", "../b.png")
+// against the raw URL of the file being edited. The base URL is provided by the server
+// (data-raw-file-url), so it already accounts for appSubUrl and branch names containing
+// slashes; native URL resolution handles "./" and "../" segments correctly.
+function resolveRelativeSrc(src: string, baseFileUrl: string): string {
+  if (!baseFileUrl) return src;
+  try {
+    const base = new URL(baseFileUrl, window.location.origin);
+    return new URL(src, base).href;
+  } catch {
+    return src;
+  }
+}
 
 export async function createToastEditor(
   textarea: HTMLTextAreaElement,
@@ -43,6 +59,9 @@ export async function createToastEditor(
     container.style.height = height;
   }
 
+  // Server-provided raw URL of the file being edited, used to resolve relative image paths.
+  const rawFileUrl = textarea.getAttribute('data-raw-file-url') || '';
+
   // Initialize Toast UI Editor
   // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- Editor type has issues
   const editorRef = {current: null as Editor | null};
@@ -64,9 +83,56 @@ export async function createToastEditor(
         textarea.dispatchEvent(new Event('change'));
       },
     },
+    hooks: {
+      addImageBlobHook: (blob: Blob, callback: (url: string, text?: string) => void) => {
+        const max = getMaxAttachmentSize();
+        if (max && blob.size > max) {
+          showFileTooLargeError((blob as File).name || 'image');
+          return;
+        }
+        const reader = new FileReader();
+        reader.addEventListener('load', () => {
+          callback(reader.result as string, (blob as File).name || 'image');
+        });
+        reader.addEventListener('error', () => {
+          showErrorToast(window.config.i18n.editor_image_read_failed || 'Failed to read the image file.');
+        });
+        reader.readAsDataURL(blob);
+      },
+    },
+    customHTMLRenderer: {
+      image(node: any, context: any) {
+        const {skipChildren, getChildrenText} = context;
+        skipChildren();
+        const altText = getChildrenText(node);
+        let src = node.destination;
+        if (src && !src.startsWith('data:') && !src.startsWith('http:') && !src.startsWith('https:') && !src.startsWith('/') && !src.startsWith('#')) {
+          src = resolveRelativeSrc(src, rawFileUrl);
+        }
+        return [
+          {type: 'openTag', tagName: 'img', attributes: {src, alt: altText}},
+          {type: 'closeTag', tagName: 'img'},
+        ];
+      },
+    },
     widgetRules,
   });
   editorRef.current = editor;
+
+  // Intercept drop and paste events in the capture phase to block oversized files
+  container.addEventListener('drop', (e: DragEvent) => {
+    if (!ensureFilesWithinLimit(e.dataTransfer?.files)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+
+  container.addEventListener('paste', (e: ClipboardEvent) => {
+    if (!ensureFilesWithinLimit(e.clipboardData?.files)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 
   // Override getMarkdown to strip internal $$widget placeholders
   installBase64WidgetPatch(editor);

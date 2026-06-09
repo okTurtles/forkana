@@ -19,7 +19,7 @@
 ### 1. Decide what to work on
 
 - Check the [open issues](https://github.com/okTurtles/group-income/issues).
-- Read some docs like __[the deep wiki](https://deepwiki.com/okTurtles/forkana)__ (although be careful, it might be out of date, so we also recommend using a local coding agent to explore the codebase and answer questions).
+- Read some docs like **[the deep wiki](https://deepwiki.com/okTurtles/forkana)** (although be careful, it might be out of date, so we also recommend using a local coding agent to explore the codebase and answer questions).
 
 We recommend [joining `#forkana` on Slack](https://join.slack.com/t/okturtles/shared_invite/zt-10jmpfgxj-tXQ1MKW7t8qqdyY6fB7uyQ) and telling folks what you're interested in working on.
 
@@ -27,10 +27,10 @@ We recommend [joining `#forkana` on Slack](https://join.slack.com/t/okturtles/sh
 
 Our process for submitting code is inspired by the [C4.1](https://web.archive.org/web/20190921024411/http://hintjens.com/blog:93) process (documentation may be edited directly by maintainers):
 
-1. __Always__ either work in your own fork or a topic-branch and submit pull requests (PRs) to `master`.
-2. __Always__ add/update tests for any new/modified functionality. (:exclamation:)
-3. __Always__ make sure your PR passes all tests (`grunt test`).
-4. __Always__ ensure your PR adheres to the __[Contribution Policy](#3-follow-this-contribution-policy)__ described below.
+1. **Always** either work in your own fork or a topic-branch and submit pull requests (PRs) to `master`.
+2. **Always** add/update tests for any new/modified functionality. (:exclamation:)
+3. **Always** make sure your PR passes all tests (`grunt test`).
+4. **Always** ensure your PR adheres to the **[Contribution Policy](#3-follow-this-contribution-policy)** described below.
 
 ### 3. Follow this Contribution Policy
 
@@ -46,17 +46,17 @@ This contribution policy will evolve over time. For now it is based on a slightl
 
 Pull requests (PRs) must adhere to the following requirements (unless the Founation is organizing a special hackathon, in which case, hackathon-rules apply).
 
-1. A PR __SHOULD__ be a minimal and accurate answer to exactly one identified and agreed problem.
-2. A PR __SHOULD__ follow [the boy scout rule](https://github.com/okTurtles/group-income/issues/383#issuecomment-383381863): leave the code cleaner than you found it when the refactor effort is not too big.
-3. A PR __MAY NOT__ include non-trivial code from other projects unless the Contributor is the original author of that code. The exception being new dependencies, however in that case you __MUST__ receive approval from a maintainer to use the third-party dependency.
-4. A PR __MUST__ pass all tests on at least the principle target platform.
-5. A PR __MUST__ include new tests for any new functionality introduced.
+1. A PR **SHOULD** be a minimal and accurate answer to exactly one identified and agreed problem.
+2. A PR **SHOULD** follow [the boy scout rule](https://github.com/okTurtles/group-income/issues/383#issuecomment-383381863): leave the code cleaner than you found it when the refactor effort is not too big.
+3. A PR **MAY NOT** include non-trivial code from other projects unless the Contributor is the original author of that code. The exception being new dependencies, however in that case you **MUST** receive approval from a maintainer to use the third-party dependency.
+4. A PR **MUST** pass all tests on at least the principle target platform.
+5. A PR **MUST** include new tests for any new functionality introduced.
 6. Follow existing style and code structure (we don't have a style guide yet and Gitea didn't provide one). TBD
-7. A PR __MUST__ document any AI-assistance, by specifying the precise modules used. See [AI Usage Policy](#ai-usage-policy) for details.
-8. A PR __MUST__ receive approval from at least one long-term contributor before being merged. Contributors __MAY NOT__ review their own PRs, __MUST NOT__ push commits to someone else's PR.
-9. A PR __MUST__ receive approval from the designer when it's related to the user interface before being merged.
-10. A PR __MAY NOT__ be merged if there exist unaddressed concerns from a current maintainer (via the Github "request changes" review feature). Contributors are encouraged to discuss the requested changes, and may even argue against them if there are strong reasons to do so. However, maintainers have veto power over all PRs.
-11. Only __maintainers__ may merge PRs. Maintainers __SHOULD__ use "squash-merging" when merging to keep the `master` branch commit history clean. If there are no maintainers, further changes should happen in a fork.
+7. A PR **MUST** document any AI-assistance, by specifying the precise modules used. See [AI Usage Policy](#ai-usage-policy) for details.
+8. A PR **MUST** receive approval from at least one long-term contributor before being merged. Contributors **MAY NOT** review their own PRs, **MUST NOT** push commits to someone else's PR.
+9. A PR **MUST** receive approval from the designer when it's related to the user interface before being merged.
+10. A PR **MAY NOT** be merged if there exist unaddressed concerns from a current maintainer (via the Github "request changes" review feature). Contributors are encouraged to discuss the requested changes, and may even argue against them if there are strong reasons to do so. However, maintainers have veto power over all PRs.
+11. Only **maintainers** may merge PRs. Maintainers **SHOULD** use "squash-merging" when merging to keep the `master` branch commit history clean. If there are no maintainers, further changes should happen in a fork.
 
 ## AI Usage Policy
 
@@ -64,17 +64,17 @@ _With credit to the [Peersky AI Usage Policy](https://github.com/p2plabsxyz/peer
 
 At okTurtles, we encourage contributors to use AI tools to improve efficiency and productivity. AI can be valuable for research, drafting, refactoring, and exploring ideas.
 
-However, AI is an assistive tool. __It does not replace professional skill, judgment, or accountability.__
+However, AI is an assistive tool. **It does not replace professional skill, judgment, or accountability.**
 
 All AI-generated output must be thoroughly reviewed and fully understood before submission. Contributors are responsible for every line of code they commit, regardless of how it was produced.
 
-__If you cannot clearly explain, modify, or defend the code without AI assistance, it should not be submitted in the first place.__
+**If you cannot clearly explain, modify, or defend the code without AI assistance, it should not be submitted in the first place.**
 
-__We expect contributors to already possess the skills required to complete tasks independently. AI should enhance your workflow, not compensate for gaps in knowledge or experience.__
+**We expect contributors to already possess the skills required to complete tasks independently. AI should enhance your workflow, not compensate for gaps in knowledge or experience.**
 
 If AI is used at all, then we strongly encourage you to work with the best performing model(s) available at the time.
 
-Finally, all PRs submitted that use AI-assistance __must specify the precise model(s) that were used in their PR descriptions.__
+Finally, all PRs submitted that use AI-assistance **must specify the precise model(s) that were used in their PR descriptions.**
 
 For example:
 

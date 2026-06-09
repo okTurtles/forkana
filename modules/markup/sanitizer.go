@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"code.gitea.io/gitea/modules/setting"
+
 	"github.com/microcosm-cc/bluemonday"
 )
 
@@ -53,8 +55,12 @@ func ResetDefaultSanitizerForTesting() {
 }
 
 func allowDataURIImagesPolicy(u *url.URL) bool {
-	// Enforce a size limit of 2MB to protect against storage bloat and slow decoding (Issue 11)
-	if len(u.Opaque) > 2*1024*1024 {
+	// Enforce a size limit based on MaxDisplayFileSize (plus base64 overhead) to protect against storage bloat and slow decoding
+	maxSize := setting.UI.MaxDisplayFileSize * 4 / 3
+	if maxSize <= 0 {
+		maxSize = 20 * 1024 * 1024 * 4 / 3
+	}
+	if int64(len(u.Opaque)) > maxSize {
 		return false
 	}
 	// Replicate bluemonday's strict validation (Issue 2)
