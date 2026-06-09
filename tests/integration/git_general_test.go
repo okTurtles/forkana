@@ -31,6 +31,7 @@ import (
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/git/gitcmd"
 	"code.gitea.io/gitea/modules/lfs"
+	private_module "code.gitea.io/gitea/modules/private"
 	"code.gitea.io/gitea/modules/setting"
 	api "code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/tests"
@@ -457,6 +458,26 @@ func doBranchProtectPRMerge(baseCtx *APITestContext, dstPath string) func(t *tes
 			assert.NoError(t, err)
 		})
 		t.Run("PushToUnprotectedBranch", doGitPushTestRepository(dstPath, "origin", "protected:unprotected-2"))
+		t.Run("RejectForgedPullRequestIDPush", func(t *testing.T) {
+			oldCommitID, _, err := gitcmd.NewCommand("rev-parse").AddDynamicArguments("origin/protected").RunStdString(t.Context(), &gitcmd.RunOpts{Dir: dstPath})
+			require.NoError(t, err)
+			newCommitID, _, err := gitcmd.NewCommand("rev-parse").AddDynamicArguments("origin/unprotected-2").RunStdString(t.Context(), &gitcmd.RunOpts{Dir: dstPath})
+			require.NoError(t, err)
+
+			hookOpts := private_module.HookOptions{
+				OldCommitIDs:  []string{strings.TrimSpace(oldCommitID)},
+				NewCommitIDs:  []string{strings.TrimSpace(newCommitID)},
+				RefFullNames:  []git.RefName{git.BranchPrefix + "protected"},
+				UserID:        pr.Poster.ID,
+				PullRequestID: pr.ID,
+			}
+			req := NewRequestWithJSON(t, "POST", fmt.Sprintf("/api/internal/hook/pre-receive/%s/%s", url.PathEscape(baseCtx.Username), url.PathEscape(baseCtx.Reponame)), hookOpts).
+				SetHeader("X-Gitea-Internal-Auth", "Bearer "+setting.InternalToken)
+			resp := MakeRequest(t, req, http.StatusForbidden)
+			var privateResp private_module.Response
+			DecodeJSON(t, resp, &privateResp)
+			assert.Equal(t, "Not allowed to push to protected branch protected", privateResp.UserMsg)
+		})
 		var pr2 api.PullRequest
 		t.Run("CreatePullRequest", func(t *testing.T) {
 			pr2, err = doAPICreatePullRequest(ctx, baseCtx.Username, baseCtx.Reponame, "unprotected", "unprotected-2")(t)
