@@ -50,7 +50,7 @@ Pull requests (PRs) must adhere to the following requirements (unless the Founat
 1. A PR **SHOULD** be a minimal and accurate answer to exactly one identified and agreed problem.
 2. A PR **SHOULD** follow [the boy scout rule](https://github.com/okTurtles/group-income/issues/383#issuecomment-383381863): leave the code cleaner than you found it when the refactor effort is not too big.
 3. A PR **MAY NOT** include non-trivial code from other projects unless the Contributor is the original author of that code. The exception being new dependencies, however in that case you **MUST** receive approval from a maintainer to use the third-party dependency.
-4. A PR **MUST** pass all tests on at least the principle target platform.
+4. A PR **MUST** pass all tests on at least the principal target platform.
 5. A PR **MUST** include new tests for any new functionality introduced.
 6. Follow existing style and code structure (we don't have a style guide yet and Gitea didn't provide one). TBD
 7. A PR **MUST** document any AI-assistance, by specifying the precise modules used. See [AI Usage Policy](#ai-usage-policy) for details.
