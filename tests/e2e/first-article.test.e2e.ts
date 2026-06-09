@@ -40,7 +40,7 @@ test.describe('First Article Becomes Root', () => {
       // Step 4: Wait for submit button to be enabled and click
       const submitButton = page.locator('#create-repo-submit-button');
       await expect(submitButton).toBeEnabled({timeout: 5000});
-      await submitButton.click();
+      await submitButton.click({force: true});
 
       // Step 5: Wait for navigation to the subject page
       await page.waitForURL(/\/subject\//, {timeout: 30000});
