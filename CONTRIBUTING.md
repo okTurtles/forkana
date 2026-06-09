@@ -14,7 +14,6 @@
 
 <!-- END doctoc -->
 
-
 ## How to contribute code
 
 ### 1. Decide what to work on
@@ -31,7 +30,7 @@ Our process for submitting code is inspired by the [C4.1](https://web.archive.or
 1. **Always** either work in your own fork or a topic-branch and submit pull requests (PRs) to `master`.
 2. **Always** add/update tests for any new/modified functionality. (:exclamation:)
 3. **Always** make sure your PR passes all tests (`grunt test`).
-4. **Always** ensure your PR adheres to the **[Contribution Policy](#contribution-policy)** described below.
+4. **Always** ensure your PR adheres to the **[Contribution Policy](#3-follow-this-contribution-policy)** described below.
 
 ### 3. Follow this Contribution Policy
 
@@ -50,7 +49,7 @@ Pull requests (PRs) must adhere to the following requirements (unless the Founat
 1. A PR **SHOULD** be a minimal and accurate answer to exactly one identified and agreed problem.
 2. A PR **SHOULD** follow [the boy scout rule](https://github.com/okTurtles/group-income/issues/383#issuecomment-383381863): leave the code cleaner than you found it when the refactor effort is not too big.
 3. A PR **MAY NOT** include non-trivial code from other projects unless the Contributor is the original author of that code. The exception being new dependencies, however in that case you **MUST** receive approval from a maintainer to use the third-party dependency.
-4. A PR **MUST** pass all tests on at least the principle target platform.
+4. A PR **MUST** pass all tests on at least the principal target platform.
 5. A PR **MUST** include new tests for any new functionality introduced.
 6. Follow existing style and code structure (we don't have a style guide yet and Gitea didn't provide one). TBD
 7. A PR **MUST** document any AI-assistance, by specifying the precise modules used. See [AI Usage Policy](#ai-usage-policy) for details.

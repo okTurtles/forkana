@@ -40,6 +40,10 @@ func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string) {
 
 	file, header, err := ctx.Req.FormFile("file")
 	if err != nil {
+		if isUploadSizeError(err) {
+			ctx.HTTPError(http.StatusRequestEntityTooLarge, uploadTooLargeMessage())
+			return
+		}
 		ctx.HTTPError(http.StatusInternalServerError, fmt.Sprintf("FormFile: %v", err))
 		return
 	}

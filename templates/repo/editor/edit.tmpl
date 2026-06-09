@@ -27,7 +27,8 @@
 						<div class="ui active tab tw-rounded-b" data-tab="write">
 							<textarea id="edit_area" name="content" class="tw-hidden" data-id="repo-{{.Repository.Name}}-{{.TreePath}}"
 								data-previewable-extensions="{{.PreviewableExtensions}}"
-								data-line-wrap-extensions="{{.LineWrapExtensions}}">{{.FileContent}}</textarea>
+								data-line-wrap-extensions="{{.LineWrapExtensions}}"
+								data-raw-file-url="{{.RepoLink}}/raw/{{.RefTypeNameSubURL}}/{{.TreePath | PathEscapeSegments}}">{{.FileContent}}</textarea>
 							<div class="editor-loading is-loading"></div>
 						</div>
 						<div class="ui tab tw-px-4 tw-py-3" data-tab="preview">
