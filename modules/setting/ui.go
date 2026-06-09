@@ -84,7 +84,7 @@ var UI = struct {
 	GraphMaxCommitNum:       100,
 	CodeCommentLines:        4,
 	ReactionMaxUserNum:      10,
-	MaxDisplayFileSize:      8388608,
+	MaxDisplayFileSize:      20971520,
 	DefaultTheme:            `gitea-auto`,
 	FileIconTheme:           `material`,
 	Reactions:               []string{`+1`, `-1`, `laugh`, `hooray`, `confused`, `heart`, `rocket`, `eyes`},

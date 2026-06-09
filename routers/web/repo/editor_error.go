@@ -59,6 +59,8 @@ func editorHandleFileOperationError(ctx *context_service.Context, targetBranchNa
 		}
 	} else if errAs, ok := errorAs[files_service.ErrRepoFileAlreadyExists](err); ok {
 		ctx.JSONError(ctx.Tr("repo.editor.file_already_exists", errAs.Path))
+	} else if errAs, ok := errorAs[files_service.ErrFileTooLarge](err); ok {
+		ctx.JSONError(ctx.Tr("repo.editor.file_too_large_to_write", errAs.MaxSize/(1024*1024)))
 	} else if errAs, ok := errorAs[git.ErrBranchNotExist](err); ok {
 		ctx.JSONError(ctx.Tr("repo.editor.branch_does_not_exist", errAs.Name))
 	} else if errAs, ok := errorAs[git_model.ErrBranchAlreadyExists](err); ok {

@@ -21,6 +21,7 @@ import {
   initDropzone,
 } from '../dropzone.ts';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './base64ImageWidget.ts';
+import {ensureFilesWithinLimit} from './editorFileLimit.ts';
 
 // Event dispatched when editor content changes
 export const EventEditorContentChanged = 'ce-editor-content-changed';
@@ -156,11 +157,18 @@ export class ToastCommentEditor {
         e.preventDefault();
         e.stopPropagation();
         this.handleDroppedFiles(e.dataTransfer.files);
-      }, false);
+      }, true);
       this.editorWrapper.addEventListener('dragover', (e: DragEvent) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
-      }, false);
+      }, true);
+      this.editorWrapper.addEventListener('paste', (e: ClipboardEvent) => {
+        const files = e.clipboardData?.files;
+        if (!files || !files.length) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleDroppedFiles(files);
+      }, true);
 
       // Clean up markdown links when an attachment is removed from the Dropzone
       this.attachedDropzoneInst.on(DropzoneCustomEventRemovedFile, ({fileUuid}: {fileUuid: string}) => {
@@ -175,6 +183,7 @@ export class ToastCommentEditor {
   }
 
   private async handleDroppedFiles(files: FileList) {
+    if (!ensureFilesWithinLimit(files)) return;
     for (const file of files) {
       const indicator = this.showUploadIndicator(file.name);
       const {width, dppx} = file.size <= 10 * 1024 * 1024 ? await imageInfo(file) : {};

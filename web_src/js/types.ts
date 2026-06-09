@@ -19,6 +19,7 @@ export type Config = {
   enableTimeTracking: boolean,
   mentionValues?: MentionValue[],
   mermaidMaxSourceCharacters: number,
+  maxAttachmentSize: number, // in bytes; 0 means no limit
   i18n: Record<string, string>,
 };
 

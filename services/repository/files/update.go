@@ -354,6 +354,27 @@ func (err ErrRepoFileAlreadyExists) Unwrap() error {
 	return util.ErrAlreadyExist
 }
 
+// ErrFileTooLarge represents a "FileTooLarge" kind of error.
+type ErrFileTooLarge struct {
+	Filename string
+	Size     int64
+	MaxSize  int64
+}
+
+// IsErrFileTooLarge checks if an error is a ErrFileTooLarge.
+func IsErrFileTooLarge(err error) bool {
+	_, ok := err.(ErrFileTooLarge)
+	return ok
+}
+
+func (err ErrFileTooLarge) Error() string {
+	return fmt.Sprintf("file is too large [filename: %s, size: %d, max_size: %d]", err.Filename, err.Size, err.MaxSize)
+}
+
+func (err ErrFileTooLarge) Unwrap() error {
+	return util.ErrInvalidArgument
+}
+
 // ErrFilePathInvalid represents a "FilePathInvalid" kind of error.
 type ErrFilePathInvalid struct {
 	Message string
@@ -498,6 +519,21 @@ func modifyFile(ctx context.Context, t *TemporaryUploadRepository, file *ChangeR
 			return nil, fmt.Errorf("OpenLazyReader: %w", err)
 		}
 		defer rd.Close()
+	}
+
+	if file.ContentReader != nil {
+		size, err := file.ContentReader.Seek(0, io.SeekEnd)
+		if err != nil {
+			return nil, fmt.Errorf("SeekEnd: %w", err)
+		}
+		_, err = file.ContentReader.Seek(0, io.SeekStart)
+		if err != nil {
+			return nil, fmt.Errorf("SeekStart: %w", err)
+		}
+		maxSize := setting.Attachment.MaxSize << 20 // Attachment.MaxSize is configured in MB
+		if size > maxSize {
+			return nil, ErrFileTooLarge{Size: size, MaxSize: maxSize, Filename: file.TreePath}
+		}
 	}
 
 	// Get the two paths (might be the same if not moving) from the index if they exist

@@ -142,6 +142,13 @@ func NewFuncMap() template.FuncMap {
 		"MermaidMaxSourceCharacters": func() int {
 			return setting.MermaidMaxSourceCharacters
 		},
+		"MaxAttachmentSize": func() int64 {
+			// exposed to the frontend in bytes; 0 or below means "no limit"
+			if setting.Attachment.MaxSize <= 0 {
+				return 0
+			}
+			return setting.Attachment.MaxSize << 20
+		},
 
 		// -----------------------------------------------------------------
 		// render

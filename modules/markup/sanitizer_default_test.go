@@ -77,6 +77,12 @@ func TestSanitizer(t *testing.T) {
 }
 
 func TestSanitizerAllowDataURIImages(t *testing.T) {
+	oldMaxDisplayFileSize := setting.UI.MaxDisplayFileSize
+	setting.UI.MaxDisplayFileSize = 2 * 1024 * 1024
+	defer func() {
+		setting.UI.MaxDisplayFileSize = oldMaxDisplayFileSize
+	}()
+
 	defer test.MockVariableValue(&setting.ExternalSanitizerRules, []setting.MarkupSanitizerRule{
 		{
 			AllowDataURIImages: true,
@@ -111,8 +117,8 @@ func TestSanitizerAllowDataURIImages(t *testing.T) {
 	output = string(Sanitize(input))
 	assert.NotContains(t, output, `src=`)
 
-	// Negative case: image exceeding 2MB size cap is stripped
-	largePayload := make([]byte, 2*1024*1024+100)
+	// Negative case: image exceeding size cap is stripped
+	largePayload := make([]byte, setting.UI.MaxDisplayFileSize*4/3+100)
 	for i := range largePayload {
 		largePayload[i] = 'A'
 	}
@@ -120,7 +126,7 @@ func TestSanitizerAllowDataURIImages(t *testing.T) {
 	output = string(Sanitize(input))
 	assert.NotContains(t, output, `src=`)
 
-	// Verify that when the rule is NOT set, the valid base64 PNG is stripped
+	// Verify that when the rule is NOT set, the valid base64 PNG is still allowed by default in Forkana
 	func() {
 		defer test.MockVariableValue(&setting.ExternalSanitizerRules, nil)()
 		ResetDefaultSanitizerForTesting()
@@ -128,7 +134,7 @@ func TestSanitizerAllowDataURIImages(t *testing.T) {
 
 		input := `<img src="data:image/png;base64,iVBORw0KGgoAAAANS">`
 		output := string(Sanitize(input))
-		assert.NotContains(t, output, `src=`)
+		assert.Contains(t, output, `src="data:image/png;base64,iVBORw0KGgoAAAANS"`)
 
 		input = `<a href="data:1234">bad</a>`
 		output = string(Sanitize(input))
