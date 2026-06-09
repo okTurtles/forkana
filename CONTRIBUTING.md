@@ -14,7 +14,6 @@
 
 <!-- END doctoc -->
 
-
 ## How to contribute code
 
 ### 1. Decide what to work on
@@ -31,7 +30,7 @@ Our process for submitting code is inspired by the [C4.1](https://web.archive.or
 1. **Always** either work in your own fork or a topic-branch and submit pull requests (PRs) to `master`.
 2. **Always** add/update tests for any new/modified functionality. (:exclamation:)
 3. **Always** make sure your PR passes all tests (`grunt test`).
-4. **Always** ensure your PR adheres to the **[Contribution Policy](#contribution-policy)** described below.
+4. **Always** ensure your PR adheres to the **[Contribution Policy](#3-follow-this-contribution-policy)** described below.
 
 ### 3. Follow this Contribution Policy
 
