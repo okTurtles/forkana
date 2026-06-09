@@ -40,9 +40,11 @@ async function main() {
   const gitea = argv.slice(2).includes('gitea');
   const logoSvg = await readFile(new URL('../assets/logo.svg', import.meta.url), 'utf8');
   const faviconSvg = await readFile(new URL('../assets/favicon.svg', import.meta.url), 'utf8');
+  const logoDarkSvg = await readFile(new URL('../assets/logo-forkana-dark.svg', import.meta.url), 'utf8');
   await initWasm(await readFile(new URL(import.meta.resolve('@resvg/resvg-wasm/index_bg.wasm'))));
 
   await Promise.all([
+    generate(logoDarkSvg, '../public/assets/img/logo-dark.svg', {size: 32}),
     generate(logoSvg, '../public/assets/img/logo.svg', {size: 32}),
     generate(logoSvg, '../public/assets/img/logo.png', {size: 512}),
     generate(faviconSvg, '../public/assets/img/favicon.svg', {size: 32}),

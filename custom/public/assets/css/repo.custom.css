@@ -462,6 +462,7 @@ col.col-type-marker {
   border-radius: .5rem;
 }
 
+.user-setting-content .ui.attached.segment,
 .content.comment-container .ui.attached.segment {
   padding: 1rem;
 }
@@ -752,7 +753,7 @@ col.col-type-marker {
 }
 
 .conflict-buttons-row .conflict-btn-gutter.lines-num-new.add-code {
-  background: #e5e9ff !important;
+  background: var(--color-diff-added-linenum-bg) !important;
 }
 
 .conflict-btn-cell {

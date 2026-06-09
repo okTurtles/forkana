@@ -1,9 +1,9 @@
 /* Forkana light theme variables overriding theme-gitea-light */
-gitea-theme-meta-info {
+[data-theme="gitea-light"] gitea-theme-meta-info {
   --theme-display-name: "Forkana Light";
 }
 
-:root {
+[data-theme="gitea-light"] {
   --color-primary: #4E40FA;
   --color-primary-contrast: #ffffff;
   --color-primary-hover: #3C2EED;
@@ -93,6 +93,16 @@ gitea-theme-meta-info {
   --color-yellow: #EBB400;
   --color-purple: #8250DF;
   --color-grey: #59636E;
-  
+
+  /* Bubble graph */
+  --bubble-grad-start: #FAFBFC;
+  --bubble-grad-mid: #EEF2F7;
+  --bubble-grad-end: #E6EBF2;
+  --bubble-stroke: #DBE2EA;
+  --bubble-edge-stroke: #D7DFE8;
+  --bubble-joint-fill: #ffffff;
+  --bubble-joint-stroke: #C7D2DF;
+  --bubble-shadow-color: #64748b;
+  --bubble-overlay-bg: rgba(255, 255, 255, 0.98);
 }
 

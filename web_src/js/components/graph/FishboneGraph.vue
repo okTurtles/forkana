@@ -1124,12 +1124,12 @@ function goToComparison() {
           <defs>
             <!-- Soft radial bubble gradient -->
             <radialGradient id="bubbleGrad" cx="35%" cy="30%" r="65%">
-              <stop offset="0%" stop-color="#FAFBFC"/>
-              <stop offset="60%" stop-color="#EEF2F7"/>
-              <stop offset="100%" stop-color="#E6EBF2"/>
+              <stop offset="0%" stop-color="var(--bubble-grad-start)"/>
+              <stop offset="60%" stop-color="var(--bubble-grad-mid)"/>
+              <stop offset="100%" stop-color="var(--bubble-grad-end)"/>
             </radialGradient>
             <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#64748b" flood-opacity="0.18"/>
+              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="var(--bubble-shadow-color)" flood-opacity="0.18"/>
             </filter>
           </defs>
 
@@ -1138,27 +1138,27 @@ function goToComparison() {
             <!-- Trunks (vertical) -->
             <line
               v-for="t in trunksList" :key="t.id" class="trunk" :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
-              stroke="#D7DFE8" stroke-width="2" stroke-linecap="round"
+              stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
             />
 
             <!-- Branch elbows + runs (one path per edge) -->
             <path
               v-for="e in edgesList" :key="`${e.source.id}-${e.target.id}`" class="branch" fill="none"
-              stroke="#D7DFE8" stroke-width="2" stroke-linecap="round" opacity="0.9"
+              stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round" opacity="0.9"
               :d="`M ${e.ex} ${e.ey} C ${e.ex} ${e.ey + 0.5522847498307936 * state.elbowR}, ${e.ex + e.side * 0.5522847498307936 * state.elbowR} ${e.hy}, ${e.hx} ${e.hy} L ${e.cx} ${e.cy}`"
             />
 
             <!-- Child stems -->
             <line
               v-for="e in edgesList" :key="`stem-${e.source.id}-${e.target.id}`" class="child-stem" :x1="e.sx1"
-              :y1="e.sy1" :x2="e.sx2" :y2="e.sy2" stroke="#D7DFE8" stroke-width="2" stroke-linecap="round"
+              :y1="e.sy1" :x2="e.sx2" :y2="e.sy2" stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
               opacity="0.9"
             />
 
             <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
             <circle
               v-for="j in jointDots" :key="`joint-${j.id}`" class="joint-parent" :cx="j.x" :cy="j.y" r="6"
-              fill="#ffffff" stroke="#C7D2DF" stroke-width="2" style="cursor: pointer; transition: all 0.15s ease;"
+              fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="2" style="cursor: pointer; transition: all 0.15s ease;"
               role="button" tabindex="0" :aria-label="`Compare ${j.sourceOwner} with ${j.targetOwner}`"
               @click.stop="() => onJointClick(j)" @keydown.enter.stop="() => onJointClick(j)"
               @keydown.space.stop="() => onJointClick(j)"
@@ -1183,19 +1183,19 @@ function goToComparison() {
           >
             <defs>
               <radialGradient id="loadingBubbleGrad" cx="35%" cy="30%" r="65%">
-                <stop offset="0%" stop-color="#FAFBFC"/>
-                <stop offset="60%" stop-color="#EEF2F7"/>
-                <stop offset="100%" stop-color="#E6EBF2"/>
+                <stop offset="0%" stop-color="var(--bubble-grad-start)"/>
+                <stop offset="60%" stop-color="var(--bubble-grad-mid)"/>
+                <stop offset="100%" stop-color="var(--bubble-grad-end)"/>
               </radialGradient>
             </defs>
             <!-- Centered at 50% of viewBox (550, 200) -->
             <g transform="translate(550, 200)">
               <circle
-                r="80" fill="url(#loadingBubbleGrad)" stroke="#DBE2EA" stroke-width="1.2" opacity="0.7"
+                r="80" fill="url(#loadingBubbleGrad)" stroke="var(--bubble-stroke)" stroke-width="1.2" opacity="0.7"
                 class="pulse-animation"
               />
               <text
-                text-anchor="middle" dominant-baseline="central" fill="#64748b" font-size="16"
+                text-anchor="middle" dominant-baseline="central" fill="var(--bubble-shadow-color)" font-size="16"
                 font-weight="500"
               >Loading...</text>
             </g>
@@ -1293,7 +1293,7 @@ function goToComparison() {
 
 /* Error state has opaque background and blocks interaction */
 .error-state {
-  background-color: rgba(255, 255, 255, 0.98);
+  background-color: var(--bubble-overlay-bg);
   pointer-events: auto !important;
   /* Re-enable interaction for buttons */
 }
@@ -1313,19 +1313,19 @@ function goToComparison() {
 }
 
 .error-icon {
-  color: #ef4444;
+  color: var(--color-red);
 }
 
 .state-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
   margin: 0 0 0.5rem 0;
 }
 
 .state-description {
   font-size: 1rem;
-  color: #64748b;
+  color: var(--color-text-secondary);
   margin: 0 0 1.5rem 0;
   line-height: 1.5;
 }
@@ -1378,13 +1378,13 @@ function goToComparison() {
 .joint-parent:hover {
   stroke: var(--color-primary, #2563eb) !important;
   stroke-width: 3 !important;
-  fill: #f0f7ff !important;
+  fill: var(--color-primary-alpha-10) !important;
 }
 
 .joint-parent:focus {
   outline: none;
   stroke: var(--color-primary, #2563eb) !important;
   stroke-width: 3 !important;
-  fill: #e0efff !important;
+  fill: var(--color-primary-alpha-20) !important;
 }
 </style>

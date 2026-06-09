@@ -180,7 +180,7 @@ function onKeyDown(ev: KeyboardEvent) {
         'compare-selected-first': props.compareState === 'first',
         'compare-selected-second': props.compareState === 'second'
       }" :r="r" fill="url(#bubbleGrad)"
-      :stroke="props.compareState === 'first' || props.compareState === 'second' ? 'var(--color-primary)' : isActive ? 'var(--color-primary)' : '#DBE2EA'"
+      :stroke="props.compareState === 'first' || props.compareState === 'second' ? 'var(--color-primary)' : isActive ? 'var(--color-primary)' : 'var(--bubble-stroke)'"
       :stroke-width="props.compareState === 'first' || props.compareState === 'second' ? 3 : 1"
       :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : 'none'"
       filter="url(#softShadow)"
@@ -268,7 +268,7 @@ function onKeyDown(ev: KeyboardEvent) {
 
 /* Combined layout: count and label on same line with larger font */
 .html-label-wrapper .combined {
-  color: #1f2937;
+  color: var(--color-text-primary);
   font-weight: 600;
   line-height: 1;
   pointer-events: none;
@@ -276,7 +276,7 @@ function onKeyDown(ev: KeyboardEvent) {
 
 /* Count: always visible, bold and prominent */
 .html-label-wrapper .count {
-  color: #1f2937;
+  color: var(--color-text-primary);
   font-weight: 600;
   line-height: 1;
   pointer-events: none;
@@ -284,7 +284,7 @@ function onKeyDown(ev: KeyboardEvent) {
 
 /* Label text: "Contributor(s)" */
 .html-label-wrapper .label {
-  color: #475569;
+  color: var(--color-text-secondary);
   font-weight: 700;
   line-height: 1;
   pointer-events: none;
@@ -292,7 +292,7 @@ function onKeyDown(ev: KeyboardEvent) {
 
 /* Updated date information */
 .html-label-wrapper .updated {
-  color: #94a3b8;
+  color: var(--color-text-tertiary);
   line-height: 1;
   pointer-events: none;
 }
@@ -300,7 +300,7 @@ function onKeyDown(ev: KeyboardEvent) {
 /* View article button - HTML button with proper styling */
 .html-label-wrapper .view-button {
   background-color: var(--color-primary);
-  color: #ffffff;
+  color: var(--color-primary-contrast);
   font-size: 14px;
   font-weight: 600;
   padding: 0.38rem 0.5rem;
@@ -322,7 +322,7 @@ function onKeyDown(ev: KeyboardEvent) {
 }
 
 .html-label-wrapper .view-button:focus {
-  outline: 2px solid #ffffff;
+  outline: 2px solid var(--color-surface);
   outline-offset: 2px;
   background-color: var(--color-primary);
 }
