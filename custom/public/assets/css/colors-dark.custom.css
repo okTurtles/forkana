@@ -3,7 +3,12 @@
   --theme-display-name: "Forkana Dark";
 }
 
-[data-theme="gitea-dark"] {
+[data-theme="gitea-dark-protanopia-deuteranopia"] gitea-theme-meta-info {
+  --theme-display-name: "Forkana Dark (Colorblind-friendly)";
+}
+
+[data-theme="gitea-dark"],
+[data-theme="gitea-dark-protanopia-deuteranopia"] {
   --color-primary: #4E40FA;
   --color-primary-contrast: #ffffff;
   --color-primary-hover: #6558FB;
@@ -104,4 +109,16 @@
   --bubble-joint-stroke: #3d4a58;
   --bubble-shadow-color: #000000;
   --bubble-overlay-bg: rgba(27, 31, 35, 0.98);
+}
+
+/* Restore colorblind diff colors — must come after the shared block above. */
+[data-theme="gitea-dark-protanopia-deuteranopia"] {
+  --color-diff-added-linenum-bg: #1979fd46;
+  --color-diff-added-row-bg: #1979fd20;
+  --color-diff-added-word-bg: #1979fd66;
+  --color-diff-removed-linenum-bg: #c8622146;
+  --color-diff-removed-row-bg: #c8622120;
+  --color-diff-removed-word-bg: #c8622166;
+  --color-diff-del-word-bg: #c8622166;
+  --color-diff-add-num-bg: #1979fd46;
 }
