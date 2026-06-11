@@ -29,10 +29,10 @@
   --color-success-bg: #1a3a28;
 
   --color-box-header: #1a1d1f;
-  --color-diff-removed-linenum-bg: #3d2006;
-  --color-diff-removed-row-bg: #2e1a08;
-  --color-diff-added-linenum-bg: #1e1c3d;
-  --color-diff-added-row-bg: #1a183a;
+  --color-diff-removed-linenum-bg: #f851494d;
+  --color-diff-removed-row-bg: #f851491a;
+  --color-diff-added-linenum-bg: #0c2d6b;
+  --color-diff-added-row-bg: #388bfd1a;
 
   /* Green colors */
   --color-green: #57ab5a;
@@ -72,8 +72,8 @@
   --color-banner-hover: rgba(196, 181, 253, 0.1);
 
   /* Diff word highlight */
-  --color-diff-del-word-bg: #5e2222;
-  --color-diff-add-num-bg: #1e1c4a;
+  --color-diff-del-word-bg: #f8514966;
+  --color-diff-add-num-bg: #0c2d6b;
 
   /* Warning theme */
   --color-warning-theme-bg: #2a2108;
@@ -111,14 +111,15 @@
   --bubble-overlay-bg: rgba(27, 31, 35, 0.98);
 }
 
-/* Restore colorblind diff colors — must come after the shared block above. */
+/* Colorblind diff colors — bright orange (removed) vs clear blue (added).
+   Higher opacity than light theme since dark backgrounds absorb more contrast. */
 [data-theme="gitea-dark-protanopia-deuteranopia"] {
-  --color-diff-added-linenum-bg: #1979fd46;
-  --color-diff-added-row-bg: #1979fd20;
-  --color-diff-added-word-bg: #1979fd66;
-  --color-diff-removed-linenum-bg: #c8622146;
-  --color-diff-removed-row-bg: #c8622120;
-  --color-diff-removed-word-bg: #c8622166;
-  --color-diff-del-word-bg: #c8622166;
-  --color-diff-add-num-bg: #1979fd46;
+  --color-diff-removed-linenum-bg: #ff8c0080; /* 50% bright orange — line number bg */
+  --color-diff-removed-row-bg: #ff8c004d;     /* 30% bright orange — content bg */
+  --color-diff-removed-word-bg: #ff8c00b3;    /* 70% bright orange — word highlight */
+  --color-diff-del-word-bg: #ff8c00b3;
+  --color-diff-added-linenum-bg: #4d94ff80;   /* 50% light blue — line number bg */
+  --color-diff-added-row-bg: #4d94ff4d;       /* 30% light blue — content bg */
+  --color-diff-added-word-bg: #4d94ffb3;      /* 70% light blue — word highlight */
+  --color-diff-add-num-bg: #4d94ff80;
 }

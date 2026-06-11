@@ -111,16 +111,17 @@
   --bubble-overlay-bg: rgba(255, 255, 255, 0.98);
 }
 
-/* Restore colorblind diff colors — must come after the shared block above
-   so they win over Forkana's orange/purple diff palette. */
+/* Colorblind diff colors — orange (removed) vs blue (added).
+   Both hues are distinguishable by protanopes and deuteranopes.
+   Opacity is high enough to be clearly visible against white. */
 [data-theme="gitea-light-protanopia-deuteranopia"] {
-  --color-diff-added-linenum-bg: #54aeff4d;
-  --color-diff-added-row-bg: #ddf4ff80;
-  --color-diff-added-word-bg: #54aeff66;
-  --color-diff-removed-linenum-bg: #ffb77c4d;
-  --color-diff-removed-row-bg: #fff1e580;
-  --color-diff-removed-word-bg: #ffb77c80;
-  --color-diff-del-word-bg: #ffb77c80;
-  --color-diff-add-num-bg: #54aeff4d;
+  --color-diff-removed-linenum-bg: #ffb77c80; /* 50% orange — line number bg */
+  --color-diff-removed-row-bg: #ffb77c40;     /* 25% orange — content bg */
+  --color-diff-removed-word-bg: #ffb77ccc;    /* 80% orange — word highlight */
+  --color-diff-del-word-bg: #ffb77ccc;
+  --color-diff-added-linenum-bg: #54aeff80;   /* 50% blue — line number bg */
+  --color-diff-added-row-bg: #54aeff40;       /* 25% blue — content bg */
+  --color-diff-added-word-bg: #54aeffcc;      /* 80% blue — word highlight */
+  --color-diff-add-num-bg: #54aeff80;
 }
 
