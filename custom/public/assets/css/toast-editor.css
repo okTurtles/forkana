@@ -303,7 +303,8 @@
 }
 
 [data-theme] .toastui-editor-contents blockquote {
-  border-color: var(--color-border-light);
+  border-left: 4px solid var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 [data-theme] .toastui-editor-contents blockquote p,
@@ -394,13 +395,6 @@
 }
 
 /* Inactive tab background (#f7f9fc → toolbar-bg, #eaedf1 → secondary-bg) */
-[data-theme] .toastui-editor-mode-switch .tab-item {
-  background-color: var(--color-secondary-bg);
-}
-
-[data-theme] .toastui-editor-md-tab-container .tab-item {
-  background-color: var(--color-secondary-bg);
-}
 
 /* Markdown tab container itself */
 [data-theme] .toastui-editor-defaultUI .toastui-editor-md-tab-container {
@@ -409,11 +403,6 @@
 }
 
 /* ─── Close-button hover ────────────────────────────────────────── */
-
-[data-theme] .toastui-editor-defaultUI .toastui-editor-close-button {
-  background-color: var(--color-button);
-  border-color: var(--color-border);
-}
 
 [data-theme] .toastui-editor-defaultUI .toastui-editor-close-button:hover {
   border-color: var(--color-border-light);
@@ -452,24 +441,13 @@
   color: var(--color-text-secondary);
 }
 
-[data-theme] .toastui-editor-contents blockquote {
-  border-left-color: var(--color-border);
-  color: var(--color-text-secondary);
-}
-
 [data-theme] .toastui-editor-contents hr {
   border-color: var(--color-border-muted);
 }
 
 /* Code block bg (#f4f7f8 → very dark in dark mode) */
-[data-theme] .toastui-editor-contents pre {
-  background-color: var(--color-code-bg);
-}
 
 /* Inline code (#f9f2f4 pinkish bg) */
-[data-theme] .toastui-editor-contents code {
-  background-color: var(--color-markup-code-inline);
-}
 
 /* Code-block label tag */
 [data-theme] .toastui-editor-contents .toastui-editor-ww-code-block:after {
