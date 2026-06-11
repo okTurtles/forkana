@@ -272,5 +272,5 @@ gitea-theme-meta-info {
 }
 
 img[src$="/assets/img/logo-forkana.svg"] {
-  content: url("/public/assets/img/logo-forkana-dark.svg");
+  content: url("/assets/img/logo-forkana-dark.svg");
 }
