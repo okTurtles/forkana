@@ -1124,12 +1124,12 @@ function goToComparison() {
           <defs>
             <!-- Soft radial bubble gradient -->
             <radialGradient id="bubbleGrad" cx="35%" cy="30%" r="65%">
-              <stop offset="0%" stop-color="var(--bubble-grad-start)"/>
-              <stop offset="60%" stop-color="var(--bubble-grad-mid)"/>
-              <stop offset="100%" stop-color="var(--bubble-grad-end)"/>
+              <stop offset="0%" class="bubble-grad-start"/>
+              <stop offset="60%" class="bubble-grad-mid"/>
+              <stop offset="100%" class="bubble-grad-end"/>
             </radialGradient>
             <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="var(--bubble-shadow-color)" flood-opacity="0.18"/>
+              <feDropShadow dx="0" dy="2" stdDeviation="3" class="bubble-shadow"/>
             </filter>
           </defs>
 
@@ -1183,9 +1183,9 @@ function goToComparison() {
           >
             <defs>
               <radialGradient id="loadingBubbleGrad" cx="35%" cy="30%" r="65%">
-                <stop offset="0%" stop-color="var(--bubble-grad-start)"/>
-                <stop offset="60%" stop-color="var(--bubble-grad-mid)"/>
-                <stop offset="100%" stop-color="var(--bubble-grad-end)"/>
+                <stop offset="0%" class="bubble-grad-start"/>
+                <stop offset="60%" class="bubble-grad-mid"/>
+                <stop offset="100%" class="bubble-grad-end"/>
               </radialGradient>
             </defs>
             <!-- Centered at 50% of viewBox (550, 200) -->
@@ -1386,5 +1386,22 @@ function goToComparison() {
   stroke: var(--color-primary, #2563eb) !important;
   stroke-width: 3 !important;
   fill: var(--color-primary-alpha-20) !important;
+}
+
+.bubble-grad-start {
+  stop-color: var(--bubble-grad-start);
+}
+
+.bubble-grad-mid {
+  stop-color: var(--bubble-grad-mid);
+}
+
+.bubble-grad-end {
+  stop-color: var(--bubble-grad-end);
+}
+
+.bubble-shadow {
+  flood-color: var(--bubble-shadow-color);
+  flood-opacity: 0.18;
 }
 </style>

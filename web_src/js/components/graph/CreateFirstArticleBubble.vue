@@ -48,12 +48,12 @@ function handleCreateArticle(event: Event) {
       >
         <defs>
           <radialGradient id="createBubbleGrad" cx="35%" cy="30%" r="65%">
-            <stop offset="0%" stop-color="var(--bubble-grad-start)"/>
-            <stop offset="60%" stop-color="var(--bubble-grad-mid)"/>
-            <stop offset="100%" stop-color="var(--bubble-grad-end)"/>
+            <stop offset="0%" class="bubble-grad-start"/>
+            <stop offset="60%" class="bubble-grad-mid"/>
+            <stop offset="100%" class="bubble-grad-end"/>
           </radialGradient>
           <filter id="createSoftShadow" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="var(--bubble-shadow-color)" flood-opacity="0.18"/>
+            <feDropShadow dx="0" dy="2" stdDeviation="3" class="bubble-shadow"/>
           </filter>
         </defs>
         
@@ -166,5 +166,22 @@ function handleCreateArticle(event: Event) {
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+.bubble-grad-start {
+  stop-color: var(--bubble-grad-start);
+}
+
+.bubble-grad-mid {
+  stop-color: var(--bubble-grad-mid);
+}
+
+.bubble-grad-end {
+  stop-color: var(--bubble-grad-end);
+}
+
+.bubble-shadow {
+  flood-color: var(--bubble-shadow-color);
+  flood-opacity: 0.18;
 }
 </style>
