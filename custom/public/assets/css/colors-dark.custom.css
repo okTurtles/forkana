@@ -1,0 +1,125 @@
+/* Forkana dark theme variables overriding theme-gitea-dark */
+[data-theme="gitea-dark"] gitea-theme-meta-info {
+  --theme-display-name: "Forkana Dark";
+}
+
+[data-theme="gitea-dark-protanopia-deuteranopia"] gitea-theme-meta-info {
+  --theme-display-name: "Forkana Dark (Colorblind-friendly)";
+}
+
+[data-theme="gitea-dark"],
+[data-theme="gitea-dark-protanopia-deuteranopia"] {
+  --color-primary: #4E40FA;
+  --color-primary-contrast: #ffffff;
+  --color-primary-hover: #6558FB;
+  --color-primary-active: #7C73FC;
+  --color-secondary-nav-bg: #181c20;
+
+  --color-hover: #4E40FA19;
+  --color-muted: #1f2428;
+  --color-muted-text: #8d96a0;
+  --color-text-light-3: #8d96a0;
+  --color-muted-1: #ffffff0f;
+
+  --color-warning-border: #bb9d0066;
+  --color-warning-text: #fbbd08;
+  --color-warning-bg: #3a3a30;
+
+  --color-success-border: #458a5766;
+  --color-success-bg: #1a3a28;
+
+  --color-box-header: #1a1d1f;
+  --color-diff-removed-linenum-bg: #f851494d;
+  --color-diff-removed-row-bg: #f851491a;
+  --color-diff-added-linenum-bg: #0c2d6b;
+  --color-diff-added-row-bg: #388bfd1a;
+
+  /* Green colors */
+  --color-green: #57ab5a;
+  --color-green-light: #6bc46d;
+  --color-green-light-1: #2dba4e;
+  --color-green-dark-1: #4c9552;
+  --color-green-dark-2: #3d7b42;
+
+  /* Text colors */
+  --color-text-primary: #e6edf3;
+  --color-text-secondary: #8d96a0;
+  --color-text-tertiary: #6e7681;
+
+  /* Border colors */
+  --color-border: #30363d;
+  --color-border-light: #21262d;
+  --color-border-input: #30363d;
+  --color-border-muted: #21262d;
+
+  /* Surface colors */
+  --color-surface: #1b1f23;
+  --color-surface-muted: #161b22;
+  --color-surface-subtle: #21262d;
+  --color-surface-toolbar: #13161a;
+
+  /* Overlay & shadow */
+  --color-overlay-backdrop: rgba(0, 0, 0, 0.75);
+  --color-shadow-medium: rgba(0, 0, 0, 0.4);
+
+  /* Navbar pill */
+  --color-navbar-pill-bg: #ffffff1a;
+
+  /* Info banner (dark purple-tinted) */
+  --color-banner-bg: #1a1730;
+  --color-banner-border: #312a5e;
+  --color-banner-text: #c4b5fd;
+  --color-banner-hover: rgba(196, 181, 253, 0.1);
+
+  /* Diff word highlight */
+  --color-diff-del-word-bg: #f8514966;
+  --color-diff-add-num-bg: #0c2d6b;
+
+  /* Warning theme */
+  --color-warning-theme-bg: #2a2108;
+  --color-warning-theme-text: #e3b341;
+  --color-warning-theme-border: #4d3c08;
+  --color-warning-icon: #d29922;
+
+  /* Fork modal */
+  --color-fork-text: #8d96a0;
+  --color-fork-btn-primary: #4E40FA;
+  --color-fork-btn-primary-hover: #6558fb;
+  --color-fork-btn-cancel-bg: #21262d;
+  --color-fork-btn-cancel-text: #c9d1d9;
+  --color-fork-btn-cancel-border: #30363d;
+
+  /* Tab colors */
+  --color-tab-inactive: #6e7681;
+  --color-tab-active-text: #e6edf3;
+
+  --color-white: #FFFFFF;
+  --color-red: #f85149;
+  --color-yellow: #e3b341;
+  --color-purple: #bc8cff;
+  --color-grey: #6e7681;
+
+  /* Bubble graph — mirror principle: as far from dark body as light values are from white */
+  --bubble-grad-start: #2e3640;
+  --bubble-grad-mid: #232b35;
+  --bubble-grad-end: #1d2530;
+  --bubble-stroke: #3a4450;
+  --bubble-edge-stroke: #2d3540;
+  --bubble-joint-fill: #1b1f23;
+  --bubble-joint-stroke: #3d4a58;
+  --bubble-shadow-color: #000000;
+  --bubble-overlay-bg: rgba(27, 31, 35, 0.98);
+}
+
+/* Colorblind diff colors — bright orange (removed) vs clear blue (added).
+   Higher opacity than light theme since dark backgrounds absorb more contrast. */
+[data-theme="gitea-dark-protanopia-deuteranopia"] {
+  --color-diff-removed-linenum-bg: #ff8c0080; /* 50% bright orange — line number bg */
+  --color-diff-removed-row-bg: #ff8c004d;     /* 30% bright orange — content bg */
+  --color-diff-removed-word-bg: #ff8c00b3;    /* 70% bright orange — word highlight */
+  --color-diff-del-word-bg: #ff8c00b3;
+  --color-diff-added-linenum-bg: #4d94ff80;   /* 50% light blue — line number bg */
+  --color-diff-added-row-bg: #4d94ff4d;       /* 30% light blue — content bg */
+  --color-diff-added-word-bg: #4d94ffb3;      /* 70% light blue — word highlight */
+  --color-diff-add-num-bg: #4d94ff80;
+}

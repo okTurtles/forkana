@@ -1,4 +1,8 @@
 /* Footer overrides */
+.footer-divider {
+  border-color: var(--color-border);
+}
+
 .page-footer {
   /* example: tweak background or padding */
   /* background: var(--color-secondary); */

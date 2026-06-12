@@ -48,6 +48,8 @@ const webComponents = new Set([
 ]);
 
 const filterCssImport = (url: string, ...args: Array<any>) => {
+  if (url.startsWith('/')) return false;
+
   const cssFile = args[1] || args[0]; // resourcePath is 2nd argument for url and 3rd for import
   const importedFile = url.replace(/[?#].+/, '').toLowerCase();
 

@@ -11,7 +11,7 @@
 		</div>
 		<div class="ui top attached segment">
 			{{if eq .Status 1}}
-				<div class="tw-flex tw-justify-between">
+				<div class="tw-flex tw-justify-between tw-pl-2 tw-pt-2">
 					<div class="tw-flex">
 						<div class="small-menu-items ui compact tiny menu">
 							<a class="{{if eq .State "all"}}active {{end}}item" href="?sort={{$.SortType}}&state=all&issueType={{$.IssueType}}&labels={{$.Labels}}">
@@ -62,7 +62,7 @@
 						</div>
 					</div>
 				</div>
-				<div class="divider"></div>
+				<div class="divider tw-mt-2"></div>
 				{{if not .Issues}}
 					{{ctx.Locale.Tr "notification.no_subscriptions"}}
 				{{else}}

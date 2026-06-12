@@ -127,3 +127,418 @@
   border: 1px solid var(--color-secondary);
   border-bottom: 1px solid var(--color-surface);
 }
+
+/* ─── Replace all hardcoded #fff / dark-text values ───────────── */
+/* [data-theme] prefix raises specificity above the lazy-loaded    */
+/* index-domready.css which injects ToastUI CSS at runtime and     */
+/* would otherwise override same-weight rules loaded earlier.      */
+
+/* Editor border */
+[data-theme] .toastui-editor-defaultUI {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+/* Writing area backgrounds */
+[data-theme] .toastui-editor-ww-container,
+[data-theme] .toastui-editor-md-container {
+  background-color: var(--color-input-background);
+}
+
+/* Main container text */
+[data-theme] .toastui-editor-main-container {
+  color: var(--color-text);
+}
+
+/* Generic mode-switch background (fallback for any editor instance) */
+[data-theme] .toastui-editor-mode-switch {
+  background-color: var(--color-menu);
+}
+
+[data-theme] .toastui-editor-mode-switch .tab-item {
+  color: var(--color-tab-inactive);
+  border-color: var(--color-border);
+  background-color: var(--color-secondary-bg);
+}
+
+[data-theme] .toastui-editor-mode-switch .tab-item.active {
+  border-top-color: var(--color-input-background);
+  background-color: var(--color-input-background);
+  color: var(--color-text);
+}
+
+/* Markdown tab container */
+[data-theme] .toastui-editor-md-tab-container {
+  background-color: var(--color-secondary-bg);
+  border-bottom-color: var(--color-border);
+}
+
+[data-theme] .toastui-editor-md-tab-container .tab-item {
+  background-color: var(--color-secondary-bg);
+  border-color: var(--color-border);
+  color: var(--color-tab-inactive);
+}
+
+[data-theme] .toastui-editor-md-tab-container .tab-item.active {
+  border-bottom-color: var(--color-input-background);
+  background-color: var(--color-input-background);
+  color: var(--color-text);
+}
+
+/* Toolbar button hover */
+[data-theme] .toastui-editor-defaultUI-toolbar button {
+  color: var(--color-text);
+}
+
+[data-theme] .toastui-editor-defaultUI-toolbar button:not(:disabled):hover {
+  background-color: var(--color-button);
+  border-color: var(--color-border);
+}
+
+/* Popups and context menu */
+[data-theme] .toastui-editor-popup,
+[data-theme] .toastui-editor-context-menu {
+  background-color: var(--color-menu);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme] .toastui-editor-context-menu .menu-group {
+  border-bottom-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme] .toastui-editor-context-menu li:not(.disabled):hover,
+[data-theme] .toastui-editor-popup-add-heading ul li:hover {
+  background-color: var(--color-hover-opaque);
+}
+
+/* Table insert grid */
+[data-theme] .toastui-editor-popup-add-table .toastui-editor-table-cell {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+[data-theme] .toastui-editor-popup-add-table .toastui-editor-table-cell.header {
+  background-color: var(--color-surface-muted);
+  border-color: var(--color-border);
+}
+
+/* Popup form inputs */
+[data-theme] .toastui-editor-popup-body label {
+  color: var(--color-text-secondary);
+}
+
+[data-theme] .toastui-editor-popup-body input[type='text'] {
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background-color: var(--color-input-background);
+}
+
+[data-theme] .toastui-editor-popup-body input[type='text']:focus {
+  outline-color: var(--color-primary);
+}
+
+[data-theme] .toastui-editor-popup-body .toastui-editor-file-name {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme] .toastui-editor-popup-body .toastui-editor-file-select-button {
+  border-color: var(--color-border);
+  background-color: var(--color-button);
+  color: var(--color-text);
+}
+
+/* Popup action buttons */
+[data-theme] .toastui-editor-defaultUI .toastui-editor-close-button {
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background-color: var(--color-button);
+}
+
+[data-theme] .toastui-editor-defaultUI .toastui-editor-ok-button {
+  color: var(--color-primary-contrast);
+  background-color: var(--color-primary);
+}
+
+[data-theme] .toastui-editor-defaultUI .toastui-editor-ok-button:hover {
+  background-color: var(--color-primary-hover);
+}
+
+/* Code block language picker */
+[data-theme] .toastui-editor-ww-code-block-language {
+  background-color: var(--color-input-background);
+  border-color: var(--color-border);
+}
+
+[data-theme] .toastui-editor-ww-code-block-language input {
+  color: var(--color-text);
+}
+
+/* ProseMirror editor surface */
+[data-theme] .ProseMirror {
+  color: var(--color-text);
+}
+
+[data-theme] .ProseMirror .placeholder {
+  color: var(--color-placeholder-text);
+}
+
+/* Rendered content inside the editor */
+[data-theme] .toastui-editor-contents p,
+[data-theme] .toastui-editor-contents h1,
+[data-theme] .toastui-editor-contents h2,
+[data-theme] .toastui-editor-contents h3,
+[data-theme] .toastui-editor-contents h4,
+[data-theme] .toastui-editor-contents h5,
+[data-theme] .toastui-editor-contents h6,
+[data-theme] .toastui-editor-contents div {
+  color: var(--color-text);
+}
+
+[data-theme] .toastui-editor-contents h1,
+[data-theme] .toastui-editor-contents h2 {
+  border-color: var(--color-border);
+}
+
+[data-theme] .toastui-editor-contents blockquote {
+  border-left: 4px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+[data-theme] .toastui-editor-contents blockquote p,
+[data-theme] .toastui-editor-contents blockquote ul,
+[data-theme] .toastui-editor-contents blockquote ol {
+  color: var(--color-text-secondary);
+}
+
+[data-theme] .toastui-editor-contents pre {
+  background-color: var(--color-code-bg);
+}
+
+[data-theme] .toastui-editor-contents pre code {
+  color: var(--color-text);
+  background-color: transparent;
+}
+
+[data-theme] .toastui-editor-contents code {
+  color: var(--color-purple);
+  background-color: var(--color-markup-code-inline);
+}
+
+[data-theme] .toastui-editor-contents a {
+  color: var(--color-primary);
+}
+
+[data-theme] .toastui-editor-contents a:hover {
+  color: var(--color-primary-hover);
+}
+
+[data-theme] .toastui-editor-contents table {
+  border-color: var(--color-border);
+}
+
+[data-theme] .toastui-editor-contents table th,
+[data-theme] .toastui-editor-contents table td {
+  border-color: var(--color-border);
+}
+
+[data-theme] .toastui-editor-contents table th {
+  background-color: var(--color-surface-muted);
+}
+
+[data-theme] .toastui-editor-contents table td,
+[data-theme] .toastui-editor-contents table td p {
+  color: var(--color-text);
+}
+
+/* Image link hover button (uses background-image, only fix background-color) */
+[data-theme] .toastui-editor-contents .image-link:hover::before {
+  border-color: var(--color-border);
+  background-color: var(--color-surface);
+}
+
+/* Split-view divider between markdown and preview panes */
+[data-theme] .toastui-editor-main .toastui-editor-md-splitter {
+  background-color: var(--color-border);
+}
+
+/* ─── Toolbar structural colors ─────────────────────────────────── */
+
+[data-theme] .toastui-editor-defaultUI-toolbar {
+  background-color: var(--color-surface-toolbar);
+  border-bottom-color: var(--color-border-light);
+}
+
+/* Default (non-hover) button border blends into toolbar bg */
+[data-theme] .toastui-editor-defaultUI-toolbar button {
+  border-color: var(--color-surface-toolbar);
+}
+
+/* Vertical divider between toolbar icon groups */
+[data-theme] .toastui-editor-toolbar-divider {
+  background-color: var(--color-border);
+}
+
+/* Dropdown toolbar (overflow) */
+[data-theme] .toastui-editor-dropdown-toolbar {
+  background-color: var(--color-surface-toolbar);
+  border-color: var(--color-border);
+}
+
+/* ─── Mode-switch and tab containers ────────────────────────────── */
+
+/* Top border of the mode-switch strip */
+[data-theme] .toastui-editor-mode-switch {
+  border-top-color: var(--color-border);
+}
+
+/* Inactive tab background (#f7f9fc → toolbar-bg, #eaedf1 → secondary-bg) */
+
+/* Markdown tab container itself */
+[data-theme] .toastui-editor-defaultUI .toastui-editor-md-tab-container {
+  background-color: var(--color-surface-toolbar);
+  border-bottom-color: var(--color-border-light);
+}
+
+/* ─── Close-button hover ────────────────────────────────────────── */
+
+[data-theme] .toastui-editor-defaultUI .toastui-editor-close-button:hover {
+  border-color: var(--color-border-light);
+}
+
+/* ─── Popup form — disabled input and image tabs ────────────────── */
+
+[data-theme] .toastui-editor-popup-body input[type='text'].disabled {
+  background-color: var(--color-surface-muted);
+  border-color: var(--color-border);
+  color: var(--color-text-tertiary);
+}
+
+[data-theme] .toastui-editor-popup-add-image .toastui-editor-tabs .tab-item {
+  border-bottom-color: var(--color-border);
+  color: var(--color-text);
+}
+
+[data-theme] .toastui-editor-popup-add-image .toastui-editor-tabs .tab-item:hover {
+  border-bottom-color: var(--color-border-light);
+}
+
+[data-theme] .toastui-editor-popup-add-image .toastui-editor-tabs .tab-item.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+[data-theme] .toastui-editor-popup-add-image .toastui-editor-file-name {
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+/* ─── Editor content — typography ───────────────────────────────── */
+
+[data-theme] .toastui-editor-contents del {
+  color: var(--color-text-secondary);
+}
+
+[data-theme] .toastui-editor-contents hr {
+  border-color: var(--color-border-muted);
+}
+
+/* Code block bg (#f4f7f8 → very dark in dark mode) */
+
+/* Inline code (#f9f2f4 pinkish bg) */
+
+/* Code-block label tag */
+[data-theme] .toastui-editor-contents .toastui-editor-ww-code-block:after {
+  background-color: var(--color-secondary-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+/* ─── Custom block (fenced div) ─────────────────────────────────── */
+
+/* Light: #f9f7fd bg, #452d6b text, #dbd4ea border → dark purple tints */
+[data-theme] .toastui-editor-custom-block .toastui-editor-custom-block-editor {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+[data-theme] .toastui-editor-custom-block.ProseMirror-selectednode .toastui-editor-custom-block-view {
+  border-color: var(--color-border);
+}
+
+[data-theme] .toastui-editor-custom-block-view .info {
+  color: var(--color-purple);
+}
+
+[data-theme] .toastui-editor-custom-block-view button {
+  border-color: var(--color-border);
+}
+
+/* ─── Markdown syntax coloring ──────────────────────────────────── */
+
+/* Delimiters (#ccc in light → muted text in dark) */
+[data-theme] .toastui-editor-md-delimiter,
+[data-theme] .toastui-editor-md-thematic-break,
+[data-theme] .toastui-editor-md-link,
+[data-theme] .toastui-editor-md-table,
+[data-theme] .toastui-editor-md-block-quote {
+  color: var(--color-text-secondary);
+}
+
+[data-theme] .toastui-editor-md-code.toastui-editor-md-delimiter {
+  color: var(--color-text-tertiary);
+}
+
+/* Meta / HTML / URL (#999) */
+[data-theme] .toastui-editor-md-meta,
+[data-theme] .toastui-editor-md-html,
+[data-theme] .toastui-editor-md-link.toastui-editor-md-link-url.toastui-editor-md-marked-text {
+  color: var(--color-text-tertiary);
+}
+
+/* Blockquote text / list meta (#555 — too dark on dark bg) */
+[data-theme] .toastui-editor-md-block-quote .toastui-editor-md-marked-text,
+[data-theme] .toastui-editor-md-list-item .toastui-editor-md-meta {
+  color: var(--color-text-secondary);
+}
+
+/* Table cell text (#222 — invisible on dark bg) */
+[data-theme] .toastui-editor-md-table .toastui-editor-md-table-cell {
+  color: var(--color-text);
+}
+
+/* List bullet colors: odd=blue, even=red */
+[data-theme] .toastui-editor-md-link.toastui-editor-md-link-desc.toastui-editor-md-marked-text,
+[data-theme] .toastui-editor-md-list-item-style.toastui-editor-md-list-item-odd {
+  color: var(--color-primary);
+}
+
+[data-theme] .toastui-editor-md-list-item-style.toastui-editor-md-list-item-even {
+  color: var(--color-red);
+}
+
+/* Inline code bg (light pinkish → dark markup-code-inline) */
+[data-theme] .toastui-editor-md-code {
+  background-color: var(--color-markup-code-inline);
+}
+
+/* Code block line background (#f5f7f8 → very dark) */
+[data-theme] .toastui-editor-md-code-block-line-background {
+  background-color: var(--color-secondary-bg);
+}
+
+/* Custom block syntax (#452d6b / #5200d0 dark purple → purple variable) */
+[data-theme] .toastui-editor-md-custom-block {
+  color: var(--color-purple);
+}
+
+[data-theme] .toastui-editor-md-custom-block-line-background {
+  background-color: var(--color-surface-muted);
+}
+
+[data-theme] .toastui-editor-md-custom-block .toastui-editor-md-meta {
+  color: var(--color-purple);
+}
