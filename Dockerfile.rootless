@@ -1,8 +1,12 @@
 # Build stage
 FROM docker.io/library/golang:1.25-alpine3.22 AS build-env
 
+# Default was "direct", but gitea.com blocks CI/datacenter traffic with 403s
+# (e.g. when fetching the gitea.com/gitea/go-xsd-duration replace module),
+# breaking Docker builds. Going through proxy.golang.org avoids hitting
+# gitea.com directly since the proxy serves modules from its cache.
 ARG GOPROXY
-ENV GOPROXY=${GOPROXY:-direct}
+ENV GOPROXY=${GOPROXY:-https://proxy.golang.org,direct}
 
 ARG GITEA_VERSION
 ARG TAGS="sqlite sqlite_unlock_notify"
