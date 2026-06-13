@@ -18,7 +18,7 @@
 
 ### 1. Decide what to work on
 
-- Check the [open issues](https://github.com/okTurtles/group-income/issues).
+- Check the [open issues](https://github.com/okTurtles/forkana/issues).
 - Read some docs like __[the deep wiki](https://deepwiki.com/okTurtles/forkana)__ (although be careful, it might be out of date, so we also recommend using a local coding agent to explore the codebase and answer questions).
 
 We recommend [joining `#forkana` on Slack](https://join.slack.com/t/okturtles/shared_invite/zt-10jmpfgxj-tXQ1MKW7t8qqdyY6fB7uyQ) and telling folks what you're interested in working on.
