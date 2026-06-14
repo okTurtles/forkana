@@ -9,6 +9,9 @@ dev = [
   "yamllint==1.37.1",
 ]
 
+[tool.uv]
+exclude-newer = "14 days"
+
 [tool.djlint]
 profile="golang"
 ignore="H005,H006,H013,H016,H020,H021,H030,H031"
