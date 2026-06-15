@@ -6,17 +6,9 @@
 mkdir -p ${HOME} && chmod 0700 ${HOME}
 if [ ! -w ${HOME} ]; then echo "${HOME} is not writable"; exit 1; fi
 
-# Prepare custom folder
-mkdir -p ${GITEA_CUSTOM} && chmod 0700 ${GITEA_CUSTOM}
-
-# Sync baked-in custom defaults (options, public, services, templates) into GITEA_CUSTOM.
-# The defaults live outside the volume paths so they survive volume mounts.
-# Uses cp -rn so existing user-modified files are never overwritten.
-CUSTOM_DEFAULTS="/usr/local/share/gitea/custom-defaults"
-if [ -d "${CUSTOM_DEFAULTS}" ] && [ -n "$(find "${CUSTOM_DEFAULTS}" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-    # Use glob instead of "/." — BusyBox cp -rn silently fails with the dot syntax.
-    cp -rn "${CUSTOM_DEFAULTS}"/* "${GITEA_CUSTOM}/"
-fi
+# GITEA_CUSTOM is baked into the image (see Dockerfile) and points outside the
+# volume paths, so no per-boot sync into the data volume is needed; each image
+# already ships its matching custom overrides.
 
 # Prepare temp folder
 mkdir -p ${GITEA_TEMP} && chmod 0700 ${GITEA_TEMP}
