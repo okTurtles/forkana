@@ -455,6 +455,8 @@ type GetFeedsOptions struct {
 	Date               string                 // the day we want activity for: YYYY-MM-DD
 	DontCount          bool                   // do counting in GetFeeds
 	ExcludeRepoOwnerID int64
+	SinceUnix          int64        // filter actions since this Unix timestamp (overrides Date when set)
+	OpTypes            []ActionType // filter by specific action types
 }
 
 func (opts GetFeedsOptions) shouldExcludeRepoOwner() bool {
@@ -477,6 +479,10 @@ func ActivityReadable(user, doer *user_model.User) bool {
 
 func FeedDateCond(opts GetFeedsOptions) builder.Cond {
 	cond := builder.NewCond()
+	if opts.SinceUnix > 0 {
+		cond = cond.And(builder.Gte{"`action`.created_unix": opts.SinceUnix})
+		return cond
+	}
 	if opts.Date == "" {
 		return cond
 	}
@@ -575,6 +581,10 @@ func ActivityQueryCondition(ctx context.Context, opts GetFeedsOptions) (builder.
 	}
 	if !opts.IncludeDeleted {
 		cond = cond.And(builder.Eq{"is_deleted": false})
+	}
+
+	if len(opts.OpTypes) > 0 {
+		cond = cond.And(builder.In("`action`.op_type", opts.OpTypes))
 	}
 
 	cond = cond.And(FeedDateCond(opts))

@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	activities_model "code.gitea.io/gitea/models/activities"
 	asymkey_model "code.gitea.io/gitea/models/asymkey"
@@ -48,11 +49,142 @@ import (
 )
 
 const (
+	tplHome       templates.TplName = "home"
 	tplDashboard  templates.TplName = "user/dashboard/dashboard"
+	tplFeedsPage  templates.TplName = "user/feeds/feeds_page"
 	tplIssues     templates.TplName = "user/dashboard/issues"
 	tplMilestones templates.TplName = "user/dashboard/milestones"
 	tplProfile    templates.TplName = "user/profile"
 )
+
+// HomeFeed renders the logged-in homepage with a 3-item feed preview.
+func HomeFeed(ctx *context.Context) {
+	ctxUser := ctx.Doer
+	ctx.Data["ContextUser"] = ctxUser
+	ctx.Data["Title"] = ctx.Locale.TrString("home")
+	ctx.Data["PageIsHome"] = true
+
+	feeds, _, err := feed_service.GetFeedsForDashboard(ctx, activities_model.GetFeedsOptions{
+		RequestedUser:      ctxUser,
+		Actor:              ctx.Doer,
+		IncludePrivate:     true,
+		IncludeDeleted:     false,
+		ExcludeRepoOwnerID: ctx.Doer.ID,
+		DontCount:          true,
+		ListOptions: db.ListOptions{
+			Page:     1,
+			PageSize: 3,
+		},
+	})
+	if err != nil {
+		ctx.ServerError("GetFeeds", err)
+		return
+	}
+
+	ctx.Data["Feeds"] = feeds
+	ctx.HTML(http.StatusOK, tplHome)
+}
+
+// UserFeeds renders the full feeds page with search, filter, sort, and pagination.
+func UserFeeds(ctx *context.Context) {
+	ctxUser := getDashboardContextUser(ctx)
+	if ctx.Written() {
+		return
+	}
+
+	var (
+		page    = ctx.FormInt("page")
+		period  = ctx.FormString("period")
+		filters = ctx.FormStrings("filter")
+		q       = ctx.FormString("q")
+	)
+	if page <= 1 {
+		page = 1
+	}
+
+	filtersMap := make(map[string]bool)
+	for _, f := range filters {
+		filtersMap[f] = true
+	}
+
+	ctx.Data["Title"] = ctx.Locale.TrString("home.your_feeds")
+	ctx.Data["PageIsFeeds"] = true
+	ctx.Data["Period"] = period
+	ctx.Data["Filters"] = filters
+	ctx.Data["FiltersMap"] = filtersMap
+	ctx.Data["Keyword"] = q
+
+	opts := activities_model.GetFeedsOptions{
+		RequestedUser:      ctxUser,
+		Actor:              ctx.Doer,
+		IncludePrivate:     true,
+		IncludeDeleted:     false,
+		ExcludeRepoOwnerID: ctx.Doer.ID,
+		ListOptions: db.ListOptions{
+			Page:     page,
+			PageSize: 4,
+		},
+	}
+
+	now := time.Now()
+	switch period {
+	case "today":
+		opts.Date = now.Format("2006-01-02")
+	case "week":
+		opts.SinceUnix = now.AddDate(0, 0, -7).Unix()
+	case "last_week":
+		opts.SinceUnix = now.AddDate(0, 0, -14).Unix()
+	case "3_months":
+		opts.SinceUnix = now.AddDate(0, -3, 0).Unix()
+	case "6_months":
+		opts.SinceUnix = now.AddDate(0, -6, 0).Unix()
+	}
+
+	var opTypes []activities_model.ActionType
+	if filtersMap["change_requests"] {
+		opTypes = append(opTypes,
+			activities_model.ActionCreatePullRequest,
+			activities_model.ActionClosePullRequest,
+			activities_model.ActionReopenPullRequest,
+			activities_model.ActionMergePullRequest,
+			activities_model.ActionApprovePullRequest,
+			activities_model.ActionRejectPullRequest,
+			activities_model.ActionAutoMergePullRequest,
+		)
+	}
+	if filtersMap["articles"] {
+		opTypes = append(opTypes,
+			activities_model.ActionCreateRepo,
+			activities_model.ActionCommitRepo,
+			activities_model.ActionMirrorSyncPush,
+		)
+	}
+	if filtersMap["mentions"] {
+		opTypes = append(opTypes,
+			activities_model.ActionCommentIssue,
+			activities_model.ActionCommentPull,
+		)
+	}
+	if filtersMap["users"] {
+		opTypes = append(opTypes,
+			activities_model.ActionStarRepo,
+			activities_model.ActionWatchRepo,
+		)
+	}
+	opts.OpTypes = opTypes
+
+	feeds, count, err := feed_service.GetFeedsForDashboard(ctx, opts)
+	if err != nil {
+		ctx.ServerError("GetFeeds", err)
+		return
+	}
+
+	pager := context.NewPagination(count, 4, page, 5).WithCurRows(len(feeds))
+	pager.AddParamFromRequest(ctx.Req)
+	ctx.Data["Page"] = pager
+	ctx.Data["Feeds"] = feeds
+	ctx.HTML(http.StatusOK, tplFeedsPage)
+}
 
 // getDashboardContextUser finds out which context user dashboard is being viewed as .
 func getDashboardContextUser(ctx *context.Context) *user_model.User {
