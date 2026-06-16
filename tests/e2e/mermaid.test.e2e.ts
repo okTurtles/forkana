@@ -55,7 +55,6 @@ test.describe('Mermaid rendering', () => {
       await page.waitForURL(/\/user2\/.*\/_new\/.*\/README\.md/, {timeout: 20000});
 
       await setTextareaValue(page, '#edit_area', `${fencedMermaid(articleDiagram)}\n`);
-      await page.locator('input[name="commit_summary"]').fill('Add Mermaid article');
       await page.locator('#commit-button').click();
       await page.waitForURL(`**/article/user2/${subject}**`, {timeout: 30000});
 
