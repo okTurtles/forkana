@@ -462,6 +462,7 @@ col.col-type-marker {
   border-radius: .5rem;
 }
 
+.user-setting-content .ui.attached.segment,
 .content.comment-container .ui.attached.segment {
   padding: 1rem;
 }
@@ -689,21 +690,21 @@ col.col-type-marker {
 
 /* Left side (del/current) */
 .conflict-inner-table .lines-num.lines-num-old {
-  background: var(--color-diff-removed-row-bg) !important;
+  background: var(--color-diff-removed-linenum-bg) !important;
   color: var(--color-text-light-3) !important;
   padding-top: 10px;
 }
 
 /* Right side (add/proposed) */
 .conflict-inner-table .lines-num.lines-num-new.add-code {
-  background: var(--color-diff-added-row-bg) !important;
+  background: var(--color-diff-added-linenum-bg) !important;
   color: var(--color-text-light-3) !important;
   padding-top: 10px;
 }
 
 /* Left code content */
 .repository .diff-file-box .code-diff .conflict-inner-table .lines-code-old.conflict-btn-cell,
-.repository .diff-file-box .code-diff .conflict-inner-table td.lines-code-old.del-code{
+.repository .diff-file-box .code-diff .conflict-inner-table td.lines-code-old.del-code {
   background: rgb(from var(--color-diff-removed-row-bg) r g b / 30%) !important;
 }
 
@@ -752,7 +753,7 @@ col.col-type-marker {
 }
 
 .conflict-buttons-row .conflict-btn-gutter.lines-num-new.add-code {
-  background: #e5e9ff !important;
+  background: var(--color-diff-added-linenum-bg) !important;
 }
 
 .conflict-btn-cell {
@@ -1048,4 +1049,53 @@ col.col-type-marker {
 
 .base64-image-widget:hover .base64-image-icon {
   color: var(--color-primary, #0969da);
+}
+
+/* Dark mode diff line colors (both dark and dark colorblind themes).
+   del-code uses var(--color-surface) in the base rule above, which maps to the body
+   color in dark mode (indistinguishable). Override explicitly using positional classes
+   so del-code row descendant selectors don't bleed into the right-side add-code cells.
+   All rules use CSS variables — the colorblind theme automatically resolves its own
+   orange/blue palette instead of red/blue. */
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .code-diff-unified .del-code,
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .code-diff-unified .del-code td,
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .code-diff-split .del-code .lines-num-old,
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .code-diff-split .del-code .lines-escape-old,
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .code-diff-split .del-code .lines-code-old {
+  background: var(--color-diff-removed-row-bg) !important;
+}
+
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .code-diff-unified .del-code .lines-num,
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .code-diff-split .del-code .lines-num-old {
+  background: var(--color-diff-removed-linenum-bg) !important;
+}
+
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .code-diff-split .del-code .add-code.lines-code-new {
+  background: var(--color-diff-added-row-bg) !important;
+}
+
+/* Conflict inner-table: 4 cells, each pinned to the correct side's color. */
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .repository .diff-file-box .code-diff .conflict-inner-table .lines-num.lines-num-old {
+  background: var(--color-diff-removed-linenum-bg) !important;
+}
+
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .repository .diff-file-box .code-diff .conflict-inner-table td.lines-code-old.del-code {
+  background: var(--color-diff-removed-row-bg) !important;
+}
+
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .repository .diff-file-box .code-diff .conflict-inner-table .lines-num.lines-num-new.add-code {
+  background: var(--color-diff-added-linenum-bg) !important;
+}
+
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .repository .diff-file-box .code-diff .conflict-inner-table .add-code .lines-code-new {
+  background: var(--color-diff-added-row-bg) !important;
+}
+
+/* Button row cells match their adjacent code cells in dark modes. */
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .conflict-inner-table .lines-code-new.conflict-btn-cell {
+  background: var(--color-diff-added-row-bg) !important;
+}
+
+:is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .repository .diff-file-box .code-diff .conflict-inner-table .lines-code-old.conflict-btn-cell {
+  background: var(--color-diff-removed-row-bg) !important;
 }

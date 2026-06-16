@@ -1,9 +1,9 @@
 {
   "type": "module",
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@10.34.3",
   "engines": {
     "node": ">= 22.6.0",
-    "pnpm": ">= 10.0.0"
+    "pnpm": ">= 10.16.0"
   },
   "dependencies": {
     "@citation-js/core": "0.7.18",

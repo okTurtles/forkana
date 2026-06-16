@@ -129,7 +129,7 @@ html body .page-content.explore.users .flex-list .flex-item .flex-item-body {
 
 .page-content.explore.users .ui.pagination.menu .item.active {
   background: var(--color-primary);
-  color: white;
+  color: var(--color-primary-contrast);
   font-weight: 500;
 }
 

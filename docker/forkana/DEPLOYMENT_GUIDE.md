@@ -119,8 +119,8 @@ sudo dnf install -y git jq curl
 > skip this step - the deploy user's directories are created there instead.
 
 ```bash
-mkdir -p ~/forkana/{data,data/git,data/custom,config,postgres,compose}
-chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/data/custom ~/forkana/config
+mkdir -p ~/forkana/{data,data/git,config,postgres,compose}
+chmod 0755 ~/forkana/data ~/forkana/data/git ~/forkana/config
 ```
 
 </details>
@@ -213,10 +213,9 @@ DEPLOY_USER="forkana-deploy"  # ← replace with your UID 1000 username
 DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
 sudo -Hiu "${DEPLOY_USER}" bash -lc "
-  mkdir -p $DEPLOY_HOME/forkana/{compose,data,data/git,data/custom,config,postgres,images}
+  mkdir -p $DEPLOY_HOME/forkana/{compose,data,data/git,config,postgres,images}
   chmod 0755 $DEPLOY_HOME/forkana/data $DEPLOY_HOME/forkana/data/git \
-             $DEPLOY_HOME/forkana/data/custom $DEPLOY_HOME/forkana/config \
-             $DEPLOY_HOME/forkana/images
+             $DEPLOY_HOME/forkana/config $DEPLOY_HOME/forkana/images
 "
 ```
 

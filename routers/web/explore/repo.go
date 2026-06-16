@@ -832,7 +832,7 @@ func getFileContributorCount(gitRepo *git.Repository, branch, filePath string, s
 		cmd.AddOptionFormat("--since=%s", since.Format(time.RFC3339))
 	}
 
-	stdout, _, err := cmd.AddDynamicArguments(branch, "--", filePath).
+	stdout, _, err := cmd.AddDynamicArguments(branch).AddDashesAndList(filePath).
 		RunStdString(gitRepo.Ctx, &gitcmd.RunOpts{Dir: gitRepo.Path})
 	if err != nil {
 		return 0, err

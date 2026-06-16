@@ -95,16 +95,18 @@ COPY --from=build-env --chown=root:root /go/src/code.gitea.io/gitea/environment-
 
 # Bake Forkana custom overrides (options, public, services, templates) into the image.
 # public/ carries custom CSS (content.custom.css, navbar.custom.css, etc.) and images.
-# Placed outside both VOLUME paths (/var/lib/gitea, /etc/gitea) so they survive
-# volume mounts. docker-setup.sh syncs them into GITEA_CUSTOM on every startup.
-COPY --from=build-env --chown=1000:1000 /tmp/custom-defaults/ /usr/local/share/gitea/custom-defaults/
+# Placed outside both VOLUME paths (/var/lib/gitea, /etc/gitea) and used directly
+# as GITEA_CUSTOM, so every deployed image atomically ships its matching
+# overrides. They are intentionally NOT synced into the data volume: a copy
+# there previously went stale and shadowed updated templates on deploy.
+COPY --from=build-env --chown=1000:1000 /tmp/custom-defaults/ /usr/local/share/gitea/custom/
 
 # Run as non-root user (git:git)
 USER 1000:1000
 
 # Environment configuration
 ENV GITEA_WORK_DIR=/var/lib/gitea
-ENV GITEA_CUSTOM=/var/lib/gitea/custom
+ENV GITEA_CUSTOM=/usr/local/share/gitea/custom
 ENV GITEA_TEMP=/tmp/gitea
 ENV TMPDIR=/tmp/gitea
 ENV GITEA_APP_INI=/etc/gitea/app.ini

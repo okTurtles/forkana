@@ -48,12 +48,12 @@ function handleCreateArticle(event: Event) {
       >
         <defs>
           <radialGradient id="createBubbleGrad" cx="35%" cy="30%" r="65%">
-            <stop offset="0%" stop-color="#FAFBFC"/>
-            <stop offset="60%" stop-color="#EEF2F7"/>
-            <stop offset="100%" stop-color="#E6EBF2"/>
+            <stop offset="0%" class="bubble-grad-start"/>
+            <stop offset="60%" class="bubble-grad-mid"/>
+            <stop offset="100%" class="bubble-grad-end"/>
           </radialGradient>
           <filter id="createSoftShadow" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#64748b" flood-opacity="0.18"/>
+            <feDropShadow dx="0" dy="2" stdDeviation="3" class="bubble-shadow"/>
           </filter>
         </defs>
         
@@ -62,7 +62,7 @@ function handleCreateArticle(event: Event) {
           cy="160"
           r="145" 
           fill="url(#createBubbleGrad)" 
-          stroke="#DBE2EA" 
+          stroke="var(--bubble-stroke)"
           stroke-width="2" 
           stroke-dasharray="8,6"
           filter="url(#createSoftShadow)"
@@ -70,8 +70,8 @@ function handleCreateArticle(event: Event) {
         />
 
         <g class="plus-symbol" transform="translate(160, 135)">
-          <line x1="0" y1="-25" x2="0" y2="25" stroke="#000000" stroke-width="4" stroke-linecap="round"/>
-          <line x1="-25" y1="0" x2="25" y2="0" stroke="#000000" stroke-width="4" stroke-linecap="round"/>
+          <line x1="0" y1="-25" x2="0" y2="25" stroke="var(--color-text-primary)" stroke-width="4" stroke-linecap="round"/>
+          <line x1="-25" y1="0" x2="25" y2="0" stroke="var(--color-text-primary)" stroke-width="4" stroke-linecap="round"/>
         </g>
         
         <text
@@ -79,7 +79,7 @@ function handleCreateArticle(event: Event) {
           y="215"
           text-anchor="middle" 
           dominant-baseline="central" 
-          fill="#000000" 
+          fill="var(--color-text-primary)"
           font-size="14" 
           font-weight="500"
           class="create-text"
@@ -107,7 +107,7 @@ function handleCreateArticle(event: Event) {
 }
 
 .empty-state {
-  background-color: rgba(255, 255, 255, 0.98);
+  background-color: var(--bubble-overlay-bg);
   pointer-events: auto !important;
 }
 
@@ -166,5 +166,22 @@ function handleCreateArticle(event: Event) {
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+.bubble-grad-start {
+  stop-color: var(--bubble-grad-start);
+}
+
+.bubble-grad-mid {
+  stop-color: var(--bubble-grad-mid);
+}
+
+.bubble-grad-end {
+  stop-color: var(--bubble-grad-end);
+}
+
+.bubble-shadow {
+  flood-color: var(--bubble-shadow-color);
+  flood-opacity: 0.18;
 }
 </style>

@@ -153,7 +153,6 @@ deploy_run() {
   for dir in \
     "${DEPLOY_DIR}/data" \
     "${DEPLOY_DIR}/data/git" \
-    "${DEPLOY_DIR}/data/custom" \
     "${DEPLOY_DIR}/config" \
     "${DEPLOY_DIR}/postgres"; do
     if [[ ! -d "${dir}" ]]; then
