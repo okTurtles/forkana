@@ -19,7 +19,6 @@ import (
 	charsetModule "code.gitea.io/gitea/modules/charset"
 	"code.gitea.io/gitea/modules/container"
 	"code.gitea.io/gitea/modules/httpcache"
-	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/typesniffer"
 	"code.gitea.io/gitea/modules/util"
@@ -38,6 +37,42 @@ type ServeHeaderOptions struct {
 	LastModified       time.Time
 }
 
+const (
+	// Disable JS execution on the same origin, since we serve the file from the same origin as Gitea server.
+	// This rule can be relaxed in the future as long as it is properly sandboxed.
+	// "style-src" is for SVG inline styles (from Display SVG files as images instead of text #14101)
+	serveHeaderCspDefault = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+
+	// No sandbox attribute for PDF as it breaks rendering in at least Safari.
+	// This should generally be safe as scripts inside PDF can not escape the PDF document.
+	// See https://bugs.chromium.org/p/chromium/issues/detail?id=413851 for more discussion.
+	// HINT: PDF-RENDER-SANDBOX: PDF won't render in sandboxed context
+	serveHeaderCspPdf = "default-src 'none'; style-src 'unsafe-inline'"
+
+	// For audios and videos, actually it doesn't really need CSP (just like Gitea <= 1.25)
+	serveHeaderCspAudioVideo = ""
+)
+
+func serveSetHeaderContentRelated(w http.ResponseWriter, contentType string) {
+	header := w.Header()
+	contentType = util.IfZero(contentType, typesniffer.MimeTypeApplicationOctetStream)
+	header.Set("Content-Type", contentType)
+	header.Set("X-Content-Type-Options", "nosniff")
+
+	csp := serveHeaderCspDefault
+	if strings.HasPrefix(contentType, "application/pdf") {
+		csp = serveHeaderCspPdf
+	}
+	if strings.HasPrefix(contentType, "video/") || strings.HasPrefix(contentType, "audio/") {
+		csp = serveHeaderCspAudioVideo
+	}
+	if csp != "" {
+		header.Set("Content-Security-Policy", csp)
+	} else {
+		header.Del("Content-Security-Policy")
+	}
+}
+
 // ServeSetHeaders sets necessary content serve headers
 func ServeSetHeaders(w http.ResponseWriter, opts *ServeHeaderOptions) {
 	header := w.Header()
@@ -46,17 +81,7 @@ func ServeSetHeaders(w http.ResponseWriter, opts *ServeHeaderOptions) {
 	if skipCompressionExts.Contains(strings.ToLower(path.Ext(opts.Filename))) {
 		w.Header().Add(gzhttp.HeaderNoCompression, "1")
 	}
-
-	contentType := typesniffer.MimeTypeApplicationOctetStream
-	if opts.ContentType != "" {
-		if opts.ContentTypeCharset != "" {
-			contentType = opts.ContentType + "; charset=" + strings.ToLower(opts.ContentTypeCharset)
-		} else {
-			contentType = opts.ContentType
-		}
-	}
-	header.Set("Content-Type", contentType)
-	header.Set("X-Content-Type-Options", "nosniff")
+	serveSetHeaderContentRelated(w, opts.ContentType)
 
 	if opts.ContentLength != nil {
 		header.Set("Content-Length", strconv.FormatInt(*opts.ContentLength, 10))
@@ -86,35 +111,32 @@ func ServeSetHeaders(w http.ResponseWriter, opts *ServeHeaderOptions) {
 }
 
 // ServeData download file from io.Reader
-func setServeHeadersByFile(r *http.Request, w http.ResponseWriter, mineBuf []byte, opts *ServeHeaderOptions) {
+func serveSetHeadersByUserContent(w http.ResponseWriter, contentPrefetchBuf []byte, opts *ServeHeaderOptions) {
 	// do not set "Content-Length", because the length could only be set by callers, and it needs to support range requests
-	sniffedType := typesniffer.DetectContentType(mineBuf)
-
-	// the "render" parameter came from year 2016: 638dd24c, it doesn't have clear meaning, so I think it could be removed later
-	isPlain := sniffedType.IsText() || r.FormValue("render") != ""
+	sniffedType := typesniffer.DetectContentType(contentPrefetchBuf)
+	var detectCharset bool
 
 	if setting.MimeTypeMap.Enabled {
 		fileExtension := strings.ToLower(filepath.Ext(opts.Filename))
 		opts.ContentType = setting.MimeTypeMap.Map[fileExtension]
+		detectCharset = !strings.Contains(opts.ContentType, "charset=")
 	}
 
 	if opts.ContentType == "" {
 		if sniffedType.IsBrowsableBinaryType() {
 			opts.ContentType = sniffedType.GetMimeType()
-		} else if isPlain {
+		} else if sniffedType.IsText() {
 			opts.ContentType = "text/plain"
+			detectCharset = true
 		} else {
 			opts.ContentType = typesniffer.MimeTypeApplicationOctetStream
 		}
 	}
 
-	if isPlain {
-		charset, err := charsetModule.DetectEncoding(mineBuf)
-		if err != nil {
-			log.Error("Detect raw file %s charset failed: %v, using by default utf-8", opts.Filename, err)
-			charset = "utf-8"
+	if detectCharset {
+		if charset, _ := charsetModule.DetectEncoding(contentPrefetchBuf); charset != "" {
+			opts.ContentType += "; charset=" + strings.ToLower(charset)
 		}
-		opts.ContentTypeCharset = strings.ToLower(charset)
 	}
 
 	isSVG := sniffedType.IsSvgImage()
@@ -149,7 +171,7 @@ func ServeContentByReader(r *http.Request, w http.ResponseWriter, size int64, re
 	if n >= 0 {
 		buf = buf[:n]
 	}
-	setServeHeadersByFile(r, w, buf, opts)
+	serveSetHeadersByUserContent(w, buf, opts)
 
 	// reset the reader to the beginning
 	reader = io.MultiReader(bytes.NewReader(buf), reader)
@@ -226,7 +248,7 @@ func ServeContentByReadSeeker(r *http.Request, w http.ResponseWriter, modTime *t
 	if n >= 0 {
 		buf = buf[:n]
 	}
-	setServeHeadersByFile(r, w, buf, opts)
+	serveSetHeadersByUserContent(w, buf, opts)
 	if modTime == nil {
 		modTime = &time.Time{}
 	}
