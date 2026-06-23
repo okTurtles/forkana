@@ -112,12 +112,10 @@ func ServeSetHeaders(w http.ResponseWriter, opts *ServeHeaderOptions) {
 func serveSetHeadersByUserContent(w http.ResponseWriter, contentPrefetchBuf []byte, opts *ServeHeaderOptions) {
 	// do not set "Content-Length", because the length could only be set by callers, and it needs to support range requests
 	sniffedType := typesniffer.DetectContentType(contentPrefetchBuf)
-	var detectCharset bool
 
 	if setting.MimeTypeMap.Enabled {
 		fileExtension := strings.ToLower(filepath.Ext(opts.Filename))
 		opts.ContentType = setting.MimeTypeMap.Map[fileExtension]
-		detectCharset = !strings.Contains(opts.ContentType, "charset=")
 	}
 
 	if opts.ContentType == "" {
@@ -125,13 +123,13 @@ func serveSetHeadersByUserContent(w http.ResponseWriter, contentPrefetchBuf []by
 			opts.ContentType = sniffedType.GetMimeType()
 		} else if sniffedType.IsText() {
 			opts.ContentType = "text/plain"
-			detectCharset = true
 		} else {
 			opts.ContentType = typesniffer.MimeTypeApplicationOctetStream
 		}
 	}
 
-	if detectCharset {
+	// Detect charset for text content unless the caller/config already specified one.
+	if strings.HasPrefix(opts.ContentType, "text/") && !strings.Contains(opts.ContentType, "charset=") {
 		if charset, _ := charsetModule.DetectEncoding(contentPrefetchBuf); charset != "" {
 			opts.ContentType += "; charset=" + strings.ToLower(charset)
 		}
