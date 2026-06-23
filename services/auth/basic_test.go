@@ -46,5 +46,5 @@ func TestBasicAuthOAuth2TokenSetsScope(t *testing.T) {
 	assert.Equal(t, true, data["IsApiToken"])
 	scope, ok := data["ApiTokenScope"].(auth_model.AccessTokenScope)
 	assert.True(t, ok, "ApiTokenScope must be set for OAuth2 tokens via Basic auth")
-	assert.NotEqual(t, "", string(scope))
+	assert.NotEmpty(t, string(scope))
 }
