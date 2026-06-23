@@ -120,6 +120,10 @@ func TestServeSetHeaderContentRelated(t *testing.T) {
 		{"application/pdf; other", serveHeaderCspPdf},
 		{"audio/mp4", serveHeaderCspAudioVideo},
 		{"video/ogg; other", serveHeaderCspAudioVideo},
+		{"video/mp4", serveHeaderCspAudioVideo},
+		{"audio/wav", serveHeaderCspAudioVideo},
+		// Ensure non-standard PDF mimes fall through to the strict default policy
+		{"x-application/pdf", serveHeaderCspDefault},
 		{typesniffer.MimeTypeImageSvg, serveHeaderCspDefault},
 	}
 	for _, c := range cases {
@@ -132,4 +136,15 @@ func TestServeSetHeaderContentRelated(t *testing.T) {
 
 	// make sure sandboxed
 	require.Contains(t, serveHeaderCspDefault, "; sandbox")
+
+	// A previously set CSP (e.g. from the middleware chain) must be overwritten with the
+	// strict media policy for audio/video, never left as the original restrictive value.
+	t.Run("OverwriteExistingCSPForMedia", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+		serveSetHeaderContentRelated(w, "video/mp4")
+
+		assert.Equal(t, serveHeaderCspAudioVideo, w.Header().Get("Content-Security-Policy"), "pre-existing CSP should be overwritten for video/mp4")
+	})
 }
