@@ -57,6 +57,10 @@
 						{{end}}
 					</div>
 				</div>
+				{{/* No-JS / keyboard fallback: JavaScript hides this and auto-submits on change instead. */}}
+				<div class="field theme-submit-fallback">
+					<button class="ui primary button">{{ctx.Locale.Tr "settings.update_theme"}}</button>
+				</div>
 			</form>
 		</div>
 

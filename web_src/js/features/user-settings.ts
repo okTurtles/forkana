@@ -6,6 +6,9 @@ import {hideElem, showElem} from '../utils/dom.ts';
 function initUserThemeSelector() {
   const form = document.querySelector<HTMLFormElement>('#theme-selector-form');
   if (!form) return;
+  // Progressive enhancement: with JS we auto-submit on change, so the explicit
+  // submit button (the no-JS / keyboard fallback) is redundant — hide it.
+  hideElem(form.querySelector('.theme-submit-fallback'));
   form.addEventListener('change', (e) => {
     if ((e.target as HTMLElement).matches('.theme-radio')) form.requestSubmit();
   });
