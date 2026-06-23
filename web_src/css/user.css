@@ -155,10 +155,20 @@
   margin-top: 1rem;
 }
 
-.theme-fieldset {
+.theme-list-fieldset {
   border: none;
   margin: 0;
   padding: 0;
+  min-inline-size: 0; /* let the fieldset shrink so the grid can size its columns */
+}
+
+/* Mirror the Fomantic `.field > label` appearance for the group legend. */
+.theme-list-legend {
+  display: block;
+  margin: 0 0 0.28571429rem;
+  padding: 0;
+  font-size: 0.92857143em;
+  font-weight: var(--font-weight-medium);
 }
 
 .theme-label {

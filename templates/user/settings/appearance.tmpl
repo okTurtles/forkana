@@ -34,11 +34,11 @@
 					</a>
 				</div>
 				<div class="field">
-					<label>{{ctx.Locale.Tr "settings.ui"}}</label>
-					<div class="theme-list">
-						{{range $theme := .AllThemes}}
-						{{$isAuto := StringUtils.HasPrefix $theme.InternalName "gitea-auto"}}
-						<fieldset class="theme-fieldset">
+					<fieldset class="theme-list-fieldset">
+						<legend class="theme-list-legend">{{ctx.Locale.Tr "settings.ui"}}</legend>
+						<div class="theme-list">
+							{{range $theme := .AllThemes}}
+							{{$isAuto := StringUtils.HasPrefix $theme.InternalName "gitea-auto"}}
 							<label for="theme_{{$theme.InternalName}}" class="theme-label">
 								<input type="radio" class="theme-radio" name="theme" value="{{$theme.InternalName}}" id="theme_{{$theme.InternalName}}" {{if eq $.SignedUser.Theme $theme.InternalName}}checked{{end}}>
 								<div class="c-color" data-theme="{{$theme.InternalName}}">
@@ -53,9 +53,9 @@
 								</div>
 								<span class="theme-name">{{$theme.DisplayName}}</span>
 							</label>
-						</fieldset>
-						{{end}}
-					</div>
+							{{end}}
+						</div>
+					</fieldset>
 				</div>
 				{{/* No-JS / keyboard fallback: JavaScript hides this and auto-submits on change instead. */}}
 				<div class="field theme-submit-fallback">
