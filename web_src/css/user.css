@@ -275,6 +275,14 @@
   --preview-diff-added: #1979fd20;
 }
 
+/* The shared <symbol> sprite is referenced via <use> and never rendered itself. */
+.theme-preview-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 /* Apply variables to SVG */
 .c-color svg {
   display: block;
