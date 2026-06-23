@@ -146,3 +146,131 @@
 .notifications-item:hover .notifications-updated {
   display: none;
 }
+
+/* Settings: Theme Selector */
+.theme-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.theme-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.theme-label {
+  display: grid;
+  grid-template-areas: 
+    "color color"
+    "radio name";
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 0.5rem;
+  row-gap: 0.5rem;
+  cursor: pointer;
+}
+
+.theme-label .c-color {
+  grid-area: color;
+  transition: transform 250ms cubic-bezier(0.4, 0.25, 0.3, 1), border-color 250ms ease;
+  border: 2px solid var(--color-secondary);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+  background: var(--preview-nav-bg); /* Default fallback */
+}
+
+.theme-label:hover .c-color {
+  transform: scale(1.05);
+  border-color: var(--color-primary);
+}
+
+.theme-label .theme-radio {
+  grid-area: radio;
+  margin: 0;
+}
+
+.theme-label .theme-name {
+  grid-area: name;
+}
+
+.theme-radio:checked + .c-color {
+  border-color: var(--color-primary);
+}
+
+/* Base variables for SVG previews */
+.c-color {
+  --preview-nav-bg: #f6f8fa;
+  --preview-secondary: #d0d7de;
+  --preview-box-body: #ffffff;
+  --preview-primary: #4E40FA;
+  --preview-diff-removed: #FFE7D1;
+  --preview-diff-added: #E5E9FF;
+}
+
+.c-color[data-theme*="protanopia"] {
+  --preview-diff-removed: #ffb77c40;
+  --preview-diff-added: #54aeff40;
+}
+
+.c-color[data-theme*="dark"] {
+  --preview-nav-bg: #161b22;
+  --preview-secondary: #30363d;
+  --preview-box-body: #1b1f23;
+  --preview-primary: #4E40FA;
+  --preview-diff-removed: #f851491a;
+  --preview-diff-added: #388bfd1a;
+}
+
+.c-color[data-theme*="dark"][data-theme*="protanopia"] {
+  --preview-diff-removed: #ff8c004d;
+  --preview-diff-added: #4d94ff4d;
+}
+
+/* For Auto, .c-color will have both light and dark. */
+.c-combined-color {
+  position: relative;
+  display: flex;
+}
+.c-combined-color .svg-light {
+  clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+.c-combined-color .svg-dark {
+  clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
+  width: 100%;
+}
+
+/* Override variables for the dark half in auto theme */
+.c-combined-color .svg-dark {
+  --preview-nav-bg: #161b22;
+  --preview-secondary: #30363d;
+  --preview-box-body: #1b1f23;
+  --preview-primary: #4E40FA;
+  --preview-diff-removed: #f851491a;
+  --preview-diff-added: #388bfd1a;
+}
+.c-color[data-theme*="protanopia"] .svg-dark {
+  --preview-diff-removed: #ff8c004d;
+  --preview-diff-added: #4d94ff4d;
+}
+
+/* Apply variables to SVG */
+.c-color svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.svg-nav-bg { fill: var(--preview-nav-bg); }
+.svg-secondary { fill: var(--preview-secondary); }
+.svg-box-body { fill: var(--preview-box-body); }
+.svg-primary { fill: var(--preview-primary); }
+.svg-diff-removed { fill: var(--preview-diff-removed); }
+.svg-diff-added { fill: var(--preview-diff-added); }
