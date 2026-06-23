@@ -370,6 +370,24 @@ func (a *Action) GetTag() string {
 	return strings.TrimPrefix(a.RefName, git.TagPrefix)
 }
 
+// GetCardLink returns the primary destination link for a feed card.
+func (a *Action) GetCardLink(ctx context.Context) string {
+	repoLink := a.GetRepoLink(ctx)
+	infos := a.GetIssueInfos()
+	switch a.OpType {
+	case ActionCommentIssue, ActionCommentPull, ActionApprovePullRequest, ActionRejectPullRequest, ActionPullReviewDismissed:
+		return a.GetCommentLink(ctx)
+	case ActionCreateIssue, ActionCloseIssue, ActionReopenIssue:
+		return fmt.Sprintf("%s/issues/%s", repoLink, infos[0])
+	case ActionCreatePullRequest, ActionClosePullRequest, ActionReopenPullRequest,
+		ActionMergePullRequest, ActionAutoMergePullRequest:
+		return fmt.Sprintf("%s/pulls/%s", repoLink, infos[0])
+	case ActionPushTag, ActionPublishRelease:
+		return fmt.Sprintf("%s/releases/tag/%s", repoLink, a.GetTag())
+	}
+	return repoLink
+}
+
 // GetContent returns the action's content.
 func (a *Action) GetContent() string {
 	return a.Content

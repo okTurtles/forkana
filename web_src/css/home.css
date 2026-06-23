@@ -154,6 +154,15 @@
   max-width: 860px;
 }
 
+@media (max-width: 767.98px) {
+  .feeds-page .ui.container {
+    width: 100% !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    box-sizing: border-box;
+  }
+}
+
 .feeds-page-toolbar {
   display: flex;
   align-items: center;
@@ -211,6 +220,10 @@
   color: var(--color-text);
 }
 
+.feeds-sort-btn {
+  background: var(--color-white);
+}
+
 .feeds-filter-btn:hover,
 .feeds-sort-btn:hover {
   background: var(--color-secondary);
@@ -246,7 +259,7 @@
   display: block;
   padding: 8px 16px;
   font-size: 13px;
-  color: var(--color-primary);
+  color: var(--color-black);
   text-decoration: none;
 }
 
@@ -300,7 +313,7 @@
 }
 
 .feeds-page-heading {
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
@@ -309,14 +322,36 @@
 .feeds-card-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 1.5rem;
 }
 
 .feeds-card {
+  position: relative;
   border: 1px solid var(--color-secondary);
   border-radius: 8px;
   overflow: hidden;
   background: var(--color-body);
+  transition: border-color 0.15s;
+}
+
+.feeds-card:hover,
+.feeds-card:focus-within {
+  border-color: var(--color-primary);
+  cursor: pointer;
+}
+
+/* Full-card stretch link — transparent overlay at z-index 1, above non-positioned content */
+.feeds-card-link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* Nested interactive elements float above the stretch link */
+.feeds-card a:not(.feeds-card-link),
+.feeds-card button {
+  position: relative;
+  z-index: 2;
 }
 
 .feeds-card-header {
@@ -330,8 +365,8 @@
 }
 
 .feeds-card-actor img {
-  width: 36px;
-  height: 36px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -340,9 +375,21 @@
   flex: 1;
   font-size: 13px;
   line-height: 1.5;
+  color: var(--color-text-light-1);
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.feeds-card-actor-info > span:first-child a,
+.feeds-card-actor-info > span:first-child > a:first-child {
+  font-weight: 700;
+  color: var(--color-text-dark);
+}
+
+.feeds-card-actor-info a {
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 .feeds-card-time {
@@ -352,9 +399,55 @@
 }
 
 .feeds-card-body {
-  padding: 10px 16px 12px;
+  padding: 10px 16px 12px 50px;
   font-size: 13px;
   color: var(--color-text);
+}
+
+.feeds-card-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-dark);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.feeds-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.feeds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.feeds-badge-merged {
+  background: var(--color-violet);
+  color: #fff;
+}
+
+.feeds-badge-closed {
+  background: var(--color-red);
+  color: #fff;
+}
+
+.feeds-badge-open {
+  background: var(--color-green);
+  color: #fff;
+}
+
+.feeds-card-meta-text {
+  font-size: 13px;
+  color: var(--color-text-light-2);
 }
 
 .feeds-page-empty {
@@ -363,52 +456,53 @@
   color: var(--color-text-light-3);
 }
 
-.feeds-page-pagination {
+/* ===== Feeds page custom pagination ===== */
+
+.feeds-pagination {
   display: flex;
-  justify-content: center;
-}
-
-/* Pagination overrides — no border/background, primary color for prev/next/active */
-.feeds-page-pagination .ui.pagination.menu {
-  border: none;
-  box-shadow: none;
-  background: transparent;
-}
-
-/* Always show all page number items (override mobile-only rule in menu.css) */
-.feeds-page-pagination .ui.pagination.menu .item {
-  display: inline-flex !important;
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-  border-radius: 6px;
-  min-width: 36px;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
+  gap: 2px;
 }
 
-.feeds-page-pagination .ui.pagination.menu .item.navigation {
-  color: var(--color-primary);
-  font-weight: 500;
-}
-
-.feeds-page-pagination .ui.pagination.menu .item.navigation:hover {
-  background: var(--color-secondary);
-}
-
-.feeds-page-pagination .ui.pagination.menu .item.active {
-  background: var(--color-primary) !important;
-  color: #fff !important;
+.feeds-pg-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 6px;
   border-radius: 6px;
-  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s;
 }
 
-.feeds-page-pagination .ui.pagination.menu .item.active:hover {
-  background: var(--color-primary-dark-1) !important;
+.feeds-pg-nav {
+  color: var(--color-primary);
+}
+
+.feeds-pg-active {
+  background: var(--color-primary);
   color: #fff !important;
+  font-weight: 600;
+  cursor: default;
 }
 
-.feeds-page-pagination .ui.pagination.menu .item:not(.active):hover {
+.feeds-pg-disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+.feeds-pg-ellipsis {
+  cursor: default;
+  color: var(--color-text-light-3);
+}
+
+.feeds-pg-item:not(.feeds-pg-active):not(.feeds-pg-disabled):not(.feeds-pg-ellipsis):hover {
   background: var(--color-secondary);
 }
 

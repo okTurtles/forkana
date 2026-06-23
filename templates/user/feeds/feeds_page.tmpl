@@ -57,11 +57,12 @@
 			</div>
 		</div>
 
-		<h2 class="feeds-page-heading tw-mt-6 tw-mb-4">{{ctx.Locale.Tr "home.your_feeds"}}</h2>
+		<h2 class="feeds-page-heading tw-mt-7 tw-mb-4">{{ctx.Locale.Tr "home.your_feeds"}}</h2>
 
 		<div class="feeds-card-list">
 			{{range .Feeds}}
 			<div class="feeds-card">
+				<a href="{{.GetCardLink ctx}}" class="feeds-card-link" aria-hidden="true" tabindex="-1"></a>
 				<div class="feeds-card-header">
 					<div class="feeds-card-actor">
 						{{ctx.AvatarUtils.AvatarByAction .}}
@@ -166,32 +167,59 @@
 					</div>
 				{{else if .GetOpType.InActions "create_issue"}}
 					<div class="feeds-card-body">
-						<span class="text truncate issue title">{{index .GetIssueInfos 1 | ctx.RenderUtils.RenderIssueSimpleTitle}}</span>
+						<div class="feeds-card-title">{{index .GetIssueInfos 1 | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
 					</div>
 				{{else if .GetOpType.InActions "create_pull_request"}}
 					<div class="feeds-card-body">
-						<span class="text truncate issue title">{{index .GetIssueInfos 1 | ctx.RenderUtils.RenderIssueSimpleTitle}}</span>
+						<div class="feeds-card-title">{{index .GetIssueInfos 1 | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
+					</div>
+				{{else if .GetOpType.InActions "merge_pull_request" "auto_merge_pull_request"}}
+					<div class="feeds-card-body">
+						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
+						<div class="feeds-card-badges">
+							<span class="feeds-badge feeds-badge-merged">{{svg "octicon-git-merge" 14}} Merged</span>
+						</div>
+					</div>
+				{{else if .GetOpType.InActions "close_pull_request"}}
+					<div class="feeds-card-body">
+						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
+						<div class="feeds-card-badges">
+							<span class="feeds-badge feeds-badge-closed">{{svg "octicon-git-pull-request-closed" 14}} Closed</span>
+						</div>
+					</div>
+				{{else if .GetOpType.InActions "reopen_pull_request"}}
+					<div class="feeds-card-body">
+						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
+						<div class="feeds-card-badges">
+							<span class="feeds-badge feeds-badge-open">{{svg "octicon-git-pull-request" 14}} Open</span>
+						</div>
+					</div>
+				{{else if .GetOpType.InActions "close_issue"}}
+					<div class="feeds-card-body">
+						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
+						<div class="feeds-card-badges">
+							<span class="feeds-badge feeds-badge-closed">{{svg "octicon-issue-closed" 14}} Closed</span>
+						</div>
+					</div>
+				{{else if .GetOpType.InActions "reopen_issue"}}
+					<div class="feeds-card-body">
+						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
+						<div class="feeds-card-badges">
+							<span class="feeds-badge feeds-badge-open">{{svg "octicon-issue-reopened" 14}} Open</span>
+						</div>
 					</div>
 				{{else if .GetOpType.InActions "comment_issue" "approve_pull_request" "reject_pull_request" "comment_pull"}}
 					<div class="feeds-card-body">
-						<a href="{{.GetCommentLink ctx}}" class="text truncate issue title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</a>
+						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
 						{{$comment := index .GetIssueInfos 1}}
 						{{if $comment}}
-							<div class="render-content markup tw-text-14">{{ctx.RenderUtils.MarkdownToHtml $comment}}</div>
+							<div class="render-content markup tw-text-14 tw-mt-2">{{ctx.RenderUtils.MarkdownToHtml $comment}}</div>
 						{{end}}
-					</div>
-				{{else if .GetOpType.InActions "merge_pull_request"}}
-					<div class="feeds-card-body">
-						<span class="text black">{{index .GetIssueInfos 1}}</span>
-					</div>
-				{{else if .GetOpType.InActions "close_issue" "reopen_issue" "close_pull_request" "reopen_pull_request"}}
-					<div class="feeds-card-body">
-						<span class="text truncate issue title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</span>
 					</div>
 				{{else if .GetOpType.InActions "pull_review_dismissed"}}
 					<div class="feeds-card-body">
-						<span class="text black">{{ctx.Locale.Tr "action.review_dismissed_reason"}}</span>
-						<span class="text black">{{index .GetIssueInfos 2 | ctx.RenderUtils.RenderEmoji}}</span>
+						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
+						<div class="feeds-card-meta-text">{{ctx.Locale.Tr "action.review_dismissed_reason"}}: {{index .GetIssueInfos 2 | ctx.RenderUtils.RenderEmoji}}</div>
 					</div>
 				{{end}}
 			</div>
@@ -202,10 +230,28 @@
 			{{end}}
 		</div>
 
-		{{if .Page.Paginater.TotalPages}}
-		<div class="feeds-page-pagination tw-mt-8">
-			{{template "base/paginate" .}}
-		</div>
+		{{with .Page.Paginater}}
+		{{$params := $.Page.GetParams}}
+		{{if or (eq .TotalPages -1) (gt .TotalPages 1)}}
+		<nav class="feeds-pagination tw-mt-8" aria-label="Pagination">
+			<a class="feeds-pg-item feeds-pg-nav{{if not .HasPrevious}} feeds-pg-disabled{{end}}"
+				{{if .HasPrevious}}href="{{AppSubUrl}}/feeds?page={{.Previous}}{{if $params}}&{{$params}}{{end}}"{{end}}>
+				{{svg "octicon-chevron-left" 16}}
+			</a>
+			{{range .Pages}}
+				{{if eq .Num -1}}
+					<span class="feeds-pg-item feeds-pg-ellipsis">…</span>
+				{{else}}
+					<a class="feeds-pg-item{{if .IsCurrent}} feeds-pg-active{{end}}"
+						{{if not .IsCurrent}}href="{{AppSubUrl}}/feeds?page={{.Num}}{{if $params}}&{{$params}}{{end}}"{{end}}>{{.Num}}</a>
+				{{end}}
+			{{end}}
+			<a class="feeds-pg-item feeds-pg-nav{{if not .HasNext}} feeds-pg-disabled{{end}}"
+				{{if .HasNext}}href="{{AppSubUrl}}/feeds?page={{.Next}}{{if $params}}&{{$params}}{{end}}"{{end}}>
+				{{svg "octicon-chevron-right" 16}}
+			</a>
+		</nav>
+		{{end}}
 		{{end}}
 	</div>
 </div>

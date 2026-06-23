@@ -173,15 +173,16 @@ func UserFeeds(ctx *context.Context) {
 	}
 	opts.OpTypes = opTypes
 
-	feeds, count, err := feed_service.GetFeedsForDashboard(ctx, opts)
+	feeds, count, err := feed_service.GetFeeds(ctx, opts)
 	if err != nil {
 		ctx.ServerError("GetFeeds", err)
 		return
 	}
 
-	pager := context.NewPagination(count, 4, page, 5).WithCurRows(len(feeds))
+	pager := context.NewPagination(int(count), 4, page, 5).WithCurRows(len(feeds))
 	pager.AddParamFromRequest(ctx.Req)
 	ctx.Data["Page"] = pager
+	ctx.Data["Link"] = setting.AppSubURL + "/feeds"
 	ctx.Data["Feeds"] = feeds
 	ctx.HTML(http.StatusOK, tplFeedsPage)
 }
