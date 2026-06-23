@@ -1,8 +1,10 @@
 {{template "user/settings/layout_head" (dict "ctxData" . "pageClass" "user settings")}}
 
-{{/* The preview shape is defined once as a <symbol>; each card references it via <use>.
-     Fills are inline so they survive the <use> shadow tree, resolving the --preview-*
-     custom properties inherited from each card's .c-color wrapper. */}}
+{{/*
+	The preview shape is defined once as a <symbol>; each card references it via <use>.
+	Fills are inline so they survive the <use> shadow tree, resolving the per-card
+	--preview-* custom properties inherited from each .c-color wrapper.
+*/}}
 {{define "theme-preview-sprite"}}
 <svg class="theme-preview-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
 	<symbol id="theme-preview-symbol" viewBox="0 0 247 128">
