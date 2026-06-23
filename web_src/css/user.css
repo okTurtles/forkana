@@ -201,36 +201,44 @@
   border-color: var(--color-primary);
 }
 
-/* Base variables for SVG previews */
+/* Preview palettes — values mirror each theme's real tokens in
+   web_src/css/themes/theme-*.css. Only the active theme's CSS variables are
+   loaded at runtime, so the per-theme values are inlined here (keyed by
+   data-theme) instead of referencing var(--color-*), which would resolve to the
+   currently active theme and make every card look identical.
+   gitea-light also serves as the fallback and the light half of gitea-auto. */
 .c-color {
-  --preview-nav-bg: #f6f8fa;
+  --preview-nav-bg: #f6f7fa;
   --preview-secondary: #d0d7de;
   --preview-box-body: #ffffff;
-  --preview-primary: #4E40FA;
-  --preview-diff-removed: #FFE7D1;
-  --preview-diff-added: #E5E9FF;
+  --preview-primary: #4183c4;
+  --preview-diff-removed: #ffeef0;
+  --preview-diff-added: #e6ffed;
 }
 
-.c-color[data-theme*="protanopia"] {
-  --preview-diff-removed: #ffb77c40;
-  --preview-diff-added: #54aeff40;
+.c-color[data-theme="gitea-light-protanopia-deuteranopia"],
+.c-color[data-theme="gitea-auto-protanopia-deuteranopia"] {
+  --preview-diff-removed: #fff1e580;
+  --preview-diff-added: #ddf4ff80;
 }
 
-.c-color[data-theme*="dark"] {
-  --preview-nav-bg: #161b22;
-  --preview-secondary: #30363d;
-  --preview-box-body: #1b1f23;
-  --preview-primary: #4E40FA;
-  --preview-diff-removed: #f851491a;
-  --preview-diff-added: #388bfd1a;
+.c-color[data-theme="gitea-dark"] {
+  --preview-nav-bg: #16191d;
+  --preview-secondary: #3b444c;
+  --preview-box-body: #14171a;
+  --preview-diff-removed: #301e1e;
+  --preview-diff-added: #203224;
 }
 
-.c-color[data-theme*="dark"][data-theme*="protanopia"] {
-  --preview-diff-removed: #ff8c004d;
-  --preview-diff-added: #4d94ff4d;
+.c-color[data-theme="gitea-dark-protanopia-deuteranopia"] {
+  --preview-nav-bg: #16191d;
+  --preview-secondary: #3b444c;
+  --preview-box-body: #14171a;
+  --preview-diff-removed: #c8622120;
+  --preview-diff-added: #1979fd20;
 }
 
-/* For Auto, .c-color will have both light and dark. */
+/* For Auto, .c-color will have both light and dark halves. */
 .c-combined-color {
   position: relative;
   display: flex;
@@ -242,23 +250,19 @@
   left: 0;
   width: 100%;
 }
+/* The dark half of the auto previews uses the dark theme's tokens. */
 .c-combined-color .svg-dark {
   clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
   width: 100%;
+  --preview-nav-bg: #16191d;
+  --preview-secondary: #3b444c;
+  --preview-box-body: #14171a;
+  --preview-diff-removed: #301e1e;
+  --preview-diff-added: #203224;
 }
-
-/* Override variables for the dark half in auto theme */
-.c-combined-color .svg-dark {
-  --preview-nav-bg: #161b22;
-  --preview-secondary: #30363d;
-  --preview-box-body: #1b1f23;
-  --preview-primary: #4E40FA;
-  --preview-diff-removed: #f851491a;
-  --preview-diff-added: #388bfd1a;
-}
-.c-color[data-theme*="protanopia"] .svg-dark {
-  --preview-diff-removed: #ff8c004d;
-  --preview-diff-added: #4d94ff4d;
+.c-color[data-theme="gitea-auto-protanopia-deuteranopia"] .svg-dark {
+  --preview-diff-removed: #c8622120;
+  --preview-diff-added: #1979fd20;
 }
 
 /* Apply variables to SVG */
