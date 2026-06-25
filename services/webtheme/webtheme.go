@@ -134,21 +134,24 @@ func initThemes() {
 		}
 	}
 	if len(setting.UI.Themes) > 0 {
-		allowedThemes := container.SetOf(setting.UI.Themes...)
+		themeMap := make(map[string]*ThemeMetaInfo)
 		for _, theme := range foundThemes {
-			if allowedThemes.Contains(theme.InternalName) {
+			themeMap[theme.InternalName] = theme
+		}
+		for _, themeName := range setting.UI.Themes {
+			if theme, ok := themeMap[themeName]; ok {
 				availableThemes = append(availableThemes, theme)
 			}
 		}
 	} else {
 		availableThemes = foundThemes
+		sort.Slice(availableThemes, func(i, j int) bool {
+			if availableThemes[i].InternalName == setting.UI.DefaultTheme {
+				return true
+			}
+			return availableThemes[i].DisplayName < availableThemes[j].DisplayName
+		})
 	}
-	sort.Slice(availableThemes, func(i, j int) bool {
-		if availableThemes[i].InternalName == setting.UI.DefaultTheme {
-			return true
-		}
-		return availableThemes[i].DisplayName < availableThemes[j].DisplayName
-	})
 	if len(availableThemes) == 0 {
 		setting.LogStartupProblem(1, log.ERROR, "No theme candidate in asset files, but Gitea requires there should be at least one usable theme")
 		availableThemes = []*ThemeMetaInfo{defaultThemeMetaInfoByInternalName(setting.UI.DefaultTheme)}

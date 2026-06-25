@@ -146,3 +146,154 @@
 .notifications-item:hover .notifications-updated {
   display: none;
 }
+
+/* Settings: Theme Selector */
+.theme-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 767.98px) {
+  .theme-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.theme-list-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0; /* let the fieldset shrink so the grid can size its columns */
+}
+
+/* Mirror the Fomantic `.field > label` appearance for the group legend. */
+.theme-list-legend {
+  display: block;
+  margin: 0 0 0.28571429rem;
+  padding: 0;
+  font-size: 0.92857143em;
+  font-weight: var(--font-weight-medium);
+}
+
+.theme-label {
+  display: grid;
+  grid-template-areas:
+    "color color"
+    "radio name";
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.theme-label .c-color {
+  grid-area: color;
+  transition: transform 250ms cubic-bezier(0.4, 0.25, 0.3, 1), border-color 250ms ease;
+  border: 2px solid var(--color-secondary);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+  background: var(--preview-nav-bg); /* Default fallback */
+}
+
+.theme-label:hover .c-color {
+  transform: scale(1.05);
+  border-color: var(--color-primary);
+}
+
+.theme-label .theme-radio {
+  grid-area: radio;
+  margin: 0;
+}
+
+.theme-label .theme-name {
+  grid-area: name;
+}
+
+.theme-radio:checked + .c-color {
+  border-color: var(--color-primary);
+}
+
+/* Preview palettes. The settings page only loads the *active* theme's stylesheet
+   (templates/base/head_style.tmpl), so var(--color-*) resolves to the active theme
+   for every card — it can only be used for tokens that are identical across all
+   themes. --color-primary is theme-invariant (#4183c4 everywhere), so the preview
+   reads it live; the theme-varying tokens (nav-bg, secondary, box-body, diff colors)
+   are snapshotted here per theme from web_src/css/themes/theme-*.css.
+   gitea-light also serves as the fallback and the light half of gitea-auto. */
+.c-color {
+  --preview-nav-bg: #f6f7fa;
+  --preview-secondary: #d0d7de;
+  --preview-box-body: #ffffff;
+  --preview-primary: var(--color-primary);
+  --preview-diff-removed: #ffeef0;
+  --preview-diff-added: #e6ffed;
+}
+
+.c-color[data-theme="gitea-light-protanopia-deuteranopia"],
+.c-color[data-theme="gitea-auto-protanopia-deuteranopia"] {
+  --preview-diff-removed: #fff1e580;
+  --preview-diff-added: #ddf4ff80;
+}
+
+.c-color[data-theme="gitea-dark"] {
+  --preview-nav-bg: #16191d;
+  --preview-secondary: #3b444c;
+  --preview-box-body: #14171a;
+  --preview-diff-removed: #301e1e;
+  --preview-diff-added: #203224;
+}
+
+.c-color[data-theme="gitea-dark-protanopia-deuteranopia"] {
+  --preview-nav-bg: #16191d;
+  --preview-secondary: #3b444c;
+  --preview-box-body: #14171a;
+  --preview-diff-removed: #c8622120;
+  --preview-diff-added: #1979fd20;
+}
+
+/* For Auto, .c-color will have both light and dark halves. */
+.c-combined-color {
+  position: relative;
+  display: flex;
+}
+.c-combined-color .svg-light {
+  clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+/* The dark half of the auto previews uses the dark theme's tokens. */
+.c-combined-color .svg-dark {
+  clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
+  width: 100%;
+  --preview-nav-bg: #16191d;
+  --preview-secondary: #3b444c;
+  --preview-box-body: #14171a;
+  --preview-diff-removed: #301e1e;
+  --preview-diff-added: #203224;
+}
+.c-color[data-theme="gitea-auto-protanopia-deuteranopia"] .svg-dark {
+  --preview-diff-removed: #c8622120;
+  --preview-diff-added: #1979fd20;
+}
+
+/* The shared <symbol> sprite is referenced via <use> and never rendered itself. */
+.theme-preview-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* The preview <svg> wrappers fill their card; the symbol's shapes carry their own
+   inline fills, so no global .svg-* fill classes are needed (they'd also be too
+   generic and risk colliding with other SVGs on the page). */
+.c-color svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
