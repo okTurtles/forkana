@@ -1,16 +1,120 @@
 {{template "base/head" .}}
 <div role="main" aria-label="{{if .IsSigned}}{{ctx.Locale.Tr "dashboard"}}{{else}}{{ctx.Locale.Tr "home"}}{{end}}" class="page-content home">
-	<div class="tw-mb-8 tw-px-8">
-		<div class="center">
-			<img class="logo" width="220" height="220" src="{{AssetUrlPrefix}}/img/logo.svg" alt="{{ctx.Locale.Tr "logo"}}">
-			<div class="hero">
-				<h1 class="ui icon header title tw-text-balance">
-					{{AppName}}
-				</h1>
-				<h2 class="tw-text-balance">{{ctx.Locale.Tr "startpage.app_desc"}}</h2>
-			</div>
-		</div>
+	{{if .IsSigned}}
+	<div class="ui container">
+		<a href="javascript:history.back()" class="back-button tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-mt-4 tw-text-primary">
+			{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "go_back"}}
+		</a>
 	</div>
+	{{end}}
+
+	<div class="home-hero">
+		<img class="home-hero-logo" src="{{AssetUrlPrefix}}/img/logo.svg" alt="{{ctx.Locale.Tr "logo"}}">
+		<h1 class="home-hero-title">{{ctx.Locale.Tr "home.whats_on_your_mind"}}</h1>
+		<form action="{{AppSubUrl}}/explore" method="get" class="home-search-form">
+			<span class="home-search-icon">{{svg "octicon-search" 16}}</span>
+			<input type="text" name="q" class="home-search-input" placeholder="{{ctx.Locale.Tr "home.search_placeholder"}}">
+		</form>
+
+		{{if .IsSigned}}
+		<div class="home-feeds-card">
+			<div class="home-feeds-card-header">{{ctx.Locale.Tr "home.your_feeds"}}</div>
+			{{range .Feeds}}
+			<div class="home-feed-item">
+				<div class="home-feed-item-avatar">
+					{{ctx.AvatarUtils.AvatarByAction .}}
+				</div>
+				<div class="home-feed-item-body">
+					<div class="home-feed-item-action">
+						{{if gt .ActUser.ID 0}}
+							<a href="{{AppSubUrl}}/{{(.GetActUserName ctx) | PathEscape}}" title="{{.GetActDisplayNameTitle ctx}}" class="tw-font-semibold">{{.GetActDisplayName ctx}}</a>
+						{{else}}
+							<span class="tw-font-semibold">{{.ShortActUserName ctx}}</span>
+						{{end}}
+						{{if .GetOpType.InActions "create_repo"}}
+							{{ctx.Locale.Tr "action.create_repo" (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "rename_repo"}}
+							{{ctx.Locale.Tr "action.rename_repo" .GetContent (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
+						{{else if IsArticleOwnerUpdate ctx .}}
+							{{ctx.Locale.Tr "action.update_article" (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "commit_repo"}}
+							{{if .Content}}
+								{{ctx.Locale.Tr "action.commit_repo" (.GetRepoLink ctx) (.GetRefLink ctx) .GetBranch (.ShortRepoPath ctx)}}
+							{{else}}
+								{{ctx.Locale.Tr "action.create_branch" (.GetRepoLink ctx) (.GetRefLink ctx) .GetBranch (.ShortRepoPath ctx)}}
+							{{end}}
+						{{else if .GetOpType.InActions "create_issue"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.create_issue" (printf "%s/issues/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "create_pull_request"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.create_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "transfer_repo"}}
+							{{ctx.Locale.Tr "action.transfer_repo" .GetContent (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "push_tag"}}
+							{{ctx.Locale.Tr "action.push_tag" (.GetRepoLink ctx) (.GetRefLink ctx) .GetTag (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "comment_issue"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.comment_issue" (printf "%s/issues/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "merge_pull_request"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.merge_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "close_issue"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.close_issue" (printf "%s/issues/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "reopen_issue"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.reopen_issue" (printf "%s/issues/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "close_pull_request"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.close_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "reopen_pull_request"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.reopen_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "delete_tag"}}
+							{{ctx.Locale.Tr "action.delete_tag" (.GetRepoLink ctx) .GetTag (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "delete_branch"}}
+							{{ctx.Locale.Tr "action.delete_branch" (.GetRepoLink ctx) .GetBranch (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "mirror_sync_push"}}
+							{{ctx.Locale.Tr "action.mirror_sync_push" (.GetRepoLink ctx) (.GetRefLink ctx) .GetBranch (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "mirror_sync_create"}}
+							{{ctx.Locale.Tr "action.mirror_sync_create" (.GetRepoLink ctx) (.GetRefLink ctx) .GetBranch (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "mirror_sync_delete"}}
+							{{ctx.Locale.Tr "action.mirror_sync_delete" (.GetRepoLink ctx) .GetBranch (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "approve_pull_request"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.approve_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "reject_pull_request"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.reject_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "comment_pull"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.comment_pull" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{else if .GetOpType.InActions "publish_release"}}
+							{{$linkText := .Content | ctx.RenderUtils.RenderEmoji}}
+							{{ctx.Locale.Tr "action.publish_release" (.GetRepoLink ctx) (printf "%s/releases/tag/%s" (.GetRepoLink ctx) .GetTag) (.ShortRepoPath ctx) $linkText}}
+						{{else if .GetOpType.InActions "pull_review_dismissed"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{$reviewer := index .GetIssueInfos 1}}
+							{{ctx.Locale.Tr "action.review_dismissed" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx) $reviewer}}
+						{{else if .GetOpType.InActions "auto_merge_pull_request"}}
+							{{$index := index .GetIssueInfos 0}}
+							{{ctx.Locale.Tr "action.auto_merge_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
+						{{end}}
+					</div>
+					<div class="home-feed-item-time">{{DateUtils.TimeSince .GetCreate}}</div>
+				</div>
+				<div class="home-feed-item-icon">
+					{{svg (printf "octicon-%s" (ActionIcon .GetOpType)) 20 "text grey"}}
+				</div>
+			</div>
+			{{end}}
+			<a href="{{AppSubUrl}}/feeds" class="home-feeds-see-all">{{ctx.Locale.Tr "home.see_all"}}</a>
+		</div>
+		{{end}}
+	</div>
+
+	{{if not .IsSigned}}
 	<div class="ui stackable middle very relaxed page grid">
 		<div class="eight wide center column">
 			<h1 class="hero ui icon header">
@@ -47,5 +151,6 @@
 			</p>
 		</div>
 	</div>
+	{{end}}
 </div>
 {{template "base/footer" .}}

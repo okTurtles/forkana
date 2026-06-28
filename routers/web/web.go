@@ -560,6 +560,7 @@ func registerWebRoutes(m *web.Router) {
 		m.Get("/search", repo.SearchIssues)
 	}, reqSignIn)
 
+	m.Get("/feeds", reqSignIn, user.UserFeeds)
 	m.Get("/pulls", reqSignIn, user.Pulls)
 	m.Get("/milestones", reqSignIn, reqMilestonesDashboardPageEnabled, user.Milestones)
 

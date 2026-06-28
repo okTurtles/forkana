@@ -370,6 +370,24 @@ func (a *Action) GetTag() string {
 	return strings.TrimPrefix(a.RefName, git.TagPrefix)
 }
 
+// GetCardLink returns the primary destination link for a feed card.
+func (a *Action) GetCardLink(ctx context.Context) string {
+	repoLink := a.GetRepoLink(ctx)
+	infos := a.GetIssueInfos()
+	switch a.OpType {
+	case ActionCommentIssue, ActionCommentPull, ActionApprovePullRequest, ActionRejectPullRequest, ActionPullReviewDismissed:
+		return a.GetCommentLink(ctx)
+	case ActionCreateIssue, ActionCloseIssue, ActionReopenIssue:
+		return fmt.Sprintf("%s/issues/%s", repoLink, infos[0])
+	case ActionCreatePullRequest, ActionClosePullRequest, ActionReopenPullRequest,
+		ActionMergePullRequest, ActionAutoMergePullRequest:
+		return fmt.Sprintf("%s/pulls/%s", repoLink, infos[0])
+	case ActionPushTag, ActionPublishRelease:
+		return fmt.Sprintf("%s/releases/tag/%s", repoLink, a.GetTag())
+	}
+	return repoLink
+}
+
 // GetContent returns the action's content.
 func (a *Action) GetContent() string {
 	return a.Content
@@ -455,6 +473,8 @@ type GetFeedsOptions struct {
 	Date               string                 // the day we want activity for: YYYY-MM-DD
 	DontCount          bool                   // do counting in GetFeeds
 	ExcludeRepoOwnerID int64
+	SinceUnix          int64        // filter actions since this Unix timestamp (overrides Date when set)
+	OpTypes            []ActionType // filter by specific action types
 }
 
 func (opts GetFeedsOptions) shouldExcludeRepoOwner() bool {
@@ -477,6 +497,10 @@ func ActivityReadable(user, doer *user_model.User) bool {
 
 func FeedDateCond(opts GetFeedsOptions) builder.Cond {
 	cond := builder.NewCond()
+	if opts.SinceUnix > 0 {
+		cond = cond.And(builder.Gte{"`action`.created_unix": opts.SinceUnix})
+		return cond
+	}
 	if opts.Date == "" {
 		return cond
 	}
@@ -575,6 +599,10 @@ func ActivityQueryCondition(ctx context.Context, opts GetFeedsOptions) (builder.
 	}
 	if !opts.IncludeDeleted {
 		cond = cond.And(builder.Eq{"is_deleted": false})
+	}
+
+	if len(opts.OpTypes) > 0 {
+		cond = cond.And(builder.In("`action`.op_type", opts.OpTypes))
 	}
 
 	cond = cond.And(FeedDateCond(opts))
