@@ -2,6 +2,17 @@
 	--fonts-override: Inter, -apple-system, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial;
 	--border-radius: 6px;
 	--border-radius-dropdown: 12px;
+
+	/* Bubble graph defaults (light) — overridden per-theme by colors.custom.css / colors-dark.custom.css */
+	--bubble-grad-start: #FAFBFC;
+	--bubble-grad-mid: #EEF2F7;
+	--bubble-grad-end: #E6EBF2;
+	--bubble-stroke: #DBE2EA;
+	--bubble-edge-stroke: #D7DFE8;
+	--bubble-joint-fill: #ffffff;
+	--bubble-joint-stroke: #C7D2DF;
+	--bubble-shadow-color: #64748b;
+	--bubble-overlay-bg: rgba(255, 255, 255, 0.98);
 }
 
 
