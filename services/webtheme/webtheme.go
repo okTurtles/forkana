@@ -132,8 +132,9 @@ func initThemes() {
 			foundThemes = append(foundThemes, parseThemeMetaInfo(fileName, util.UnsafeBytesToString(content)))
 		}
 	}
+	adminAllowlist := len(setting.UI.Themes) > 0
 	themeOrderList := setting.UI.Themes
-	if len(themeOrderList) == 0 {
+	if !adminAllowlist {
 		// Default ordering: standard themes first, then colorblind variants.
 		themeOrderList = []string{
 			"gitea-auto", "gitea-light", "gitea-dark",
@@ -151,10 +152,12 @@ func initThemes() {
 			ordered[themeName] = true
 		}
 	}
-	// Append any discovered themes not covered by the order list.
-	for _, theme := range foundThemes {
-		if !ordered[theme.InternalName] {
-			availableThemes = append(availableThemes, theme)
+	// When no admin allowlist is set, append any discovered themes not in the default order list.
+	if !adminAllowlist {
+		for _, theme := range foundThemes {
+			if !ordered[theme.InternalName] {
+				availableThemes = append(availableThemes, theme)
+			}
 		}
 	}
 	if len(availableThemes) == 0 {
