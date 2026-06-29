@@ -1,0 +1,202 @@
+{{template "user/settings/layout_head" (dict "ctxData" . "pageClass" "user settings")}}
+
+{{/*
+	The preview shape is defined once as a <symbol>; each card references it via <use>.
+	Fills are inline so they survive the <use> shadow tree, resolving the per-card
+	--preview-* custom properties inherited from each .c-color wrapper.
+*/}}
+{{define "theme-preview-sprite"}}
+<svg class="theme-preview-sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+	<symbol id="theme-preview-symbol" viewBox="0 0 247 128">
+		<path d="M243 0.5C244.933 0.5 246.5 2.067 246.5 4V124C246.5 125.933 244.933 127.5 243 127.5H4C2.06701 127.5 0.5 125.933 0.5 124V4C0.5 2.067 2.067 0.5 4 0.5H243Z" style="fill:var(--preview-nav-bg)"/>
+		<rect x="24" y="28" width="48" height="9" rx="4.5" style="fill:var(--preview-secondary)"/>
+		<rect x="24" y="48" width="48" height="9" rx="4.5" style="fill:var(--preview-secondary)"/>
+		<rect x="24" y="68" width="48" height="9" rx="4.5" style="fill:var(--preview-secondary)"/>
+		<rect x="24" y="88" width="48" height="9" rx="4.5" style="fill:var(--preview-secondary)"/>
+		<path d="M86 32C86 29.7909 87.7909 28 90 28H246V123C246 125.209 244.209 127 242 127H86V32Z" style="fill:var(--preview-box-body)"/>
+		<rect x="106" y="52" width="120" height="12" rx="2" style="fill:var(--preview-diff-removed)"/>
+		<rect x="106" y="72" width="120" height="12" rx="2" style="fill:var(--preview-diff-added)"/>
+		<circle cx="12.5" cy="32.5" r="4.5" style="fill:var(--preview-primary)"/>
+		<circle cx="12.5" cy="52.5" r="4.5" style="fill:var(--preview-primary)"/>
+		<circle cx="12.5" cy="72.5" r="4.5" style="fill:var(--preview-primary)"/>
+		<rect x="8" y="8.00002" width="64" height="9" rx="4.5" style="fill:var(--preview-secondary)"/>
+		<circle cx="12.5" cy="92.5" r="4.5" style="fill:var(--preview-primary)"/>
+	</symbol>
+</svg>
+{{end}}
+
+{{define "theme-preview-svg"}}
+<svg viewBox="0 0 247 128" aria-hidden="true" {{if .class}}class="{{.class}}"{{end}}><use href="#theme-preview-symbol"/></svg>
+{{end}}
+	<div class="user-setting-content">
+
+		<!-- Theme -->
+		<h4 class="ui top attached header">
+			{{ctx.Locale.Tr "settings.manage_themes"}}
+		</h4>
+		<div class="ui attached segment">
+			{{template "theme-preview-sprite" .}}
+			<form class="ui form ignore-dirty" action="{{.Link}}/theme" method="post" id="theme-selector-form">
+				{{.CsrfTokenHtml}}
+				<div class="field">
+					{{ctx.Locale.Tr "settings.theme_desc"}}
+				</div>
+				<div class="field">
+					<fieldset class="theme-list-fieldset">
+						<legend class="theme-list-legend">{{ctx.Locale.Tr "settings.ui"}}</legend>
+						<div class="theme-list theme-list-grid">
+							{{range $theme := .AllThemes}}
+							{{$isAuto := StringUtils.HasPrefix $theme.InternalName "gitea-auto"}}
+							<label for="theme_{{$theme.InternalName}}" class="theme-label">
+								<input type="radio" class="theme-radio" name="theme" value="{{$theme.InternalName}}" id="theme_{{$theme.InternalName}}" {{if eq $.SignedUser.Theme $theme.InternalName}}checked{{end}}>
+								<div class="c-color" data-theme="{{$theme.InternalName}}">
+									{{if $isAuto}}
+									<div class="c-combined-color">
+										{{template "theme-preview-svg" (dict "class" "svg-light")}}
+										{{template "theme-preview-svg" (dict "class" "svg-dark")}}
+									</div>
+									{{else}}
+										{{template "theme-preview-svg" (dict "class" "")}}
+									{{end}}
+								</div>
+								{{$localeKey := print "settings.theme_name." $theme.InternalName}}
+							<span class="theme-name">{{if ctx.Locale.HasKey $localeKey}}{{ctx.Locale.Tr $localeKey}}{{else}}{{$theme.DisplayName}}{{end}}</span>
+							</label>
+							{{end}}
+						</div>
+					</fieldset>
+				</div>
+				{{/* No-JS / keyboard fallback: JavaScript hides this and auto-submits on change instead. */}}
+				<div class="field theme-submit-fallback">
+					<button class="ui primary button">{{ctx.Locale.Tr "settings.update_theme"}}</button>
+				</div>
+			</form>
+		</div>
+
+		<!-- Language -->
+		<h4 class="ui top attached header">
+			{{ctx.Locale.Tr "settings.language"}}
+		</h4>
+		<div class="ui attached segment">
+			<form class="ui form" action="{{.Link}}/language" method="post">
+				{{.CsrfTokenHtml}}
+				<div class="field">
+					<div class="ui language selection dropdown" id="language">
+						<input name="language" type="hidden" value="{{.SignedUser.Language}}">
+						{{svg "octicon-triangle-down" 14 "dropdown icon"}}
+						<div class="text">{{range .AllLangs}}{{if eq $.SignedUser.Language .Lang}}{{.Name}}{{end}}{{end}}</div>
+						<div class="menu">
+						{{range .AllLangs}}
+							<div class="item{{if eq $.SignedUser.Language .Lang}} active selected{{end}}" data-value="{{.Lang}}">{{.Name}}</div>
+						{{end}}
+						</div>
+					</div>
+				</div>
+				<div class="field">
+					<button class="ui primary button">{{ctx.Locale.Tr "settings.update_language"}}</button>
+				</div>
+			</form>
+		</div>
+
+		<!-- Shown comment event types -->
+		<h4 class="ui top attached header">
+			{{ctx.Locale.Tr "settings.hidden_comment_types"}}
+		</h4>
+		<div class="ui attached segment">
+			<p class="help">
+				{{ctx.Locale.Tr "settings.hidden_comment_types_description"}}
+			</p>
+			<form class="ui form" action="{{.Link}}/hidden_comments" method="post">
+				{{.CsrfTokenHtml}}
+				<div class="inline field">
+					<div class="ui checkbox" data-tooltip-content="{{ctx.Locale.Tr "settings.hidden_comment_types.ref_tooltip"}}">
+						<input name="reference" type="checkbox" {{if(call .IsCommentTypeGroupChecked "reference")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_reference"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="label" type="checkbox" {{if (call .IsCommentTypeGroupChecked "label")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_label"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="milestone" type="checkbox" {{if (call .IsCommentTypeGroupChecked "milestone")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_milestone"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="assignee" type="checkbox" {{if (call .IsCommentTypeGroupChecked "assignee")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_assignee"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="title" type="checkbox" {{if (call .IsCommentTypeGroupChecked "title")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_title"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="branch" type="checkbox" {{if (call .IsCommentTypeGroupChecked "branch")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_branch"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="time_tracking" type="checkbox" {{if (call .IsCommentTypeGroupChecked "time_tracking")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_time_tracking"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="deadline" type="checkbox" {{if (call .IsCommentTypeGroupChecked "deadline")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_deadline"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="dependency" type="checkbox" {{if (call .IsCommentTypeGroupChecked "dependency")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_dependency"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="lock" type="checkbox" {{if (call .IsCommentTypeGroupChecked "lock")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_lock"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="review_request" type="checkbox" {{if (call .IsCommentTypeGroupChecked "review_request")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_review_request"}}</label>
+					</div>
+				</div>
+
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="pull_request_push" type="checkbox" {{if (call .IsCommentTypeGroupChecked "pull_request_push")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_pull_request_push"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox">
+						<input name="project" type="checkbox" {{if (call .IsCommentTypeGroupChecked "project")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_project"}}</label>
+					</div>
+				</div>
+				<div class="inline field">
+					<div class="ui checkbox" data-tooltip-content="{{ctx.Locale.Tr "settings.hidden_comment_types.issue_ref_tooltip"}}">
+						<input name="issue_ref" type="checkbox" {{if (call .IsCommentTypeGroupChecked "issue_ref")}}checked{{end}}>
+						<label>{{ctx.Locale.Tr "settings.comment_type_group_issue_ref"}}</label>
+					</div>
+				</div>
+				<div class="field">
+					<button class="ui primary button">{{ctx.Locale.Tr "save"}}</button>
+				</div>
+			</form>
+		</div>
+	</div>
+{{template "user/settings/layout_footer" .}}

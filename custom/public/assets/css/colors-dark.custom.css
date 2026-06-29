@@ -111,6 +111,22 @@
   --bubble-overlay-bg: rgba(27, 31, 35, 0.98);
 }
 
+/* gitea-auto in dark OS mode: apply dark bubble variables (data-theme stays "gitea-auto") */
+@media (prefers-color-scheme: dark) {
+  [data-theme="gitea-auto"],
+  [data-theme="gitea-auto-protanopia-deuteranopia"] {
+    --bubble-grad-start: #2e3640;
+    --bubble-grad-mid: #232b35;
+    --bubble-grad-end: #1d2530;
+    --bubble-stroke: #3a4450;
+    --bubble-edge-stroke: #2d3540;
+    --bubble-joint-fill: #1b1f23;
+    --bubble-joint-stroke: #3d4a58;
+    --bubble-shadow-color: #000000;
+    --bubble-overlay-bg: rgba(27, 31, 35, 0.98);
+  }
+}
+
 /* Colorblind diff colors — bright orange (removed) vs clear blue (added).
    Higher opacity than light theme since dark backgrounds absorb more contrast. */
 [data-theme="gitea-dark-protanopia-deuteranopia"] {
