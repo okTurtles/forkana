@@ -127,12 +127,24 @@ export async function createToastEditor(
     }
   }, true);
 
+  // Some engines (notably Safari) ignore `clipboardData` passed to the ClipboardEvent
+  // constructor, which would make the re-dispatch below carry no data and drop the paste.
+  // Detect support once; if unsupported, skip the strip and let the paste proceed normally
+  // (the gitdiff base64 placeholder is the backend safety net).
+  let canConstructClipboardData = false;
+  try {
+    canConstructClipboardData = new ClipboardEvent('paste', {clipboardData: new DataTransfer()}).clipboardData !== null;
+  } catch {
+    canConstructClipboardData = false;
+  }
+
   container.addEventListener('paste', (e: ClipboardEvent) => {
     if (!ensureFilesWithinLimit(e.clipboardData?.files)) {
       e.preventDefault();
       e.stopPropagation();
       return;
     }
+    if (!canConstructClipboardData) return;
 
     // When the clipboard contains HTML (e.g. content copied from YouTube or other media
     // sites), it may include external thumbnail <img> elements. If left in, Toast UI
