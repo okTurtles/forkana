@@ -166,7 +166,14 @@ export async function createToastEditor(
         const dt = new DataTransfer();
         dt.setData('text/html', cleanHtml);
         dt.setData('text/plain', text);
-        container.dispatchEvent(new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: dt}));
+        // Re-dispatch on the element the editor actually listens on (the pseudo-clipboard
+        // textarea in markdown mode, or the ProseMirror contenteditable in WYSIWYG) — NOT
+        // `container`, which is an ancestor the editor's paste handler never receives. The
+        // synthetic event re-enters this capture listener, but with no external <img> left
+        // it falls through and reaches the editor. Rebuilding the DataTransfer without the
+        // image item is what keeps the pasted text while dropping the incidental thumbnail.
+        const target = (e.target as HTMLElement) ?? container;
+        target.dispatchEvent(new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: dt}));
       }
     }
   }, true);
