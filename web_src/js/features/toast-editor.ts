@@ -131,6 +131,43 @@ export async function createToastEditor(
     if (!ensureFilesWithinLimit(e.clipboardData?.files)) {
       e.preventDefault();
       e.stopPropagation();
+      return;
+    }
+
+    // When the clipboard contains HTML (e.g. content copied from YouTube or other media
+    // sites), it may include external thumbnail <img> elements. If left in, Toast UI
+    // converts them to base64 blobs via addImageBlobHook, creating very long lines in the
+    // saved markdown file and triggering the git diff suppression (issue #233).
+    // Rewrite the clipboard as HTML with external images removed, keeping only data: URIs
+    // (locally pasted/dropped images that the user deliberately embedded).
+    const html = e.clipboardData?.getData('text/html');
+    if (html && e.clipboardData?.types.includes('text/html')) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      let strippedAny = false;
+      for (const img of doc.querySelectorAll('img')) {
+        const src = img.getAttribute('src') || '';
+        if (!src.startsWith('data:')) {
+          // Replace external image with its alt text as a plain text node, or remove entirely
+          const alt = img.getAttribute('alt');
+          if (alt) {
+            img.replaceWith(doc.createTextNode(alt));
+          } else {
+            img.remove();
+          }
+          strippedAny = true;
+        }
+      }
+      if (strippedAny) {
+        e.preventDefault();
+        e.stopPropagation();
+        const cleanHtml = doc.body.innerHTML;
+        const text = e.clipboardData.getData('text/plain');
+        const dt = new DataTransfer();
+        dt.setData('text/html', cleanHtml);
+        dt.setData('text/plain', text);
+        container.dispatchEvent(new ClipboardEvent('paste', {bubbles: true, cancelable: true, clipboardData: dt}));
+      }
     }
   }, true);
 

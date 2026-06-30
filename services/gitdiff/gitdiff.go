@@ -796,6 +796,13 @@ func skipToNextDiffHead(input *bufio.Reader) (line string, err error) {
 	return line, err
 }
 
+// isBase64ImageDiffLine reports whether a diff line payload (the content after the +/-/space prefix)
+// is a Markdown image containing an inline base64 data URI, e.g. ![alt](data:image/png;base64,...).
+// These lines are produced by Forkana's article editor and can be very long.
+func isBase64ImageDiffLine(s string) bool {
+	return strings.Contains(s, "data:image/") && strings.Contains(s, ";base64,")
+}
+
 func parseHunks(ctx context.Context, curFile *DiffFile, maxLines, maxLineCharacters int, input *bufio.Reader) (lineBytes []byte, isFragment bool, err error) {
 	sb := strings.Builder{}
 
@@ -975,9 +982,18 @@ func parseHunks(ctx context.Context, curFile *DiffFile, maxLines, maxLineCharact
 			}
 		}
 		if len(line) > maxLineCharacters {
-			curFile.IsIncomplete = true
-			curFile.IsIncompleteLineTooLong = true
-			line = line[:maxLineCharacters]
+			// A diff line that is a Markdown image with an inline base64 data URI (stored by
+			// Forkana's article editor) would otherwise suppress the whole file diff.
+			// Substitute a short human-readable placeholder so the rest of the diff remains visible.
+			if len(line) > 1 && isBase64ImageDiffLine(line[1:]) {
+				b64Offset := strings.Index(line, ";base64,")
+				decodedKB := (len(line) - b64Offset - 8) * 3 / 4 / 1024
+				line = string(line[0]) + fmt.Sprintf("[embedded base64 image, ~%d KB]", decodedKB)
+			} else {
+				curFile.IsIncomplete = true
+				curFile.IsIncompleteLineTooLong = true
+				line = line[:maxLineCharacters]
+			}
 		}
 		curSection.Lines[len(curSection.Lines)-1].Content = line
 
