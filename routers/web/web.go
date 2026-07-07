@@ -262,6 +262,11 @@ func registerRepoFileEditorRoutes(m *web.Router, reqRepoCodeWriter func(*context
 			m.Post("/upload-file", repo.UploadFileToServer)
 			m.Post("/upload-remove", repo.RemoveUploadFileFromServer)
 		}, repo.MustBeAbleToUpload, reqRepoCodeWriter)
+		// Stores images pasted/dropped in the article/file editor as repo attachments
+		// (referenced by /attachments/{uuid}) instead of inline base64. Only "code reader"
+		// is required so the "fork and edit" flow can upload before the fork is created;
+		// the enclosing groups already enforce sign-in and repo read access.
+		m.Post("/editor-attachments", repo.UploadEditorAttachment)
 	}, repo.MustBeEditable, context.RepoMustNotBeArchived())
 }
 

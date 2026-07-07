@@ -4,6 +4,7 @@ import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 import {showErrorToast} from '../modules/toast.ts';
 import {ensureFilesWithinLimit, getMaxAttachmentSize, showFileTooLargeError} from './comp/editorFileLimit.ts';
+import {POST} from '../modules/fetch.ts';
 
 export type ToastEditorOptions = {
   height?: string;
@@ -61,6 +62,8 @@ export async function createToastEditor(
 
   // Server-provided raw URL of the file being edited, used to resolve relative image paths.
   const rawFileUrl = textarea.getAttribute('data-raw-file-url') || '';
+  // Endpoint that stores a pasted/dropped image as a repo attachment and returns its uuid.
+  const attachmentUploadUrl = textarea.getAttribute('data-attachment-upload-url') || '';
 
   // Initialize Toast UI Editor
   // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- Editor type has issues
@@ -84,15 +87,34 @@ export async function createToastEditor(
       },
     },
     hooks: {
-      addImageBlobHook: (blob: Blob, callback: (url: string, text?: string) => void) => {
+      addImageBlobHook: async (blob: Blob, callback: (url: string, text?: string) => void) => {
         const max = getMaxAttachmentSize();
         if (max && blob.size > max) {
           showFileTooLargeError((blob as File).name || 'image');
           return;
         }
+        const name = (blob as File).name || 'image';
+        // Upload the image as a repo attachment and reference it by URL. Storing it inline as
+        // base64 bloats the Markdown and makes a single line exceed MAX_GIT_DIFF_LINE_CHARACTERS,
+        // which suppresses the whole file diff (issue #233).
+        if (attachmentUploadUrl) {
+          try {
+            const form = new FormData();
+            form.append('file', blob, name);
+            const resp = await POST(attachmentUploadUrl, {data: form});
+            if (!resp.ok) throw new Error(`attachment upload failed: ${resp.status}`);
+            const data = await resp.json();
+            callback(`/attachments/${data.uuid}`, name);
+          } catch (err) {
+            console.error(err);
+            showErrorToast(window.config.i18n.editor_image_read_failed || 'Failed to upload the image file.');
+          }
+          return;
+        }
+        // Fallback when no upload endpoint is configured: embed as base64 so the image is not lost.
         const reader = new FileReader();
         reader.addEventListener('load', () => {
-          callback(reader.result as string, (blob as File).name || 'image');
+          callback(reader.result as string, name);
         });
         reader.addEventListener('error', () => {
           showErrorToast(window.config.i18n.editor_image_read_failed || 'Failed to read the image file.');
