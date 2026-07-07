@@ -545,6 +545,64 @@ index 0000000..6bb8f39
 	}
 }
 
+func TestParsePatch_base64Image(t *testing.T) {
+	// A Markdown image with a long inline base64 data URI (as stored by Forkana's article
+	// editor) must NOT suppress the whole file diff; the payload is replaced by a short
+	// placeholder while the rest of the file renders normally. See issue #233 / PR #237.
+	// The payload is far larger than the read buffer (max(maxLineCharacters, 4096)), so the
+	// line is returned as a fragment — the path that previously bypassed the placeholder.
+	base64Payload := strings.Repeat("A", 8000)
+	diff := "diff --git a/article.md b/article.md\n" +
+		"new file mode 100644\n" +
+		"index 0000000..1111111\n" +
+		"--- /dev/null\n" +
+		"+++ b/article.md\n" +
+		"@@ -0,0 +1,3 @@\n" +
+		"+# Title\n" +
+		"+![logo](data:image/png;base64," + base64Payload + ")\n" +
+		"+Some text after\n"
+
+	result, err := ParsePatch(t.Context(), 1000, 5000, setting.Git.MaxGitDiffFiles, strings.NewReader(diff), "")
+	require.NoError(t, err)
+	require.Len(t, result.Files, 1)
+	f := result.Files[0]
+	assert.False(t, f.IsIncomplete, "file diff must not be suppressed for a base64 image line")
+	assert.False(t, f.IsIncompleteLineTooLong, "base64 image line must not flag the file as too-long")
+
+	var joined string
+	for _, sec := range f.Sections {
+		for _, ln := range sec.Lines {
+			joined += ln.Content + "\n"
+		}
+	}
+	assert.Contains(t, joined, "+# Title", "content before the image should remain visible")
+	assert.Contains(t, joined, "+Some text after", "content after the image should remain visible")
+	assert.Contains(t, joined, "embedded base64 image: logo", "the image line should become a placeholder keeping the alt text")
+	assert.NotContains(t, joined, base64Payload, "the raw base64 payload must not be kept in the diff")
+
+	// A long line that merely *mentions* a data URI (not the ![](…) image syntax) must still
+	// be treated as a too-long line, not rewritten to a fake image placeholder.
+	prose := "+" + strings.Repeat("x", 6000) + " data:image/png;base64,xx"
+	diff2 := "diff --git a/notes.md b/notes.md\n" +
+		"new file mode 100644\n" +
+		"index 0000000..2222222\n" +
+		"--- /dev/null\n" +
+		"+++ b/notes.md\n" +
+		"@@ -0,0 +1,1 @@\n" +
+		prose + "\n"
+	result2, err := ParsePatch(t.Context(), 1000, 5000, setting.Git.MaxGitDiffFiles, strings.NewReader(diff2), "")
+	require.NoError(t, err)
+	require.Len(t, result2.Files, 1)
+	assert.True(t, result2.Files[0].IsIncompleteLineTooLong, "non-image long line should still be flagged too-long")
+	var joined2 string
+	for _, sec := range result2.Files[0].Sections {
+		for _, ln := range sec.Lines {
+			joined2 += ln.Content
+		}
+	}
+	assert.NotContains(t, joined2, "embedded base64 image", "prose mentioning a data URI must not be rewritten as an image placeholder")
+}
+
 func setupDefaultDiff() *Diff {
 	return &Diff{
 		Files: []*DiffFile{
