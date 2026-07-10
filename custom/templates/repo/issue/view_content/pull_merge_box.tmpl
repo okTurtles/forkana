@@ -42,12 +42,9 @@
 			{{if .Issue.PullRequest.HasMerged}}
 				<div class="item item-section text tw-flex-1">
 					<div class="item-section-left">
-						<h3 class="tw-mb-2">
+						<h3>
 							{{ctx.Locale.Tr "repo.pulls.merged_success"}}
 						</h3>
-						<div class="merge-section-info">
-							{{ctx.Locale.Tr "repo.pulls.merged_info_text" (HTMLFormat "<code>%s</code>" .HeadTarget)}}
-						</div>
 					</div>
 				</div>
 			{{else if .Issue.IsClosed}}
