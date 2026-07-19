@@ -21,6 +21,12 @@
             <div class="ui error message tw-mt-4" data-role="article-error" hidden>
                 <p data-role="article-error-text"></p>
             </div>
+            <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
+                style="margin-top: -8px; margin-bottom: 28px"
+                href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (.Repository.GetSubject ctx)) "view" "bubble"}}">
+                {{svg "octicon-chevron-left" 16}}
+                <span>{{ctx.Locale.Tr "repo.back_to_bubble_view"}}</span>
+            </a>
             <div class="tw-flex tw-items-center tw-gap-2">
                 <span class="pill">
                     {{svg "octicon-person" 16 "tw-mr-1"}}
@@ -52,11 +58,6 @@
                     </a>
                     <div class="tw-flex tw-items-center tw-gap-2 tw-ml-auto">
                         {{if .IsArticleModeRead}}
-                            {{if not (and $.IsSigned (eq $.SignedUser.ID .Repository.OwnerID))}}
-                            <div class="tw-flex">
-                                {{template "repo/watch_unwatch" .}}
-                            </div>
-                            {{end}}
                             <div class="ui icon top left pointing dropdown button mini tw-px-3">
                                 {{svg "octicon-kebab-horizontal" 14}}
                                 <div class="menu">

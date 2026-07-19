@@ -1,6 +1,15 @@
 {{template "base/head" .}}
-<main class="tw-flex tw-h-full tw-items-start sm:tw-items-center tw-justify-center">
-	<section class="tw-w-full tw-max-w-[720px] tw-px-6 sm:tw-px-8 tw-pt-16 sm:tw-pt-0 tw-text-center">
+<main class="tw-flex tw-flex-col {{if .IsSigned}}tw-items-center{{else}}tw-h-full tw-items-center tw-justify-center{{end}}">
+	{{if .IsSigned}}
+	<div class="tw-w-full tw-max-w-[1088px] tw-mx-auto tw-px-6 sm:tw-px-8 tw-pt-6">
+		<a id="home-back-link" href="{{AppSubUrl}}/" class="tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-text-primary back-button">
+			{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "home.back"}}
+		</a>
+		<script>document.getElementById('home-back-link')?.addEventListener('click',function(e){e.preventDefault();history.back()});</script>
+	</div>
+	{{end}}
+
+	<section class="tw-w-full tw-max-w-[720px] tw-px-6 sm:tw-px-8 {{if .IsSigned}}tw-pt-8{{else}}tw-pt-16 sm:tw-pt-0{{end}} tw-text-center">
 		<!-- Logo -->
 		<div class="tw-mx-auto tw-mb-10 tw-rounded-full tw-bg-transparent">
 			<img class="logo" width="124" height="122" src="{{AssetUrlPrefix}}/img/logo.svg" alt="{{ctx.Locale.Tr "logo"}}">
@@ -8,7 +17,7 @@
 
 		<!-- Heading -->
 		<h1 class="tw-text-3xl sm:tw-text-5xl tw-font-semibold tw-tracking-tight tw-mb-10">
-			What’s on your mind?
+			{{ctx.Locale.Tr "home.whats_on_your_mind"}}
 		</h1>
 
 		<!-- Search + Dropdown -->
@@ -39,57 +48,35 @@
 				<!-- Items injected via JS -->
 			</div>
 		</div>
+
+		{{if .IsSigned}}
+		<!-- Feeds card -->
+		<div class="home-feeds-card tw-mx-auto tw-mt-6 tw-max-w-[560px] tw-text-left">
+			<div class="home-feeds-card-header">{{ctx.Locale.Tr "home.your_feeds"}}</div>
+			{{range .Feeds}}
+			<div class="home-feed-item">
+				<div class="home-feed-item-avatar">
+					{{ctx.AvatarUtils.AvatarByAction .}}
+				</div>
+				<div class="home-feed-item-body">
+					<div class="home-feed-item-action">
+						{{if gt .ActUser.ID 0}}
+							<a href="{{AppSubUrl}}/{{(.GetActUserName ctx) | PathEscape}}" title="{{.GetActDisplayNameTitle ctx}}" class="tw-font-semibold">{{.GetActDisplayName ctx}}</a>
+						{{else}}
+							<span class="tw-font-semibold">{{.ShortActUserName ctx}}</span>
+						{{end}}
+						{{template "shared/feed_action_text" .}}
+					</div>
+					<div class="home-feed-item-time">{{DateUtils.TimeSince .GetCreate}}</div>
+				</div>
+				<div class="home-feed-item-icon">
+					{{svg (printf "octicon-%s" (ActionIcon .GetOpType)) 20 "text grey"}}
+				</div>
+			</div>
+			{{end}}
+			<a href="{{AppSubUrl}}/feeds" class="home-feeds-see-all">{{ctx.Locale.Tr "home.see_all"}}</a>
+		</div>
+		{{end}}
 	</section>
 </main>
-<!--
-<div role="main" aria-label="{{if .IsSigned}}{{ctx.Locale.Tr "dashboard"}}{{else}}{{ctx.Locale.Tr "home"}}{{end}}" class="page-content home">
-	<div class="tw-mb-8 tw-px-8">
-		<div class="center">
-			<img class="logo" width="220" height="220" src="{{AssetUrlPrefix}}/img/logo.svg" alt="{{ctx.Locale.Tr "logo"}}">
-			<div class="hero">
-				<h1 class="ui icon header title tw-text-balance">
-					{{AppName}}
-				</h1>
-				<h2 class="tw-text-balance">{{ctx.Locale.Tr "startpage.app_desc"}}</h2>
-			</div>
-		</div>
-	</div>
-	<div class="ui stackable middle very relaxed page grid">
-		<div class="eight wide center column">
-			<h1 class="hero ui icon header">
-				{{svg "octicon-flame"}} {{ctx.Locale.Tr "startpage.install"}}
-			</h1>
-			<p class="large tw-text-balance">
-				{{ctx.Locale.Tr "startpage.install_desc" "https://docs.gitea.com/installation/install-from-binary" "https://github.com/go-gitea/gitea/tree/master/docker" "https://docs.gitea.com/installation/install-from-package"}}
-			</p>
-		</div>
-		<div class="eight wide center column">
-			<h1 class="hero ui icon header">
-				{{svg "octicon-device-desktop"}} {{ctx.Locale.Tr "startpage.platform"}}
-			</h1>
-			<p class="large tw-text-balance">
-				{{ctx.Locale.Tr "startpage.platform_desc" "https://go.dev/"}}
-			</p>
-		</div>
-	</div>
-	<div class="ui stackable middle very relaxed page grid">
-		<div class="eight wide center column">
-			<h1 class="hero ui icon header">
-				{{svg "octicon-rocket"}} {{ctx.Locale.Tr "startpage.lightweight"}}
-			</h1>
-			<p class="large tw-text-balance">
-				{{ctx.Locale.Tr "startpage.lightweight_desc"}}
-			</p>
-		</div>
-		<div class="eight wide center column">
-			<h1 class="hero ui icon header">
-				{{svg "octicon-code"}} {{ctx.Locale.Tr "startpage.license"}}
-			</h1>
-			<p class="large tw-text-balance">
-				{{ctx.Locale.Tr "startpage.license_desc" "https://code.gitea.io/gitea" "code.gitea.io/gitea" "https://github.com/go-gitea/gitea"}}
-			</p>
-		</div>
-	</div>
-</div>
--->
 {{template "base/footer" .}}
