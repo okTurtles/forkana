@@ -21,6 +21,12 @@
             <div class="ui error message tw-mt-4" data-role="article-error" hidden>
                 <p data-role="article-error-text"></p>
             </div>
+            <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
+                style="margin-top: -8px; margin-bottom: 28px"
+                href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (.Repository.GetSubject ctx)) "view" "bubble"}}">
+                {{svg "octicon-chevron-left" 16}}
+                <span>Back to bubble view</span>
+            </a>
             <div class="tw-flex tw-items-center tw-gap-2">
                 <span class="pill">
                     {{svg "octicon-person" 16 "tw-mr-1"}}
