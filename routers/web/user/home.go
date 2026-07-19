@@ -88,8 +88,8 @@ func HomeFeed(ctx *context.Context) {
 // feedsPageSize is the number of feed cards shown per page on the /feeds page.
 const feedsPageSize = 4
 
-// UserFeeds renders the full feeds page with search, filter, sort, and pagination.
-func UserFeeds(ctx *context.Context) {
+// Feeds renders the full feeds page with search, filter, sort, and pagination.
+func Feeds(ctx *context.Context) {
 	ctxUser := getDashboardContextUser(ctx)
 	if ctx.Written() {
 		return
