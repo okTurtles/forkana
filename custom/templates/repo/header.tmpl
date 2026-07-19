@@ -2,13 +2,13 @@
 {{with .Repository}}
 	{{$canFollow := not (and $.IsSigned (eq $.SignedUser.ID .OwnerID))}}
 	<div class="ui container">
-		<div class="repo-header tw-flex tw-flex-col tw-items-center tw-pt-14" style="padding-bottom: {{if $canFollow}}38px{{else}}40px{{end}}">
+		<div class="repo-header tw-flex tw-flex-col tw-items-center tw-pt-14 {{if $canFollow}}repo-header-with-follow{{else}}tw-pb-10{{end}}">
 			<h1 class="tw-text-40 tw-m-0">{{.GetSubject ctx}}</h1>
 			<!-- Does header need to be a link?
 				<a class="muted" href="{{$.RepoLink}}"></a>
 			-->
 			{{if $canFollow}}
-				<div class="tw-flex tw-justify-center" style="margin-top: 6px">
+				<div class="repo-header-follow">
 					{{template "repo/watch_unwatch" $}}
 				</div>
 			{{end}}

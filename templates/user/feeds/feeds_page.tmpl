@@ -16,10 +16,10 @@
 			<!-- Filter dropdown with checkboxes -->
 			<div class="feeds-filter-wrapper">
 				<button type="button" class="feeds-filter-btn" id="feeds-filter-toggle" aria-expanded="false">
-					{{svg "octicon-filter" 14}} Filter
+					{{svg "octicon-filter" 14}} {{ctx.Locale.Tr "filter"}}
 					{{svg "octicon-chevron-down" 12 "feeds-filter-chevron"}}
 				</button>
-				<div id="feeds-filter-panel" class="feeds-filter-panel tw-hidden" role="dialog" aria-label="Filter options">
+				<div id="feeds-filter-panel" class="feeds-filter-panel tw-hidden" role="dialog" aria-label="{{ctx.Locale.Tr "home.filter_options"}}">
 					<a href="{{AppSubUrl}}/feeds?{{if .Period}}period={{.Period}}&{{end}}{{if .Keyword}}q={{.Keyword | QueryEscape}}&{{end}}" class="feeds-filter-clear">{{ctx.Locale.Tr "home.clear_filter"}}</a>
 					<div class="feeds-filter-divider"></div>
 					<div class="feeds-filter-section">{{ctx.Locale.Tr "home.filter_subject"}}</div>
@@ -44,7 +44,7 @@
 
 			<!-- Sort/period dropdown -->
 			<div class="ui dropdown feeds-sort-btn">
-				<span><span class="feeds-sort-icon">{{svg "octicon-arrow-switch" 14}}</span> Sort</span>
+				<span><span class="feeds-sort-icon">{{svg "octicon-arrow-switch" 14}}</span> {{ctx.Locale.Tr "home.sort"}}</span>
 				{{svg "octicon-chevron-down" 12 "dropdown icon"}}
 				<div class="menu">
 					<a class="item {{if not .Period}}active{{end}}" href="{{AppSubUrl}}/feeds?{{range .Filters}}filter={{.}}&{{end}}{{if .Keyword}}q={{.Keyword | QueryEscape}}&{{end}}">{{ctx.Locale.Tr "all"}}</a>
@@ -73,76 +73,7 @@
 								{{else}}
 									<span class="tw-font-semibold">{{.ShortActUserName ctx}}</span>
 								{{end}}
-								{{if .GetOpType.InActions "create_repo"}}
-									{{ctx.Locale.Tr "action.create_repo" (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "rename_repo"}}
-									{{ctx.Locale.Tr "action.rename_repo" .GetContent (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
-								{{else if IsArticleOwnerUpdate ctx .}}
-									{{ctx.Locale.Tr "action.update_article" (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "commit_repo"}}
-									{{if .Content}}
-										{{ctx.Locale.Tr "action.commit_repo" (.GetRepoLink ctx) (.GetRefLink ctx) .GetBranch (.ShortRepoPath ctx)}}
-									{{else}}
-										{{ctx.Locale.Tr "action.create_branch" (.GetRepoLink ctx) (.GetRefLink ctx) .GetBranch (.ShortRepoPath ctx)}}
-									{{end}}
-								{{else if .GetOpType.InActions "create_issue"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.create_issue" (printf "%s/issues/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "create_pull_request"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.create_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "transfer_repo"}}
-									{{ctx.Locale.Tr "action.transfer_repo" .GetContent (.GetRepoLink ctx) (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "push_tag"}}
-									{{ctx.Locale.Tr "action.push_tag" (.GetRepoLink ctx) (.GetRefLink ctx) .GetTag (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "comment_issue"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.comment_issue" (printf "%s/issues/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "merge_pull_request"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.merge_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "close_issue"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.close_issue" (printf "%s/issues/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "reopen_issue"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.reopen_issue" (printf "%s/issues/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "close_pull_request"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.close_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "reopen_pull_request"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.reopen_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "delete_tag"}}
-									{{ctx.Locale.Tr "action.delete_tag" (.GetRepoLink ctx) .GetTag (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "delete_branch"}}
-									{{ctx.Locale.Tr "action.delete_branch" (.GetRepoLink ctx) .GetBranch (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "mirror_sync_push"}}
-									{{ctx.Locale.Tr "action.mirror_sync_push" (.GetRepoLink ctx) (.GetRefLink ctx) .GetBranch (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "mirror_sync_create"}}
-									{{ctx.Locale.Tr "action.mirror_sync_create" (.GetRepoLink ctx) (.GetRefLink ctx) .GetBranch (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "mirror_sync_delete"}}
-									{{ctx.Locale.Tr "action.mirror_sync_delete" (.GetRepoLink ctx) .GetBranch (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "approve_pull_request"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.approve_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "reject_pull_request"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.reject_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "comment_pull"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.comment_pull" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{else if .GetOpType.InActions "publish_release"}}
-									{{$linkText := .Content | ctx.RenderUtils.RenderEmoji}}
-									{{ctx.Locale.Tr "action.publish_release" (.GetRepoLink ctx) (printf "%s/releases/tag/%s" (.GetRepoLink ctx) .GetTag) (.ShortRepoPath ctx) $linkText}}
-								{{else if .GetOpType.InActions "pull_review_dismissed"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{$reviewer := index .GetIssueInfos 1}}
-									{{ctx.Locale.Tr "action.review_dismissed" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx) $reviewer}}
-								{{else if .GetOpType.InActions "auto_merge_pull_request"}}
-									{{$index := index .GetIssueInfos 0}}
-									{{ctx.Locale.Tr "action.auto_merge_pull_request" (printf "%s/pulls/%s" (.GetRepoLink ctx) $index) $index (.ShortRepoPath ctx)}}
-								{{end}}
+								{{template "shared/feed_action_text" .}}
 							</span>
 							<span class="feeds-card-time">{{DateUtils.TimeSince .GetCreate}}</span>
 						</div>
@@ -177,35 +108,35 @@
 					<div class="feeds-card-body">
 						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
 						<div class="feeds-card-badges">
-							<span class="feeds-badge feeds-badge-merged">{{svg "octicon-git-merge" 14}} Merged</span>
+							<span class="feeds-badge feeds-badge-merged">{{svg "octicon-git-merge" 14}} {{ctx.Locale.Tr "repo.pulls.merged"}}</span>
 						</div>
 					</div>
 				{{else if .GetOpType.InActions "close_pull_request"}}
 					<div class="feeds-card-body">
 						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
 						<div class="feeds-card-badges">
-							<span class="feeds-badge feeds-badge-closed">{{svg "octicon-git-pull-request-closed" 14}} Closed</span>
+							<span class="feeds-badge feeds-badge-closed">{{svg "octicon-git-pull-request-closed" 14}} {{ctx.Locale.Tr "repo.issues.closed_title"}}</span>
 						</div>
 					</div>
 				{{else if .GetOpType.InActions "reopen_pull_request"}}
 					<div class="feeds-card-body">
 						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
 						<div class="feeds-card-badges">
-							<span class="feeds-badge feeds-badge-open">{{svg "octicon-git-pull-request" 14}} Open</span>
+							<span class="feeds-badge feeds-badge-open">{{svg "octicon-git-pull-request" 14}} {{ctx.Locale.Tr "repo.issues.open_title"}}</span>
 						</div>
 					</div>
 				{{else if .GetOpType.InActions "close_issue"}}
 					<div class="feeds-card-body">
 						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
 						<div class="feeds-card-badges">
-							<span class="feeds-badge feeds-badge-closed">{{svg "octicon-issue-closed" 14}} Closed</span>
+							<span class="feeds-badge feeds-badge-closed">{{svg "octicon-issue-closed" 14}} {{ctx.Locale.Tr "repo.issues.closed_title"}}</span>
 						</div>
 					</div>
 				{{else if .GetOpType.InActions "reopen_issue"}}
 					<div class="feeds-card-body">
 						<div class="feeds-card-title">{{(.GetIssueTitle ctx) | ctx.RenderUtils.RenderIssueSimpleTitle}}</div>
 						<div class="feeds-card-badges">
-							<span class="feeds-badge feeds-badge-open">{{svg "octicon-issue-reopened" 14}} Open</span>
+							<span class="feeds-badge feeds-badge-open">{{svg "octicon-issue-reopened" 14}} {{ctx.Locale.Tr "repo.issues.open_title"}}</span>
 						</div>
 					</div>
 				{{else if .GetOpType.InActions "comment_issue" "approve_pull_request" "reject_pull_request" "comment_pull"}}
@@ -255,38 +186,4 @@
 		{{end}}
 	</div>
 </div>
-
-<script>
-(function() {
-	const toggle = document.getElementById('feeds-filter-toggle');
-	const panel = document.getElementById('feeds-filter-panel');
-	if (!toggle || !panel) return;
-
-	toggle.addEventListener('click', function(e) {
-		e.stopPropagation();
-		const isHidden = panel.classList.toggle('tw-hidden');
-		toggle.setAttribute('aria-expanded', String(!isHidden));
-	});
-
-	document.addEventListener('click', function(e) {
-		if (!panel.classList.contains('tw-hidden') && !panel.contains(e.target) && !toggle.contains(e.target)) {
-			panel.classList.add('tw-hidden');
-			toggle.setAttribute('aria-expanded', 'false');
-		}
-	});
-
-	panel.querySelectorAll('.feeds-filter-checkbox').forEach(function(cb) {
-		cb.addEventListener('change', function() {
-			const params = new URLSearchParams(window.location.search);
-			params.delete('filter');
-			params.delete('page');
-			panel.querySelectorAll('.feeds-filter-checkbox:checked').forEach(function(checked) {
-				params.append('filter', checked.value);
-			});
-			window.location.href = '{{AppSubUrl}}/feeds?' + params.toString();
-		});
-	});
-})();
-</script>
-
 {{template "base/footer" .}}

@@ -25,7 +25,7 @@
                 style="margin-top: -8px; margin-bottom: 28px"
                 href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (.Repository.GetSubject ctx)) "view" "bubble"}}">
                 {{svg "octicon-chevron-left" 16}}
-                <span>Back to bubble view</span>
+                <span>{{ctx.Locale.Tr "repo.back_to_bubble_view"}}</span>
             </a>
             <div class="tw-flex tw-items-center tw-gap-2">
                 <span class="pill">

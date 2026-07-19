@@ -475,6 +475,8 @@ type GetFeedsOptions struct {
 	ExcludeRepoOwnerID int64
 	SinceUnix          int64        // filter actions since this Unix timestamp (overrides Date when set)
 	OpTypes            []ActionType // filter by specific action types
+	Keyword            string       // filter by repo (article) name, subject name, or actor name
+	FollowedByUserID   int64        // only actions performed by users this user ID follows
 }
 
 func (opts GetFeedsOptions) shouldExcludeRepoOwner() bool {
@@ -603,6 +605,27 @@ func ActivityQueryCondition(ctx context.Context, opts GetFeedsOptions) (builder.
 
 	if len(opts.OpTypes) > 0 {
 		cond = cond.And(builder.In("`action`.op_type", opts.OpTypes))
+	}
+
+	if opts.FollowedByUserID > 0 {
+		cond = cond.And(builder.In("`action`.act_user_id",
+			builder.Select("follow_id").From("follow").Where(builder.Eq{"user_id": opts.FollowedByUserID}),
+		))
+	}
+
+	if opts.Keyword != "" {
+		// match article (repo) name, subject name, or actor name
+		cond = cond.And(builder.Or(
+			builder.In("`action`.repo_id", builder.Select("id").From("repository").Where(builder.Or(
+				db.BuildCaseInsensitiveLike("name", opts.Keyword),
+				builder.In("subject_id", builder.Select("id").From("subject").Where(
+					db.BuildCaseInsensitiveLike("name", opts.Keyword),
+				)),
+			))),
+			builder.In("`action`.act_user_id", builder.Select("id").From("`user`").Where(
+				db.BuildCaseInsensitiveLike("name", opts.Keyword),
+			)),
+		))
 	}
 
 	cond = cond.And(FeedDateCond(opts))

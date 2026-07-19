@@ -85,6 +85,9 @@ func HomeFeed(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplHome)
 }
 
+// feedsPageSize is the number of feed cards shown per page on the /feeds page.
+const feedsPageSize = 4
+
 // UserFeeds renders the full feeds page with search, filter, sort, and pagination.
 func UserFeeds(ctx *context.Context) {
 	ctxUser := getDashboardContextUser(ctx)
@@ -96,7 +99,7 @@ func UserFeeds(ctx *context.Context) {
 		page    = ctx.FormInt("page")
 		period  = ctx.FormString("period")
 		filters = ctx.FormStrings("filter")
-		q       = ctx.FormString("q")
+		q       = ctx.FormTrim("q")
 	)
 	if page <= 1 {
 		page = 1
@@ -120,9 +123,10 @@ func UserFeeds(ctx *context.Context) {
 		IncludePrivate:     true,
 		IncludeDeleted:     false,
 		ExcludeRepoOwnerID: ctx.Doer.ID,
+		Keyword:            q,
 		ListOptions: db.ListOptions{
 			Page:     page,
-			PageSize: 4,
+			PageSize: feedsPageSize,
 		},
 	}
 
@@ -165,13 +169,11 @@ func UserFeeds(ctx *context.Context) {
 			activities_model.ActionCommentPull,
 		)
 	}
-	if filtersMap["users"] {
-		opTypes = append(opTypes,
-			activities_model.ActionStarRepo,
-			activities_model.ActionWatchRepo,
-		)
-	}
 	opts.OpTypes = opTypes
+	if filtersMap["users"] {
+		// "Users" narrows the feed to activity performed by users the viewer follows
+		opts.FollowedByUserID = ctx.Doer.ID
+	}
 
 	feeds, count, err := feed_service.GetFeeds(ctx, opts)
 	if err != nil {
@@ -179,7 +181,7 @@ func UserFeeds(ctx *context.Context) {
 		return
 	}
 
-	pager := context.NewPagination(int(count), 4, page, 5).WithCurRows(len(feeds))
+	pager := context.NewPagination(int(count), feedsPageSize, page, 5).WithCurRows(len(feeds))
 	pager.AddParamFromRequest(ctx.Req)
 	ctx.Data["Page"] = pager
 	ctx.Data["Link"] = setting.AppSubURL + "/feeds"
