@@ -19,7 +19,7 @@
 
 .home-hero-title {
   font-size: 2rem;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   margin: 24px 0 16px;
   text-align: center;
 }
@@ -70,7 +70,7 @@
 
 .home-feeds-card-header {
   padding: 12px 16px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   font-size: 14px;
   color: var(--color-text);
   background: var(--color-feeds-card-header);
@@ -129,9 +129,9 @@
   padding: 12px 16px;
   text-align: center;
   background: var(--color-primary);
-  color: #fff !important;
+  color: var(--color-primary-contrast) !important;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   text-decoration: none;
   transition: background 0.15s;
   margin: 4px 1rem 1rem;
@@ -229,7 +229,6 @@
   background: var(--color-secondary);
 }
 
-.feeds-sort-btn .menu,
 .feeds-sort-btn .menu {
   min-width: 160px;
 }
@@ -276,7 +275,7 @@
 .feeds-filter-section {
   padding: 6px 16px 4px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-light-3);
@@ -314,7 +313,7 @@
 
 .feeds-page-heading {
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 /* ===== Feed card (full feeds page) ===== */
@@ -383,12 +382,12 @@
 
 .feeds-card-actor-info > span:first-child a,
 .feeds-card-actor-info > span:first-child > a:first-child {
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   color: var(--color-text-dark);
 }
 
 .feeds-card-actor-info a {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text);
 }
 
@@ -406,7 +405,7 @@
 
 .feeds-card-title {
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   color: var(--color-text-dark);
   line-height: 1.4;
   margin-bottom: 8px;
@@ -426,23 +425,23 @@
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   white-space: nowrap;
 }
 
 .feeds-badge-merged {
   background: var(--color-violet);
-  color: #fff;
+  color: var(--color-white);
 }
 
 .feeds-badge-closed {
   background: var(--color-red);
-  color: #fff;
+  color: var(--color-white);
 }
 
 .feeds-badge-open {
   background: var(--color-green);
-  color: #fff;
+  color: var(--color-white);
 }
 
 .feeds-card-meta-text {
@@ -486,8 +485,8 @@
 
 .feeds-pg-active {
   background: var(--color-primary);
-  color: #fff !important;
-  font-weight: 600;
+  color: var(--color-primary-contrast) !important;
+  font-weight: var(--font-weight-semibold);
   cursor: default;
 }
 

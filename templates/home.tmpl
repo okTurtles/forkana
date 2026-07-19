@@ -2,9 +2,10 @@
 <div role="main" aria-label="{{if .IsSigned}}{{ctx.Locale.Tr "dashboard"}}{{else}}{{ctx.Locale.Tr "home"}}{{end}}" class="page-content home">
 	{{if .IsSigned}}
 	<div class="ui container">
-		<a href="javascript:history.back()" class="back-button tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-mt-4 tw-text-primary">
+		<a id="home-back-link" href="{{AppSubUrl}}/" class="back-button tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-mt-4 tw-text-primary">
 			{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "go_back"}}
 		</a>
+		<script>document.getElementById('home-back-link')?.addEventListener('click',function(e){e.preventDefault();history.back()});</script>
 	</div>
 	{{end}}
 

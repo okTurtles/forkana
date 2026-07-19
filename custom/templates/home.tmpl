@@ -2,9 +2,10 @@
 <main class="tw-flex tw-flex-col {{if .IsSigned}}tw-items-center{{else}}tw-h-full tw-items-center tw-justify-center{{end}}">
 	{{if .IsSigned}}
 	<div class="tw-w-full tw-max-w-[1088px] tw-mx-auto tw-px-6 sm:tw-px-8 tw-pt-6">
-		<a href="javascript:history.back()" class="tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-text-primary back-button">
+		<a id="home-back-link" href="{{AppSubUrl}}/" class="tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-text-primary back-button">
 			{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "home.back"}}
 		</a>
+		<script>document.getElementById('home-back-link')?.addEventListener('click',function(e){e.preventDefault();history.back()});</script>
 	</div>
 	{{end}}
 
