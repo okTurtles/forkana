@@ -83,7 +83,7 @@
 
              <div class="field">
                  <div class="tw-p-0">
-                     <textarea id="edit_area" name="content" class="tw-hidden" data-id="repo-{{.Repository.Name}}-{{.ReadmeTreePath}}" data-raw-file-url="{{.RepoLink}}/raw/branch/{{PathEscapeSegments .BranchName}}/{{PathEscapeSegments .ReadmeTreePath}}">{{.FileContent}}</textarea>
+                     <textarea id="edit_area" name="content" class="tw-hidden" data-id="repo-{{.Repository.Name}}-{{.ReadmeTreePath}}" data-raw-file-url="{{.RepoLink}}/raw/branch/{{PathEscapeSegments .BranchName}}/{{PathEscapeSegments .ReadmeTreePath}}" data-attachment-upload-url="{{.RepoLink}}/editor-attachments">{{.FileContent}}</textarea>
                      <div class="editor-loading is-loading"></div>
                      <div id="toast-editor-container" style="min-height: 500px;"></div>
                  </div>

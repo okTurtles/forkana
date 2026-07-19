@@ -29,7 +29,7 @@ func generateImg() bytes.Buffer {
 	return buff
 }
 
-func createAttachment(t *testing.T, session *TestSession, csrf, repoURL, filename string, buff bytes.Buffer, expectedStatus int) string {
+func uploadAttachmentTo(t *testing.T, session *TestSession, csrf, url, filename string, buff bytes.Buffer, expectedStatus int) string {
 	body := &bytes.Buffer{}
 
 	// Setup multi-part
@@ -41,7 +41,7 @@ func createAttachment(t *testing.T, session *TestSession, csrf, repoURL, filenam
 	err = writer.Close()
 	assert.NoError(t, err)
 
-	req := NewRequestWithBody(t, "POST", repoURL+"/issues/attachments", body)
+	req := NewRequestWithBody(t, "POST", url, body)
 	req.Header.Add("X-Csrf-Token", csrf)
 	req.Header.Add("Content-Type", writer.FormDataContentType())
 	resp := session.MakeRequest(t, req, expectedStatus)
@@ -54,27 +54,12 @@ func createAttachment(t *testing.T, session *TestSession, csrf, repoURL, filenam
 	return obj["uuid"]
 }
 
+func createAttachment(t *testing.T, session *TestSession, csrf, repoURL, filename string, buff bytes.Buffer, expectedStatus int) string {
+	return uploadAttachmentTo(t, session, csrf, repoURL+"/issues/attachments", filename, buff, expectedStatus)
+}
+
 func createEditorAttachment(t *testing.T, session *TestSession, csrf, repoURL, filename string, buff bytes.Buffer, expectedStatus int) string {
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, err := writer.CreateFormFile("file", filename)
-	assert.NoError(t, err)
-	_, err = io.Copy(part, &buff)
-	assert.NoError(t, err)
-	err = writer.Close()
-	assert.NoError(t, err)
-
-	req := NewRequestWithBody(t, "POST", repoURL+"/editor-attachments", body)
-	req.Header.Add("X-Csrf-Token", csrf)
-	req.Header.Add("Content-Type", writer.FormDataContentType())
-	resp := session.MakeRequest(t, req, expectedStatus)
-
-	if expectedStatus != http.StatusOK {
-		return ""
-	}
-	var obj map[string]string
-	DecodeJSON(t, resp, &obj)
-	return obj["uuid"]
+	return uploadAttachmentTo(t, session, csrf, repoURL+"/editor-attachments", filename, buff, expectedStatus)
 }
 
 // TestEditorAttachmentServedToRepoReaders verifies that an attachment uploaded via the

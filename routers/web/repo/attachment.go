@@ -104,10 +104,14 @@ func DeleteAttachment(ctx *context.Context) {
 	})
 }
 
-// editorAttachmentReadable reports whether an attachment that is not linked to an issue or
-// release (e.g. one uploaded via the file/article editor, carrying only a RepoID) may be
-// served to the current user based on their read permission for the owning repository.
-func editorAttachmentReadable(ctx *context.Context, attach *repo_model.Attachment) bool {
+// unlinkedAttachmentRepoReadable reports whether an attachment that is not linked to an issue
+// or release (carrying only a RepoID) may be served to the current user based on their read
+// permission for the owning repository. This covers file/article editor uploads (the intended
+// case), but also any other repo-scoped unlinked attachment such as a pending issue/release
+// draft. Because the originating unit can no longer be recovered without the link, it gates on
+// unit.TypeCode as a deliberately conservative default; the uploader-only fallback in
+// ServeAttachment still applies when this returns false.
+func unlinkedAttachmentRepoReadable(ctx *context.Context, attach *repo_model.Attachment) bool {
 	if attach.RepoID == 0 {
 		return false
 	}
@@ -144,7 +148,7 @@ func ServeAttachment(ctx *context.Context, uuid string) {
 		// Editor/article attachments carry only a RepoID (no issue/release). Authorize them by
 		// repository read permission so article readers can view embedded images; otherwise fall
 		// back to uploader-only for genuinely context-less uploads (e.g. pending comment drafts).
-		if !editorAttachmentReadable(ctx, attach) && !(ctx.IsSigned && attach.UploaderID == ctx.Doer.ID) {
+		if !unlinkedAttachmentRepoReadable(ctx, attach) && !(ctx.IsSigned && attach.UploaderID == ctx.Doer.ID) {
 			ctx.HTTPError(http.StatusNotFound)
 			return
 		}

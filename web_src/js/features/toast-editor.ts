@@ -93,7 +93,14 @@ export async function createToastEditor(
           showFileTooLargeError((blob as File).name || 'image');
           return;
         }
-        const name = (blob as File).name || 'image';
+        let name = (blob as File).name || '';
+        if (!name.includes('.')) {
+          // Clipboard screenshots often arrive without a filename/extension. The server's
+          // attachment type check is extension-based, so derive one from the MIME type;
+          // otherwise the upload is rejected (e.g. "image/svg+xml" -> "svg").
+          const ext = (blob.type.split('/')[1] || 'png').split('+')[0];
+          name = name ? `${name}.${ext}` : `image.${ext}`;
+        }
         // Upload the image as a repo attachment and reference it by URL. Storing it inline as
         // base64 bloats the Markdown and makes a single line exceed MAX_GIT_DIFF_LINE_CHARACTERS,
         // which suppresses the whole file diff (issue #233).
@@ -107,7 +114,7 @@ export async function createToastEditor(
             callback(`/attachments/${data.uuid}`, name);
           } catch (err) {
             console.error(err);
-            showErrorToast(window.config.i18n.editor_image_read_failed || 'Failed to upload the image file.');
+            showErrorToast(window.config.i18n.editor_image_upload_failed || 'Failed to upload the image file.');
           }
           return;
         }
