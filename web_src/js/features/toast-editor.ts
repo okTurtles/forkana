@@ -2,6 +2,7 @@
 import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
+import {installLosslessMarkdownTracker} from './comp/losslessMarkdown.ts';
 import {showErrorToast} from '../modules/toast.ts';
 import {ensureFilesWithinLimit, getMaxAttachmentSize, showFileTooLargeError} from './comp/editorFileLimit.ts';
 
@@ -76,13 +77,8 @@ export async function createToastEditor(
     usageStatistics,
     hideModeSwitch,
     toolbarItems,
-    events: {
-      change: () => {
-        const content = editorRef.current!.getMarkdown();
-        textarea.value = content;
-        textarea.dispatchEvent(new Event('change'));
-      },
-    },
+    // NOTE: no `events.change` here — the lossless tracker installed below owns the
+    // editor→textarea sync so the WYSIWYG serializer can't rewrite untouched source.
     hooks: {
       addImageBlobHook: (blob: Blob, callback: (url: string, text?: string) => void) => {
         const max = getMaxAttachmentSize();
@@ -193,10 +189,11 @@ export async function createToastEditor(
   // Override getMarkdown to strip internal $$widget placeholders
   installBase64WidgetPatch(editor);
 
-  // Set initial content
-  if (textarea.value) {
-    editor.setMarkdown(textarea.value);
-  }
+  // Load the initial content and keep the user's markdown source byte-identical unless
+  // they actually edit in the visual editor (issue #262). Overrides getMarkdown/setMarkdown
+  // on top of the widget patch, so submit handlers need no changes. Must come after
+  // installBase64WidgetPatch so comparisons see widget-stripped output.
+  installLosslessMarkdownTracker(editor, textarea);
 
   // Rename mode switch labels
   const switchEl = container.querySelector('.toastui-editor-mode-switch');
