@@ -79,6 +79,7 @@ func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string) {
 	log.Trace("New attachment uploaded: %s", attach.UUID)
 	ctx.JSON(http.StatusOK, map[string]string{
 		"uuid": attach.UUID,
+		"url":  setting.AppSubURL + "/attachments/" + attach.UUID,
 	})
 }
 

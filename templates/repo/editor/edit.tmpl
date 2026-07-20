@@ -28,7 +28,7 @@
 							<textarea id="edit_area" name="content" class="tw-hidden" data-id="repo-{{.Repository.Name}}-{{.TreePath}}"
 								data-previewable-extensions="{{.PreviewableExtensions}}"
 								data-line-wrap-extensions="{{.LineWrapExtensions}}"
-								data-attachment-upload-url="{{.RepoLink}}/editor-attachments"
+								{{if .IsAttachmentEnabled}}data-attachment-upload-url="{{.RepoLink}}/editor-attachments"{{end}}
 								data-raw-file-url="{{.RepoLink}}/raw/{{.RefTypeNameSubURL}}/{{.TreePath | PathEscapeSegments}}">{{.FileContent}}</textarea>
 							<div class="editor-loading is-loading"></div>
 						</div>

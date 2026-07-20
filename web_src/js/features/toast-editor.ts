@@ -111,7 +111,7 @@ export async function createToastEditor(
             const resp = await POST(attachmentUploadUrl, {data: form});
             if (!resp.ok) throw new Error(`attachment upload failed: ${resp.status}`);
             const data = await resp.json();
-            callback(`/attachments/${data.uuid}`, name);
+            callback(data.url, name);
           } catch (err) {
             console.error(err);
             showErrorToast(window.config.i18n.editor_image_upload_failed || 'Failed to upload the image file.');
