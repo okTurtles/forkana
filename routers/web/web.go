@@ -262,6 +262,15 @@ func registerRepoFileEditorRoutes(m *web.Router, reqRepoCodeWriter func(*context
 			m.Post("/upload-file", repo.UploadFileToServer)
 			m.Post("/upload-remove", repo.RemoveUploadFileFromServer)
 		}, repo.MustBeAbleToUpload, reqRepoCodeWriter)
+		// Stores images pasted/dropped in the article/file editor as repo attachments
+		// (referenced by /attachments/{uuid}) instead of inline base64. Only "code reader"
+		// is required so the "fork and edit" flow can upload before the fork is created;
+		// the enclosing groups already enforce sign-in and repo read access.
+		// Trade-off: like pending issue attachments, an upload that is never followed by a
+		// commit becomes a permanent orphan (no issue/release to link it to for cleanup), and
+		// any signed-in reader can create one. This is the same orphan class as issue drafts
+		// and is accepted here to keep fork-and-edit working without pre-creating the fork.
+		m.Post("/editor-attachments", repo.UploadEditorAttachment)
 	}, repo.MustBeEditable, context.RepoMustNotBeArchived())
 }
 

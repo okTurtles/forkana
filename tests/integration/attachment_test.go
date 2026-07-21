@@ -29,7 +29,7 @@ func generateImg() bytes.Buffer {
 	return buff
 }
 
-func createAttachment(t *testing.T, session *TestSession, csrf, repoURL, filename string, buff bytes.Buffer, expectedStatus int) string {
+func uploadAttachmentTo(t *testing.T, session *TestSession, csrf, url, filename string, buff bytes.Buffer, expectedStatus int) string {
 	body := &bytes.Buffer{}
 
 	// Setup multi-part
@@ -41,7 +41,7 @@ func createAttachment(t *testing.T, session *TestSession, csrf, repoURL, filenam
 	err = writer.Close()
 	assert.NoError(t, err)
 
-	req := NewRequestWithBody(t, "POST", repoURL+"/issues/attachments", body)
+	req := NewRequestWithBody(t, "POST", url, body)
 	req.Header.Add("X-Csrf-Token", csrf)
 	req.Header.Add("Content-Type", writer.FormDataContentType())
 	resp := session.MakeRequest(t, req, expectedStatus)
@@ -52,6 +52,42 @@ func createAttachment(t *testing.T, session *TestSession, csrf, repoURL, filenam
 	var obj map[string]string
 	DecodeJSON(t, resp, &obj)
 	return obj["uuid"]
+}
+
+func createAttachment(t *testing.T, session *TestSession, csrf, repoURL, filename string, buff bytes.Buffer, expectedStatus int) string {
+	return uploadAttachmentTo(t, session, csrf, repoURL+"/issues/attachments", filename, buff, expectedStatus)
+}
+
+func createEditorAttachment(t *testing.T, session *TestSession, csrf, repoURL, filename string, buff bytes.Buffer, expectedStatus int) string {
+	return uploadAttachmentTo(t, session, csrf, repoURL+"/editor-attachments", filename, buff, expectedStatus)
+}
+
+// TestEditorAttachmentServedToRepoReaders verifies that an attachment uploaded via the
+// article/file editor (linked only by RepoID, never to an issue/release) is served to anyone
+// with repo read permission — not just the uploader — so embedded article images are visible
+// to readers, while remaining hidden from users without read access to a private repo.
+func TestEditorAttachmentServedToRepoReaders(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner := loginUser(t, "user2")
+	user8 := loginUser(t, "user8")
+
+	// A fresh request per call: session.MakeRequest stamps the session cookie onto the
+	// request, so reusing one *http.Request across sessions would leak the first cookie.
+	attachReq := func(uuid string) *RequestWrapper { return NewRequest(t, "GET", "/attachments/"+uuid) }
+
+	// Public repo: readable by the uploader and by any other reader (incl. anonymous). Serving
+	// to non-uploaders is the new behavior — previously an unlinked attachment was uploader-only.
+	pubUUID := createEditorAttachment(t, owner, GetUserCSRFToken(t, owner), "user2/repo1", "image.png", generateImg(), http.StatusOK)
+	owner.MakeRequest(t, attachReq(pubUUID), http.StatusOK)
+	user8.MakeRequest(t, attachReq(pubUUID), http.StatusOK)
+	MakeRequest(t, attachReq(pubUUID), http.StatusOK) // anonymous
+
+	// Private repo: readable by the owner, blocked for users without read access.
+	privUUID := createEditorAttachment(t, owner, GetUserCSRFToken(t, owner), "user2/repo2", "image.png", generateImg(), http.StatusOK)
+	owner.MakeRequest(t, attachReq(privUUID), http.StatusOK)
+	user8.MakeRequest(t, attachReq(privUUID), http.StatusNotFound)
+	MakeRequest(t, attachReq(privUUID), http.StatusNotFound) // anonymous
 }
 
 func TestCreateAnonymousAttachment(t *testing.T) {

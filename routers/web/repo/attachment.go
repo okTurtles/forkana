@@ -9,6 +9,7 @@ import (
 
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/httpcache"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
@@ -29,6 +30,14 @@ func UploadIssueAttachment(ctx *context.Context) {
 // UploadReleaseAttachment response for uploading release attachments
 func UploadReleaseAttachment(ctx *context.Context) {
 	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Repository.Release.AllowedTypes)
+}
+
+// UploadEditorAttachment uploads an attachment for the file/article editor. Unlike issue or
+// release attachments, these are never linked to an issue/release: they are referenced only
+// from the committed Markdown by RepoID. ServeAttachment authorizes such attachments by
+// repository read permission so embedded article images are visible to readers.
+func UploadEditorAttachment(ctx *context.Context) {
+	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Attachment.AllowedTypes)
 }
 
 // UploadAttachment response for uploading attachments
@@ -70,6 +79,7 @@ func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string) {
 	log.Trace("New attachment uploaded: %s", attach.UUID)
 	ctx.JSON(http.StatusOK, map[string]string{
 		"uuid": attach.UUID,
+		"url":  setting.AppSubURL + "/attachments/" + attach.UUID,
 	})
 }
 
@@ -95,6 +105,28 @@ func DeleteAttachment(ctx *context.Context) {
 	})
 }
 
+// unlinkedAttachmentRepoReadable reports whether an attachment that is not linked to an issue
+// or release (carrying only a RepoID) may be served to the current user based on their read
+// permission for the owning repository. This covers file/article editor uploads (the intended
+// case), but also any other repo-scoped unlinked attachment such as a pending issue/release
+// draft. Because the originating unit can no longer be recovered without the link, it gates on
+// unit.TypeCode as a deliberately conservative default; the uploader-only fallback in
+// ServeAttachment still applies when this returns false.
+func unlinkedAttachmentRepoReadable(ctx *context.Context, attach *repo_model.Attachment) bool {
+	if attach.RepoID == 0 {
+		return false
+	}
+	repo, err := repo_model.GetRepositoryByID(ctx, attach.RepoID)
+	if err != nil || repo == nil {
+		return false
+	}
+	perm, err := access_model.GetUserRepoPermission(ctx, repo, ctx.Doer)
+	if err != nil {
+		return false
+	}
+	return perm.CanRead(unit.TypeCode)
+}
+
 // GetAttachment serve attachments with the given UUID
 func ServeAttachment(ctx *context.Context, uuid string) {
 	attach, err := repo_model.GetAttachmentByUUID(ctx, uuid)
@@ -113,8 +145,11 @@ func ServeAttachment(ctx *context.Context, uuid string) {
 		return
 	}
 
-	if repository == nil { // If not linked
-		if !(ctx.IsSigned && attach.UploaderID == ctx.Doer.ID) { // We block if not the uploader
+	if repository == nil { // If not linked to an issue or release
+		// Editor/article attachments carry only a RepoID (no issue/release). Authorize them by
+		// repository read permission so article readers can view embedded images; otherwise fall
+		// back to uploader-only for genuinely context-less uploads (e.g. pending comment drafts).
+		if !unlinkedAttachmentRepoReadable(ctx, attach) && !(ctx.IsSigned && attach.UploaderID == ctx.Doer.ID) {
 			ctx.HTTPError(http.StatusNotFound)
 			return
 		}

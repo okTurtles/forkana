@@ -357,6 +357,7 @@ func EditFile(ctx *context.Context) {
 	}
 
 	ctx.Data["EditorconfigJson"] = getContextRepoEditorConfig(ctx, ctx.Repo.TreePath)
+	ctx.Data["IsAttachmentEnabled"] = setting.Attachment.Enabled
 	ctx.HTML(http.StatusOK, tplEditFile)
 }
 
