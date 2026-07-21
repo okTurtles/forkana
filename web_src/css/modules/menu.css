@@ -169,8 +169,9 @@
 }
 
 .ui.secondary.menu .dropdown.item > .menu {
-  border-radius: 0.28571429rem;
+  border-radius: 0.75rem;
   margin-top: 0.35714286em;
+  padding: 6px 0;
 }
 
 .ui.menu .pointing.dropdown.item .menu {

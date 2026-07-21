@@ -1,7 +1,7 @@
 {{template "base/head" .}}
 <div role="main" aria-label="{{.Title}}" class="page-content explore users">
-	{{template "explore/navbar" .}}
 	<div class="ui container">
+		{{template "explore/navbar" .}}
 		{{template "explore/search" .}}
 		<div class="explore-users-list-container">
 			{{template "explore/user_list" .}}

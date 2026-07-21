@@ -130,10 +130,34 @@
   border-right-color: transparent;
 }
 
+.ui.action.input[class*="left action"] > input,
+.ui.action.input[class*="left action"] > input:hover {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  border-left-color: transparent;
+  /* pulls the input 1px into the button to close the sub-pixel gap that fractional
+     flex-item widths can leave between the two adjacent rounded boxes */
+  margin-left: -1px;
+}
+.ui.action.input[class*="left action"] > input[type="search"] {
+  /* [type="search"] normally uses "-webkit-appearance: textfield", which makes Chrome/Safari
+     paint a native text-field border that ignores the transparent border-left-color above. */
+  -webkit-appearance: none;
+  appearance: none;
+}
+.ui.action.input[class*="left action"] > input:focus {
+  border-left-color: var(--color-primary);
+}
+
 .ui.action.input > .dropdown:first-child,
 .ui.action.input > .button:first-child,
 .ui.action.input > .buttons:first-child > .button {
   border-radius: 0.28571429rem 0 0 0.28571429rem;
+}
+.ui.action.input[class*="left action"] > .button:first-child {
+  border-radius: 6px 0 0 6px;
 }
 .ui.action.input > .dropdown:not(:first-child),
 .ui.action.input > .button:not(:first-child),
@@ -164,6 +188,9 @@
   border-color: var(--color-input-border);
   padding-top: 0; /* the ".action.input" is "flex + stretch", so let the buttons layout themselves */
   padding-bottom: 0;
+}
+.ui.action.input[class*="left action"] .ui.ui.button {
+  border-right-color: transparent;
 }
 
 /* currently used for search bar dropdowns in repo search and explore code */

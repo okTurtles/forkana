@@ -229,6 +229,13 @@ func Subjects(ctx *context.Context) {
 	keyword := ctx.FormTrim("q")
 	ctx.Data["Keyword"] = keyword
 
+	// Get filter options: whether the subject's root repository is archived, and whether it has forks
+	archived := ctx.FormOptionalBool("archived")
+	ctx.Data["IsArchived"] = archived
+
+	hasForks := ctx.FormOptionalBool("fork")
+	ctx.Data["HasForks"] = hasForks
+
 	// Helper type for subjects with counts
 	type SubjectWithCount struct {
 		*repo_model.Subject
@@ -252,6 +259,8 @@ func Subjects(ctx *context.Context) {
 			Keyword:        keyword,
 			OrderBy:        orderBy,
 			ExactMatchOnly: true,
+			Archived:       archived,
+			HasForks:       hasForks,
 		})
 		if err != nil {
 			ctx.ServerError("FindSubjects (exact)", err)
@@ -265,7 +274,13 @@ func Subjects(ctx *context.Context) {
 		}
 
 		// Find similar subjects (excluding the exact match)
-		similarResults, err := repo_model.FindSimilarSubjects(ctx, keyword, 20, excludeIDs)
+		similarResults, err := repo_model.FindSimilarSubjects(ctx, repo_model.FindSimilarSubjectsOptions{
+			Keyword:    keyword,
+			Limit:      20,
+			ExcludeIDs: excludeIDs,
+			Archived:   archived,
+			HasForks:   hasForks,
+		})
 		if err != nil {
 			ctx.ServerError("FindSimilarSubjects", err)
 			return
@@ -321,8 +336,10 @@ func Subjects(ctx *context.Context) {
 				Page:     page,
 				PageSize: setting.UI.ExplorePagingNum,
 			},
-			Keyword: keyword,
-			OrderBy: orderBy,
+			Keyword:  keyword,
+			OrderBy:  orderBy,
+			Archived: archived,
+			HasForks: hasForks,
 		})
 		if err != nil {
 			ctx.ServerError("FindSubjects", err)

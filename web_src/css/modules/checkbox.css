@@ -7,6 +7,78 @@ input[type="radio"] {
   height: var(--checkbox-size);
 }
 
+/* Default checkbox appearance: a square 16x16 box with a 3px radius, filled with a
+   primary-color tick (via `currentColor`, so it tracks the active theme/accent) once checked. */
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--color-input-border);
+  border-radius: 3px;
+  background-color: var(--color-input-background);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 11px 11px;
+  color: var(--color-primary);
+  cursor: pointer;
+  vertical-align: middle;
+}
+input[type="checkbox"]:hover {
+  border-color: var(--color-primary);
+}
+input[type="checkbox"]:checked {
+  border-color: var(--color-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E");
+}
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* Filter-dropdown options (e.g. explore search "Archived"/"Forked") behave as a
+   mutually exclusive radio group but are presented visually as the same square
+   checkbox as above. "Clear filter" has no state of its own, so its indicator is hidden
+   while staying clickable through the wrapping <label>. */
+.flex-items-menu input[type="radio"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--color-input-border);
+  border-radius: 3px;
+  background-color: var(--color-input-background);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 11px 11px;
+  color: var(--color-primary);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.flex-items-menu input[type="radio"]:hover {
+  border-color: var(--color-primary);
+}
+.flex-items-menu input[type="radio"]:checked {
+  border-color: var(--color-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E");
+}
+.flex-items-menu input[type="radio"]:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.flex-items-menu input[name="clear-filter"] {
+  display: none;
+}
+/* Fomantic's dropdown .menu > .item padding/line-height are `!important`, so match
+   their specificity (".ui.menu .ui.dropdown .menu > .item") to size each row around
+   the bigger 16px checkbox above. */
+.ui.menu .ui.dropdown .menu.flex-items-menu > .item {
+  padding: .5rem 1rem !important;
+  line-height: 2rem !important;
+}
+
 .ui.checkbox {
   position: relative;
   display: inline-block;

@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"code.gitea.io/gitea/models/db"
+	"code.gitea.io/gitea/modules/optional"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"golang.org/x/text/runes"
@@ -266,6 +267,10 @@ type FindSubjectsOptions struct {
 	OrderBy        string
 	ExcludeIDs     []int64 // IDs to exclude from results
 	ExactMatchOnly bool    // Only find exact matches
+	// Archived filters subjects by whether their root (non-fork) repository is archived.
+	Archived optional.Option[bool]
+	// HasForks filters subjects by whether they have at least one forked repository.
+	HasForks optional.Option[bool]
 }
 
 // ToConds converts options to database conditions
@@ -283,28 +288,62 @@ func (opts FindSubjectsOptions) ToConds() builder.Cond {
 	if len(opts.ExcludeIDs) > 0 {
 		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
+	if opts.Archived.Has() {
+		cond = cond.And(builder.In("id", builder.Select("subject_id").From("repository").
+			Where(builder.Eq{"is_fork": false, "is_archived": opts.Archived.Value()})))
+	}
+	if opts.HasForks.Has() {
+		hasForkSubjectIDs := builder.Select("subject_id").From("repository").Where(builder.Eq{"is_fork": true})
+		if opts.HasForks.Value() {
+			cond = cond.And(builder.In("id", hasForkSubjectIDs))
+		} else {
+			cond = cond.And(builder.NotIn("id", hasForkSubjectIDs))
+		}
+	}
 	return cond
+}
+
+// FindSimilarSubjectsOptions represents options for finding subjects similar to a keyword
+type FindSimilarSubjectsOptions struct {
+	Keyword    string
+	Limit      int
+	ExcludeIDs []int64
+	// Archived filters subjects by whether their root (non-fork) repository is archived.
+	Archived optional.Option[bool]
+	// HasForks filters subjects by whether they have at least one forked repository.
+	HasForks optional.Option[bool]
 }
 
 // FindSimilarSubjects finds subjects similar to the given keyword
 // It returns subjects that partially match the keyword, excluding exact matches
-func FindSimilarSubjects(ctx context.Context, keyword string, limit int, excludeIDs []int64) ([]*Subject, error) {
+func FindSimilarSubjects(ctx context.Context, opts FindSimilarSubjectsOptions) ([]*Subject, error) {
+	keyword := strings.ToLower(strings.TrimSpace(opts.Keyword))
 	if keyword == "" {
 		return nil, nil
 	}
 
-	keyword = strings.ToLower(strings.TrimSpace(keyword))
-
 	// Find subjects that contain the keyword but are not exact matches
 	// Fetch more results than needed for better scoring, then trim to limit after sorting
-	fetchLimit := limit * 2
+	fetchLimit := opts.Limit * 2
 	subjects := make([]*Subject, 0, fetchLimit)
-	sess := db.GetEngine(ctx).
-		Where("LOWER(name) LIKE ? AND LOWER(name) != ?", "%"+keyword+"%", keyword)
-	if len(excludeIDs) > 0 {
-		sess = sess.NotIn("id", excludeIDs)
+	cond := builder.NewCond().And(builder.Expr("LOWER(name) LIKE ? AND LOWER(name) != ?", "%"+keyword+"%", keyword))
+	if len(opts.ExcludeIDs) > 0 {
+		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
-	err := sess.OrderBy("updated_unix DESC").
+	if opts.Archived.Has() {
+		cond = cond.And(builder.In("id", builder.Select("subject_id").From("repository").
+			Where(builder.Eq{"is_fork": false, "is_archived": opts.Archived.Value()})))
+	}
+	if opts.HasForks.Has() {
+		hasForkSubjectIDs := builder.Select("subject_id").From("repository").Where(builder.Eq{"is_fork": true})
+		if opts.HasForks.Value() {
+			cond = cond.And(builder.In("id", hasForkSubjectIDs))
+		} else {
+			cond = cond.And(builder.NotIn("id", hasForkSubjectIDs))
+		}
+	}
+	err := db.GetEngine(ctx).Where(cond).
+		OrderBy("updated_unix DESC").
 		Limit(fetchLimit).
 		Find(&subjects)
 	if err != nil {
@@ -329,7 +368,7 @@ func FindSimilarSubjects(ctx context.Context, keyword string, limit int, exclude
 	})
 
 	// Extract sorted subjects, trimmed to original limit
-	resultLimit := min(len(scoredSubjects), limit)
+	resultLimit := min(len(scoredSubjects), opts.Limit)
 	result := make([]*Subject, 0, resultLimit)
 	for i := range resultLimit {
 		result = append(result, scoredSubjects[i].subject)

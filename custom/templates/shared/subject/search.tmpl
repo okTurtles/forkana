@@ -1,8 +1,23 @@
 <div class="ui small secondary filter menu">
 	<form id="subject-search-form" class="ui form ignore-dirty tw-flex-1 tw-flex tw-items-center tw-gap-x-2">
-		<div class="ui small fluid action input tw-flex-1 tw-my-4">
-			{{template "shared/search/input" dict "Value" .Keyword "Placeholder" (ctx.Locale.Tr "search.repo_kind")}}
+		<div class="ui small fluid left action input tw-flex-1 tw-my-4 md:tw-mr-14">
 			{{template "shared/search/button"}}
+			{{template "shared/search/input" dict "Value" .Keyword "Placeholder" (ctx.Locale.Tr "search.repo_kind")}}
+		</div>
+		<!-- Filter -->
+		<div class="item ui small dropdown jump">
+			{{svg "octicon-filter" 14 "dropdown icon tw-mr-1"}}
+			<span class="text">{{ctx.Locale.Tr "filter"}}</span>
+			{{svg "octicon-triangle-down" 14 "dropdown icon"}}
+			<div class="menu flex-items-menu">
+				<label class="item"><input type="radio" name="clear-filter"> {{ctx.Locale.Tr "filter.clear"}}</label>
+				<div class="divider"></div>
+				<label class="item"><input type="radio" name="archived" {{if .IsArchived.Value}}checked{{end}} value="1"> {{ctx.Locale.Tr "filter.is_archived"}}</label>
+				<label class="item"><input type="radio" name="archived" {{if (not (.IsArchived.ValueOrDefault true))}}checked{{end}} value="0"> {{ctx.Locale.Tr "filter.not_archived"}}</label>
+				<div class="divider"></div>
+				<label class="item"><input type="radio" name="fork" {{if .HasForks.Value}}checked{{end}} value="1"> {{ctx.Locale.Tr "filter.is_fork"}}</label>
+				<label class="item"><input type="radio" name="fork" {{if (not (.HasForks.ValueOrDefault true))}}checked{{end}} value="0"> {{ctx.Locale.Tr "filter.not_fork"}}</label>
+			</div>
 		</div>
 		<!-- Sort -->
 		<div class="item ui small dropdown jump">
@@ -22,4 +37,3 @@
 		</div>
 	</form>
 </div>
-
