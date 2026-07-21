@@ -405,22 +405,36 @@ func calculateSimilarityScore(keyword, subjectName string) int {
 type SubjectSortType string
 
 const (
-	SubjectSortAlphabetically SubjectSortType = "alphabetically"
-	SubjectSortAlphaReverse   SubjectSortType = "reversealphabetically"
-	SubjectSortNewest         SubjectSortType = "newest"
-	SubjectSortOldest         SubjectSortType = "oldest"
-	SubjectSortRecentUpdate   SubjectSortType = "recentupdate"
-	SubjectSortLeastUpdate    SubjectSortType = "leastupdate"
+	SubjectSortAlphabetically     SubjectSortType = "alphabetically"
+	SubjectSortAlphaReverse       SubjectSortType = "reversealphabetically"
+	SubjectSortRecentUpdate       SubjectSortType = "recentupdate"
+	SubjectSortLeastUpdate        SubjectSortType = "leastupdate"
+	SubjectSortMostForks          SubjectSortType = "mostforks"
+	SubjectSortFewestForks        SubjectSortType = "fewestforks"
+	SubjectSortMostContributors   SubjectSortType = "mostcontributors"
+	SubjectSortFewestContributors SubjectSortType = "fewestcontributors"
 )
+
+// subjectForkCountSubquery counts the forked repositories under a subject.
+// `is_fork` is used bare (rather than "= true"/"= 1") since it evaluates correctly
+// as a boolean condition across SQLite, MySQL, and PostgreSQL.
+const subjectForkCountSubquery = "(SELECT COUNT(*) FROM repository WHERE repository.subject_id = subject.id AND repository.is_fork)"
+
+// subjectContributorCountSubquery counts the distinct repository owners under a subject,
+// used as a proxy for "contributors" since actual git contributor counts are only ever
+// computed live per-repository and are too expensive to aggregate across a whole subject.
+const subjectContributorCountSubquery = "(SELECT COUNT(DISTINCT repository.owner_id) FROM repository WHERE repository.subject_id = subject.id)"
 
 // SubjectOrderByMap maps sort types to database ORDER BY clauses
 var SubjectOrderByMap = map[SubjectSortType]string{
-	SubjectSortAlphabetically: "name ASC",
-	SubjectSortAlphaReverse:   "name DESC",
-	SubjectSortNewest:         "created_unix DESC",
-	SubjectSortOldest:         "created_unix ASC",
-	SubjectSortRecentUpdate:   "updated_unix DESC",
-	SubjectSortLeastUpdate:    "updated_unix ASC",
+	SubjectSortAlphabetically:     "name ASC",
+	SubjectSortAlphaReverse:       "name DESC",
+	SubjectSortRecentUpdate:       "updated_unix DESC",
+	SubjectSortLeastUpdate:        "updated_unix ASC",
+	SubjectSortMostForks:          subjectForkCountSubquery + " DESC",
+	SubjectSortFewestForks:        subjectForkCountSubquery + " ASC",
+	SubjectSortMostContributors:   subjectContributorCountSubquery + " DESC",
+	SubjectSortFewestContributors: subjectContributorCountSubquery + " ASC",
 }
 
 // CountRepositoriesBySubject counts the number of repositories for a given subject
