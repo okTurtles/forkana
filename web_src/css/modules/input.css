@@ -189,6 +189,14 @@
 .ui.action.input[class*="left action"] .ui.ui.button {
   border-right-color: transparent;
 }
+/* Without this, focusing the input only colors its own border, leaving the button/icon
+   side gray - the same "frame turns primary-colored but not around the icon" mismatch
+   the default (right-action) variant avoids via its own `input:focus + .button` rule. */
+.ui.action.input[class*="left action"]:focus-within > .ui.ui.button {
+  border-top-color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  border-left-color: var(--color-primary);
+}
 
 /* currently used for search bar dropdowns in repo search and explore code */
 .ui.action.input:not([class*="left action"]) > .ui.dropdown.selection {
