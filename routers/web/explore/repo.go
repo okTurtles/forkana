@@ -218,10 +218,10 @@ func Subjects(ctx *context.Context) {
 	}
 
 	// Map sort order to database ORDER BY clause
-	orderBy := repo_model.SubjectOrderByMap[repo_model.SubjectSortType(sortOrder)]
+	orderBy := repo_model.SubjectOrderBy(repo_model.SubjectSortType(sortOrder))
 	if orderBy == "" {
 		sortOrder = string(repo_model.SubjectSortRecentUpdate)
-		orderBy = repo_model.SubjectOrderByMap[repo_model.SubjectSortRecentUpdate]
+		orderBy = repo_model.SubjectOrderBy(repo_model.SubjectSortRecentUpdate)
 	}
 	ctx.Data["SortType"] = sortOrder
 
@@ -278,6 +278,7 @@ func Subjects(ctx *context.Context) {
 			Keyword:    keyword,
 			Limit:      20,
 			ExcludeIDs: excludeIDs,
+			OrderBy:    orderBy,
 			Archived:   archived,
 			HasForks:   hasForks,
 		})

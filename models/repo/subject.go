@@ -14,6 +14,7 @@ import (
 
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/modules/optional"
+	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"golang.org/x/text/runes"
@@ -289,8 +290,12 @@ func (opts FindSubjectsOptions) ToConds() builder.Cond {
 		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
 	if opts.Archived.Has() {
+		// Matches the "root repository" definition used by CountRootRepositoriesBySubject:
+		// non-fork AND non-empty. Without the is_empty condition, a subject with both an
+		// archived real root and an uncommitted empty repo would match both "Archived" and
+		// "Not Archived".
 		cond = cond.And(builder.In("id", builder.Select("subject_id").From("repository").
-			Where(builder.Eq{"is_fork": false, "is_archived": opts.Archived.Value()})))
+			Where(builder.Eq{"is_fork": false, "is_empty": false, "is_archived": opts.Archived.Value()})))
 	}
 	if opts.HasForks.Has() {
 		hasForkSubjectIDs := builder.Select("subject_id").From("repository").Where(builder.Eq{"is_fork": true})
@@ -308,6 +313,10 @@ type FindSimilarSubjectsOptions struct {
 	Keyword    string
 	Limit      int
 	ExcludeIDs []int64
+	// OrderBy is the database ORDER BY clause used for the final, displayed order of the
+	// matched subjects (e.g. from SubjectOrderBy). It does not affect which subjects are
+	// selected as matches - that's still driven by keyword similarity.
+	OrderBy string
 	// Archived filters subjects by whether their root (non-fork) repository is archived.
 	Archived optional.Option[bool]
 	// HasForks filters subjects by whether they have at least one forked repository.
@@ -331,8 +340,12 @@ func FindSimilarSubjects(ctx context.Context, opts FindSimilarSubjectsOptions) (
 		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
 	if opts.Archived.Has() {
+		// Matches the "root repository" definition used by CountRootRepositoriesBySubject:
+		// non-fork AND non-empty. Without the is_empty condition, a subject with both an
+		// archived real root and an uncommitted empty repo would match both "Archived" and
+		// "Not Archived".
 		cond = cond.And(builder.In("id", builder.Select("subject_id").From("repository").
-			Where(builder.Eq{"is_fork": false, "is_archived": opts.Archived.Value()})))
+			Where(builder.Eq{"is_fork": false, "is_empty": false, "is_archived": opts.Archived.Value()})))
 	}
 	if opts.HasForks.Has() {
 		hasForkSubjectIDs := builder.Select("subject_id").From("repository").Where(builder.Eq{"is_fork": true})
@@ -367,11 +380,25 @@ func FindSimilarSubjects(ctx context.Context, opts FindSimilarSubjectsOptions) (
 		return a.score - b.score
 	})
 
-	// Extract sorted subjects, trimmed to original limit
+	// Trim to the requested limit: similarity determines *which* subjects are matches
 	resultLimit := min(len(scoredSubjects), opts.Limit)
-	result := make([]*Subject, 0, resultLimit)
+	if resultLimit == 0 {
+		return nil, nil
+	}
+	matchedIDs := make([]int64, resultLimit)
 	for i := range resultLimit {
-		result = append(result, scoredSubjects[i].subject)
+		matchedIDs[i] = scoredSubjects[i].subject.ID
+	}
+
+	// Re-fetch the matched subjects in the requested display order (defaulting to the
+	// same order used for the initial candidate fetch above)
+	orderBy := opts.OrderBy
+	if orderBy == "" {
+		orderBy = "updated_unix DESC"
+	}
+	result := make([]*Subject, 0, resultLimit)
+	if err := db.GetEngine(ctx).Where(builder.In("id", matchedIDs)).OrderBy(orderBy).Find(&result); err != nil {
+		return nil, err
 	}
 
 	return result, nil
@@ -415,26 +442,53 @@ const (
 	SubjectSortFewestContributors SubjectSortType = "fewestcontributors"
 )
 
+// sqlBooleanTrueLiteral returns the SQL literal for boolean `true` in the configured
+// database dialect. MSSQL's `bit` type doesn't understand the TRUE/FALSE keywords used
+// by SQLite/MySQL/PostgreSQL and requires the numeric literal instead.
+func sqlBooleanTrueLiteral() string {
+	if setting.Database.Type.IsMSSQL() {
+		return "1"
+	}
+	return "true"
+}
+
 // subjectForkCountSubquery counts the forked repositories under a subject.
-// `is_fork` is used bare (rather than "= true"/"= 1") since it evaluates correctly
-// as a boolean condition across SQLite, MySQL, and PostgreSQL.
-const subjectForkCountSubquery = "(SELECT COUNT(*) FROM repository WHERE repository.subject_id = subject.id AND repository.is_fork)"
+func subjectForkCountSubquery() string {
+	return "(SELECT COUNT(*) FROM repository WHERE repository.subject_id = subject.id AND repository.is_fork = " + sqlBooleanTrueLiteral() + ")"
+}
 
 // subjectContributorCountSubquery counts the distinct repository owners under a subject,
 // used as a proxy for "contributors" since actual git contributor counts are only ever
 // computed live per-repository and are too expensive to aggregate across a whole subject.
-const subjectContributorCountSubquery = "(SELECT COUNT(DISTINCT repository.owner_id) FROM repository WHERE repository.subject_id = subject.id)"
+func subjectContributorCountSubquery() string {
+	return "(SELECT COUNT(DISTINCT repository.owner_id) FROM repository WHERE repository.subject_id = subject.id)"
+}
 
-// SubjectOrderByMap maps sort types to database ORDER BY clauses
-var SubjectOrderByMap = map[SubjectSortType]string{
-	SubjectSortAlphabetically:     "name ASC",
-	SubjectSortAlphaReverse:       "name DESC",
-	SubjectSortRecentUpdate:       "updated_unix DESC",
-	SubjectSortLeastUpdate:        "updated_unix ASC",
-	SubjectSortMostForks:          subjectForkCountSubquery + " DESC",
-	SubjectSortFewestForks:        subjectForkCountSubquery + " ASC",
-	SubjectSortMostContributors:   subjectContributorCountSubquery + " DESC",
-	SubjectSortFewestContributors: subjectContributorCountSubquery + " ASC",
+// SubjectOrderBy returns the database ORDER BY clause for the given sort type, or an
+// empty string if the sort type is unrecognized. This is a function rather than a
+// precomputed map because the fork/contributor-count clauses depend on the configured
+// database dialect, which isn't known until settings are loaded at runtime.
+func SubjectOrderBy(sortType SubjectSortType) string {
+	switch sortType {
+	case SubjectSortAlphabetically:
+		return "name ASC"
+	case SubjectSortAlphaReverse:
+		return "name DESC"
+	case SubjectSortRecentUpdate:
+		return "updated_unix DESC"
+	case SubjectSortLeastUpdate:
+		return "updated_unix ASC"
+	case SubjectSortMostForks:
+		return subjectForkCountSubquery() + " DESC"
+	case SubjectSortFewestForks:
+		return subjectForkCountSubquery() + " ASC"
+	case SubjectSortMostContributors:
+		return subjectContributorCountSubquery() + " DESC"
+	case SubjectSortFewestContributors:
+		return subjectContributorCountSubquery() + " ASC"
+	default:
+		return ""
+	}
 }
 
 // CountRepositoriesBySubject counts the number of repositories for a given subject
