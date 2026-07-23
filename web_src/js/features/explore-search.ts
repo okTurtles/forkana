@@ -4,7 +4,7 @@ import type {DOMEvent} from '../utils/dom.ts';
 // design, each rendered as its own <form> with one of these ids.
 const searchFormSelectors = '#repo-search-form, #subject-search-form, #user-search-form';
 
-export function initRepositorySearch() {
+export function initExploreSearch() {
   for (const searchForm of document.querySelectorAll<HTMLFormElement>(searchFormSelectors)) {
     searchForm.addEventListener('change', (e: DOMEvent<Event, HTMLInputElement>) => {
       e.preventDefault();

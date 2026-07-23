@@ -4,6 +4,7 @@
 package repo
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -289,17 +290,23 @@ func (opts FindSubjectsOptions) ToConds() builder.Cond {
 	if len(opts.ExcludeIDs) > 0 {
 		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
-	if opts.Archived.Has() {
+	return subjectArchivedForkConds(cond, opts.Archived, opts.HasForks)
+}
+
+// subjectArchivedForkConds appends the Archived/HasForks filter conditions shared by
+// FindSubjectsOptions.ToConds and FindSimilarSubjects.
+func subjectArchivedForkConds(cond builder.Cond, archived, hasForks optional.Option[bool]) builder.Cond {
+	if archived.Has() {
 		// Matches the "root repository" definition used by CountRootRepositoriesBySubject:
 		// non-fork AND non-empty. Without the is_empty condition, a subject with both an
 		// archived real root and an uncommitted empty repo would match both "Archived" and
 		// "Not Archived".
 		cond = cond.And(builder.In("id", builder.Select("subject_id").From("repository").
-			Where(builder.Eq{"is_fork": false, "is_empty": false, "is_archived": opts.Archived.Value()})))
+			Where(builder.Eq{"is_fork": false, "is_empty": false, "is_archived": archived.Value()})))
 	}
-	if opts.HasForks.Has() {
+	if hasForks.Has() {
 		hasForkSubjectIDs := builder.Select("subject_id").From("repository").Where(builder.Eq{"is_fork": true})
-		if opts.HasForks.Value() {
+		if hasForks.Value() {
 			cond = cond.And(builder.In("id", hasForkSubjectIDs))
 		} else {
 			cond = cond.And(builder.NotIn("id", hasForkSubjectIDs))
@@ -339,22 +346,7 @@ func FindSimilarSubjects(ctx context.Context, opts FindSimilarSubjectsOptions) (
 	if len(opts.ExcludeIDs) > 0 {
 		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
-	if opts.Archived.Has() {
-		// Matches the "root repository" definition used by CountRootRepositoriesBySubject:
-		// non-fork AND non-empty. Without the is_empty condition, a subject with both an
-		// archived real root and an uncommitted empty repo would match both "Archived" and
-		// "Not Archived".
-		cond = cond.And(builder.In("id", builder.Select("subject_id").From("repository").
-			Where(builder.Eq{"is_fork": false, "is_empty": false, "is_archived": opts.Archived.Value()})))
-	}
-	if opts.HasForks.Has() {
-		hasForkSubjectIDs := builder.Select("subject_id").From("repository").Where(builder.Eq{"is_fork": true})
-		if opts.HasForks.Value() {
-			cond = cond.And(builder.In("id", hasForkSubjectIDs))
-		} else {
-			cond = cond.And(builder.NotIn("id", hasForkSubjectIDs))
-		}
-	}
+	cond = subjectArchivedForkConds(cond, opts.Archived, opts.HasForks)
 	err := db.GetEngine(ctx).Where(cond).
 		OrderBy("updated_unix DESC").
 		Limit(fetchLimit).
@@ -385,23 +377,53 @@ func FindSimilarSubjects(ctx context.Context, opts FindSimilarSubjectsOptions) (
 	if resultLimit == 0 {
 		return nil, nil
 	}
-	matchedIDs := make([]int64, resultLimit)
+	result := make([]*Subject, resultLimit)
 	for i := range resultLimit {
-		matchedIDs[i] = scoredSubjects[i].subject.ID
+		result[i] = scoredSubjects[i].subject
 	}
 
-	// Re-fetch the matched subjects in the requested display order (defaulting to the
-	// same order used for the initial candidate fetch above)
+	// Put the matched subjects in the requested display order (defaulting to the same
+	// order used for the initial candidate fetch above).
 	orderBy := opts.OrderBy
 	if orderBy == "" {
 		orderBy = "updated_unix DESC"
 	}
-	result := make([]*Subject, 0, resultLimit)
+	if less := subjectInMemoryComparator(orderBy); less != nil {
+		// Simple column sorts can reorder the already-loaded subjects directly.
+		slices.SortFunc(result, less)
+		return result, nil
+	}
+
+	// Subquery-based orderings (fork/contributor counts) aren't values we have in memory,
+	// so re-fetch the matched subjects from the database in that order.
+	matchedIDs := make([]int64, resultLimit)
+	for i, subject := range result {
+		matchedIDs[i] = subject.ID
+	}
+	result = result[:0]
 	if err := db.GetEngine(ctx).Where(builder.In("id", matchedIDs)).OrderBy(orderBy).Find(&result); err != nil {
 		return nil, err
 	}
 
 	return result, nil
+}
+
+// subjectInMemoryComparator returns a comparator for the given ORDER BY clause if it's a
+// simple column sort, or nil if the clause needs the database to evaluate (e.g. the
+// fork/contributor-count subqueries from SubjectOrderBy).
+func subjectInMemoryComparator(orderBy string) func(a, b *Subject) int {
+	switch orderBy {
+	case "name ASC":
+		return func(a, b *Subject) int { return strings.Compare(a.Name, b.Name) }
+	case "name DESC":
+		return func(a, b *Subject) int { return strings.Compare(b.Name, a.Name) }
+	case "updated_unix ASC":
+		return func(a, b *Subject) int { return cmp.Compare(a.UpdatedUnix, b.UpdatedUnix) }
+	case "updated_unix DESC":
+		return func(a, b *Subject) int { return cmp.Compare(b.UpdatedUnix, a.UpdatedUnix) }
+	default:
+		return nil
+	}
 }
 
 // calculateSimilarityScore calculates a similarity score between keyword and subject name

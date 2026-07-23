@@ -18,8 +18,7 @@ input[type="checkbox"],
   -webkit-appearance: none;
   appearance: none;
   position: relative;
-  width: 16px;
-  height: 16px;
+  /* width/height come from the shared --checkbox-size rule above */
   margin: 0;
   border: 1.5px solid var(--color-input-border);
   border-radius: 3px;
