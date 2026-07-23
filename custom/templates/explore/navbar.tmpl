@@ -1,5 +1,5 @@
-<overflow-menu class="ui secondary pointing menu tw-px-4">
-	<a class="{{if .PageIsExploreRepositories}}active {{end}}item" href="{{AppSubUrl}}/explore/subjects">
+<overflow-menu class="ui secondary pointing menu tw-px-4 tw-pt-2">
+	<a class="{{if .PageIsExploreSubjects}}active {{end}}item" href="{{AppSubUrl}}/explore/subjects">
 		{{svg "octicon-goal"}} {{ctx.Locale.Tr "explore.repos"}}
 	</a>
 	{{if not .UsersPageIsDisabled}}

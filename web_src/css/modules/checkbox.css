@@ -7,6 +7,73 @@ input[type="radio"] {
   height: var(--checkbox-size);
 }
 
+/* Default checkbox appearance: a square 16x16 box with a 3px radius, filled with the
+   shared checked/indeterminate tick masks (same ones used for markdown task-list
+   checkboxes) once checked. Filter-dropdown options (e.g. explore search
+   "Archived"/"Forked") behave as a mutually exclusive radio group but are presented
+   visually as the same square checkbox. "Clear filter" has no state of its own, so its
+   indicator is hidden while staying clickable through the wrapping <label>. */
+input[type="checkbox"],
+.flex-items-menu input[type="radio"] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  /* width/height come from the shared --checkbox-size rule above */
+  margin: 0;
+  border: 1.5px solid var(--color-input-border);
+  border-radius: 3px;
+  background-color: var(--color-input-background);
+  cursor: pointer;
+  vertical-align: middle;
+}
+input[type="checkbox"]:hover,
+.flex-items-menu input[type="radio"]:hover {
+  border-color: var(--color-primary);
+}
+input[type="checkbox"]:checked,
+input[type="checkbox"]:indeterminate,
+.flex-items-menu input[type="radio"]:checked {
+  border-color: var(--color-primary);
+}
+input[type="checkbox"]::after,
+.flex-items-menu input[type="radio"]::after {
+  /* no `content` here: an unset/`normal` content means the pseudo-element isn't
+     generated at all, so the tick only appears once :checked/:indeterminate below
+     give it actual content */
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--color-primary);
+  mask-size: cover;
+  -webkit-mask-size: cover;
+}
+input[type="checkbox"]:checked::after,
+.flex-items-menu input[type="radio"]:checked::after {
+  content: "";
+  mask-image: var(--checkbox-mask-checked);
+  -webkit-mask-image: var(--checkbox-mask-checked);
+}
+input[type="checkbox"]:indeterminate::after {
+  content: "";
+  mask-image: var(--checkbox-mask-indeterminate);
+  -webkit-mask-image: var(--checkbox-mask-indeterminate);
+}
+input[type="checkbox"]:focus-visible,
+.flex-items-menu input[type="radio"]:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+.flex-items-menu input[name="clear-filter"] {
+  display: none;
+}
+/* Fomantic's dropdown .menu > .item padding/line-height are `!important`, so match
+   their specificity (".ui.menu .ui.dropdown .menu > .item") to size each row around
+   the bigger 16px checkbox above. */
+.ui.menu .ui.dropdown .menu.flex-items-menu > .item {
+  padding: .5rem 1rem !important;
+  line-height: 2rem !important;
+}
+
 .ui.checkbox {
   position: relative;
   display: inline-block;

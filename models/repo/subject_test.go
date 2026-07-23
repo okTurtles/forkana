@@ -10,6 +10,7 @@ import (
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
+	"code.gitea.io/gitea/modules/optional"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -456,4 +457,71 @@ func TestMultipleRepositoriesSameSubject(t *testing.T) {
 	count, err := repo_model.CountRepositoriesBySubject(t.Context(), subject.ID)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, count, int64(2), "At least 2 repositories should have this subject")
+}
+
+func TestSubjectOrderBy(t *testing.T) {
+	cases := []struct {
+		sortType repo_model.SubjectSortType
+		expected string
+	}{
+		{repo_model.SubjectSortAlphabetically, "name ASC"},
+		{repo_model.SubjectSortAlphaReverse, "name DESC"},
+		{repo_model.SubjectSortRecentUpdate, "updated_unix DESC"},
+		{repo_model.SubjectSortLeastUpdate, "updated_unix ASC"},
+		{repo_model.SubjectSortMostForks, "(SELECT COUNT(*) FROM repository WHERE repository.subject_id = subject.id AND repository.is_fork = true) DESC"},
+		{repo_model.SubjectSortFewestForks, "(SELECT COUNT(*) FROM repository WHERE repository.subject_id = subject.id AND repository.is_fork = true) ASC"},
+		{repo_model.SubjectSortMostContributors, "(SELECT COUNT(DISTINCT repository.owner_id) FROM repository WHERE repository.subject_id = subject.id) DESC"},
+		{repo_model.SubjectSortFewestContributors, "(SELECT COUNT(DISTINCT repository.owner_id) FROM repository WHERE repository.subject_id = subject.id) ASC"},
+		{repo_model.SubjectSortType("unknown"), ""},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.expected, repo_model.SubjectOrderBy(c.sortType), "sort type %q", c.sortType)
+	}
+}
+
+func TestFindSubjectsArchivedFilterRequiresNonEmptyRoot(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	subject, err := repo_model.GetOrCreateSubject(t.Context(), "Archived Filter Test Subject")
+	assert.NoError(t, err)
+
+	// A real, archived root: non-fork, non-empty, archived.
+	archivedRoot, err := repo_model.GetRepositoryByID(t.Context(), 1)
+	assert.NoError(t, err)
+	archivedRoot.SubjectID = subject.ID
+	archivedRoot.IsFork = false
+	archivedRoot.IsEmpty = false
+	archivedRoot.IsArchived = true
+	assert.NoError(t, repo_model.UpdateRepositoryColsWithAutoTime(t.Context(), archivedRoot, "subject_id", "is_fork", "is_empty", "is_archived"))
+
+	// An uncommitted, non-archived, non-fork repo on the *same* subject. Before the
+	// is_empty fix, this repo alone would make the subject match "Not Archived" too.
+	emptyRepo, err := repo_model.GetRepositoryByID(t.Context(), 2)
+	assert.NoError(t, err)
+	emptyRepo.SubjectID = subject.ID
+	emptyRepo.IsFork = false
+	emptyRepo.IsEmpty = true
+	emptyRepo.IsArchived = false
+	assert.NoError(t, repo_model.UpdateRepositoryColsWithAutoTime(t.Context(), emptyRepo, "subject_id", "is_fork", "is_empty", "is_archived"))
+
+	archivedSubjects, _, err := repo_model.FindSubjects(t.Context(), repo_model.FindSubjectsOptions{
+		Archived: optional.Some(true),
+	})
+	assert.NoError(t, err)
+	assert.True(t, containsSubjectID(archivedSubjects, subject.ID), "subject with an archived, non-empty root should match Archived")
+
+	notArchivedSubjects, _, err := repo_model.FindSubjects(t.Context(), repo_model.FindSubjectsOptions{
+		Archived: optional.Some(false),
+	})
+	assert.NoError(t, err)
+	assert.False(t, containsSubjectID(notArchivedSubjects, subject.ID), "subject should not match Not Archived just because it also has an unrelated empty repo")
+}
+
+func containsSubjectID(subjects []*repo_model.Subject, id int64) bool {
+	for _, s := range subjects {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
 }
