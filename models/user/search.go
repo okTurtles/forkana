@@ -43,22 +43,22 @@ type SearchUserOptions struct {
 	// RepoRole filters users by their relationship to repositories they own: whether
 	// they own at least one root (non-fork, non-empty) repository, own only forks, or
 	// own neither. Empty means no filtering.
-	RepoRole UserRepoRole
+	RepoRole RepoRole
 }
 
-// UserRepoRole classifies a user by the repositories they own
-type UserRepoRole string
+// RepoRole classifies a user by the repositories they own
+type RepoRole string
 
 const (
-	// UserRepoRoleOwner matches users who own at least one root (non-fork, non-empty)
+	// RepoRoleOwner matches users who own at least one root (non-fork, non-empty)
 	// repository, i.e. they've published at least one article.
-	UserRepoRoleOwner UserRepoRole = "owner"
-	// UserRepoRoleContributor matches users who own at least one forked repository but
-	// no root repository, i.e. they've contributed to others' articles without
-	// publishing one of their own.
-	UserRepoRoleContributor UserRepoRole = "contributor"
-	// UserRepoRoleNeither matches users who own no repositories at all (root or fork).
-	UserRepoRoleNeither UserRepoRole = "neither"
+	RepoRoleOwner RepoRole = "owner"
+	// RepoRoleContributor matches users who own at least one forked repository but no
+	// root repository, i.e. they've contributed to others' articles without publishing
+	// one of their own.
+	RepoRoleContributor RepoRole = "contributor"
+	// RepoRoleNeither matches users who own no repositories at all (root or fork).
+	RepoRoleNeither RepoRole = "neither"
 )
 
 func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Session {
@@ -142,12 +142,12 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 		ownedForkRepoUserIDs := builder.Select("owner_id").From("repository").
 			Where(builder.Eq{"is_fork": true})
 		switch opts.RepoRole {
-		case UserRepoRoleOwner:
+		case RepoRoleOwner:
 			cond = cond.And(builder.In("`user`.id", ownedRootRepoUserIDs))
-		case UserRepoRoleContributor:
+		case RepoRoleContributor:
 			cond = cond.And(builder.NotIn("`user`.id", ownedRootRepoUserIDs)).
 				And(builder.In("`user`.id", ownedForkRepoUserIDs))
-		case UserRepoRoleNeither:
+		case RepoRoleNeither:
 			cond = cond.And(builder.NotIn("`user`.id", ownedRootRepoUserIDs)).
 				And(builder.NotIn("`user`.id", ownedForkRepoUserIDs))
 		}

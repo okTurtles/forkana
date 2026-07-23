@@ -151,9 +151,9 @@ func Users(ctx *context.Context) {
 		ctx.SetFormString("sort", sortOrder)
 	}
 
-	repoRole := user_model.UserRepoRole(ctx.FormString("repo_role"))
+	repoRole := user_model.RepoRole(ctx.FormString("repo_role"))
 	switch repoRole {
-	case user_model.UserRepoRoleOwner, user_model.UserRepoRoleContributor, user_model.UserRepoRoleNeither:
+	case user_model.RepoRoleOwner, user_model.RepoRoleContributor, user_model.RepoRoleNeither:
 		// valid, keep as-is
 	default:
 		repoRole = ""

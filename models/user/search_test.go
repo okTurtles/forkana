@@ -25,7 +25,7 @@ func TestSearchUsersRepoRole(t *testing.T) {
 	// Sanity check the starting state: user 4 owns nothing.
 	neitherBefore, _, err := user_model.SearchUsers(t.Context(), user_model.SearchUserOptions{
 		Type:     user_model.UserTypeIndividual,
-		RepoRole: user_model.UserRepoRoleNeither,
+		RepoRole: user_model.RepoRoleNeither,
 	})
 	assert.NoError(t, err)
 	assert.True(t, containsUserID(neitherBefore, 4))
@@ -42,7 +42,7 @@ func TestSearchUsersRepoRole(t *testing.T) {
 
 	owners, _, err := user_model.SearchUsers(t.Context(), user_model.SearchUserOptions{
 		Type:     user_model.UserTypeIndividual,
-		RepoRole: user_model.UserRepoRoleOwner,
+		RepoRole: user_model.RepoRoleOwner,
 	})
 	assert.NoError(t, err)
 	assert.True(t, containsUserID(owners, 2), "user 2 owns a root repo in fixtures")
@@ -51,7 +51,7 @@ func TestSearchUsersRepoRole(t *testing.T) {
 
 	contributors, _, err := user_model.SearchUsers(t.Context(), user_model.SearchUserOptions{
 		Type:     user_model.UserTypeIndividual,
-		RepoRole: user_model.UserRepoRoleContributor,
+		RepoRole: user_model.RepoRoleContributor,
 	})
 	assert.NoError(t, err)
 	assert.True(t, containsUserID(contributors, 4), "user 4 now owns a fork and no root repo")
@@ -59,7 +59,7 @@ func TestSearchUsersRepoRole(t *testing.T) {
 
 	neitherAfter, _, err := user_model.SearchUsers(t.Context(), user_model.SearchUserOptions{
 		Type:     user_model.UserTypeIndividual,
-		RepoRole: user_model.UserRepoRoleNeither,
+		RepoRole: user_model.RepoRoleNeither,
 	})
 	assert.NoError(t, err)
 	assert.False(t, containsUserID(neitherAfter, 4), "user 4 now owns a fork, so it's no longer \"neither\"")
