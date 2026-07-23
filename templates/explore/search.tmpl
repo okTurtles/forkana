@@ -15,6 +15,10 @@
 			{{svg "octicon-triangle-down" 14 "dropdown icon"}}
 			<div class="menu flex-items-menu">
 				<label class="item"><input type="radio" name="clear-filter"> {{ctx.Locale.Tr "filter.clear"}}</label>
+				<div class="divider"></div>
+				<label class="item"><input type="radio" name="repo_role" {{if eq .RepoRole "owner"}}checked{{end}} value="owner"> {{ctx.Locale.Tr "filter.is_article_owner"}}</label>
+				<label class="item"><input type="radio" name="repo_role" {{if eq .RepoRole "contributor"}}checked{{end}} value="contributor"> {{ctx.Locale.Tr "filter.is_contributor"}}</label>
+				<label class="item"><input type="radio" name="repo_role" {{if eq .RepoRole "neither"}}checked{{end}} value="neither"> {{ctx.Locale.Tr "filter.is_neither_owner_nor_contributor"}}</label>
 			</div>
 		</div>
 		<!-- Sort -->

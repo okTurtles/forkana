@@ -39,7 +39,27 @@ type SearchUserOptions struct {
 	IsTwoFactorEnabled optional.Option[bool]
 	IsProhibitLogin    optional.Option[bool]
 	IncludeReserved    bool
+
+	// RepoRole filters users by their relationship to repositories they own: whether
+	// they own at least one root (non-fork, non-empty) repository, own only forks, or
+	// own neither. Empty means no filtering.
+	RepoRole UserRepoRole
 }
+
+// UserRepoRole classifies a user by the repositories they own
+type UserRepoRole string
+
+const (
+	// UserRepoRoleOwner matches users who own at least one root (non-fork, non-empty)
+	// repository, i.e. they've published at least one article.
+	UserRepoRoleOwner UserRepoRole = "owner"
+	// UserRepoRoleContributor matches users who own at least one forked repository but
+	// no root repository, i.e. they've contributed to others' articles without
+	// publishing one of their own.
+	UserRepoRoleContributor UserRepoRole = "contributor"
+	// UserRepoRoleNeither matches users who own no repositories at all (root or fork).
+	UserRepoRoleNeither UserRepoRole = "neither"
+)
 
 func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Session {
 	var cond builder.Cond
@@ -114,6 +134,23 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 
 	if opts.IsProhibitLogin.Has() {
 		cond = cond.And(builder.Eq{"prohibit_login": opts.IsProhibitLogin.Value()})
+	}
+
+	if opts.RepoRole != "" {
+		ownedRootRepoUserIDs := builder.Select("owner_id").From("repository").
+			Where(builder.Eq{"is_fork": false, "is_empty": false})
+		ownedForkRepoUserIDs := builder.Select("owner_id").From("repository").
+			Where(builder.Eq{"is_fork": true})
+		switch opts.RepoRole {
+		case UserRepoRoleOwner:
+			cond = cond.And(builder.In("`user`.id", ownedRootRepoUserIDs))
+		case UserRepoRoleContributor:
+			cond = cond.And(builder.NotIn("`user`.id", ownedRootRepoUserIDs)).
+				And(builder.In("`user`.id", ownedForkRepoUserIDs))
+		case UserRepoRoleNeither:
+			cond = cond.And(builder.NotIn("`user`.id", ownedRootRepoUserIDs)).
+				And(builder.NotIn("`user`.id", ownedForkRepoUserIDs))
+		}
 	}
 
 	e := db.GetEngine(ctx)

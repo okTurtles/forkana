@@ -19,6 +19,7 @@ export function initExploreSearch() {
         params.delete('mirror');
         params.delete('template');
         params.delete('private');
+        params.delete('repo_role');
       }
 
       params.delete('clear-filter');
