@@ -19,7 +19,7 @@ RUN apk --no-cache add \
     git \
     nodejs \
     npm \
-    && npm install -g pnpm@10.34.3 \
+    && corepack enable \
     && rm -rf /var/cache/apk/*
 
 # Setup repo
