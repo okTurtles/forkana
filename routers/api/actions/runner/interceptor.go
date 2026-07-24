@@ -61,11 +61,19 @@ var withRunner = connect.WithInterceptors(connect.UnaryInterceptorFunc(func(unar
 }))
 
 func getMethodName(req connect.AnyRequest) string {
-	splits := strings.Split(req.Spec().Procedure, "/")
-	if len(splits) > 0 {
-		return splits[len(splits)-1]
+	return getMethodNameFromProcedure(req.Spec().Procedure)
+}
+
+func getMethodNameFromProcedure(procedure string) string {
+	if !strings.HasPrefix(procedure, "/") {
+		return ""
 	}
-	return ""
+
+	lastSlash := strings.LastIndex(procedure, "/")
+	if lastSlash <= 0 || lastSlash == len(procedure)-1 {
+		return ""
+	}
+	return procedure[lastSlash+1:]
 }
 
 type runnerCtxKey struct{}
