@@ -11,6 +11,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/httpcache"
+	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/storage"
@@ -71,7 +72,12 @@ func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string) {
 	log.Trace("New attachment uploaded: %s", attach.UUID)
 	ctx.JSON(http.StatusOK, map[string]string{
 		"uuid": attach.UUID,
-		"url":  setting.AppSubURL + "/attachments/" + attach.UUID,
+		// Absolute (scheme+host), not app-relative: markdown's link resolver treats a
+		// root-relative "/attachments/{uuid}" as relative to the current file's ref/path
+		// base and mangles it into "/{owner}/{repo}/media/branch/{ref}/attachments/{uuid}"
+		// (a 404) once the file is committed and rendered. A full URL is recognized as
+		// already-absolute and passed through untouched.
+		"url": httplib.MakeAbsoluteURL(ctx, "/attachments/"+attach.UUID),
 	})
 }
 
