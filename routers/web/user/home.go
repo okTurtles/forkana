@@ -90,10 +90,11 @@ const feedsPageSize = 4
 
 // Feeds renders the full feeds page with search, filter, sort, and pagination.
 func Feeds(ctx *context.Context) {
-	ctxUser := getDashboardContextUser(ctx)
-	if ctx.Written() {
-		return
-	}
+	// Unlike Dashboard, /feeds has no :org param and never switches context, so this can use
+	// ctx.Doer directly instead of getDashboardContextUser (which would run an unused
+	// GetUserOrgsList query just to populate ctx.Data["Orgs"], which this page never reads).
+	ctxUser := ctx.Doer
+	ctx.Data["ContextUser"] = ctxUser
 
 	var (
 		page    = ctx.FormInt("page")
@@ -138,6 +139,7 @@ func Feeds(ctx *context.Context) {
 		opts.SinceUnix = now.AddDate(0, 0, -7).Unix()
 	case "last_week":
 		opts.SinceUnix = now.AddDate(0, 0, -14).Unix()
+		opts.UntilUnix = now.AddDate(0, 0, -7).Unix()
 	case "3_months":
 		opts.SinceUnix = now.AddDate(0, -3, 0).Unix()
 	case "6_months":

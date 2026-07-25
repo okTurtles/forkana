@@ -232,6 +232,7 @@ func GetFeeds(ctx context.Context, opts GetFeedsOptions) (ActionList, int64, err
 		if opts.shouldExcludeRepoOwner() {
 			cond = cond.And(opts.excludeRepoOwnerCond())
 		}
+		cond = opts.applyFeedFilters(cond)
 	} else {
 		cond, err = ActivityQueryCondition(ctx, opts)
 		if err != nil {
