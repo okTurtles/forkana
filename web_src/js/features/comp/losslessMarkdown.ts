@@ -80,8 +80,18 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
     if (mode !== 'markdown' && mode !== 'wysiwyg') return;
     if (mode === 'wysiwyg') {
       mdSnapshot = sourceText;
-      wysiwygBaseline = baseGetMarkdown();
-      syncTextarea();
+      // Deferred for the same reason as the markdown-mode branch below: the core still
+      // reads its own tracked cursor/selection mapping and applies it to the WYSIWYG model
+      // *after* emitting `changeMode`. Calling baseGetMarkdown() synchronously here forces
+      // Toast UI's internal markdown<->WYSIWYG convertor to run a serialization pass right
+      // in the middle of that, which can leave it with stale position-mapping state; the
+      // core's own subsequent setSelection(pos) then throws a ProseMirror range error.
+      queueMicrotask(() => {
+        // The user may have switched modes again before the microtask ran.
+        if (editor.isMarkdownMode()) return;
+        wysiwygBaseline = baseGetMarkdown();
+        syncTextarea();
+      });
       return;
     }
     // mode === 'markdown': the core just overwrote the markdown document with the WYSIWYG

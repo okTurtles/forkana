@@ -119,6 +119,7 @@ test('edits made in Source mode are kept verbatim', async () => {
   expect(textarea.value).toBe(edited);
   // and they survive an untouched Visual round-trip
   fake.changeMode('wysiwyg');
+  await flush();
   fake.changeMode('markdown');
   await flush();
   expect(editor.getMarkdown()).toBe(edited);
