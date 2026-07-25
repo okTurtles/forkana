@@ -1,4 +1,5 @@
 import {installLosslessMarkdownTracker, type LosslessEditor} from './losslessMarkdown.ts';
+import {stripWidgetPlaceholders} from './base64ImageWidget.ts';
 
 // Fake mirroring the verified Toast UI 3.2.2 behaviors the tracker depends on:
 // - WYSIWYG getMarkdown() serializes lossily (here: escapes `[` and `_`);
@@ -176,7 +177,7 @@ test('comparisons run through the patched getMarkdown (widget stripping applied)
   const fake = new FakeEditor('wysiwyg');
   // simulate installBase64WidgetPatch being installed first
   const original = fake.getMarkdown.bind(fake);
-  fake.getMarkdown = () => original().replace(/\$\$widget\d+\s([\s\S]*?)\$\$/g, '$1');
+  fake.getMarkdown = () => stripWidgetPlaceholders(original());
   const textarea = document.createElement('textarea');
   textarea.value = GNARLY;
   installLosslessMarkdownTracker(fake, textarea);

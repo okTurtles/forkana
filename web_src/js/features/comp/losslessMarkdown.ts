@@ -2,7 +2,7 @@
 //
 // Toast UI's WYSIWYG→markdown serializer normalizes and escapes the source (headers
 // rewritten, `\[` `\_` `\#` escapes added), and the core overwrites the markdown document
-// with that lossy serialization on every Visual→Source mode switch — even when the user
+// with that lossy serialization on every Visual→Source mode switch, even when the user
 // edited nothing. Committing `getMarkdown()` therefore rewrote articles wholesale and the
 // escaped output no longer rendered as markdown.
 //
@@ -36,7 +36,7 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
   let sourceText = textarea.value;
   // Serialization snapshot taken on every entry into WYSIWYG mode (including initial
   // load). Equality with the current serialization ⇔ "no effective Visual edit".
-  let wwBaseline = '';
+  let wysiwygBaseline = '';
   // The pristine source at the moment WYSIWYG mode was entered; restored when the user
   // returns to Source mode without having made an effective Visual edit.
   let mdSnapshot = sourceText;
@@ -46,7 +46,7 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
   const getLosslessMarkdown = (): string => {
     if (editor.isMarkdownMode()) return sourceText;
     const serialized = baseGetMarkdown();
-    return serialized === wwBaseline ? sourceText : serialized;
+    return serialized === wysiwygBaseline ? sourceText : serialized;
   };
 
   const syncTextarea = () => {
@@ -64,31 +64,31 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
     }
     sourceText = markdown;
     mdSnapshot = markdown;
-    if (!editor.isMarkdownMode()) wwBaseline = baseGetMarkdown();
+    if (!editor.isMarkdownMode()) wysiwygBaseline = baseGetMarkdown();
     syncTextarea();
   };
 
   editor.on('change', () => {
     if (suppressChange) return;
-    // Markdown mode is lossless (raw line texts), so the editor content is authoritative.
+    // Markdown mode is lossless (the source is stored verbatim), so the editor content is authoritative.
     // WYSIWYG changes are only adopted lazily via getLosslessMarkdown's baseline check.
     if (editor.isMarkdownMode()) sourceText = baseGetMarkdown();
     syncTextarea();
   });
 
-  editor.on('changeMode', (...args: unknown[]) => {
-    const mode = args[0] as string;
+  editor.on('changeMode', (mode: unknown) => {
+    if (mode !== 'markdown' && mode !== 'wysiwyg') return;
     if (mode === 'wysiwyg') {
       mdSnapshot = sourceText;
-      wwBaseline = baseGetMarkdown();
+      wysiwygBaseline = baseGetMarkdown();
       syncTextarea();
       return;
     }
     // mode === 'markdown': the core just overwrote the markdown document with the WYSIWYG
-    // serialization (lossy) — even if nothing was edited — and that write already ran
+    // serialization (lossy), even if nothing was edited, and that write already ran
     // through the change handler above, clobbering sourceText.
     const serialized = baseGetMarkdown();
-    if (serialized === wwBaseline) {
+    if (serialized === wysiwygBaseline) {
       // No effective Visual edit: restore the pristine source. Deferred, because the core
       // still restores focus/selection (with positions mapped against the serialized doc)
       // after emitting `changeMode`; replacing the document synchronously would race that.
@@ -110,11 +110,11 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
   if (textarea.value) {
     applyMarkdown(textarea.value);
   } else if (!editor.isMarkdownMode()) {
-    wwBaseline = baseGetMarkdown();
+    wysiwygBaseline = baseGetMarkdown();
   }
 
-  // Every consumer — submit handlers reading getMarkdown(), external code replacing the
-  // content via setMarkdown() — now goes through the lossless layer.
+  // Every consumer (submit handlers reading getMarkdown(), external code replacing the
+  // content via setMarkdown()) now goes through the lossless layer.
   editor.getMarkdown = getLosslessMarkdown;
   editor.setMarkdown = applyMarkdown;
 }

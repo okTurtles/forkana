@@ -21,6 +21,7 @@ import {
   initDropzone,
 } from '../dropzone.ts';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './base64ImageWidget.ts';
+import {installLosslessMarkdownTracker} from './losslessMarkdown.ts';
 import {ensureFilesWithinLimit} from './editorFileLimit.ts';
 
 // Event dispatched when editor content changes
@@ -102,16 +103,6 @@ export class ToastCommentEditor {
       usageStatistics: false,
       hideModeSwitch: false,
       toolbarItems,
-      events: {
-        change: () => {
-          if (this.editor) {
-            const content = this.editor.getMarkdown();
-            this.textarea.value = content;
-            this.textarea.dispatchEvent(new Event('change'));
-            triggerEditorContentChanged(this.container);
-          }
-        },
-      },
       widgetRules: [
         createBase64WidgetRule(() => this.editor),
       ],
@@ -119,10 +110,12 @@ export class ToastCommentEditor {
 
     // Override getMarkdown to strip internal $$widget placeholders
     installBase64WidgetPatch(this.editor);
-    // Set initial content from textarea
-    if (this.textarea.value) {
-      this.editor.setMarkdown(this.textarea.value);
-    }
+    // Keep the user's markdown source byte-identical across mode switches unless they
+    // actually edit in the visual editor (issue #262). Installs itself on top of the widget
+    // patch, loads the initial content, and overrides getMarkdown/setMarkdown so every
+    // existing call site below (and value()) stays lossless with no further changes.
+    this.textarea.addEventListener('change', () => triggerEditorContentChanged(this.container));
+    installLosslessMarkdownTracker(this.editor, this.textarea);
 
     // Rename mode switch labels
     const switchEl = this.editorWrapper.querySelector('.toastui-editor-mode-switch');

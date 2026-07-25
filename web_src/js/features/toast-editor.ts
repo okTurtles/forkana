@@ -77,7 +77,7 @@ export async function createToastEditor(
     usageStatistics,
     hideModeSwitch,
     toolbarItems,
-    // NOTE: no `events.change` here — the lossless tracker installed below owns the
+    // NOTE: no `events.change` here, the lossless tracker installed below owns the
     // editor→textarea sync so the WYSIWYG serializer can't rewrite untouched source.
     hooks: {
       addImageBlobHook: (blob: Blob, callback: (url: string, text?: string) => void) => {
