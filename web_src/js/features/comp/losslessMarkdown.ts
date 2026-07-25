@@ -92,11 +92,18 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
       // No effective Visual edit: restore the pristine source. Deferred, because the core
       // still restores focus/selection (with positions mapped against the serialized doc)
       // after emitting `changeMode`; replacing the document synchronously would race that.
+      // Must pass cursorToEnd=true: with false, Toast UI's markdown editor does a wholesale
+      // ProseMirror document replace and lets the transaction auto-map the old (now-stale)
+      // selection through it. That mapped position is not just imprecise, it can point
+      // outside the new document's node structure entirely (different text, different
+      // length), and Toast UI's next mode switch reuses that broken position to restore the
+      // WYSIWYG selection, throwing "Index N out of range" from inside ProseMirror. Passing
+      // true makes it call moveCursorToEnd instead, which is always structurally valid.
       sourceText = mdSnapshot;
       queueMicrotask(() => {
         // The user may have switched modes again before the microtask ran.
         if (!editor.isMarkdownMode()) return;
-        applyMarkdown(sourceText, false);
+        applyMarkdown(sourceText, true);
       });
     } else {
       // Genuine Visual edits: the serialization is now the authoritative source.
