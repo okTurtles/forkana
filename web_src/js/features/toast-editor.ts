@@ -94,7 +94,9 @@ export async function createToastEditor(
           return;
         }
         let name = (blob as File).name || '';
-        if (!name.includes('.')) {
+        const dot = name.lastIndexOf('.');
+        const hasExtension = dot > 0 && dot < name.length - 1;
+        if (!hasExtension) {
           // Clipboard screenshots often arrive without a filename/extension. The server's
           // attachment type check is extension-based, so derive one from the MIME type;
           // otherwise the upload is rejected (e.g. "image/svg+xml" -> "svg").

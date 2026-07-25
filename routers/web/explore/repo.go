@@ -726,6 +726,7 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			}
 		}
 		ctx.Data["FileSize"] = fileSize
+		ctx.Data["IsAttachmentEnabled"] = setting.Attachment.Enabled
 
 		// Set up fork-on-edit context data
 		prepareArticleForkOnEditData(ctx)

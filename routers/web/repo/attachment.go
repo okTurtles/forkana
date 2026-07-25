@@ -32,14 +32,6 @@ func UploadReleaseAttachment(ctx *context.Context) {
 	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Repository.Release.AllowedTypes)
 }
 
-// UploadEditorAttachment uploads an attachment for the file/article editor. Unlike issue or
-// release attachments, these are never linked to an issue/release: they are referenced only
-// from the committed Markdown by RepoID. ServeAttachment authorizes such attachments by
-// repository read permission so embedded article images are visible to readers.
-func UploadEditorAttachment(ctx *context.Context) {
-	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Attachment.AllowedTypes)
-}
-
 // UploadAttachment response for uploading attachments
 func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string) {
 	if !setting.Attachment.Enabled {
