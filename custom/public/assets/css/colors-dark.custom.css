@@ -1,10 +1,26 @@
 /* Forkana dark theme variables overriding theme-gitea-dark */
+
+/* Single source of truth for the dark bubble palette. Defined unconditionally (not gated by
+   prefers-color-scheme) so it's available both when a dark theme is explicitly selected and
+   when gitea-auto matches dark OS mode below; the two consumers can never drift. */
+:root {
+  --bubble-dark-grad-start: #2e3640;
+  --bubble-dark-grad-mid: #232b35;
+  --bubble-dark-grad-end: #1d2530;
+  --bubble-dark-stroke: #3a4450;
+  --bubble-dark-edge-stroke: #2d3540;
+  --bubble-dark-joint-fill: #1b1f23;
+  --bubble-dark-joint-stroke: #3d4a58;
+  --bubble-dark-shadow-color: #000000;
+  --bubble-dark-overlay-bg: rgba(27, 31, 35, 0.98);
+}
+
 [data-theme="gitea-dark"] gitea-theme-meta-info {
-  --theme-display-name: "Forkana Dark";
+  --theme-display-name: "Dark";
 }
 
 [data-theme="gitea-dark-protanopia-deuteranopia"] gitea-theme-meta-info {
-  --theme-display-name: "Forkana Dark (Colorblind-friendly)";
+  --theme-display-name: "Dark (Colorblind)";
 }
 
 [data-theme="gitea-dark"],
@@ -100,30 +116,30 @@
   --color-grey: #6e7681;
 
   /* Bubble graph — mirror principle: as far from dark body as light values are from white */
-  --bubble-grad-start: #2e3640;
-  --bubble-grad-mid: #232b35;
-  --bubble-grad-end: #1d2530;
-  --bubble-stroke: #3a4450;
-  --bubble-edge-stroke: #2d3540;
-  --bubble-joint-fill: #1b1f23;
-  --bubble-joint-stroke: #3d4a58;
-  --bubble-shadow-color: #000000;
-  --bubble-overlay-bg: rgba(27, 31, 35, 0.98);
+  --bubble-grad-start: var(--bubble-dark-grad-start);
+  --bubble-grad-mid: var(--bubble-dark-grad-mid);
+  --bubble-grad-end: var(--bubble-dark-grad-end);
+  --bubble-stroke: var(--bubble-dark-stroke);
+  --bubble-edge-stroke: var(--bubble-dark-edge-stroke);
+  --bubble-joint-fill: var(--bubble-dark-joint-fill);
+  --bubble-joint-stroke: var(--bubble-dark-joint-stroke);
+  --bubble-shadow-color: var(--bubble-dark-shadow-color);
+  --bubble-overlay-bg: var(--bubble-dark-overlay-bg);
 }
 
 /* gitea-auto in dark OS mode: apply dark bubble variables (data-theme stays "gitea-auto") */
 @media (prefers-color-scheme: dark) {
   [data-theme="gitea-auto"],
   [data-theme="gitea-auto-protanopia-deuteranopia"] {
-    --bubble-grad-start: #2e3640;
-    --bubble-grad-mid: #232b35;
-    --bubble-grad-end: #1d2530;
-    --bubble-stroke: #3a4450;
-    --bubble-edge-stroke: #2d3540;
-    --bubble-joint-fill: #1b1f23;
-    --bubble-joint-stroke: #3d4a58;
-    --bubble-shadow-color: #000000;
-    --bubble-overlay-bg: rgba(27, 31, 35, 0.98);
+    --bubble-grad-start: var(--bubble-dark-grad-start);
+    --bubble-grad-mid: var(--bubble-dark-grad-mid);
+    --bubble-grad-end: var(--bubble-dark-grad-end);
+    --bubble-stroke: var(--bubble-dark-stroke);
+    --bubble-edge-stroke: var(--bubble-dark-edge-stroke);
+    --bubble-joint-fill: var(--bubble-dark-joint-fill);
+    --bubble-joint-stroke: var(--bubble-dark-joint-stroke);
+    --bubble-shadow-color: var(--bubble-dark-shadow-color);
+    --bubble-overlay-bg: var(--bubble-dark-overlay-bg);
   }
 }
 

@@ -3,7 +3,8 @@
 	--border-radius: 6px;
 	--border-radius-dropdown: 12px;
 
-	/* Bubble graph defaults (light) — overridden per-theme by colors.custom.css / colors-dark.custom.css */
+	/* Bubble graph defaults (light) — single source of truth for gitea-light and gitea-auto
+	   in light OS mode; overridden for dark themes by colors-dark.custom.css */
 	--bubble-grad-start: #FAFBFC;
 	--bubble-grad-mid: #EEF2F7;
 	--bubble-grad-end: #E6EBF2;

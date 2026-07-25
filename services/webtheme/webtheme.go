@@ -145,17 +145,17 @@ func initThemes() {
 	for _, theme := range foundThemes {
 		themeMap[theme.InternalName] = theme
 	}
-	ordered := make(map[string]bool)
+	added := make(map[string]bool)
 	for _, themeName := range themeOrderList {
 		if theme, ok := themeMap[themeName]; ok {
 			availableThemes = append(availableThemes, theme)
-			ordered[themeName] = true
+			added[themeName] = true
 		}
 	}
 	// When no admin allowlist is set, append any discovered themes not in the default order list.
 	if !adminAllowlist {
 		for _, theme := range foundThemes {
-			if !ordered[theme.InternalName] {
+			if !added[theme.InternalName] {
 				availableThemes = append(availableThemes, theme)
 			}
 		}

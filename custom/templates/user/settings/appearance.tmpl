@@ -59,7 +59,7 @@
 										{{template "theme-preview-svg" (dict "class" "")}}
 									{{end}}
 								</div>
-								{{$localeKey := print "settings.theme_name." $theme.InternalName}}
+							{{$localeKey := print "settings.theme_name." $theme.InternalName}}
 							<span class="theme-name">{{if ctx.Locale.HasKey $localeKey}}{{ctx.Locale.Tr $localeKey}}{{else}}{{$theme.DisplayName}}{{end}}</span>
 							</label>
 							{{end}}
