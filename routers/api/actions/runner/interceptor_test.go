@@ -17,13 +17,20 @@ func TestGetMethodNameFromProcedure(t *testing.T) {
 			want:      "Register",
 		},
 		{
-			name:      "valid prefixed procedure",
+			// connect's Spec().Procedure never contains a URL prefix in production,
+			// but a multi-segment path still resolves to its last segment
+			name:      "multi-segment path resolves last segment",
 			procedure: "/api/actions/runner.v1.RunnerService/UpdateTask",
 			want:      "UpdateTask",
 		},
 		{
 			name:      "missing leading slash",
 			procedure: "runner.v1.RunnerService/Register",
+			want:      "",
+		},
+		{
+			name:      "empty service segment",
+			procedure: "//Register",
 			want:      "",
 		},
 		{
