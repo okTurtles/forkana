@@ -27,7 +27,7 @@ const (
 
 var withRunner = connect.WithInterceptors(connect.UnaryInterceptorFunc(func(unaryFunc connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
-		methodName := getMethodName(request)
+		methodName := getMethodNameFromProcedure(request.Spec().Procedure)
 		if methodName == "Register" {
 			return unaryFunc(ctx, request)
 		}
@@ -59,10 +59,6 @@ var withRunner = connect.WithInterceptors(connect.UnaryInterceptorFunc(func(unar
 		return unaryFunc(ctx, request)
 	}
 }))
-
-func getMethodName(req connect.AnyRequest) string {
-	return getMethodNameFromProcedure(req.Spec().Procedure)
-}
 
 func getMethodNameFromProcedure(procedure string) string {
 	if !strings.HasPrefix(procedure, "/") {
