@@ -151,12 +151,22 @@ func Users(ctx *context.Context) {
 		ctx.SetFormString("sort", sortOrder)
 	}
 
+	repoRole := user_model.RepoRole(ctx.FormString("repo_role"))
+	switch repoRole {
+	case user_model.RepoRoleOwner, user_model.RepoRoleContributor, user_model.RepoRoleNeither:
+		// valid, keep as-is
+	default:
+		repoRole = ""
+	}
+	ctx.Data["RepoRole"] = string(repoRole)
+
 	RenderUserSearch(ctx, user_model.SearchUserOptions{
 		Actor:       ctx.Doer,
 		Type:        user_model.UserTypeIndividual,
 		ListOptions: db.ListOptions{PageSize: setting.UI.ExplorePagingNum},
 		IsActive:    optional.Some(true),
 		Visible:     []structs.VisibleType{structs.VisibleTypePublic, structs.VisibleTypeLimited, structs.VisibleTypePrivate},
+		RepoRole:    repoRole,
 
 		SupportedSortOrders: supportedSortOrders,
 	}, tplExploreUsers)
