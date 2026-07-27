@@ -27,3 +27,14 @@
 .repo-header .flex-item-trailing {
   flex-wrap: nowrap;
 }
+
+/* Subject header variant with the article Follow control under the title */
+.repo-header-with-follow {
+  padding-bottom: 38px;
+}
+
+.repo-header-follow {
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
+}
