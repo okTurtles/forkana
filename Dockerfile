@@ -17,13 +17,13 @@ ARG CGO_EXTRA_CFLAGS
 # Build deps
 # pnpm bootstrap is age-gated with --min-release-age to match the 14-day
 # minimumReleaseAge policy in pnpm-workspace.yaml (repo .npmrc is not yet
-# copied at this point). pnpm >= 10.34.3 is required.
+# copied at this point). pnpm >= 10.16.0 is required.
 RUN apk --no-cache add \
     build-base \
     git \
     nodejs \
     npm \
-    && npm install -g --min-release-age=14 "pnpm@^10.34.3" \
+    && npm install -g --min-release-age=14 "pnpm@^10.16.0" \
     && rm -rf /var/cache/apk/*
 
 # Setup repo
