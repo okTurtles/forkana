@@ -789,6 +789,7 @@ func ViewPullEdit(ctx *context.Context) {
 	ctx.Data["ReadmeTreePath"] = readmeTreePath
 	ctx.Data["LastCommitID"] = headCommitID
 	ctx.Data["RepoOperationsLink"] = pull.HeadRepo.OperationsLink()
+	ctx.Data["IsAttachmentEnabled"] = setting.Attachment.Enabled
 
 	ctx.Data["IsIssuePoster"] = true
 	ctx.Data["HasIssuesOrPullsWritePermission"] = ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)

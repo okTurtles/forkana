@@ -1,10 +1,10 @@
 /* Forkana light theme variables overriding theme-gitea-light */
 [data-theme="gitea-light"] gitea-theme-meta-info {
-  --theme-display-name: "Forkana Light";
+  --theme-display-name: "Light";
 }
 
 [data-theme="gitea-light-protanopia-deuteranopia"] gitea-theme-meta-info {
-  --theme-display-name: "Forkana Light (Colorblind-friendly)";
+  --theme-display-name: "Light (Colorblind)";
 }
 
 [data-theme="gitea-light"],
@@ -99,16 +99,8 @@
   --color-purple: #8250DF;
   --color-grey: #59636E;
 
-  /* Bubble graph */
-  --bubble-grad-start: #FAFBFC;
-  --bubble-grad-mid: #EEF2F7;
-  --bubble-grad-end: #E6EBF2;
-  --bubble-stroke: #DBE2EA;
-  --bubble-edge-stroke: #D7DFE8;
-  --bubble-joint-fill: #ffffff;
-  --bubble-joint-stroke: #C7D2DF;
-  --bubble-shadow-color: #64748b;
-  --bubble-overlay-bg: rgba(255, 255, 255, 0.98);
+  /* Bubble graph: no override needed here, gitea-light gets the same light values that
+     base.custom.css already sets on :root (which matches this same element). */
 }
 
 /* Colorblind diff colors — orange (removed) vs blue (added).

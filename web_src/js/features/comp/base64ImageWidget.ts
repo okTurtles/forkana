@@ -104,10 +104,13 @@ export function createBase64WidgetRule(
   };
 }
 
+const WIDGET_PLACEHOLDER_RE = /\$\$widget\d+\s([\s\S]*?)\$\$/g;
+
+export function stripWidgetPlaceholders(content: string): string {
+  return content.replace(WIDGET_PLACEHOLDER_RE, '$1');
+}
+
 export function installBase64WidgetPatch(editor: Editor): void {
   const originalGetMarkdown = editor.getMarkdown.bind(editor);
-  editor.getMarkdown = () => {
-    const content = originalGetMarkdown();
-    return content.replace(/\$\$widget\d+\s([\s\S]*?)\$\$/g, '$1');
-  };
+  editor.getMarkdown = () => stripWidgetPlaceholders(originalGetMarkdown());
 }
