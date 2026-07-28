@@ -27,7 +27,7 @@ const (
 
 var withRunner = connect.WithInterceptors(connect.UnaryInterceptorFunc(func(unaryFunc connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, request connect.AnyRequest) (connect.AnyResponse, error) {
-		methodName := getMethodName(request)
+		methodName := getMethodNameFromProcedure(request.Spec().Procedure)
 		if methodName == "Register" {
 			return unaryFunc(ctx, request)
 		}
@@ -60,12 +60,21 @@ var withRunner = connect.WithInterceptors(connect.UnaryInterceptorFunc(func(unar
 	}
 }))
 
-func getMethodName(req connect.AnyRequest) string {
-	splits := strings.Split(req.Spec().Procedure, "/")
-	if len(splits) > 0 {
-		return splits[len(splits)-1]
+// getMethodNameFromProcedure extracts the method name from a Connect procedure,
+// which always has the canonical gRPC form "/<package.Service>/<Method>".
+// It returns an empty string if the procedure is malformed, e.g. when the
+// service segment between the leading slash and the method name is empty.
+func getMethodNameFromProcedure(procedure string) string {
+	if !strings.HasPrefix(procedure, "/") {
+		return ""
 	}
-	return ""
+	rest := procedure[1:]
+	slash := strings.LastIndexByte(rest, '/')
+	// require a non-empty service segment before the slash and a method name after it
+	if slash <= 0 || slash == len(rest)-1 {
+		return ""
+	}
+	return rest[slash+1:]
 }
 
 type runnerCtxKey struct{}
