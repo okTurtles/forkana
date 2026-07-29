@@ -53,7 +53,10 @@ export async function initMarkupCodeMermaid(elMarkup: HTMLElement): Promise<void
       mermaidBlock.classList.add('mermaid-block', 'is-loading', 'tw-hidden');
       mermaidBlock.append(iframe);
 
-      const btn = makeCodeCopyButton();
+      // reuse the generic copy button if it exists, appending it moves it into the mermaid block
+      // and avoids leaving a second overlapping button in the outer container
+      const btn = pre.closest('.code-block-container')
+        ?.querySelector<HTMLButtonElement>(':scope > .code-copy') ?? makeCodeCopyButton();
       btn.setAttribute('data-clipboard-text', source);
       mermaidBlock.append(btn);
 

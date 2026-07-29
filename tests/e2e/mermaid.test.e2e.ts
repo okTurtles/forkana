@@ -117,6 +117,7 @@ test.describe('Mermaid rendering', () => {
       const mermaidBlock = page.locator('.mermaid-block').first();
       const copyButton = mermaidBlock.locator('button[data-clipboard-text]');
       await expect(copyButton).toHaveAttribute('data-clipboard-text', /ArticleAlpha[\s\S]*ArticleBeta/);
+      await expect(page.locator('.code-block-container button[data-clipboard-text]')).toHaveCount(1);
       await mermaidBlock.hover();
       await expect(copyButton).toBeVisible();
       await copyButton.click();
