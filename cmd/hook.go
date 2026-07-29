@@ -195,6 +195,7 @@ Gitea or set your environment appropriately.`, "")
 		GitQuarantinePath:               os.Getenv(private.GitQuarantinePath),
 		GitPushOptions:                  pushOptions(),
 		PullRequestID:                   prID,
+		PushTrigger:                     repo_module.PushTrigger(os.Getenv(repo_module.EnvPushTrigger)),
 		DeployKeyID:                     deployKeyID,
 		ActionPerm:                      int(actionPerm),
 	}
@@ -269,6 +270,9 @@ Gitea or set your environment appropriately.`, "")
 			fmt.Fprintf(out, "\n")
 			lastline = 0
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fail(ctx, "Hook failed: stdin read error", "scanner error: %v", err)
 	}
 
 	if count > 0 {
@@ -410,6 +414,11 @@ Gitea or set your environment appropriately.`, "")
 			results = append(results, resp.Results...)
 			count = 0
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		_ = dWriter.Close()
+		hookPrintResults(results)
+		return fail(ctx, "Hook failed: stdin read error", "scanner error: %v", err)
 	}
 
 	if count == 0 {

@@ -97,7 +97,7 @@ func CheckRepoScopedToken(ctx *Context, repo *repo_model.Repository, level auth_
 	}
 
 	scope, ok := ctx.Data["ApiTokenScope"].(auth_model.AccessTokenScope)
-	if ok { // it's a personal access token but not oauth2 token
+	if ok { // it's an API token (personal access token or OAuth2 token) whose scope must be enforced
 		var scopeMatched bool
 
 		requiredScopes := auth_model.GetRequiredScopes(level, auth_model.AccessTokenScopeCategoryRepository)

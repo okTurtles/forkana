@@ -1,3 +1,9 @@
 .file-view.markup {
   padding: 1rem 0;
 }
+
+/* Tighter gap for the Forkana theme picker; grid layout and the mobile single-column
+   breakpoint are already provided by the base .theme-list rule in web_src/css/user.css. */
+.theme-list.theme-list-grid {
+  gap: 0.75rem;
+}

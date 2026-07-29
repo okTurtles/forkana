@@ -189,6 +189,7 @@ gitea-theme-meta-info {
   /* target-based colors */
   --color-body: #ffffff;
   --color-box-header: #f1f3f5;
+  --color-feeds-card-header: #f6f8fa;
   --color-box-body: #ffffff;
   --color-box-body-highlight: #ecf5fd;
   --color-text-dark: #01050a;

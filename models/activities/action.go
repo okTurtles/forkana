@@ -370,6 +370,24 @@ func (a *Action) GetTag() string {
 	return strings.TrimPrefix(a.RefName, git.TagPrefix)
 }
 
+// GetCardLink returns the primary destination link for a feed card.
+func (a *Action) GetCardLink(ctx context.Context) string {
+	repoLink := a.GetRepoLink(ctx)
+	infos := a.GetIssueInfos()
+	switch a.OpType {
+	case ActionCommentIssue, ActionCommentPull, ActionApprovePullRequest, ActionRejectPullRequest, ActionPullReviewDismissed:
+		return a.GetCommentLink(ctx)
+	case ActionCreateIssue, ActionCloseIssue, ActionReopenIssue:
+		return fmt.Sprintf("%s/issues/%s", repoLink, infos[0])
+	case ActionCreatePullRequest, ActionClosePullRequest, ActionReopenPullRequest,
+		ActionMergePullRequest, ActionAutoMergePullRequest:
+		return fmt.Sprintf("%s/pulls/%s", repoLink, infos[0])
+	case ActionPushTag, ActionPublishRelease:
+		return fmt.Sprintf("%s/releases/tag/%s", repoLink, a.GetTag())
+	}
+	return repoLink
+}
+
 // GetContent returns the action's content.
 func (a *Action) GetContent() string {
 	return a.Content
@@ -455,6 +473,11 @@ type GetFeedsOptions struct {
 	Date               string                 // the day we want activity for: YYYY-MM-DD
 	DontCount          bool                   // do counting in GetFeeds
 	ExcludeRepoOwnerID int64
+	SinceUnix          int64        // filter actions since this Unix timestamp (overrides Date when set)
+	UntilUnix          int64        // filter actions until this Unix timestamp (only applied when SinceUnix is also set)
+	OpTypes            []ActionType // filter by specific action types
+	Keyword            string       // filter by repo (article) name, subject name, or actor name
+	FollowedByUserID   int64        // only actions performed by users this user ID follows
 }
 
 func (opts GetFeedsOptions) shouldExcludeRepoOwner() bool {
@@ -477,6 +500,13 @@ func ActivityReadable(user, doer *user_model.User) bool {
 
 func FeedDateCond(opts GetFeedsOptions) builder.Cond {
 	cond := builder.NewCond()
+	if opts.SinceUnix > 0 {
+		cond = cond.And(builder.Gte{"`action`.created_unix": opts.SinceUnix})
+		if opts.UntilUnix > 0 {
+			cond = cond.And(builder.Lte{"`action`.created_unix": opts.UntilUnix})
+		}
+		return cond
+	}
 	if opts.Date == "" {
 		return cond
 	}
@@ -490,6 +520,39 @@ func FeedDateCond(opts GetFeedsOptions) builder.Cond {
 		cond = cond.And(builder.Gte{"`action`.created_unix": dateLow.Unix()})
 		cond = cond.And(builder.Lte{"`action`.created_unix": dateHigh.Unix()})
 	}
+	return cond
+}
+
+// applyFeedFilters applies the OpTypes/FollowedByUserID/Keyword filters, which are independent
+// of the permission-checking logic in ActivityQueryCondition. GetFeeds calls this on both the
+// "requester is the target user" fast path and the full ActivityQueryCondition path, so these
+// filters take effect regardless of which path built the base condition.
+func (opts GetFeedsOptions) applyFeedFilters(cond builder.Cond) builder.Cond {
+	if len(opts.OpTypes) > 0 {
+		cond = cond.And(builder.In("`action`.op_type", opts.OpTypes))
+	}
+
+	if opts.FollowedByUserID > 0 {
+		cond = cond.And(builder.In("`action`.act_user_id",
+			builder.Select("follow_id").From("follow").Where(builder.Eq{"user_id": opts.FollowedByUserID}),
+		))
+	}
+
+	if opts.Keyword != "" {
+		// match article (repo) name, subject name, or actor name
+		cond = cond.And(builder.Or(
+			builder.In("`action`.repo_id", builder.Select("id").From("repository").Where(builder.Or(
+				db.BuildCaseInsensitiveLike("name", opts.Keyword),
+				builder.In("subject_id", builder.Select("id").From("subject").Where(
+					db.BuildCaseInsensitiveLike("name", opts.Keyword),
+				)),
+			))),
+			builder.In("`action`.act_user_id", builder.Select("id").From("`user`").Where(
+				db.BuildCaseInsensitiveLike("name", opts.Keyword),
+			)),
+		))
+	}
+
 	return cond
 }
 
@@ -577,6 +640,7 @@ func ActivityQueryCondition(ctx context.Context, opts GetFeedsOptions) (builder.
 		cond = cond.And(builder.Eq{"is_deleted": false})
 	}
 
+	cond = opts.applyFeedFilters(cond)
 	cond = cond.And(FeedDateCond(opts))
 
 	return cond, nil

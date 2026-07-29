@@ -4,6 +4,7 @@
 package repo
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 	"unicode"
 
 	"code.gitea.io/gitea/models/db"
+	"code.gitea.io/gitea/modules/optional"
+	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"golang.org/x/text/runes"
@@ -266,6 +269,10 @@ type FindSubjectsOptions struct {
 	OrderBy        string
 	ExcludeIDs     []int64 // IDs to exclude from results
 	ExactMatchOnly bool    // Only find exact matches
+	// Archived filters subjects by whether their root (non-fork) repository is archived.
+	Archived optional.Option[bool]
+	// HasForks filters subjects by whether they have at least one forked repository.
+	HasForks optional.Option[bool]
 }
 
 // ToConds converts options to database conditions
@@ -283,28 +290,65 @@ func (opts FindSubjectsOptions) ToConds() builder.Cond {
 	if len(opts.ExcludeIDs) > 0 {
 		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
+	return subjectArchivedForkConds(cond, opts.Archived, opts.HasForks)
+}
+
+// subjectArchivedForkConds appends the Archived/HasForks filter conditions shared by
+// FindSubjectsOptions.ToConds and FindSimilarSubjects.
+func subjectArchivedForkConds(cond builder.Cond, archived, hasForks optional.Option[bool]) builder.Cond {
+	if archived.Has() {
+		// Matches the "root repository" definition used by CountRootRepositoriesBySubject:
+		// non-fork AND non-empty. Without the is_empty condition, a subject with both an
+		// archived real root and an uncommitted empty repo would match both "Archived" and
+		// "Not Archived".
+		cond = cond.And(builder.In("id", builder.Select("subject_id").From("repository").
+			Where(builder.Eq{"is_fork": false, "is_empty": false, "is_archived": archived.Value()})))
+	}
+	if hasForks.Has() {
+		hasForkSubjectIDs := builder.Select("subject_id").From("repository").Where(builder.Eq{"is_fork": true})
+		if hasForks.Value() {
+			cond = cond.And(builder.In("id", hasForkSubjectIDs))
+		} else {
+			cond = cond.And(builder.NotIn("id", hasForkSubjectIDs))
+		}
+	}
 	return cond
+}
+
+// FindSimilarSubjectsOptions represents options for finding subjects similar to a keyword
+type FindSimilarSubjectsOptions struct {
+	Keyword    string
+	Limit      int
+	ExcludeIDs []int64
+	// OrderBy is the database ORDER BY clause used for the final, displayed order of the
+	// matched subjects (e.g. from SubjectOrderBy). It does not affect which subjects are
+	// selected as matches - that's still driven by keyword similarity.
+	OrderBy string
+	// Archived filters subjects by whether their root (non-fork) repository is archived.
+	Archived optional.Option[bool]
+	// HasForks filters subjects by whether they have at least one forked repository.
+	HasForks optional.Option[bool]
 }
 
 // FindSimilarSubjects finds subjects similar to the given keyword
 // It returns subjects that partially match the keyword, excluding exact matches
-func FindSimilarSubjects(ctx context.Context, keyword string, limit int, excludeIDs []int64) ([]*Subject, error) {
+func FindSimilarSubjects(ctx context.Context, opts FindSimilarSubjectsOptions) ([]*Subject, error) {
+	keyword := strings.ToLower(strings.TrimSpace(opts.Keyword))
 	if keyword == "" {
 		return nil, nil
 	}
 
-	keyword = strings.ToLower(strings.TrimSpace(keyword))
-
 	// Find subjects that contain the keyword but are not exact matches
 	// Fetch more results than needed for better scoring, then trim to limit after sorting
-	fetchLimit := limit * 2
+	fetchLimit := opts.Limit * 2
 	subjects := make([]*Subject, 0, fetchLimit)
-	sess := db.GetEngine(ctx).
-		Where("LOWER(name) LIKE ? AND LOWER(name) != ?", "%"+keyword+"%", keyword)
-	if len(excludeIDs) > 0 {
-		sess = sess.NotIn("id", excludeIDs)
+	cond := builder.NewCond().And(builder.Expr("LOWER(name) LIKE ? AND LOWER(name) != ?", "%"+keyword+"%", keyword))
+	if len(opts.ExcludeIDs) > 0 {
+		cond = cond.And(builder.NotIn("id", opts.ExcludeIDs))
 	}
-	err := sess.OrderBy("updated_unix DESC").
+	cond = subjectArchivedForkConds(cond, opts.Archived, opts.HasForks)
+	err := db.GetEngine(ctx).Where(cond).
+		OrderBy("updated_unix DESC").
 		Limit(fetchLimit).
 		Find(&subjects)
 	if err != nil {
@@ -328,14 +372,58 @@ func FindSimilarSubjects(ctx context.Context, keyword string, limit int, exclude
 		return a.score - b.score
 	})
 
-	// Extract sorted subjects, trimmed to original limit
-	resultLimit := min(len(scoredSubjects), limit)
-	result := make([]*Subject, 0, resultLimit)
+	// Trim to the requested limit: similarity determines *which* subjects are matches
+	resultLimit := min(len(scoredSubjects), opts.Limit)
+	if resultLimit == 0 {
+		return nil, nil
+	}
+	result := make([]*Subject, resultLimit)
 	for i := range resultLimit {
-		result = append(result, scoredSubjects[i].subject)
+		result[i] = scoredSubjects[i].subject
+	}
+
+	// Put the matched subjects in the requested display order (defaulting to the same
+	// order used for the initial candidate fetch above).
+	orderBy := opts.OrderBy
+	if orderBy == "" {
+		orderBy = "updated_unix DESC"
+	}
+	if less := subjectInMemoryComparator(orderBy); less != nil {
+		// Simple column sorts can reorder the already-loaded subjects directly.
+		slices.SortFunc(result, less)
+		return result, nil
+	}
+
+	// Subquery-based orderings (fork/contributor counts) aren't values we have in memory,
+	// so re-fetch the matched subjects from the database in that order.
+	matchedIDs := make([]int64, resultLimit)
+	for i, subject := range result {
+		matchedIDs[i] = subject.ID
+	}
+	result = result[:0]
+	if err := db.GetEngine(ctx).Where(builder.In("id", matchedIDs)).OrderBy(orderBy).Find(&result); err != nil {
+		return nil, err
 	}
 
 	return result, nil
+}
+
+// subjectInMemoryComparator returns a comparator for the given ORDER BY clause if it's a
+// simple column sort, or nil if the clause needs the database to evaluate (e.g. the
+// fork/contributor-count subqueries from SubjectOrderBy).
+func subjectInMemoryComparator(orderBy string) func(a, b *Subject) int {
+	switch orderBy {
+	case "name ASC":
+		return func(a, b *Subject) int { return strings.Compare(a.Name, b.Name) }
+	case "name DESC":
+		return func(a, b *Subject) int { return strings.Compare(b.Name, a.Name) }
+	case "updated_unix ASC":
+		return func(a, b *Subject) int { return cmp.Compare(a.UpdatedUnix, b.UpdatedUnix) }
+	case "updated_unix DESC":
+		return func(a, b *Subject) int { return cmp.Compare(b.UpdatedUnix, a.UpdatedUnix) }
+	default:
+		return nil
+	}
 }
 
 // calculateSimilarityScore calculates a similarity score between keyword and subject name
@@ -366,22 +454,63 @@ func calculateSimilarityScore(keyword, subjectName string) int {
 type SubjectSortType string
 
 const (
-	SubjectSortAlphabetically SubjectSortType = "alphabetically"
-	SubjectSortAlphaReverse   SubjectSortType = "reversealphabetically"
-	SubjectSortNewest         SubjectSortType = "newest"
-	SubjectSortOldest         SubjectSortType = "oldest"
-	SubjectSortRecentUpdate   SubjectSortType = "recentupdate"
-	SubjectSortLeastUpdate    SubjectSortType = "leastupdate"
+	SubjectSortAlphabetically     SubjectSortType = "alphabetically"
+	SubjectSortAlphaReverse       SubjectSortType = "reversealphabetically"
+	SubjectSortRecentUpdate       SubjectSortType = "recentupdate"
+	SubjectSortLeastUpdate        SubjectSortType = "leastupdate"
+	SubjectSortMostForks          SubjectSortType = "mostforks"
+	SubjectSortFewestForks        SubjectSortType = "fewestforks"
+	SubjectSortMostContributors   SubjectSortType = "mostcontributors"
+	SubjectSortFewestContributors SubjectSortType = "fewestcontributors"
 )
 
-// SubjectOrderByMap maps sort types to database ORDER BY clauses
-var SubjectOrderByMap = map[SubjectSortType]string{
-	SubjectSortAlphabetically: "name ASC",
-	SubjectSortAlphaReverse:   "name DESC",
-	SubjectSortNewest:         "created_unix DESC",
-	SubjectSortOldest:         "created_unix ASC",
-	SubjectSortRecentUpdate:   "updated_unix DESC",
-	SubjectSortLeastUpdate:    "updated_unix ASC",
+// sqlBooleanTrueLiteral returns the SQL literal for boolean `true` in the configured
+// database dialect. MSSQL's `bit` type doesn't understand the TRUE/FALSE keywords used
+// by SQLite/MySQL/PostgreSQL and requires the numeric literal instead.
+func sqlBooleanTrueLiteral() string {
+	if setting.Database.Type.IsMSSQL() {
+		return "1"
+	}
+	return "true"
+}
+
+// subjectForkCountSubquery counts the forked repositories under a subject.
+func subjectForkCountSubquery() string {
+	return "(SELECT COUNT(*) FROM repository WHERE repository.subject_id = subject.id AND repository.is_fork = " + sqlBooleanTrueLiteral() + ")"
+}
+
+// subjectContributorCountSubquery counts the distinct repository owners under a subject,
+// used as a proxy for "contributors" since actual git contributor counts are only ever
+// computed live per-repository and are too expensive to aggregate across a whole subject.
+func subjectContributorCountSubquery() string {
+	return "(SELECT COUNT(DISTINCT repository.owner_id) FROM repository WHERE repository.subject_id = subject.id)"
+}
+
+// SubjectOrderBy returns the database ORDER BY clause for the given sort type, or an
+// empty string if the sort type is unrecognized. This is a function rather than a
+// precomputed map because the fork/contributor-count clauses depend on the configured
+// database dialect, which isn't known until settings are loaded at runtime.
+func SubjectOrderBy(sortType SubjectSortType) string {
+	switch sortType {
+	case SubjectSortAlphabetically:
+		return "name ASC"
+	case SubjectSortAlphaReverse:
+		return "name DESC"
+	case SubjectSortRecentUpdate:
+		return "updated_unix DESC"
+	case SubjectSortLeastUpdate:
+		return "updated_unix ASC"
+	case SubjectSortMostForks:
+		return subjectForkCountSubquery() + " DESC"
+	case SubjectSortFewestForks:
+		return subjectForkCountSubquery() + " ASC"
+	case SubjectSortMostContributors:
+		return subjectContributorCountSubquery() + " DESC"
+	case SubjectSortFewestContributors:
+		return subjectContributorCountSubquery() + " ASC"
+	default:
+		return ""
+	}
 }
 
 // CountRepositoriesBySubject counts the number of repositories for a given subject

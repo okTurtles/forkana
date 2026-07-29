@@ -21,6 +21,7 @@ import (
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/private"
+	repo_module "code.gitea.io/gitea/modules/repository"
 	"code.gitea.io/gitea/modules/web"
 	gitea_context "code.gitea.io/gitea/services/context"
 	pull_service "code.gitea.io/gitea/services/pull"
@@ -280,7 +281,7 @@ func preReceiveBranch(ctx *preReceiveContext, oldCommitID, newCommitID string, r
 	// 6. If we're not allowed to push directly
 	if !canPush {
 		// Is this is a merge from the UI/API?
-		if ctx.opts.PullRequestID == 0 {
+		if ctx.opts.PullRequestID == 0 || ctx.opts.PushTrigger != repo_module.PushTriggerPRMergeToBase {
 			// 6a. If we're not merging from the UI/API then there are two ways we got here:
 			//
 			// We are changing a protected file and we're not allowed to do that

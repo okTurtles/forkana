@@ -75,8 +75,8 @@ func (b *Basic) Verify(req *http.Request, w http.ResponseWriter, store DataStore
 		log.Trace("Basic Authorization: Attempting login with username as token")
 	}
 
-	// get oauth2 token's user's ID
-	_, uid := GetOAuthAccessTokenScopeAndUserID(req.Context(), authToken)
+	// get oauth2 token's user's ID and access scope
+	accessTokenScope, uid := GetOAuthAccessTokenScopeAndUserID(req.Context(), authToken)
 	if uid != 0 {
 		log.Trace("Basic Authorization: Valid OAuthAccessToken for user[%d]", uid)
 
@@ -88,13 +88,14 @@ func (b *Basic) Verify(req *http.Request, w http.ResponseWriter, store DataStore
 
 		store.GetData()["LoginMethod"] = OAuth2TokenMethodName
 		store.GetData()["IsApiToken"] = true
+		store.GetData()["ApiTokenScope"] = accessTokenScope
 		return u, nil
 	}
 
 	// check personal access token
 	token, err := auth_model.GetAccessTokenBySHA(req.Context(), authToken)
 	if err == nil {
-		log.Trace("Basic Authorization: Valid AccessToken for user[%d]", uid)
+		log.Trace("Basic Authorization: Valid AccessToken for user[%d]", token.UID)
 		u, err := user_model.GetUserByID(req.Context(), token.UID)
 		if err != nil {
 			log.Error("GetUserByID:  %v", err)
@@ -182,8 +183,6 @@ func GetAccessScope(store DataStore) auth_model.AccessTokenScope {
 		return v.(auth_model.AccessTokenScope)
 	}
 	switch store.GetData()["LoginMethod"] {
-	case OAuth2TokenMethodName:
-		fallthrough
 	case BasicMethodName, AccessTokenMethodName:
 		return auth_model.AccessTokenScopeAll
 	case ActionTokenMethodName:

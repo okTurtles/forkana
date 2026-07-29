@@ -5,7 +5,6 @@ package webtheme
 
 import (
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 
@@ -133,22 +132,34 @@ func initThemes() {
 			foundThemes = append(foundThemes, parseThemeMetaInfo(fileName, util.UnsafeBytesToString(content)))
 		}
 	}
-	if len(setting.UI.Themes) > 0 {
-		allowedThemes := container.SetOf(setting.UI.Themes...)
+	adminAllowlist := len(setting.UI.Themes) > 0
+	themeOrderList := setting.UI.Themes
+	if !adminAllowlist {
+		// Default ordering: standard themes first, then colorblind variants.
+		themeOrderList = []string{
+			"gitea-auto", "gitea-light", "gitea-dark",
+			"gitea-auto-protanopia-deuteranopia", "gitea-light-protanopia-deuteranopia", "gitea-dark-protanopia-deuteranopia",
+		}
+	}
+	themeMap := make(map[string]*ThemeMetaInfo)
+	for _, theme := range foundThemes {
+		themeMap[theme.InternalName] = theme
+	}
+	added := make(map[string]bool)
+	for _, themeName := range themeOrderList {
+		if theme, ok := themeMap[themeName]; ok {
+			availableThemes = append(availableThemes, theme)
+			added[themeName] = true
+		}
+	}
+	// When no admin allowlist is set, append any discovered themes not in the default order list.
+	if !adminAllowlist {
 		for _, theme := range foundThemes {
-			if allowedThemes.Contains(theme.InternalName) {
+			if !added[theme.InternalName] {
 				availableThemes = append(availableThemes, theme)
 			}
 		}
-	} else {
-		availableThemes = foundThemes
 	}
-	sort.Slice(availableThemes, func(i, j int) bool {
-		if availableThemes[i].InternalName == setting.UI.DefaultTheme {
-			return true
-		}
-		return availableThemes[i].DisplayName < availableThemes[j].DisplayName
-	})
 	if len(availableThemes) == 0 {
 		setting.LogStartupProblem(1, log.ERROR, "No theme candidate in asset files, but Gitea requires there should be at least one usable theme")
 		availableThemes = []*ThemeMetaInfo{defaultThemeMetaInfoByInternalName(setting.UI.DefaultTheme)}

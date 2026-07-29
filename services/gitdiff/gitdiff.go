@@ -13,6 +13,7 @@ import (
 	"html/template"
 	"io"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	pull_model "code.gitea.io/gitea/models/pull"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/analyze"
+	"code.gitea.io/gitea/modules/base"
 	"code.gitea.io/gitea/modules/charset"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/git/attribute"
@@ -796,6 +798,41 @@ func skipToNextDiffHead(input *bufio.Reader) (line string, err error) {
 	return line, err
 }
 
+// base64ImageLineRe matches a Markdown image with an inline base64 data URI, capturing
+// the alt text, e.g. ![alt](data:image/png;base64,...). Anchored to the image syntax so
+// prose/code that merely mentions a data URI is not misclassified.
+var base64ImageLineRe = regexp.MustCompile(`!\[([^\]]*)\]\(\s*data:image/[a-zA-Z0-9.+-]+;base64,`)
+
+// isBase64ImageDiffLine reports whether a diff line payload (the content after the +/-/space
+// prefix) is such a base64 image line. These lines are produced by Forkana's article editor
+// and can be very long.
+func isBase64ImageDiffLine(s string) bool {
+	return base64ImageLineRe.MatchString(s)
+}
+
+// base64ImagePlaceholder builds a short, human-readable replacement for an over-long base64
+// image diff line, preserving the +/-/space prefix and the alt text so the rest of the file
+// diff stays visible. firstFragment is the line content read so far (it always contains the
+// "![alt](data:image/...;base64," head); totalLen is the full byte length of the original line.
+func base64ImagePlaceholder(firstFragment string, totalLen int) string {
+	prefix := firstFragment[0]
+	alt := ""
+	if m := base64ImageLineRe.FindStringSubmatch(firstFragment); m != nil {
+		alt = m[1]
+	}
+	decoded := 0
+	if off := strings.Index(firstFragment, ";base64,"); off >= 0 {
+		// payload runs from after ";base64," to the end of the line; ignore the trailing ")".
+		if payloadLen := totalLen - off - len(";base64,") - 1; payloadLen > 0 {
+			decoded = payloadLen * 3 / 4
+		}
+	}
+	if alt != "" {
+		return string(prefix) + fmt.Sprintf("[embedded base64 image: %s, ~%s]", alt, base.FileSize(int64(decoded)))
+	}
+	return string(prefix) + fmt.Sprintf("[embedded base64 image, ~%s]", base.FileSize(int64(decoded)))
+}
+
 func parseHunks(ctx context.Context, curFile *DiffFile, maxLines, maxLineCharacters int, input *bufio.Reader) (lineBytes []byte, isFragment bool, err error) {
 	sb := strings.Builder{}
 
@@ -964,20 +1001,39 @@ func parseHunks(ctx context.Context, curFile *DiffFile, maxLines, maxLineCharact
 
 		line := string(lineBytes)
 		if isFragment {
-			curFile.IsIncomplete = true
-			curFile.IsIncompleteLineTooLong = true
+			// The line is longer than the read buffer (readerSize == max(maxLineCharacters, 4096)),
+			// so this is where over-long lines actually land. If it's a base64 image line stored by
+			// Forkana's article editor, substitute a short placeholder so the rest of the file diff
+			// stays visible instead of being suppressed; otherwise mark it too-long as before.
+			isB64 := len(line) > 1 && isBase64ImageDiffLine(line[1:])
+			if !isB64 {
+				curFile.IsIncomplete = true
+				curFile.IsIncompleteLineTooLong = true
+			}
+			totalLen := len(line)
 			for isFragment {
 				lineBytes, isFragment, err = input.ReadLine()
 				if err != nil {
 					// Now by the definition of ReadLine this cannot be io.EOF
 					return lineBytes, isFragment, fmt.Errorf("unable to ReadLine: %w", err)
 				}
+				totalLen += len(lineBytes)
+			}
+			if isB64 {
+				line = base64ImagePlaceholder(line, totalLen)
 			}
 		}
 		if len(line) > maxLineCharacters {
-			curFile.IsIncomplete = true
-			curFile.IsIncompleteLineTooLong = true
-			line = line[:maxLineCharacters]
+			// The line fit in the read buffer but still exceeds the display limit (only possible
+			// when MaxGitDiffLineCharacters is configured below the buffer size). Same handling:
+			// replace a base64 image line with a placeholder, otherwise truncate and flag it.
+			if len(line) > 1 && isBase64ImageDiffLine(line[1:]) {
+				line = base64ImagePlaceholder(line, len(line))
+			} else {
+				curFile.IsIncomplete = true
+				curFile.IsIncompleteLineTooLong = true
+				line = line[:maxLineCharacters]
+			}
 		}
 		curSection.Lines[len(curSection.Lines)-1].Content = line
 
