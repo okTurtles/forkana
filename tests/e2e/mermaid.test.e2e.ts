@@ -114,8 +114,11 @@ test.describe('Mermaid rendering', () => {
 
       await expectMermaidFrame(page, 0, /ArticleAlpha[\s\S]*ArticleBeta/);
 
-      const copyButton = page.locator('.mermaid-block button[data-clipboard-text]').first();
+      const mermaidBlock = page.locator('.mermaid-block').first();
+      const copyButton = mermaidBlock.locator('button[data-clipboard-text]');
       await expect(copyButton).toHaveAttribute('data-clipboard-text', /ArticleAlpha[\s\S]*ArticleBeta/);
+      await mermaidBlock.hover();
+      await expect(copyButton).toBeVisible();
       await copyButton.click();
       await expect.poll(() => page.evaluate(() => (window as typeof window & {__copiedText?: string}).__copiedText))
         .toContain(articleDiagram);
