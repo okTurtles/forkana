@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"code.gitea.io/gitea/modules/typesniffer"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -104,5 +106,45 @@ func TestServeContentByReadSeeker(t *testing.T) {
 	})
 	t.Run("_range_1-99999", func(t *testing.T) {
 		test(t, http.StatusPartialContent, data[1:])
+	})
+}
+
+func TestServeSetHeaderContentRelated(t *testing.T) {
+	cases := []struct {
+		contentType string
+		csp         string
+	}{
+		{"", serveHeaderCspDefault},
+		{"any", serveHeaderCspDefault},
+		{"application/pdf", serveHeaderCspPdf},
+		{"application/pdf; other", serveHeaderCspPdf},
+		{"audio/mp4", serveHeaderCspAudioVideo},
+		{"video/ogg; other", serveHeaderCspAudioVideo},
+		{"video/mp4", serveHeaderCspAudioVideo},
+		{"audio/wav", serveHeaderCspAudioVideo},
+		// Ensure non-standard PDF mimes fall through to the strict default policy
+		{"x-application/pdf", serveHeaderCspDefault},
+		{typesniffer.MimeTypeImageSvg, serveHeaderCspDefault},
+	}
+	for _, c := range cases {
+		w := httptest.NewRecorder()
+		serveSetHeaderContentRelated(w, c.contentType)
+		csp := w.Header().Get("Content-Security-Policy")
+		assert.Equal(t, c.csp, csp, "content-type: %s", c.contentType)
+		assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options")) // it should always be there
+	}
+
+	// make sure sandboxed
+	require.Contains(t, serveHeaderCspDefault, "; sandbox")
+
+	// A previously set CSP (e.g. from the middleware chain) must be overwritten with the
+	// strict media policy for audio/video, never left as the original restrictive value.
+	t.Run("OverwriteExistingCSPForMedia", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+		serveSetHeaderContentRelated(w, "video/mp4")
+
+		assert.Equal(t, serveHeaderCspAudioVideo, w.Header().Get("Content-Security-Policy"), "pre-existing CSP should be overwritten for video/mp4")
 	})
 }

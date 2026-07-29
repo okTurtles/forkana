@@ -29,7 +29,9 @@
 					<div class="tw-p-0">
 						<textarea id="edit_area" name="content" class="tw-hidden" data-id="repo-{{.Repository.Name}}-{{.TreePath}}"
 							data-previewable-extensions="{{.PreviewableExtensions}}"
-							data-line-wrap-extensions="{{.LineWrapExtensions}}">{{.FileContent}}</textarea>
+							data-line-wrap-extensions="{{.LineWrapExtensions}}"
+							data-raw-file-url="{{.RepoOperationsLink}}/raw/{{.RefTypeNameSubURL}}/{{.TreePath | PathEscapeSegments}}"
+							{{if .IsAttachmentEnabled}}data-attachment-upload-url="{{.RepoOperationsLink}}/editor-attachments"{{end}}>{{.FileContent}}</textarea>
 						<div class="editor-loading is-loading"></div>
 						<div id="toast-editor-container" style="min-height: 500px;"></div>
 					</div>

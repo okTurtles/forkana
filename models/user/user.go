@@ -598,6 +598,7 @@ var (
 		"user",  // user login/activate/settings, etc
 
 		"explore",
+		"feeds", // user feeds page
 		"issues",
 		"pulls",
 		"milestones",

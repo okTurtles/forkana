@@ -39,7 +39,27 @@ type SearchUserOptions struct {
 	IsTwoFactorEnabled optional.Option[bool]
 	IsProhibitLogin    optional.Option[bool]
 	IncludeReserved    bool
+
+	// RepoRole filters users by their relationship to repositories they own: whether
+	// they own at least one root (non-fork, non-empty) repository, own only forks, or
+	// own neither. Empty means no filtering.
+	RepoRole RepoRole
 }
+
+// RepoRole classifies a user by the repositories they own
+type RepoRole string
+
+const (
+	// RepoRoleOwner matches users who own at least one root (non-fork, non-empty)
+	// repository, i.e. they've published at least one article.
+	RepoRoleOwner RepoRole = "owner"
+	// RepoRoleContributor matches users who own at least one forked repository but no
+	// root repository, i.e. they've contributed to others' articles without publishing
+	// one of their own.
+	RepoRoleContributor RepoRole = "contributor"
+	// RepoRoleNeither matches users who own no repositories at all (root or fork).
+	RepoRoleNeither RepoRole = "neither"
+)
 
 func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Session {
 	var cond builder.Cond
@@ -114,6 +134,23 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 
 	if opts.IsProhibitLogin.Has() {
 		cond = cond.And(builder.Eq{"prohibit_login": opts.IsProhibitLogin.Value()})
+	}
+
+	if opts.RepoRole != "" {
+		ownedRootRepoUserIDs := builder.Select("owner_id").From("repository").
+			Where(builder.Eq{"is_fork": false, "is_empty": false})
+		ownedForkRepoUserIDs := builder.Select("owner_id").From("repository").
+			Where(builder.Eq{"is_fork": true})
+		switch opts.RepoRole {
+		case RepoRoleOwner:
+			cond = cond.And(builder.In("`user`.id", ownedRootRepoUserIDs))
+		case RepoRoleContributor:
+			cond = cond.And(builder.NotIn("`user`.id", ownedRootRepoUserIDs)).
+				And(builder.In("`user`.id", ownedForkRepoUserIDs))
+		case RepoRoleNeither:
+			cond = cond.And(builder.NotIn("`user`.id", ownedRootRepoUserIDs)).
+				And(builder.NotIn("`user`.id", ownedForkRepoUserIDs))
+		}
 	}
 
 	e := db.GetEngine(ctx)

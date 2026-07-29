@@ -40,14 +40,11 @@
 				{{.CsrfTokenHtml}}
 				<div class="field">
 					{{ctx.Locale.Tr "settings.theme_desc"}}
-					<a class="muted" target="_blank" href="https://github.com/go-gitea/gitea/blob/main/web_src/css/themes/" data-tooltip-content="{{ctx.Locale.Tr "settings.theme_colorblindness_prompt"}}">
-						{{svg "octicon-question"}} {{ctx.Locale.Tr "settings.theme_colorblindness_help"}}
-					</a>
 				</div>
 				<div class="field">
 					<fieldset class="theme-list-fieldset">
 						<legend class="theme-list-legend">{{ctx.Locale.Tr "settings.ui"}}</legend>
-						<div class="theme-list">
+						<div class="theme-list theme-list-grid">
 							{{range $theme := .AllThemes}}
 							{{$isAuto := StringUtils.HasPrefix $theme.InternalName "gitea-auto"}}
 							<label for="theme_{{$theme.InternalName}}" class="theme-label">
@@ -62,7 +59,8 @@
 										{{template "theme-preview-svg" (dict "class" "")}}
 									{{end}}
 								</div>
-								<span class="theme-name">{{$theme.DisplayName}}</span>
+							{{$localeKey := print "settings.theme_name." $theme.InternalName}}
+							<span class="theme-name">{{if ctx.Locale.HasKey $localeKey}}{{ctx.Locale.Tr $localeKey}}{{else}}{{$theme.DisplayName}}{{end}}</span>
 							</label>
 							{{end}}
 						</div>

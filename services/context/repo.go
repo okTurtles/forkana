@@ -1143,6 +1143,11 @@ func RepoAssignmentBySubject(ctx *Context) {
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
 
+	// Follow (watch) state for the article Follow control rendered in the subject header
+	if ctx.IsSigned {
+		ctx.Data["IsWatchingRepo"] = repo_model.IsWatching(ctx, ctx.Doer.ID, repo.ID)
+	}
+
 	// Set up release count data
 	ctx.Data["NumTags"], err = db.Count[repo_model.Release](ctx, repo_model.FindReleasesOptions{
 		IncludeTags: true,
