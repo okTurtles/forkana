@@ -12,6 +12,9 @@ overrides:
   array.prototype.findlastindex: npm:@nolyfill/array.prototype.findlastindex@^1
   array.prototype.flat: npm:@nolyfill/array.prototype.flat@^1
   array.prototype.flatmap: npm:@nolyfill/array.prototype.flatmap@^1
+  # 9.0.0 races when transpiling stylelint.config.ts: concurrent lints share one
+  # temp file and delete each other's. 9.0.1 makes the temp filename unique.
+  cosmiconfig: ^9.0.1
   es-aggregate-error: npm:@nolyfill/es-aggregate-error@^1
   hasown: npm:@nolyfill/hasown@^1
   is-core-module: npm:@nolyfill/is-core-module@^1
