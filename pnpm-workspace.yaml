@@ -1,3 +1,8 @@
+allowBuilds:
+  '@scarf/scarf': false
+  core-js: false
+  esbuild: false
+  unrs-resolver: false
 # 14 days expressed in minutes (14 * 24 * 60)
 minimumReleaseAge: 20160
 minimumReleaseAgeExclude: []
