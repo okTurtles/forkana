@@ -62,6 +62,7 @@ jobs:
               - "assets/emoji.json"
               - "package.json"
               - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
               - "Makefile"
               - ".eslintrc.cjs"
               - ".npmrc"
@@ -71,6 +72,7 @@ jobs:
               - ".markdownlint.yaml"
               - "package.json"
               - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
 
             actions:
               - ".github/workflows/*"
@@ -94,6 +96,7 @@ jobs:
               - "Makefile"
               - "package.json"
               - "pnpm-lock.yaml"
+              - "pnpm-workspace.yaml"
               - ".spectral.yaml"
 
             yaml:
