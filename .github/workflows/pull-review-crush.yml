@@ -512,9 +512,11 @@ jobs:
           # the token or the runner credentials — better no review than an
           # unsandboxed one. The runner agent dirs are passed as positional
           # arguments so the check probes the exact paths that were masked.
-          # The single quotes are intentional (SC2016): the variables must
-          # be expanded by the inner shell inside the sandbox, not by the
-          # outer shell, or the secret values would leak into the command.
+          # The single quotes are intentional (SC2016): $GH_TOKEN must be
+          # evaluated by the inner shell inside the sandbox. If the outer
+          # shell expanded it, the check would compare a non-empty literal
+          # and always report failure, and the value would be exposed in
+          # the process command line.
           # shellcheck disable=SC2016
           "${BWRAP[@]}" sh -c '
             fail=0
