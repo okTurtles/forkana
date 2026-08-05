@@ -25,5 +25,8 @@ overrides:
   safe-buffer: npm:@nolyfill/safe-buffer@^1
   safe-regex-test: npm:@nolyfill/safe-regex-test@^1
   safer-buffer: npm:@nolyfill/safer-buffer@^1
+  # CVE-2026-59940: lifts the transitive asciinema-player > solid-js > seroval@1.3.2.
+  seroval: ^1.5.3
+  seroval-plugins: ^1.5.3
   string.prototype.includes: npm:@nolyfill/string.prototype.includes@^1
   string.prototype.trimend: npm:@nolyfill/string.prototype.trimend@^1
