@@ -8,7 +8,8 @@
   "features": {
     // installs nodejs into container
     "ghcr.io/devcontainers/features/node:1": {
-      "version": "latest"
+      "version": "latest",
+      "pnpmVersion": "none"
     },
     "ghcr.io/devcontainers/features/git-lfs:1.2.5": {},
     "ghcr.io/jsburckhardt/devcontainer-features/uv:1": {},
@@ -42,5 +43,11 @@
       "onAutoForward": "notify"
     }
   },
+  // pnpm bootstrap is age-gated with --min-release-age to match the 14-day
+  // minimumReleaseAge policy in pnpm-workspace.yaml (`npm install -g` does not
+  // read the repo .npmrc). Must satisfy package.json#engines.pnpm.
+  // Runs in onCreateCommand so it is included in prebuilt containers and is in
+  // place before `make deps` below.
+  "onCreateCommand": "npm install -g --min-release-age=14 \"pnpm@^10.26.0\"",
   "postCreateCommand": "make deps"
 }

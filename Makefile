@@ -883,6 +883,18 @@ update-js: node-check | node_modules ## update js dependencies
 	rm -rf node_modules pnpm-lock.yaml
 	$(NODE_VARS) pnpm install
 	$(NODE_VARS) pnpm exec nolyfill install
+	@# nolyfill writes package.json#pnpm.overrides, which REPLACES (not merges with)
+	@# the overrides in pnpm-workspace.yaml, silently dropping any entry nolyfill
+	@# does not manage, such as the cosmiconfig pin.
+	@if grep -qE '^  "pnpm"[[:space:]]*:' package.json; then \
+		echo "nolyfill re-created package.json#pnpm.overrides."; \
+		echo "That field REPLACES the overrides in pnpm-workspace.yaml rather than merging with"; \
+		echo "them, so every override pnpm-workspace.yaml holds that nolyfill does not manage"; \
+		echo "(e.g. the cosmiconfig pin) is silently dropped. pnpm 11 ignores the field entirely."; \
+		echo "Move the entries into pnpm-workspace.yaml#overrides, delete package.json#pnpm,"; \
+		echo "then re-run 'pnpm install'."; \
+		exit 1; \
+	fi
 	$(NODE_VARS) pnpm install
 	@touch node_modules
 

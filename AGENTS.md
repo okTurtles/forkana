@@ -10,7 +10,7 @@ Forkana is a fork of Gitea (self-hosted git service) that's been repurposed to a
 
 - **Go**: 1.25.1+ (see https://go.dev/doc/manage-install)
 - **Node.js**: 22.6.0+
-- **pnpm**: 10.16.0+ (required for `minimumReleaseAge` dependency age gating)
+- **pnpm**: 10.26.0+ (required for `minimumReleaseAge` dependency age gating and the `allowBuilds` build-script policy)
 - **git-lfs**: Required for binary assets
 - **Make**: Build system
 
