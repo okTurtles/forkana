@@ -612,7 +612,7 @@ func handleRepoHistoryFeed(ctx *context.Context) bool {
 	return false
 }
 
-// prepareArticleView prepares data for the article view (README display with read/edit/history modes)
+// prepareArticleView prepares data for the article view (README display with read/edit/history/settings modes)
 // refPath is the reference path for rendering (e.g., "branch/main" or "commit/abc123")
 func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries []*git.TreeEntry, refPath string) {
 	// Determine mode (read/edit/history)
@@ -624,7 +624,12 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	ctx.Data["IsArticleModeRead"] = mode == "read"
 	ctx.Data["IsArticleModeEdit"] = mode == "edit"
 	ctx.Data["IsArticleModeHistory"] = mode == "history"
+	ctx.Data["IsArticleModeSettings"] = mode == "settings"
 	ctx.Data["ReadmeRequested"] = true
+
+	// The Settings tab is only rendered for the article owner, so ownership must be
+	// known in every mode (edit mode refines this via prepareArticleForkOnEditData).
+	ctx.Data["IsRepoOwner"] = ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
 
 	// Find README.md file
 	readmeFile := findReadmeInEntries(entries)

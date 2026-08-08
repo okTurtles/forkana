@@ -56,6 +56,13 @@
                         data-article-tab="history">
                         {{svg "octicon-history" 16}} History
                     </a>
+                    {{if .IsRepoOwner}}
+                        <a class="{{if .IsArticleModeSettings}}active {{end}}item"
+                            href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (.Repository.GetSubject ctx)) "view" "article" "mode" "settings"}}"
+                            data-article-tab="settings">
+                            {{svg "octicon-gear" 16}} {{ctx.Locale.Tr "repo.settings"}}
+                        </a>
+                    {{end}}
                     <div class="tw-flex tw-items-center tw-gap-2 tw-ml-auto">
                         {{if .IsArticleModeRead}}
                             <div class="ui icon top left pointing dropdown button mini tw-px-3">
@@ -152,6 +159,7 @@
             {{template "shared/repo/read" .}}
             {{template "shared/repo/edit" .}}
             {{template "shared/repo/history" .}}
+            {{template "shared/repo/settings" .}}
         {{end}}
         </div>
     </div>
