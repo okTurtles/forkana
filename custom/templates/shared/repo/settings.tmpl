@@ -1,0 +1,70 @@
+{{define "shared/repo/settings"}}
+{{if and .IsArticleModeSettings .IsRepoOwner}}
+{{$subjectName := .Repository.GetSubject ctx}}
+<div class="ui bottom attached">
+    <div class="tw-flex tw-flex-col md:tw-flex-row tw-gap-[10%]">
+        <div class="md:tw-w-[20%]">
+            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden">
+                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.sidebar_header"}}</h4>
+                <div class="ui vertical fluid secondary menu tw-mt-0 tw-pt-0">
+                    <a class="active item" href="#article-settings-general">{{svg "octicon-gear" 16}}{{ctx.Locale.Tr "repo.settings.article_general"}}</a>
+                </div>
+            </div>
+        </div>
+        <div class="md:tw-w-[70%] tw-flex tw-flex-col tw-gap-4">
+            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-general">
+                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_general"}}</h4>
+                <div class="ui form tw-flex tw-flex-col tw-gap-4 tw-p-4">
+                    <div class="field">
+                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.settings.collaboration.owner"}}</label>
+                        <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
+                            <div class="tw-flex tw-items-center tw-gap-2">
+                                {{ctx.AvatarUtils.Avatar .Repository.Owner 20}}
+                                <span class="tw-font-bold">{{.Repository.Owner.Name}}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.fork"}}</label>
+                        <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
+                            {{if and .Repository.IsFork .Repository.BaseRepo}}
+                                <span>{{.Repository.BaseRepo.OwnerName}} / {{$subjectName}}</span>
+                            {{else}}
+                                <span class="tw-text-gray-600">-</span>
+                            {{end}}
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.settings.article_subject_name"}}</label>
+                        <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
+                            <span>{{$subjectName}}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-transfer">
+                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</h4>
+                <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
+                    <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_desc"}}</p>
+                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</button>
+                </div>
+            </div>
+            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-archive">
+                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_archive"}}</h4>
+                <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
+                    <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_archive_desc"}}</p>
+                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_archive_button"}}</button>
+                </div>
+            </div>
+            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-delete">
+                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_delete"}}</h4>
+                <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
+                    <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_delete_desc"}}</p>
+                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_delete_button"}}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+{{end}}
