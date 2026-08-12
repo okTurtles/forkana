@@ -46,24 +46,99 @@
                 <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</h4>
                 <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
                     <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_desc"}}</p>
-                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</button>
+                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold" data-article-settings-modal="#article-transfer-modal">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</button>
                 </div>
             </div>
             <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-archive">
                 <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_archive"}}</h4>
                 <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
                     <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_archive_desc"}}</p>
-                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_archive_button"}}</button>
+                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold" data-article-settings-modal="#article-archive-modal">{{ctx.Locale.Tr "repo.settings.article_archive_button"}}</button>
                 </div>
             </div>
             <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-delete">
                 <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_delete"}}</h4>
                 <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
                     <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_delete_desc"}}</p>
-                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_delete_button"}}</button>
+                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold" data-article-settings-modal="#article-delete-modal">{{ctx.Locale.Tr "repo.settings.article_delete_button"}}</button>
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<div class="ui small modal" id="article-transfer-modal">
+    <div class="header">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</div>
+    <div class="content">
+        <div class="ui warning message tw-flex tw-items-start tw-gap-2">
+            {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
+            <span>{{ctx.Locale.Tr "repo.settings.article_transfer_notice"}}</span>
+        </div>
+        <p>{{ctx.Locale.Tr "repo.settings.article_transfer_modal_desc"}}</p>
+        <div class="ui form">
+            <div class="field">
+                <label>
+                    {{ctx.Locale.Tr "repo.settings.article_subject_name"}}
+                    <span class="text red">{{$subjectName}}</span>
+                </label>
+            </div>
+            <div class="required field">
+                <label for="article-transfer-new-owner">{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner"}}</label>
+                <input id="article-transfer-new-owner" name="new_owner_name" placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_placeholder"}}" required maxlength="40">
+            </div>
+        </div>
+    </div>
+    <div class="actions">
+        <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+        <button type="button" class="ui red button">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm"}}</button>
+    </div>
+</div>
+
+<div class="ui small modal" id="article-archive-modal">
+    <div class="header">{{ctx.Locale.Tr "repo.settings.article_archive"}}</div>
+    <div class="content">
+        <div class="ui warning message tw-flex tw-items-start tw-gap-2">
+            {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
+            <span>{{ctx.Locale.Tr "repo.settings.article_archive_notice"}}</span>
+        </div>
+        <p>{{ctx.Locale.Tr "repo.settings.article_archive_modal_desc"}}</p>
+        <div class="ui form">
+            <div class="required field">
+                <label for="article-archive-confirm-name">
+                    {{ctx.Locale.Tr "repo.settings.article_confirm_name"}}
+                    <span class="text red">{{$subjectName}}</span>
+                </label>
+                <input id="article-archive-confirm-name" name="article_name" required maxlength="255">
+            </div>
+        </div>
+    </div>
+    <div class="actions">
+        <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+        <button type="button" class="ui red button">{{ctx.Locale.Tr "repo.settings.article_archive_confirm"}}</button>
+    </div>
+</div>
+
+<div class="ui small modal" id="article-delete-modal">
+    <div class="header">{{ctx.Locale.Tr "repo.settings.article_delete"}}</div>
+    <div class="content">
+        <div class="ui warning message tw-flex tw-items-start tw-gap-2">
+            {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
+            <span>{{ctx.Locale.Tr "repo.settings.article_delete_notice"}}</span>
+        </div>
+        <p>{{ctx.Locale.Tr "repo.settings.article_delete_modal_desc"}}</p>
+        <div class="ui form">
+            <div class="required field">
+                <label for="article-delete-confirm-name">
+                    {{ctx.Locale.Tr "repo.settings.article_confirm_name"}}
+                    <span class="text red">{{$subjectName}}</span>
+                </label>
+                <input id="article-delete-confirm-name" name="article_name" required maxlength="255">
+            </div>
+        </div>
+    </div>
+    <div class="actions">
+        <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+        <button type="button" class="ui red button">{{ctx.Locale.Tr "repo.settings.article_delete_confirm"}}</button>
     </div>
 </div>
 {{end}}
