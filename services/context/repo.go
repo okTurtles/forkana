@@ -93,7 +93,7 @@ func (r *Repository) GetObjectFormat() git.ObjectFormat {
 func RepoMustNotBeArchived() func(ctx *Context) {
 	return func(ctx *Context) {
 		if ctx.Repo.Repository.IsArchived {
-			ctx.NotFound(errors.New(ctx.Locale.TrString("repo.archive.title")))
+			ctx.HTTPError(http.StatusForbidden, ctx.Locale.TrString("repo.archive.title"))
 		}
 	}
 }

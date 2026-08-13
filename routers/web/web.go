@@ -1238,7 +1238,7 @@ func registerWebRoutes(m *web.Router) {
 	// Article-based file operation routes - mirror the repository-based routes but use subject name
 	m.Group("/article/{username}/{subjectname}", func() {
 		registerRepoFileEditorRoutes(m, reqRepoCodeWriter)
-	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
+	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader, context.RepoMustNotBeArchived())
 	// end "/article/{username}/{subjectname}": article-based file operations
 
 	// Article-based pull request routes - mirror the repository-based routes but use subject name

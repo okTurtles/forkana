@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"code.gitea.io/gitea/models/perm"
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -71,6 +72,75 @@ func TestArticleSettingsArchiveSuccess(t *testing.T) {
 
 	archived := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
 	assert.True(t, archived.IsArchived)
+}
+
+func TestArticleArchivedReadOnly(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, true))
+
+	session := loginUser(t, owner.Name)
+	articleURL := fmt.Sprintf("/article/%s/%s?view=article", owner.Name, subjectName)
+
+	t.Run("Notice", func(t *testing.T) {
+		req := NewRequest(t, "GET", articleURL)
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		notice := htmlDoc.Find("#article-archived-notice")
+		require.Equal(t, 1, notice.Length())
+		assert.Contains(t, notice.Text(), "This article has been archived by the owner on")
+		assert.Contains(t, notice.Text(), "It is read-only.")
+		// the notice must carry the archival date, not the last update date
+		// (the date element renders its ISO fallback server-side)
+		assert.Contains(t, notice.Text(), repo.ArchivedUnix.AsTime().Format(time.DateOnly))
+	})
+
+	t.Run("EditTabHidden", func(t *testing.T) {
+		// hidden for the owner too, not only for readers
+		req := NewRequest(t, "GET", articleURL)
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		AssertHTMLElement(t, htmlDoc, `[data-article-tab="edit"]`, false)
+		AssertHTMLElement(t, htmlDoc, `[data-article-tab="read"]`, true)
+	})
+
+	t.Run("EditorRoutesForbidden", func(t *testing.T) {
+		csrf := GetUserCSRFToken(t, session)
+		editorPath := fmt.Sprintf("/article/%s/%s", owner.Name, subjectName)
+
+		for _, tc := range []struct {
+			name   string
+			method string
+			path   string
+		}{
+			{"EditGet", "GET", editorPath + "/_edit/master/README.md"},
+			{"EditPost", "POST", editorPath + "/_edit/master/README.md"},
+			{"NewGet", "GET", editorPath + "/_new/master/new.md"},
+			{"NewPost", "POST", editorPath + "/_new/master/new.md"},
+			{"DeleteGet", "GET", editorPath + "/_delete/master/README.md"},
+			{"DeletePost", "POST", editorPath + "/_delete/master/README.md"},
+			{"UploadGet", "GET", editorPath + "/_upload/master"},
+			{"UploadPost", "POST", editorPath + "/_upload/master"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				var req *RequestWrapper
+				if tc.method == "GET" {
+					req = NewRequest(t, "GET", tc.path)
+				} else {
+					req = NewRequestWithValues(t, "POST", tc.path, map[string]string{
+						"_csrf":         csrf,
+						"tree_path":     "README.md",
+						"content":       "archived write attempt",
+						"commit_choice": "direct",
+					})
+				}
+				session.MakeRequest(t, req, http.StatusForbidden)
+			})
+		}
+	})
 }
 
 func TestArticleSettingsArchiveUnauthorized(t *testing.T) {
