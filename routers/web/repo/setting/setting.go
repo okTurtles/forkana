@@ -956,16 +956,24 @@ func handleSettingsPostArchive(ctx *context.Context) {
 		return
 	}
 
+	// The article settings UI posts to this same dispatcher, but it must return to
+	// the article view instead of the repository settings page.
+	fromArticle := ctx.FormBool("redirect_to_article")
+	redirectURL := ctx.Repo.RepoLink + "/settings"
+	if fromArticle {
+		redirectURL = ctx.Repo.RepoLink + "?view=article&mode=settings"
+	}
+
 	if repo.IsMirror {
 		ctx.Flash.Error(ctx.Tr("repo.settings.archive.error_ismirror"))
-		ctx.Redirect(ctx.Repo.RepoLink + "/settings")
+		ctx.Redirect(redirectURL)
 		return
 	}
 
 	if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {
 		log.Error("Tried to archive a repo: %s", err)
 		ctx.Flash.Error(ctx.Tr("repo.settings.archive.error"))
-		ctx.Redirect(ctx.Repo.RepoLink + "/settings")
+		ctx.Redirect(redirectURL)
 		return
 	}
 
@@ -976,10 +984,14 @@ func handleSettingsPostArchive(ctx *context.Context) {
 	// update issue indexer
 	issue_indexer.UpdateRepoIndexer(ctx, repo.ID)
 
-	ctx.Flash.Success(ctx.Tr("repo.settings.archive.success"))
+	if fromArticle {
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_archive_success"))
+	} else {
+		ctx.Flash.Success(ctx.Tr("repo.settings.archive.success"))
+	}
 
 	log.Trace("Repository was archived: %s/%s", ctx.Repo.Owner.Name, repo.Name)
-	ctx.Redirect(ctx.Repo.RepoLink + "/settings")
+	ctx.Redirect(redirectURL)
 }
 
 func handleSettingsPostUnarchive(ctx *context.Context) {

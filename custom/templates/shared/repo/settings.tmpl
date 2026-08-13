@@ -113,7 +113,11 @@
         	{{ctx.Locale.Tr "repo.settings.article_archive_modal_desc"}}
         	<span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
         </p>
-        <div class="ui form">
+        <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
+            {{.CsrfTokenHtml}}
+            <input type="hidden" name="action" value="archive">
+            <input type="hidden" name="redirect_to_article" value="true">
+            <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
             <div class="required field">
                 <label for="article-archive-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_archive_confirm_label"}}</label>
                 <input id="article-archive-confirm-name" name="article_name" required maxlength="255"
@@ -121,11 +125,11 @@
                     data-article-confirm-value="{{.Repository.OwnerName}}/{{$subjectName}}"
                     data-article-confirm-target="#article-archive-submit">
             </div>
-        </div>
-    </div>
-    <div class="actions">
-        <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
-        <button type="button" id="article-archive-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_archive_confirm"}}</button>
+            <div class="actions">
+                <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+                <button type="submit" id="article-archive-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_archive_confirm"}}</button>
+            </div>
+        </form>
     </div>
 </div>
 {{end}}

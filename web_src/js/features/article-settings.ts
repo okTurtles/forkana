@@ -11,8 +11,8 @@ function syncConfirmInput(input: HTMLInputElement): void {
   target.disabled = !matches;
 }
 
-// Opens the Article settings modals (transfer/archive/delete). The modal
-// content and submission handling are not wired up yet.
+// Opens the Article settings modals (transfer/archive/delete). Submission is
+// handled by the forms inside the modals.
 export function initArticleSettings(): void {
   if (!document.querySelector('#article-settings-general')) return;
 
