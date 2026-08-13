@@ -193,6 +193,13 @@ export function initRepoHistory() {
   let articleGuidance: HTMLElement | null = null;
   let articleEmptyEl: HTMLElement | null = null;
   let articleContentEl: HTMLElement | null = null;
+  const archivedNoticeEl = document.querySelector<HTMLElement>('#article-archived-notice');
+  // the notice is hidden outside the article view, so the archived state is read from its text
+  let isArchivedArticle = Boolean(archivedNoticeText(archivedNoticeEl));
+
+  function archivedNoticeText(el: HTMLElement | null): string {
+    return el?.querySelector('[data-role="article-archived-text"]')?.textContent.trim() || '';
+  }
 
   function collectArticleRefs() {
     if (!articleSection) return;
@@ -233,6 +240,25 @@ export function initRepoHistory() {
   function showArticleContent() {
     toggleHidden(articleEmptyEl, true);
     toggleHidden(articleContentEl, false);
+  }
+
+  // The archived notice lives above the article section so it stays visible across
+  // all article modes, so it has to be updated separately when a new article is loaded.
+  // An incoming article without archival metadata clears the banner of the previous one.
+  function syncArchivedNotice(doc: Document) {
+    if (!archivedNoticeEl) return;
+    const incoming = doc.querySelector<HTMLElement>('#article-archived-notice');
+    const incomingText = archivedNoticeText(incoming);
+    isArchivedArticle = Boolean(incomingText);
+    const text = archivedNoticeEl.querySelector('[data-role="article-archived-text"]');
+    if (text) text.textContent = incomingText;
+    updateArchivedNoticeVisibility();
+  }
+
+  function updateArchivedNoticeVisibility() {
+    if (!archivedNoticeEl) return;
+    // the notice is a flex container, so it has to be hidden by class rather than by attribute
+    archivedNoticeEl.classList.toggle('tw-hidden', !isArchivedArticle || activeView.value !== 'article');
   }
 
   function syncNavActive() {
@@ -277,6 +303,7 @@ export function initRepoHistory() {
     toggleHidden(bubbleSection, activeView.value !== 'bubble');
     toggleHidden(tableSection, activeView.value !== 'table');
     toggleHidden(articleSection, activeView.value !== 'article');
+    updateArchivedNoticeVisibility();
   }
 
   function updateCheckboxes() {
@@ -465,6 +492,7 @@ export function initRepoHistory() {
       if (articleRequestToken.value !== currentToken) return;
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
+      syncArchivedNotice(doc);
       const newSection = doc.querySelector('.history-view-section--article');
       if (newSection && articleSection) {
         articleSection.innerHTML = newSection.innerHTML;

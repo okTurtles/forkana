@@ -39,12 +39,6 @@
                     </span>
                 {{end}}
             </div>
-            {{if .Repository.IsArchived}}
-                <div class="ui warning message tw-flex tw-items-start tw-gap-2" id="article-archived-notice">
-                    {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
-                    <span>{{ctx.Locale.Tr "repo.settings.article_archived_notice" (DateUtils.AbsoluteLong (Iif .Repository.ArchivedUnix.IsZero .Repository.UpdatedUnix .Repository.ArchivedUnix))}}</span>
-                </div>
-            {{end}}
             <div class="tw-flex tw-items-center tw-gap-4" id="article-tabs">
                 <div class="ui top attached tabular menu tw-my-10 tw-gap-1">
                     <a class="{{if .IsArticleModeRead}}active {{end}}item"

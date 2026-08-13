@@ -144,6 +144,19 @@
 }
 </style>
 <div role="main" aria-label="{{.Title}}" class="page-content repository file list">
+    {{/* Rendered outside the article section so it stays visible on every article
+    mode (read, edit, history, settings); repo-history.ts keeps it in sync when the
+    article section is swapped or another view is selected. */}}
+    {{/* tw-hidden, not the hidden attribute: tw-flex would otherwise win over the UA [hidden] rule */}}
+    <div class="ui warning message tw-mt-0 tw-flex tw-items-start tw-gap-2{{if not (and .Repository.IsArchived .IsArticleView)}} tw-hidden{{end}}" id="article-archived-notice">
+        {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
+        <span data-role="article-archived-text">
+            {{- if .Repository.IsArchived -}}
+                {{ctx.Locale.Tr "repo.settings.article_archived_notice" (DateUtils.AbsoluteLong (Iif .Repository.ArchivedUnix.IsZero .Repository.UpdatedUnix .Repository.ArchivedUnix))}}
+            {{- end -}}
+        </span>
+    </div>
+
     {{/* Login banner for non-authenticated users */}}
     {{if and .IsArticleModeEdit (not .IsSigned)}}
     <div class="ui warning message tw-mt-0">
@@ -154,7 +167,6 @@
     </div>
     {{end}}
     {{template "repo/header" .}}
-
 
     <div class="ui container">
         {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscapeSegments (.Repository.GetSubject ctx)) }}

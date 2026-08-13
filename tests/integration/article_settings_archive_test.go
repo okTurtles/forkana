@@ -6,6 +6,7 @@ package integration
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,9 +55,17 @@ func TestArticleSettingsArchiveSuccess(t *testing.T) {
 	session := loginUser(t, owner.Name)
 	settingsURL := fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name)
 
-	req := NewRequestWithValues(t, "POST", settingsURL,
+	// the archived notice is rendered but hidden while the article is not archived
+	req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s?view=article", owner.Name, subjectName))
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	notice := NewHTMLParser(t, resp.Body).Find("#article-archived-notice")
+	require.Equal(t, 1, notice.Length())
+	assert.True(t, notice.HasClass("tw-hidden"))
+	assert.Empty(t, strings.TrimSpace(notice.Text()))
+
+	req = NewRequestWithValues(t, "POST", settingsURL,
 		archiveForm(GetUserCSRFToken(t, session), owner.Name, subjectName))
-	resp := session.MakeRequest(t, req, http.StatusSeeOther)
+	resp = session.MakeRequest(t, req, http.StatusSeeOther)
 
 	articleSettingsURL := fmt.Sprintf("/article/%s/%s?view=article&mode=settings", owner.Name, subjectName)
 	assert.Equal(t, articleSettingsURL, test.RedirectURL(resp))
@@ -83,19 +92,40 @@ func TestArticleArchivedReadOnly(t *testing.T) {
 	session := loginUser(t, owner.Name)
 	articleURL := fmt.Sprintf("/article/%s/%s?view=article", owner.Name, subjectName)
 
-	t.Run("Notice", func(t *testing.T) {
-		req := NewRequest(t, "GET", articleURL)
-		resp := session.MakeRequest(t, req, http.StatusOK)
-		htmlDoc := NewHTMLParser(t, resp.Body)
+	// the notice sits above the article section, so it renders on every mode
+	for _, mode := range []string{"read", "history", "settings"} {
+		t.Run("Notice_"+mode, func(t *testing.T) {
+			req := NewRequest(t, "GET", articleURL+"&mode="+mode)
+			resp := session.MakeRequest(t, req, http.StatusOK)
+			htmlDoc := NewHTMLParser(t, resp.Body)
 
-		notice := htmlDoc.Find("#article-archived-notice")
-		require.Equal(t, 1, notice.Length())
-		assert.Contains(t, notice.Text(), "This article has been archived by the owner on")
-		assert.Contains(t, notice.Text(), "It is read-only.")
-		// the notice must carry the archival date, not the last update date
-		// (the date element renders its ISO fallback server-side)
-		assert.Contains(t, notice.Text(), repo.ArchivedUnix.AsTime().Format(time.DateOnly))
-	})
+			notice := htmlDoc.Find("#article-archived-notice")
+			require.Equal(t, 1, notice.Length())
+			// the container is a flex box, so it is hidden by class, not by the hidden attribute
+			assert.False(t, notice.HasClass("tw-hidden"))
+			assert.Contains(t, notice.Text(), "This article has been archived by the owner on")
+			assert.Contains(t, notice.Text(), "It is read-only.")
+			// the notice must carry the archival date, not the last update date
+			// (the date element renders its ISO fallback server-side)
+			assert.Contains(t, notice.Text(), repo.ArchivedUnix.AsTime().Format(time.DateOnly))
+			// it sits at the very top of the page, above the repository header
+			assert.Equal(t, 1, notice.NextAllFiltered(".secondary-nav").Length())
+			assert.Equal(t, 0, notice.PrevAllFiltered(".secondary-nav").Length())
+		})
+	}
+
+	// the notice belongs to the article view only
+	for _, view := range []string{"bubble", "table"} {
+		t.Run("NoticeHidden_"+view, func(t *testing.T) {
+			req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s?view=%s", subjectName, view))
+			resp := session.MakeRequest(t, req, http.StatusOK)
+			htmlDoc := NewHTMLParser(t, resp.Body)
+
+			notice := htmlDoc.Find("#article-archived-notice")
+			require.Equal(t, 1, notice.Length())
+			assert.True(t, notice.HasClass("tw-hidden"))
+		})
+	}
 
 	t.Run("EditTabHidden", func(t *testing.T) {
 		// hidden for the owner too, not only for readers
