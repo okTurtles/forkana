@@ -907,10 +907,22 @@ func handleSettingsPostDelete(ctx *context.Context) {
 		ctx.HTTPError(http.StatusNotFound)
 		return
 	}
-	if repo.Name != form.RepoName {
+
+	// The article settings UI confirms the deletion with "<owner>/<subject>" and
+	// must return to the owner profile instead of the repository settings page.
+	fromArticle := ctx.FormBool("redirect_to_article")
+	if fromArticle {
+		if form.ArticleName != ctx.Repo.Owner.Name+"/"+repo.GetSubject(ctx) {
+			ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
+			ctx.Redirect(ctx.Repo.RepoLink + "?view=article&mode=settings")
+			return
+		}
+	} else if repo.Name != form.RepoName {
 		ctx.RenderWithErr(ctx.Tr("form.enterred_invalid_repo_name"), tplSettingsOptions, nil)
 		return
 	}
+
+	subjectID := repo.SubjectID
 
 	// Close the gitrepository before doing this.
 	if ctx.Repo.GitRepo != nil {
@@ -923,8 +935,24 @@ func handleSettingsPostDelete(ctx *context.Context) {
 	}
 	log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
 
-	ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
-	ctx.Redirect(ctx.Repo.Owner.DashboardLink())
+	// The subject only exists to group articles, so drop it once its last article is gone.
+	if subjectID > 0 {
+		count, err := repo_model.CountRepositoriesBySubject(ctx, subjectID)
+		if err != nil {
+			log.Error("CountRepositoriesBySubject [%d]: %v", subjectID, err)
+		} else if count == 0 {
+			if err := repo_model.DeleteSubject(ctx, subjectID); err != nil {
+				log.Error("DeleteSubject [%d]: %v", subjectID, err)
+			}
+		}
+	}
+
+	if fromArticle {
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_delete_success"))
+	} else {
+		ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
+	}
+	ctx.Redirect(ctx.Repo.Owner.HomeLink())
 }
 
 func handleSettingsPostDeleteWiki(ctx *context.Context) {

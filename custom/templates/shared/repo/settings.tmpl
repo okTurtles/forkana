@@ -135,26 +135,36 @@
 {{end}}
 
 <div class="ui small modal" id="article-delete-modal">
-    <div class="header">{{ctx.Locale.Tr "repo.settings.article_delete"}}</div>
+    <div class="header">{{ctx.Locale.Tr "repo.settings.article_delete_modal_header"}}</div>
     <div class="content">
         <div class="ui warning message tw-flex tw-items-start tw-gap-2">
             {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
-            <span>{{ctx.Locale.Tr "repo.settings.article_delete_notice"}}</span>
+            <ul class="tw-m-0 tw-pl-4">
+                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_1"}}</li>
+                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_2" (printf "%s/%s" .Repository.OwnerName $subjectName)}}</li>
+            </ul>
         </div>
-        <p>{{ctx.Locale.Tr "repo.settings.article_delete_modal_desc"}}</p>
-        <div class="ui form">
+        <p class="tw-mt-8 tw-mb-5">
+            {{ctx.Locale.Tr "repo.settings.article_delete_modal_desc"}}
+            <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
+        </p>
+        <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
+            {{.CsrfTokenHtml}}
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="redirect_to_article" value="true">
+            <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
             <div class="required field">
-                <label for="article-delete-confirm-name">
-                    {{ctx.Locale.Tr "repo.settings.article_confirm_name"}}
-                    <span class="text">{{$subjectName}}</span>
-                </label>
-                <input id="article-delete-confirm-name" name="article_name" required maxlength="255">
+                <label for="article-delete-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_delete_confirm_label"}}</label>
+                <input id="article-delete-confirm-name" name="article_name" required maxlength="255"
+                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                    data-article-confirm-value="{{.Repository.OwnerName}}/{{$subjectName}}"
+                    data-article-confirm-target="#article-delete-submit">
             </div>
-        </div>
-    </div>
-    <div class="actions">
-        <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
-        <button type="button" class="ui red button">{{ctx.Locale.Tr "repo.settings.article_delete_confirm"}}</button>
+            <div class="actions">
+                <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+                <button type="submit" id="article-delete-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_delete_confirm"}}</button>
+            </div>
+        </form>
     </div>
 </div>
 {{end}}
