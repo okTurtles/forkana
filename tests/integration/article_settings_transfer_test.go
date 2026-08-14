@@ -122,7 +122,7 @@ func TestArticleSettingsTransferCandidates(t *testing.T) {
 	session := loginUser(t, owner.Name)
 	candidatesURL := fmt.Sprintf("/article/%s/%s/settings/transfer_candidates", owner.Name, subjectName)
 
-	search := func(t *testing.T, keyword string) []string {
+	searchUsers := func(t *testing.T, keyword string) []*api.User {
 		t.Helper()
 		req := NewRequest(t, "GET", candidatesURL+"?q="+url.QueryEscape(keyword))
 		resp := session.MakeRequest(t, req, http.StatusOK)
@@ -130,8 +130,14 @@ func TestArticleSettingsTransferCandidates(t *testing.T) {
 			Data []*api.User `json:"data"`
 		}
 		DecodeJSON(t, resp, &body)
-		logins := make([]string, 0, len(body.Data))
-		for _, u := range body.Data {
+		return body.Data
+	}
+
+	search := func(t *testing.T, keyword string) []string {
+		t.Helper()
+		users := searchUsers(t, keyword)
+		logins := make([]string, 0, len(users))
+		for _, u := range users {
 			logins = append(logins, u.UserName)
 		}
 		return logins
@@ -139,7 +145,17 @@ func TestArticleSettingsTransferCandidates(t *testing.T) {
 
 	t.Run("MatchesFullName", func(t *testing.T) {
 		recipient := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
-		assert.Contains(t, search(t, recipient.FullName), recipient.Name)
+		users := searchUsers(t, recipient.FullName)
+
+		var found *api.User
+		for _, u := range users {
+			if u.UserName == recipient.Name {
+				found = u
+			}
+		}
+		require.NotNil(t, found)
+		// the dropdown renders the avatar next to the username
+		assert.NotEmpty(t, found.AvatarURL)
 	})
 
 	t.Run("ExcludesCurrentOwner", func(t *testing.T) {

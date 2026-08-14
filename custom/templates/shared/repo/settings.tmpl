@@ -91,6 +91,38 @@
 </div>
 
 {{if not .Repository.IsArchived}}
+<style>
+/* give the owner search results room to breathe, without the fomantic separators */
+#article-transfer-owner-search > .results .result {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: none !important;
+}
+#article-transfer-owner-search > .results .result .image,
+#article-transfer-owner-search > .results .result .image img,
+#article-transfer-owner-search > .results .result > img {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+#article-transfer-owner-search > .results .result .content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+    margin: 0;
+}
+#article-transfer-owner-search > .results .result .title {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+</style>
 <div class="ui small modal" id="article-transfer-modal">
     <div class="header">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_header"}}</div>
     <div class="content">
@@ -113,6 +145,15 @@
                         <input id="article-transfer-new-owner" class="prompt" name="new_owner_name" required maxlength="255"
                             autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
                             placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_placeholder"}}">
+                    </div>
+                    <div id="article-transfer-owner-selection" class="tw-hidden tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded">
+                        <div class="tw-flex tw-items-center tw-gap-2">
+                            <img id="article-transfer-owner-avatar" class="ui avatar image" width="20" height="20" src="" alt aria-hidden="true">
+                            <span id="article-transfer-owner-name" class="tw-font-bold"></span>
+                        </div>
+                        <button type="button" id="article-transfer-owner-clear" class="btn interact-fg"
+                            data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_clear"}}"
+                            aria-label="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_clear"}}">{{svg "octicon-x" 16}}</button>
                     </div>
                 </div>
             </div>
