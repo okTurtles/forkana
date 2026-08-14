@@ -629,7 +629,21 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 
 	// The Settings tab is only rendered for the article owner, so ownership must be
 	// known in every mode (edit mode refines this via prepareArticleForkOnEditData).
-	ctx.Data["IsRepoOwner"] = ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
+	isRepoOwner := ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
+	ctx.Data["IsRepoOwner"] = isRepoOwner
+
+	// The settings tab swaps the Transfer section for a "Cancel transfer" one while a
+	// transfer awaits the recipient's confirmation.
+	if isRepoOwner && ctx.Repo.Repository.Status == repo_model.RepositoryPendingTransfer {
+		transfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
+		if err != nil {
+			log.Error("GetPendingRepositoryTransfer [%d]: %v", ctx.Repo.Repository.ID, err)
+		} else if err := transfer.LoadRecipient(ctx); err != nil {
+			log.Error("LoadRecipient [%d]: %v", transfer.ID, err)
+		} else {
+			ctx.Data["ArticleTransferRecipient"] = transfer.Recipient
+		}
+	}
 
 	// Find README.md file
 	readmeFile := findReadmeInEntries(entries)

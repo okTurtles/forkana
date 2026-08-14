@@ -7,6 +7,11 @@
             <p>{{.Flash.SuccessMsg | SanitizeHTML}}</p>
         </div>
     {{end}}
+    {{if .Flash.ErrorMsg}}
+        <div class="ui negative message flash-message tw-sticky tw-top-0 tw-z-10 tw-mb-4">
+            <p>{{.Flash.ErrorMsg | SanitizeHTML}}</p>
+        </div>
+    {{end}}
     <div class="tw-flex tw-flex-col md:tw-flex-row tw-gap-[10%]">
         <div class="md:tw-w-[20%]">
             <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden">
@@ -51,8 +56,19 @@
                 <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-transfer">
                     <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</h4>
                     <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
-                        <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_desc"}}</p>
-                        <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold" data-article-settings-modal="#article-transfer-modal">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</button>
+                        {{if .ArticleTransferRecipient}}
+                            <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_pending" .ArticleTransferRecipient.DisplayName}}</p>
+                            <form class="tw-m-0" action="{{.RepoOperationsLink}}/settings" method="post">
+                                {{.CsrfTokenHtml}}
+                                <input type="hidden" name="action" value="cancel_transfer">
+                                <input type="hidden" name="redirect_to_article" value="true">
+                                <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
+                                <button type="submit" id="article-transfer-cancel" class="ui button tw-m-0 tw-text-red tw-font-bold tw-whitespace-nowrap">{{ctx.Locale.Tr "repo.settings.article_transfer_cancel"}}</button>
+                            </form>
+                        {{else}}
+                            <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_desc"}}</p>
+                            <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold tw-whitespace-nowrap" data-article-settings-modal="#article-transfer-modal">{{ctx.Locale.Tr "repo.settings.article_transfer_button"}}</button>
+                        {{end}}
                     </div>
                 </div>
                 <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-archive">
@@ -76,29 +92,40 @@
 
 {{if not .Repository.IsArchived}}
 <div class="ui small modal" id="article-transfer-modal">
-    <div class="header">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</div>
+    <div class="header">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_header"}}</div>
     <div class="content">
         <div class="ui warning message tw-flex tw-items-start tw-gap-2">
             {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
             <span>{{ctx.Locale.Tr "repo.settings.article_transfer_notice"}}</span>
         </div>
-        <p>{{ctx.Locale.Tr "repo.settings.article_transfer_modal_desc"}}</p>
-        <div class="ui form">
-            <div class="field">
-                <label>
-                    {{ctx.Locale.Tr "repo.settings.article_subject_name"}}
-                    <span class="text">{{$subjectName}}</span>
-                </label>
-            </div>
+        <p class="tw-mt-8">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_desc"}}</p>
+        <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
+            {{.CsrfTokenHtml}}
+            <input type="hidden" name="action" value="transfer">
+            <input type="hidden" name="redirect_to_article" value="true">
+            <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
             <div class="required field">
-                <label for="article-transfer-new-owner">{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner"}}</label>
-                <input id="article-transfer-new-owner" name="new_owner_name" placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_placeholder"}}" required maxlength="40">
+                <label for="article-transfer-new-owner" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner"}}</label>
+                <input id="article-transfer-new-owner" name="new_owner_name" required maxlength="255"
+                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                    placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_placeholder"}}">
             </div>
-        </div>
-    </div>
-    <div class="actions">
-        <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
-        <button type="button" class="ui red button">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm"}}</button>
+            <p class="tw-mt-5 tw-mb-5">
+                {{ctx.Locale.Tr "repo.settings.article_transfer_modal_confirm_desc"}}
+                <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
+            </p>
+            <div class="required field">
+                <label for="article-transfer-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm_label"}}</label>
+                <input id="article-transfer-confirm-name" name="article_name" required maxlength="255"
+                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                    data-article-confirm-value="{{.Repository.OwnerName}}/{{$subjectName}}"
+                    data-article-confirm-target="#article-transfer-submit">
+            </div>
+            <div class="actions">
+                <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+                <button type="submit" id="article-transfer-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_transfer_confirm"}}</button>
+            </div>
+        </form>
     </div>
 </div>
 

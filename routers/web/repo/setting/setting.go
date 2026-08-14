@@ -17,6 +17,7 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/gitrepo"
+	"code.gitea.io/gitea/modules/htmlutil"
 	"code.gitea.io/gitea/modules/indexer/code"
 	issue_indexer "code.gitea.io/gitea/modules/indexer/issues"
 	"code.gitea.io/gitea/modules/indexer/stats"
@@ -808,6 +809,95 @@ func handleSettingsPostConvertFork(ctx *context.Context) {
 	ctx.Redirect(repo.Link())
 }
 
+// articleSettingsURL is where the article settings modals return to, the repository
+// settings page is not reachable from the article UI.
+func articleSettingsURL(ctx *context.Context) string {
+	return ctx.Repo.RepoLink + "?view=article&mode=settings"
+}
+
+// resolveArticleTransferRecipient finds the transfer recipient by their first and
+// last name, which is what the article transfer modal asks for. It reports the
+// failure through a flash message and returns nil when the name is unusable.
+func resolveArticleTransferRecipient(ctx *context.Context, fullName string) *user_model.User {
+	candidates, err := user_model.GetUsersByFullName(ctx, fullName)
+	if err != nil {
+		ctx.ServerError("GetUsersByFullName", err)
+		return nil
+	}
+
+	switch len(candidates) {
+	case 0:
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
+	case 1:
+		if candidates[0].ID == ctx.Repo.Owner.ID {
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_is_current"))
+			return nil
+		}
+		return candidates[0]
+	default:
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_ambiguous"))
+	}
+	return nil
+}
+
+// handleArticleSettingsPostTransfer serves the article transfer modal, which confirms
+// with "<owner>/<subject>", identifies the recipient by full name and always reports
+// back on the article settings page.
+func handleArticleSettingsPostTransfer(ctx *context.Context) {
+	form := web.GetForm(ctx).(*forms.RepoSettingForm)
+	repo := ctx.Repo.Repository
+	redirectURL := articleSettingsURL(ctx)
+
+	if form.ArticleName != ctx.Repo.Owner.Name+"/"+repo.GetSubject(ctx) {
+		ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
+		ctx.Redirect(redirectURL)
+		return
+	}
+
+	newOwner := resolveArticleTransferRecipient(ctx, ctx.FormString("new_owner_name"))
+	if newOwner == nil {
+		if !ctx.Written() {
+			ctx.Redirect(redirectURL)
+		}
+		return
+	}
+
+	// Close the GitRepo if open
+	if ctx.Repo.GitRepo != nil {
+		ctx.Repo.GitRepo.Close()
+		ctx.Repo.GitRepo = nil
+	}
+
+	if err := repo_service.StartRepositoryTransfer(ctx, ctx.Doer, newOwner, repo, nil); err != nil {
+		switch {
+		case repo_model.IsErrRepoAlreadyExist(err):
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_has_article"))
+		case repo_model.IsErrRepoTransferInProgress(err):
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_in_progress"))
+		case repo_service.IsRepositoryLimitReached(err):
+			limit := err.(repo_service.LimitReachedError).Limit
+			ctx.Flash.Error(ctx.TrN(limit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", limit))
+		case errors.Is(err, user_model.ErrBlockedUser):
+			ctx.Flash.Error(ctx.Tr("repo.settings.transfer.blocked_user"))
+		default:
+			ctx.ServerError("TransferOwnership", err)
+			return
+		}
+		ctx.Redirect(redirectURL)
+		return
+	}
+
+	recipientLink := htmlutil.HTMLFormat(`<a href="%s">%s</a>`, newOwner.HomeLink(), newOwner.DisplayName())
+	if repo.Status == repo_model.RepositoryPendingTransfer {
+		log.Trace("Article transfer process was started: %s/%s -> %s", ctx.Repo.Owner.Name, repo.Name, newOwner.Name)
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_transfer_started", recipientLink))
+	} else {
+		log.Trace("Article transferred: %s/%s -> %s", ctx.Repo.Owner.Name, repo.Name, newOwner.Name)
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_transfer_succeed", recipientLink))
+	}
+	ctx.Redirect(redirectURL)
+}
+
 func handleSettingsPostTransfer(ctx *context.Context) {
 	form := web.GetForm(ctx).(*forms.RepoSettingForm)
 	repo := ctx.Repo.Repository
@@ -815,6 +905,12 @@ func handleSettingsPostTransfer(ctx *context.Context) {
 		ctx.HTTPError(http.StatusNotFound)
 		return
 	}
+
+	if ctx.FormBool("redirect_to_article") {
+		handleArticleSettingsPostTransfer(ctx)
+		return
+	}
+
 	if repo.Name != form.RepoName {
 		ctx.RenderWithErr(ctx.Tr("form.enterred_invalid_repo_name"), tplSettingsOptions, nil)
 		return
@@ -879,11 +975,19 @@ func handleSettingsPostCancelTransfer(ctx *context.Context) {
 		return
 	}
 
+	// The article settings UI posts to this same dispatcher, but it must return to
+	// the article view instead of the repository settings page.
+	fromArticle := ctx.FormBool("redirect_to_article")
+	redirectURL := repo.Link() + "/settings"
+	if fromArticle {
+		redirectURL = articleSettingsURL(ctx)
+	}
+
 	repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
 	if err != nil {
 		if repo_model.IsErrNoPendingTransfer(err) {
-			ctx.Flash.Error("repo.settings.transfer_abort_invalid")
-			ctx.Redirect(repo.Link() + "/settings")
+			ctx.Flash.Error(ctx.Tr("repo.settings.transfer_abort_invalid"))
+			ctx.Redirect(redirectURL)
 		} else {
 			ctx.ServerError("GetPendingRepositoryTransfer", err)
 		}
@@ -896,8 +1000,16 @@ func handleSettingsPostCancelTransfer(ctx *context.Context) {
 	}
 
 	log.Trace("Repository transfer process was cancelled: %s/%s ", ctx.Repo.Owner.Name, repo.Name)
-	ctx.Flash.Success(ctx.Tr("repo.settings.transfer_abort_success", repoTransfer.Recipient.Name))
-	ctx.Redirect(repo.Link() + "/settings")
+	if fromArticle {
+		if err := repoTransfer.LoadRecipient(ctx); err != nil {
+			ctx.ServerError("LoadRecipient", err)
+			return
+		}
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_transfer_abort_success", repoTransfer.Recipient.DisplayName()))
+	} else {
+		ctx.Flash.Success(ctx.Tr("repo.settings.transfer_abort_success", repoTransfer.Recipient.Name))
+	}
+	ctx.Redirect(redirectURL)
 }
 
 func handleSettingsPostDelete(ctx *context.Context) {
