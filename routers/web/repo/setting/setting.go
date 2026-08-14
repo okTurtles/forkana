@@ -23,6 +23,7 @@ import (
 	"code.gitea.io/gitea/modules/indexer/stats"
 	"code.gitea.io/gitea/modules/lfs"
 	"code.gitea.io/gitea/modules/log"
+	"code.gitea.io/gitea/modules/optional"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/templates"
@@ -32,6 +33,7 @@ import (
 	actions_service "code.gitea.io/gitea/services/actions"
 	asymkey_service "code.gitea.io/gitea/services/asymkey"
 	"code.gitea.io/gitea/services/context"
+	convert_service "code.gitea.io/gitea/services/convert"
 	"code.gitea.io/gitea/services/forms"
 	"code.gitea.io/gitea/services/migrations"
 	mirror_service "code.gitea.io/gitea/services/mirror"
@@ -813,6 +815,26 @@ func handleSettingsPostConvertFork(ctx *context.Context) {
 // settings page is not reachable from the article UI.
 func articleSettingsURL(ctx *context.Context) string {
 	return ctx.Repo.RepoLink + "?view=article&mode=settings"
+}
+
+// ArticleTransferCandidates searches the users the current article can be transferred
+// to, excluding its owner and everyone who already owns an article on the same subject.
+func ArticleTransferCandidates(ctx *context.Context) {
+	repo := ctx.Repo.Repository
+	users, _, err := user_model.SearchUsers(ctx, user_model.SearchUserOptions{
+		Actor:                    ctx.Doer,
+		Keyword:                  ctx.FormTrim("q"),
+		Type:                     user_model.UserTypeIndividual,
+		IsActive:                 optional.Some(true),
+		ExcludeUserIDs:           []int64{repo.OwnerID},
+		ExcludeOwnersOfSubjectID: repo.SubjectID,
+		ListOptions:              db.ListOptions{PageSize: setting.UI.MembersPagingNum},
+	})
+	if err != nil {
+		ctx.ServerError("SearchUsers", err)
+		return
+	}
+	ctx.JSON(http.StatusOK, map[string]any{"data": convert_service.ToUsers(ctx, ctx.Doer, users)})
 }
 
 // resolveArticleTransferRecipient finds the transfer recipient by their first and

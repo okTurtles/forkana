@@ -106,9 +106,15 @@
             <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
             <div class="required field">
                 <label for="article-transfer-new-owner" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner"}}</label>
-                <input id="article-transfer-new-owner" name="new_owner_name" required maxlength="255"
-                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                    placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_placeholder"}}">
+                <div id="article-transfer-owner-search" class="ui fluid search"
+                    data-search-url="{{.RepoLink}}/settings/transfer_candidates"
+                    data-confirm-target="#article-transfer-submit">
+                    <div class="ui fluid input">
+                        <input id="article-transfer-new-owner" class="prompt" name="new_owner_name" required maxlength="255"
+                            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                            placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_placeholder"}}">
+                    </div>
+                </div>
             </div>
             <p class="tw-mt-5 tw-mb-5">
                 {{ctx.Locale.Tr "repo.settings.article_transfer_modal_confirm_desc"}}
