@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"code.gitea.io/gitea/models/db"
@@ -99,6 +100,20 @@ func TestArticleSettingsTransfer(t *testing.T) {
 			"awaiting confirmation from "+recipient.DisplayName())
 	})
 
+	t.Run("RecipientSeesBanner", func(t *testing.T) {
+		articleURL := fmt.Sprintf("/article/%s/%s?view=article", owner.Name, subjectName)
+
+		// the owner is not the recipient, so no banner is offered to them
+		AssertHTMLElement(t, NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK).Body),
+			"#article-transfer-notice", false)
+
+		recipientSession := loginUser(t, recipient.Name)
+		htmlDoc := NewHTMLParser(t, recipientSession.MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK).Body)
+		AssertHTMLElement(t, htmlDoc, "#article-transfer-notice", true)
+		assert.Contains(t, htmlDoc.Find("#article-transfer-notice").Text(),
+			fmt.Sprintf("%s wants to transfer the article %s to you.", owner.DisplayName(), subjectName))
+	})
+
 	t.Run("Cancel", func(t *testing.T) {
 		post(t, map[string]string{
 			"_csrf":               GetUserCSRFToken(t, session),
@@ -112,6 +127,22 @@ func TestArticleSettingsTransfer(t *testing.T) {
 		reverted := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
 		assert.Equal(t, repo_model.RepositoryReady, reverted.Status)
 		unittest.AssertNotExistsBean(t, &repo_model.RepoTransfer{RepoID: repo.ID})
+	})
+
+	t.Run("StartByUsername", func(t *testing.T) {
+		// users without a full name are listed by their username, which must resolve too
+		byUsername := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		require.Empty(t, strings.TrimSpace(byUsername.FullName))
+		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, byUsername.Name))
+
+		assert.Contains(t, flashText(t), "awaits confirmation from "+byUsername.DisplayName())
+		unittest.AssertExistsAndLoadBean(t, &repo_model.RepoTransfer{RepoID: repo.ID, RecipientID: byUsername.ID})
+	})
+
+	t.Run("SelfTransferByUsername", func(t *testing.T) {
+		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, owner.Name))
+
+		assert.Contains(t, flashText(t), "This article already belongs to that user.")
 	})
 }
 

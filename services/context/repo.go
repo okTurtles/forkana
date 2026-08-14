@@ -1360,4 +1360,23 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 			return
 		}
 	}
+
+	// The article view shows the recipient a banner to accept or reject a pending transfer
+	if ctx.Repo.Repository.Status == repo_model.RepositoryPendingTransfer {
+		repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
+		if err != nil {
+			ctx.ServerError("GetPendingRepositoryTransfer", err)
+			return
+		}
+
+		if err := repoTransfer.LoadAttributes(ctx); err != nil {
+			ctx.ServerError("LoadAttributes", err)
+			return
+		}
+
+		ctx.Data["RepoTransfer"] = repoTransfer
+		if ctx.Doer != nil {
+			ctx.Data["CanUserAcceptOrRejectTransfer"] = repoTransfer.CanUserAcceptOrRejectTransfer(ctx, ctx.Doer)
+		}
+	}
 }

@@ -838,28 +838,40 @@ func ArticleTransferCandidates(ctx *context.Context) {
 }
 
 // resolveArticleTransferRecipient finds the transfer recipient by their first and
-// last name, which is what the article transfer modal asks for. It reports the
-// failure through a flash message and returns nil when the name is unusable.
-func resolveArticleTransferRecipient(ctx *context.Context, fullName string) *user_model.User {
-	candidates, err := user_model.GetUsersByFullName(ctx, fullName)
+// last name, which is what the article transfer modal asks for. Users without a full
+// name are listed by their username instead, so that is tried as a fallback. It
+// reports the failure through a flash message and returns nil when the name is unusable.
+func resolveArticleTransferRecipient(ctx *context.Context, name string) *user_model.User {
+	candidates, err := user_model.GetUsersByFullName(ctx, name)
 	if err != nil {
 		ctx.ServerError("GetUsersByFullName", err)
 		return nil
 	}
 
+	var recipient *user_model.User
 	switch len(candidates) {
 	case 0:
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
-	case 1:
-		if candidates[0].ID == ctx.Repo.Owner.ID {
-			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_is_current"))
+		recipient, err = user_model.GetUserByName(ctx, strings.TrimSpace(name))
+		if err != nil {
+			if !user_model.IsErrUserNotExist(err) {
+				ctx.ServerError("GetUserByName", err)
+				return nil
+			}
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
 			return nil
 		}
-		return candidates[0]
+	case 1:
+		recipient = candidates[0]
 	default:
 		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_ambiguous"))
+		return nil
 	}
-	return nil
+
+	if recipient.ID == ctx.Repo.Owner.ID {
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_is_current"))
+		return nil
+	}
+	return recipient
 }
 
 // handleArticleSettingsPostTransfer serves the article transfer modal, which confirms
