@@ -5,6 +5,10 @@ import {addDelegatedEventListener, hideElem, showElem} from '../utils/dom.ts';
 // the button state depends on both the confirmation input and that selection.
 let transferOwnerSelected = false;
 
+// The delegated listeners are bound to the document, so they survive a re-render and
+// must not be bound again when the settings markup is reloaded.
+let delegatedListenersBound = false;
+
 // Enables the target button only when the typed value matches the expected one
 // exactly, the comparison is case-sensitive on purpose.
 function syncConfirmInput(input: HTMLInputElement): void {
@@ -95,7 +99,12 @@ function initArticleTransferOwnerSearch(): void {
 export function initArticleSettings(): void {
   if (!document.querySelector('#article-settings-general')) return;
 
+  // the settings markup is re-rendered when switching modes in the history view, so the
+  // search is bound against the current elements on every call
   initArticleTransferOwnerSearch();
+
+  if (delegatedListenersBound) return;
+  delegatedListenersBound = true;
 
   addDelegatedEventListener(document, 'click', '[data-article-settings-modal]', (el: HTMLElement, e: MouseEvent) => {
     e.preventDefault();

@@ -1,6 +1,7 @@
 import {nextTick, reactive, ref, watch} from 'vue';
 import {initRepoBubbleView} from './repo-bubble-view.ts';
 import {initArticleEditor} from './article-editor.ts';
+import {initArticleSettings} from './article-settings.ts';
 import {GET} from '../modules/fetch.ts';
 
 type ViewKey = 'bubble' | 'table' | 'article';
@@ -505,6 +506,8 @@ export function initRepoHistory() {
         updateArticleStatus();
         if (articleMode.value === 'edit') {
           initArticleEditor();
+        } else if (articleMode.value === 'settings') {
+          initArticleSettings();
         }
       }
       viewLoaded.article = true;
