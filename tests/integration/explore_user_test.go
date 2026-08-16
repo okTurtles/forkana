@@ -46,3 +46,26 @@ func TestExploreUser(t *testing.T) {
 		MakeRequest(t, req, http.StatusNotFound)
 	}
 }
+
+func TestExploreSearchKeywordAcrossTabs(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// switching explore tabs must keep the search keyword, it is carried over by the "q" query
+	// parameter of the tab links themselves (the navigation is a plain page load, so nothing can
+	// be kept in memory, and anonymous users have no session to store it in)
+	subjectsTabLink := func(path string) string {
+		req := NewRequest(t, "GET", path)
+		resp := MakeRequest(t, req, http.StatusOK)
+		h := NewHTMLParser(t, resp.Body)
+		href, exists := h.Find(`a[data-explore-tab-link][href^="/explore/subjects"]`).Attr("href")
+		assert.True(t, exists, "explore navbar should link to the subjects tab on %s", path)
+		return href
+	}
+
+	assert.Equal(t, "/explore/subjects?q=user+two", subjectsTabLink("/explore/users?q=user%20two"))
+	// an empty keyword must not add an empty "q" parameter
+	assert.Equal(t, "/explore/subjects", subjectsTabLink("/explore/users"))
+	assert.Equal(t, "/explore/subjects", subjectsTabLink("/explore/users?q="))
+	// the sort order is not carried over, it is tab specific and unsupported values are rejected
+	assert.Equal(t, "/explore/subjects?q=user+two", subjectsTabLink("/explore/users?q=user%20two&sort=oldest"))
+}
