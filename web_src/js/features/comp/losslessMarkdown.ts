@@ -9,19 +9,17 @@
 // This tracker keeps the authoritative source text alongside the editor and guarantees:
 //   - an untouched document round-trips byte-identical, regardless of tab switching;
 //   - edits made purely in Source (markdown) mode keep the rest of the text verbatim;
-//   - only a genuine edit in the Visual editor adopts the serialized form (unavoidable:
-//     Toast UI's serializer is not configurable, and the visual edit rewrote the doc anyway).
-//
-// KNOWN GAP: that last point is document-wide, not local. One character typed in the Visual
-// editor makes the serialization authoritative for the whole article, so reference links
-// (`[text][1]`), link reference definitions and bare auto-linked URLs anywhere in it are
-// still escaped into literal text. Fixing that needs a diff/merge of the serialization
-// against the pristine source, which is out of scope here; see the failing-by-design
-// expectation at the end of losslessMarkdown.editor.test.ts.
+//   - a genuine edit in the Visual editor adopts the serialized form only for the lines it
+//     actually touched: the serialization is three-way merged back onto the pristine source
+//     (see markdownThreeWayMerge.ts), so untouched paragraphs keep their original bytes and
+//     their reference links keep rendering. When that merge cannot be done confidently the
+//     whole serialization is used, which is the pre-merge behaviour.
 //
 // It installs itself by overriding `editor.getMarkdown`/`editor.setMarkdown` (the same
 // pattern as installBase64WidgetPatch, which must be installed first so widget-placeholder
 // stripping is applied uniformly to every comparison).
+
+import {mergeVisualEdit} from './markdownThreeWayMerge.ts';
 
 // Minimal structural surface of Toast UI Editor used by the tracker, so the fast unit tests
 // in losslessMarkdown.test.ts can drive it with a fake editor. The real editor is exercised
@@ -33,6 +31,13 @@ export type LosslessEditor = {
   setMarkdown(markdown: string, cursorToEnd?: boolean): void;
   on(event: string, handler: (...args: unknown[]) => void): void;
 };
+
+// Resolves the markdown to commit for a WYSIWYG serialization, merging the user's Visual
+// edit back onto the pristine source. `null` from mergeVisualEdit means "not confident",
+// and the serialization is used wholesale (the behaviour before the merge existed).
+function resolveSerialization(pristine: string, baseline: string, serialized: string): string {
+  return mergeVisualEdit(pristine, baseline, serialized) ?? serialized;
+}
 
 export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea: HTMLTextAreaElement): void {
   // Captured after installBase64WidgetPatch: strips $$widget$$ placeholders, so baseline
@@ -55,7 +60,11 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
   const getLosslessMarkdown = (): string => {
     if (editor.isMarkdownMode()) return sourceText;
     const serialized = baseGetMarkdown();
-    return serialized === wysiwygBaseline ? sourceText : serialized;
+    if (serialized === wysiwygBaseline) return sourceText;
+    // The user edited in Visual mode: keep their edit, but only let it overwrite the lines
+    // it actually touched. `sourceText` is still the pristine source here — the change
+    // handler below only reassigns it in markdown mode.
+    return resolveSerialization(sourceText, wysiwygBaseline, serialized);
   };
 
   const syncTextarea = () => {
@@ -107,10 +116,22 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
     // serialization (lossy), even if nothing was edited, and that write already ran
     // through the change handler above, clobbering sourceText.
     const serialized = baseGetMarkdown();
-    if (serialized === wysiwygBaseline) {
-      // No effective Visual edit: restore the pristine source. Deferred, because the core
-      // still restores focus/selection (with positions mapped against the serialized doc)
-      // after emitting `changeMode`; replacing the document synchronously would race that.
+    // Either nothing was edited in Visual mode (restore the pristine source verbatim) or
+    // something was (merge it back onto the pristine source, keeping untouched lines). Note
+    // `mdSnapshot`, not `sourceText`: the change handler above already clobbered sourceText
+    // with the lossy serialization the core just wrote into the markdown document.
+    const resolved = serialized === wysiwygBaseline ?
+      mdSnapshot :
+      resolveSerialization(mdSnapshot, wysiwygBaseline, serialized);
+    sourceText = resolved;
+    if (resolved !== serialized) {
+      // The editor's markdown document currently holds the lossy serialization, so the
+      // Source editor would *display* text the user never wrote — the other half of #262.
+      // Replace it with the resolved text.
+      //
+      // Deferred, because the core still restores focus/selection (with positions mapped
+      // against the serialized doc) after emitting `changeMode`; replacing the document
+      // synchronously would race that.
       // Must pass cursorToEnd=true: with false, Toast UI's markdown editor does a wholesale
       // ProseMirror document replace and lets the transaction auto-map the old (now-stale)
       // selection through it. That mapped position is not just imprecise, it can point
@@ -118,15 +139,11 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
       // length), and Toast UI's next mode switch reuses that broken position to restore the
       // WYSIWYG selection, throwing "Index N out of range" from inside ProseMirror. Passing
       // true makes it call moveCursorToEnd instead, which is always structurally valid.
-      sourceText = mdSnapshot;
       queueMicrotask(() => {
         // The user may have switched modes again before the microtask ran.
         if (!editor.isMarkdownMode()) return;
         applyMarkdown(sourceText, true);
       });
-    } else {
-      // Genuine Visual edits: the serialization is now the authoritative source.
-      sourceText = serialized;
     }
     syncTextarea();
   });

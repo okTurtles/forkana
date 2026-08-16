@@ -126,16 +126,39 @@ test('edits made in Source mode are kept verbatim', async () => {
   expect(fake.mdText).toBe(edited);
 });
 
-test('a genuine Visual edit adopts the serialized form', async () => {
+test('a Visual edit that replaces everything adopts the serialized form', async () => {
   const {fake, textarea, editor} = setup();
   fake.typeWysiwyg('Hello [world]');
   const serialized = fake.serialize('Hello [world]');
+  // Nothing of the original survives, so there is nothing for the merge to preserve.
   expect(editor.getMarkdown()).toBe(serialized);
   expect(textarea.value).toBe(serialized);
   fake.changeMode('markdown');
   await flush();
   expect(editor.getMarkdown()).toBe(serialized);
   expect(fake.mdText).toBe(serialized);
+});
+
+// The tracker feeds (pristine source, entry baseline, current serialization) to the
+// three-way merge; markdownThreeWayMerge.test.ts covers the merge itself, this covers the
+// wiring — including that the merged text is written back into the markdown document, so
+// the Source editor displays what will actually be committed.
+test('a Visual edit to one line leaves the other lines byte-identical', async () => {
+  const {fake, textarea, editor} = setup();
+  const lines = GNARLY.split('\n');
+  const editedLast = `${lines.at(-1)} edited`;
+  fake.typeWysiwyg([...lines.slice(0, -1), editedLast].join('\n'));
+
+  const expected = [...lines.slice(0, -1), fake.serialize(editedLast)].join('\n');
+  expect(editor.getMarkdown()).toBe(expected);
+  expect(textarea.value).toBe(expected);
+  // the untouched hyperlink keeps its original, unescaped spelling
+  expect(editor.getMarkdown()).toContain('[Research program](./Research_program "Research program")');
+
+  fake.changeMode('markdown');
+  await flush();
+  expect(editor.getMarkdown()).toBe(expected);
+  expect(fake.mdText).toBe(expected);
 });
 
 test('a Visual edit that is fully undone still restores the pristine source', async () => {
