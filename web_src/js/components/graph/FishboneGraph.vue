@@ -62,10 +62,18 @@ const LS_REPO_KEY = 'selectedArticleRepo';
    predefined tiers defined in ./bubble-size.ts (issue #284). That module is
    the single place where sizes and their contributor thresholds live. */
 
-/* === VERTICAL LAYOUT === */
-const LEVEL_GAP = 240;          // Vertical spacing between generations (parent to child level)
+/* === VERTICAL LAYOUT ===
+   Generations are NOT a fixed distance apart. A constant LEVEL_GAP (240px) used
+   to put the first child lane at `(depth + 1) * 240` whatever the parent looked
+   like, which left a long stretch of bare trunk under a small/medium parent.
+   The first lane is now derived per parent (see firstLaneY): the structural
+   minimum is the parent's own radius + stem + elbow radius — the rib's corner
+   arc has to clear the parent bubble — and FIRST_LANE_CLEARANCE is the only
+   free breathing room on top of that. Children are then pushed further down
+   only by the collision passes, never by a constant. */
 const STEM_LEN_PARENT = 12;     // Short vertical stem extending from parent bubble
-const STEM_LEN_CHILD = 18;     // Short vertical stem extending to child bubble
+const STEM_LEN_CHILD = 18;      // Short vertical stem extending to child bubble
+const FIRST_LANE_CLEARANCE = 24; // Breathing room under the parent, on the 8px grid (3 × 8)
 
 /* === LAYOUT DEFAULTS (used in manual mode or as auto-tuning hints) === */
 const BRANCH_SPACING_DEFAULT = 28;   // Default vertical gap between branch joints on trunk
@@ -651,6 +659,16 @@ function bubbleSeparation(rA: number, rB: number) {
   return rA + rB + state.bubblePad;
 }
 
+/** Y of the first child lane under a parent, derived from the PARENT'S OWN
+   RADIUS. `stem + elbowR` is structural: the rib leaves the parent through a
+   short stem and turns with a corner arc of radius `elbowR` whose top edge
+   must clear the bubble, so a child centred any higher than this would have
+   its rib cut through the parent. FIRST_LANE_CLEARANCE is the visual
+   breathing room added on top. */
+function firstLaneY(parentY: number, parentR: number, elbowR: number) {
+  return parentY + parentR + STEM_LEN_PARENT + elbowR + FIRST_LANE_CLEARANCE;
+}
+
 /** Minimum vertical centre distance for two bubbles sharing a lane.
    Lanes are resolved on the Y axis only (bubbles in one lane can sit at
    different X), so this is deliberately the conservative case: it is applied
@@ -699,16 +717,27 @@ function layoutFishbone(g: Graph) {
     if (!kids.length) continue;
 
     const px = p.x ?? 0, py = p.y ?? 0, pr = rFor(p.contributors);
-    const baseY = (p.depth + 1) * LEVEL_GAP;
     const yStart = py + pr + STEM_LEN_PARENT;
     const R = state.elbowR;
+    /* First lane for THIS parent, derived from its radius (not from depth). */
+    const baseY = firstLaneY(py, pr, R);
 
     const leftLane: LaneSlot[] = [];
     const rightLane: LaneSlot[] = [];
     let turn: Side = -1;
 
-    const ordered = (state.scenario === "reference") ? kids.slice()
+    const baseOrder = (state.scenario === "reference") ? kids.slice()
       : kids.slice().sort((a, b) => rFor(b.contributors) - rFor(a.contributors));
+    /* Children that have children of their own grow a TRUNK downwards from
+       themselves, and siblings share a column (their x differs only by their
+       radii), so anything placed below such a child would end up sitting on
+       that trunk — and the trunk-vs-bubble check further down can only see
+       trunks that already exist, which a sibling's does not yet. Placing the
+       subtree-bearing children last puts them at the bottom of their lane with
+       nothing below them; two of them also land on opposite sides, because the
+       side is chosen by whichever lane is still free higher up. `sort` is
+       stable, so the order above is otherwise preserved. */
+    const ordered = baseOrder.sort((a, b) => (a.children.length ? 1 : 0) - (b.children.length ? 1 : 0));
     let prevJoint = yStart - state.branchSpacing;
 
     const reserveLane = (lane: LaneSlot[], y: number, r: number) => lane.push({ y, r });
