@@ -54,6 +54,7 @@ export class ToastCommentEditor {
 
   dropzone: HTMLElement | null = null;
   attachedDropzoneInst: any = null;
+  private onTextareaChange: (() => void) | null = null;
 
   constructor(container: ToastCommentEditorContainer, options: ToastCommentEditorOptions = {}) {
     if (container._giteaToastCommentEditor) throw new Error('ToastCommentEditor already initialized');
@@ -114,7 +115,11 @@ export class ToastCommentEditor {
     // actually edit in the visual editor (issue #262). Installs itself on top of the widget
     // patch, loads the initial content, and overrides getMarkdown/setMarkdown so every
     // existing call site below (and value()) stays lossless with no further changes.
-    this.textarea.addEventListener('change', () => triggerEditorContentChanged(this.container));
+    // Kept on the instance so destroy() can detach it: unlike the previous `events.change`
+    // editor option, this listener lives on the textarea and would otherwise outlive the
+    // editor and stack up if the same container is initialized again.
+    this.onTextareaChange = () => triggerEditorContentChanged(this.container);
+    this.textarea.addEventListener('change', this.onTextareaChange);
     installLosslessMarkdownTracker(this.editor, this.textarea);
 
     // Rename mode switch labels
@@ -321,6 +326,10 @@ export class ToastCommentEditor {
   }
 
   destroy(): void {
+    if (this.onTextareaChange) {
+      this.textarea?.removeEventListener('change', this.onTextareaChange);
+      this.onTextareaChange = null;
+    }
     if (this.editor) {
       this.editor.destroy();
       this.editor = null;

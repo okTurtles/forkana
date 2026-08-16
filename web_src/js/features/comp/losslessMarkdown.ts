@@ -12,12 +12,21 @@
 //   - only a genuine edit in the Visual editor adopts the serialized form (unavoidable:
 //     Toast UI's serializer is not configurable, and the visual edit rewrote the doc anyway).
 //
+// KNOWN GAP: that last point is document-wide, not local. One character typed in the Visual
+// editor makes the serialization authoritative for the whole article, so reference links
+// (`[text][1]`), link reference definitions and bare auto-linked URLs anywhere in it are
+// still escaped into literal text. Fixing that needs a diff/merge of the serialization
+// against the pristine source, which is out of scope here; see the failing-by-design
+// expectation at the end of losslessMarkdown.editor.test.ts.
+//
 // It installs itself by overriding `editor.getMarkdown`/`editor.setMarkdown` (the same
 // pattern as installBase64WidgetPatch, which must be installed first so widget-placeholder
 // stripping is applied uniformly to every comparison).
 
-// Minimal structural surface of Toast UI Editor used by the tracker, so it can be
-// unit-tested against a fake editor (the real editor cannot run under happy-dom).
+// Minimal structural surface of Toast UI Editor used by the tracker, so the fast unit tests
+// in losslessMarkdown.test.ts can drive it with a fake editor. The real editor is exercised
+// separately in losslessMarkdown.editor.test.ts, which pins the Toast UI behaviours the fake
+// imitates (event order, lossy serialization) so the two cannot drift apart.
 export type LosslessEditor = {
   isMarkdownMode(): boolean;
   getMarkdown(): string;

@@ -174,17 +174,30 @@ test('empty initial content stays empty', () => {
   expect(textarea.value).toBe('');
 });
 
-test('comparisons run through the patched getMarkdown (widget stripping applied)', async () => {
+test('a Visual edit yields widget-stripped markdown, never $$widget placeholders', () => {
+  const IMG = '![a](data:image/png;base64,AAA)';
+  const doc = `Intro\n\n${IMG}\n\nOutro`;
   const fake = new FakeEditor('wysiwyg');
+  // Mirror the real base64 widget rule: in WYSIWYG the image is a widget node, so the
+  // serialization wraps it in a `$$widgetN <markdown>$$` placeholder.
+  const escape = (s: string) => s.replaceAll('[', '\\[').replaceAll('_', '\\_');
+  fake.serialize = (s: string) => s.split(IMG).map(escape).join(`$$widget0 ${IMG}$$`);
   // simulate installBase64WidgetPatch being installed first
   const original = fake.getMarkdown.bind(fake);
   fake.getMarkdown = () => stripWidgetPlaceholders(original());
   const textarea = document.createElement('textarea');
-  textarea.value = GNARLY;
+  textarea.value = doc;
   installLosslessMarkdownTracker(fake, textarea);
-  // WYSIWYG serialization containing a widget placeholder must not read as a user edit
-  fake.wwSource = GNARLY; // untouched
-  fake.changeMode('markdown');
-  await flush();
-  expect(fake.getMarkdown()).toBe(GNARLY);
+
+  // Untouched: the pristine source wins and the placeholder never surfaces.
+  expect(fake.getMarkdown()).toBe(doc);
+  expect(textarea.value).toBe(doc);
+
+  // After a genuine Visual edit the serialization becomes authoritative — and it is the
+  // stripped one, otherwise `$$widget0 …$$` would be committed into the article file.
+  fake.typeWysiwyg(`${doc}\n\nnew [line]`);
+  const edited = fake.getMarkdown();
+  expect(edited).not.toContain('$$widget');
+  expect(edited).toContain(IMG);
+  expect(textarea.value).toBe(edited);
 });
