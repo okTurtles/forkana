@@ -103,6 +103,23 @@
      base.custom.css already sets on :root (which matches this same element). */
 }
 
+/* "gitea-auto" is the built-in default theme (modules/setting/ui.go), so it is what
+   logged-out visitors get unless DEFAULT_THEME says otherwise. It @imports
+   theme-gitea-light.css, which still carries Gitea's own blue --color-primary (#4183c4),
+   and the [data-theme="gitea-light"] block above never matches it — so brand-colored UI
+   rendered blue instead of Forkana blue-violet (issue #243, landing-page search field
+   focus frame). Mirror the light brand primaries here; the light/dark-N and alpha-N
+   ramps are deliberately left as-is, exactly like the gitea-light block above. */
+@media (prefers-color-scheme: light) {
+  [data-theme="gitea-auto"],
+  [data-theme="gitea-auto-protanopia-deuteranopia"] {
+    --color-primary: #4E40FA;
+    --color-primary-contrast: #ffffff;
+    --color-primary-hover: #3C2EED;
+    --color-primary-active: #3328D8;
+  }
+}
+
 /* Colorblind diff colors — orange (removed) vs blue (added).
    Both hues are distinguishable by protanopes and deuteranopes.
    Opacity is high enough to be clearly visible against white. */

@@ -127,10 +127,17 @@
   --bubble-overlay-bg: var(--bubble-dark-overlay-bg);
 }
 
-/* gitea-auto in dark OS mode: apply dark bubble variables (data-theme stays "gitea-auto") */
+/* gitea-auto in dark OS mode: apply the dark brand primaries and bubble variables
+   (data-theme stays "gitea-auto", so the [data-theme="gitea-dark"] block never matches it
+   and --color-primary would otherwise stay Gitea's blue #4183c4 — see issue #243) */
 @media (prefers-color-scheme: dark) {
   [data-theme="gitea-auto"],
   [data-theme="gitea-auto-protanopia-deuteranopia"] {
+    --color-primary: #4E40FA;
+    --color-primary-contrast: #ffffff;
+    --color-primary-hover: #6558FB;
+    --color-primary-active: #7C73FC;
+
     --bubble-grad-start: var(--bubble-dark-grad-start);
     --bubble-grad-mid: var(--bubble-dark-grad-mid);
     --bubble-grad-end: var(--bubble-dark-grad-end);
