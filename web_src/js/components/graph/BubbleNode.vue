@@ -15,7 +15,7 @@ import { formatDateYMD } from '../../utils/time.ts';
 /* === FONT SIZING === */
 const FONT_SIZE_COUNT_MIN = 10;      // Minimum font size for contributor count
 const FONT_SIZE_COUNT_MAX = 34;      // Maximum font size for contributor count
-const FONT_SIZE_COUNT_SCALE = 0.95;  // Scale factor: count font size = radius * scale
+const FONT_SIZE_COUNT_SCALE = 0.95;  // Scale factor: count font size = on-screen radius * scale
 const FONT_SIZE_LABEL = 12;          // Fixed font size for "Contributor(s)" label
 const FONT_SIZE_SMALL = 11;          // Font size for "Last updated" lines
 const FONT_SIZE_COMBINED = 22;       // Font size for combined count + label (1.375rem)
@@ -82,8 +82,15 @@ function recomputeFit() {
   const availW = Dpx - 2 * pad;
   const availH = Dpx - 2 * pad;
 
-  // Count font scales with radius but clamped to min/max
-  const fsCount = Math.min(FONT_SIZE_COUNT_MAX, Math.max(FONT_SIZE_COUNT_MIN, r * FONT_SIZE_COUNT_SCALE));
+  // Count font scales with the ON-SCREEN radius (r * k), clamped to min/max.
+  // Labels are rendered at a constant screen size (the foreignObject is
+  // inverse-scaled by 1/k), so the world radius alone is not a reliable
+  // budget: with the tiered radii from bubble-size.ts every bubble would
+  // otherwise pin to FONT_SIZE_COUNT_MAX and overflow small circles when
+  // zoomed out. Using the screen radius keeps the count inside the circle at
+  // the smallest tier and at low zoom levels.
+  const screenR = r * k;
+  const fsCount = Math.min(FONT_SIZE_COUNT_MAX, Math.max(FONT_SIZE_COUNT_MIN, screenR * FONT_SIZE_COUNT_SCALE));
   const fsLabel = FONT_SIZE_LABEL;
   const fsSmall = FONT_SIZE_SMALL;
   const fsCombined = FONT_SIZE_COMBINED;

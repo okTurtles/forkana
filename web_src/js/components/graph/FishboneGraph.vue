@@ -23,6 +23,7 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
+import {bubbleRadiusFor, singleArticleScreenDiameter} from "./bubble-size.ts";
 
 // Inline types replacing former seeds module
 type Side = -1 | 1;
@@ -56,9 +57,10 @@ const LS_REPO_KEY = 'selectedArticleRepo';
    LAYOUT CONSTANTS (all values explained to avoid "magic numbers")
    ─────────────────────────────────────────────────────────────────────────── */
 
-/* === BUBBLE SIZING === */
-const R_MIN = 8;                // Minimum bubble radius in pixels (smallest contributor count)
-const R_MAX = 120;              // Maximum bubble radius in pixels (largest contributor count)
+/* === BUBBLE SIZING ===
+   Bubble radii are NOT computed here: they are snapped to one of four
+   predefined tiers defined in ./bubble-size.ts (issue #284). That module is
+   the single place where sizes and their contributor thresholds live. */
 
 /* === VERTICAL LAYOUT === */
 const LEVEL_GAP = 240;          // Vertical spacing between generations (parent to child level)
@@ -127,10 +129,9 @@ const RADIUS_MIN_SCALE = 0.65;            // Minimum overall radius scale to avo
 const FILL_FRACTION_MIN = 0.55;      // Minimum horizontal fill fraction for few forks
 const FILL_FRACTION_MAX = 0.90;      // Maximum horizontal fill fraction for many forks
 const VERTICAL_FILL_FRACTION = 0.86; // Vertical fill fraction of usable height
-const SINGLE_FORK_DIAMETER_MIN = 220;  // Minimum bubble diameter for single-fork view
-const SINGLE_FORK_DIAMETER_MAX = 480;  // Maximum bubble diameter for single-fork view
-const SINGLE_FORK_WIDTH_RATIO = 0.40;  // Desired diameter as ratio of container width
 const FOCUS_PADDING = 24;            // Padding when focusing on a single node
+/* Single-article on-screen sizing lives in ./bubble-size.ts
+   (singleArticleScreenDiameter) so radius and zoom targets stay in sync. */
 
 /* === SVG LAYOUT === */
 const DEFAULT_SVG_HEIGHT = 1000;     // Initial SVG canvas height
@@ -170,8 +171,9 @@ const state = reactive({
   pathPad: PATH_PAD_DEFAULT,
 
   auto: true,                             // responsive auto-tuning toggle
-  /* Max contributors across current graph (for relative radius scaling) */
-  maxContrib: 1,
+  /* True when the subject holds a single article (no forks): its bubble is
+     pinned to the smallest tier instead of being sized by contributors. */
+  isSingleArticle: false,
   /* Additional global attenuation to reduce bubble sizes for small screens / many forks */
   radiusScale: 1,
 });
@@ -546,12 +548,15 @@ function buildGraphFromApi(root: any): Graph {
    HELPERS (math + graph)
    ─────────────────────────────────────────────────────────────────────────── */
 
+/* Radius for a bubble with `n` contributors.
+   Sizes come from the four-tier table in ./bubble-size.ts (absolute
+   contributor thresholds, so a bubble does not resize when siblings appear).
+   `radiusScale` is the uniform viewport attenuation applied on top. */
 function rFor(n: number) {
-  const max = state.maxContrib || 1;
-  if (max <= 0) return R_MIN;
-  const t = Math.max(0, Math.min(1, n / max));
-  const base = R_MIN + (R_MAX - R_MIN) * t;
-  return base * (state.radiusScale || 1);
+  return bubbleRadiusFor(n, {
+    singleArticle: state.isSingleArticle,
+    scale: state.radiusScale || 1,
+  });
 }
 
 function getRoot(g: Graph) { return Object.values(g).find(n => n.parentId === null) ?? null; }
@@ -639,9 +644,6 @@ function layoutFishbone(g: Graph) {
   const root: any = getRoot(g);
   // Note: root is guaranteed to exist here since we checked nodeCount above
   root.x = 0; root.y = 0;
-
-  // Update global max contributors for relative radius scaling
-  state.maxContrib = Math.max(1, ...Object.values(g).map(n => n.contributors || 0));
 
   const discs: Disc[] = [{ x: root.x, y: root.y, r: rFor(root.contributors), id: root.id }];
   const trunks: SegV[] = []; const arcs: Arc[] = []; const runs: HRun[] = [];
@@ -825,14 +827,18 @@ function resetView(animated = false) {
   const scaleH = (usableH * VERTICAL_FILL_FRACTION) / Math.max(1, contentH);
 
   let targetScale = Math.min(scaleW, scaleH);
-  // Special handling for single-fork graphs: make the bubble nicely sized
-  if (forks <= 1) {
+  /* Special handling for a subject with a SINGLE article: there is nothing to
+     fit against, so pin the lone bubble to a modest on-screen diameter.
+     Previously this applied to graphs with up to one fork and targeted
+     220-480px, which blew the bubble up to ~40% of the viewport (issue #284).
+     Graphs that already have a fork now go through the normal fit path. */
+  if (state.isSingleArticle) {
     const root = getRoot(state.graph);
     if (root) {
       const r = rFor(root.contributors);
-      const desiredD = Math.max(SINGLE_FORK_DIAMETER_MIN, Math.min(Math.floor(box.width * SINGLE_FORK_WIDTH_RATIO), SINGLE_FORK_DIAMETER_MAX));
-      const sBubble = desiredD / (2 * r);
-      targetScale = Math.min(ZOOM_MAX, Math.max(sBubble, targetScale));
+      const sBubble = singleArticleScreenDiameter(box.width) / (2 * r);
+      // `min` (not `max`): never zoom past the target just to fill the canvas.
+      targetScale = Math.min(ZOOM_MAX, sBubble);
     }
   }
 
@@ -882,6 +888,9 @@ function focusNode(n: Node) {
    RENDER PIPELINE (layout→derive arrays→Vue renders)
    ─────────────────────────────────────────────────────────────────────────── */
 function layoutAndRender() {
+  // A lone article (root with no forks) is pinned to the smallest bubble tier;
+  // must be decided before any rFor() call. See ./bubble-size.ts.
+  state.isSingleArticle = Object.keys(state.graph).length <= 1;
   applyResponsiveDials();          // adapt dials first
   layoutFishbone(state.graph);     // compute x,y and derive edges/trunks/lists
 }
