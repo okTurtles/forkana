@@ -73,7 +73,10 @@ const LANE_PAD_DEFAULT = 12;   // Default padding between bubbles in same lane
 const H_OFFSET_DEFAULT = 48;   // Default horizontal rib length (parent to child)
 const ELBOW_R_DEFAULT = 28;   // Default elbow corner radius
 
-/* === COLLISION CLEARANCES === */
+/* === COLLISION CLEARANCES ===
+   These are CLEARANCES ONLY: every separation rule adds them on top of the two
+   bubbles' actual radii (see bubbleSeparation/laneSeparation below), so the
+   layout stays correct if the tier table in ./bubble-size.ts changes. */
 const BUBBLE_PAD_DEFAULT = 8;   // Minimum clearance between bubbles
 const PATH_PAD_DEFAULT = 8;   // Minimum clearance between bubbles and paths
 
@@ -82,8 +85,12 @@ const ZOOM_MIN = 0.35;          // Minimum zoom level (35% scale)
 const ZOOM_MAX = 3.5;           // Maximum zoom level (350% scale)
 
 /* === VIEW RESET PARAMETERS === */
-const RESET_TOP_MARGIN = 40;    // Top margin when resetting view to center content
-const MAX_REF_DROP = 130;       // Maximum vertical drop for reference scenario to keep layout tight
+const RESET_TOP_MARGIN = 40;    // Minimum top margin when resetting the view
+/* NOTE: a MAX_REF_DROP constant used to cap how far a child could be pushed
+   down (baseY + 130). It was applied AFTER collision resolution and therefore
+   silently threw the result away, which is what made bubbles overlap once the
+   tiered radii from ./bubble-size.ts made them larger than the cap. Vertical
+   room is now bounded by the zoom-fit in resetView(), not by a magic cap. */
 
 /* === RESPONSIVE BREAKPOINTS & FACTORS === */
 const WIDTH_BREAKPOINT_MIN = 480;    // Minimum container width for responsive calculations
@@ -134,8 +141,8 @@ const FOCUS_PADDING = 24;            // Padding when focusing on a single node
    (singleArticleScreenDiameter) so radius and zoom targets stay in sync. */
 
 /* === SVG LAYOUT === */
-const DEFAULT_SVG_HEIGHT = 1000;     // Initial SVG canvas height
-const SVG_BOTTOM_PADDING = 240;      // Extra padding below lowest bubble
+const DEFAULT_SVG_HEIGHT = 1000;     // Initial SVG canvas height (before the container is measured)
+const MIN_SVG_HEIGHT = 320;          // Never collapse the canvas below this
 const CONTENT_BOUNDS_EXTRA = 16;     // Extra horizontal padding for elbow overhang
 const VIEW_TOP_OFFSET = 12;          // Top offset for view calculations
 const DEFAULT_CONTAINER_WIDTH = 1100;   // Default container width when not measured
@@ -629,6 +636,44 @@ type Disc = { x: number; y: number; r: number; id?: string };
 type SegV = { x: number; y1: number; y2: number };
 type Arc = { cx: number; cy: number; r: number };
 type HRun = { x0: number; x1: number; y: number };
+/* A bubble already placed in a lane. The RADIUS is stored, not a pre-baked
+   interval, so the clearance is always recomputed from the two real radii. */
+type LaneSlot = { y: number; r: number };
+
+/* ── SEPARATION RULES ──────────────────────────────────────────────────────
+   Everything that keeps bubbles apart goes through these two helpers. They
+   take the two ACTUAL radii (whatever ./bubble-size.ts hands out) and add a
+   clearance dial, so no rule anywhere assumes a bubble size. If the tier table
+   grows, the spacing grows with it. */
+
+/** Minimum centre-to-centre distance so two bubbles do not touch. */
+function bubbleSeparation(rA: number, rB: number) {
+  return rA + rB + state.bubblePad;
+}
+
+/** Minimum vertical centre distance for two bubbles sharing a lane.
+   Lanes are resolved on the Y axis only (bubbles in one lane can sit at
+   different X), so this is deliberately the conservative case: it is applied
+   regardless of the horizontal gap, and is never smaller than
+   `bubbleSeparation`. */
+function laneSeparation(rA: number, rB: number) {
+  return rA + rB + Math.max(2 * state.lanePad, state.bubblePad);
+}
+
+/** Lowest y >= `y` at which a bubble of radius `r` clears every slot already
+   in `lane`. Iterated to a fixed point: moving past one slot can push the
+   bubble into another one, and the lane is not guaranteed to be sorted. */
+function clearLane(lane: LaneSlot[], y: number, r: number) {
+  for (let pass = 0; pass <= lane.length; pass++) {
+    let moved = false;
+    for (const slot of lane) {
+      const need = laneSeparation(r, slot.r);
+      if (Math.abs(y - slot.y) < need) { y = slot.y + need; moved = true; }
+    }
+    if (!moved) return y;
+  }
+  return y;
+}
 
 function layoutFishbone(g: Graph) {
   const nodeCount = Object.keys(g).length;
@@ -658,19 +703,15 @@ function layoutFishbone(g: Graph) {
     const yStart = py + pr + STEM_LEN_PARENT;
     const R = state.elbowR;
 
-    const leftLane: Array<[number, number]> = [];
-    const rightLane: Array<[number, number]> = [];
+    const leftLane: LaneSlot[] = [];
+    const rightLane: LaneSlot[] = [];
     let turn: Side = -1;
 
     const ordered = (state.scenario === "reference") ? kids.slice()
       : kids.slice().sort((a, b) => rFor(b.contributors) - rFor(a.contributors));
     let prevJoint = yStart - state.branchSpacing;
 
-    const reserveLane = (lane: Array<[number, number]>, y: number, r: number) => lane.push([y - r - state.lanePad, y + r + state.lanePad]);
-    const pushPastLane = (lane: Array<[number, number]>, y: number, r: number) => {
-      for (const [a, b] of lane) if (!(y + r + state.lanePad < a || y - r - state.lanePad > b)) y = b + state.lanePad + r;
-      return y;
-    };
+    const reserveLane = (lane: LaneSlot[], y: number, r: number) => lane.push({ y, r });
 
     for (const c of ordered) {
       if (!c) continue; // Skip undefined nodes
@@ -679,12 +720,8 @@ function layoutFishbone(g: Graph) {
       let side: Side;
       if (state.scenario === "reference" && c.sideHint) side = c.sideHint;
       else {
-        const firstFree = (lane: Array<[number, number]>) => {
-          let y = baseY;
-          for (const [a, b] of lane) if (!(y + cr + state.lanePad < a || y - cr - state.lanePad > b)) y = b + state.lanePad + cr;
-          return y;
-        };
-        const yL = firstFree(leftLane), yR = firstFree(rightLane);
+        /* Put the bubble in whichever lane can take it higher up. */
+        const yL = clearLane(leftLane, baseY, cr), yR = clearLane(rightLane, baseY, cr);
         side = (yL === yR) ? (turn = (turn === -1 ? +1 : -1)) : (yL < yR ? -1 : +1);
       }
 
@@ -692,13 +729,14 @@ function layoutFishbone(g: Graph) {
       const cx = px + side * (cr + minOffset);
 
       let reqY = Math.max(baseY, yStart + R, prevJoint + state.branchSpacing + R);
-      reqY = pushPastLane(side === -1 ? leftLane : rightLane, reqY, cr);
+      reqY = clearLane(side === -1 ? leftLane : rightLane, reqY, cr);
 
-      const bubblePad = state.bubblePad, pathPad = state.pathPad;
+      const pathPad = state.pathPad;
 
+      /* Bubble vs every bubble already placed — INCLUDING the parent, so a
+         large parent tier can never swallow a child. Uses the two real radii. */
       for (const d of discs) {
-        if (d.id === p.id) continue;
-        const dx = cx - d.x, sum = cr + d.r + bubblePad, absx = Math.abs(dx);
+        const dx = cx - d.x, sum = bubbleSeparation(cr, d.r), absx = Math.abs(dx);
         if (absx < sum) reqY = Math.max(reqY, d.y + Math.sqrt(sum * sum - absx * absx));
       }
       for (const a of arcs) {
@@ -725,8 +763,12 @@ function layoutFishbone(g: Graph) {
       }
       for (const s of trunks) if (Math.abs(cx - s.x) < cr + pathPad && reqY <= s.y2) reqY = s.y2 + cr + pathPad;
 
-      reqY = pushPastLane(side === -1 ? leftLane : rightLane, reqY, cr);
-      if (state.scenario === "reference") reqY = Math.min(reqY, baseY + MAX_REF_DROP);
+      /* Re-clear the lane: the path/disc constraints above may have moved the
+         bubble down into a slot it had already cleared. Only ever moves down,
+         so the constraints above stay satisfied. */
+      reqY = clearLane(side === -1 ? leftLane : rightLane, reqY, cr);
+      /* NO cap on reqY here: the previous `Math.min(reqY, baseY + MAX_REF_DROP)`
+         discarded the collision result and is what let bubbles overlap. */
 
       (c as any).x = cx; (c as any).y = reqY;
       reserveLane(side === -1 ? leftLane : rightLane, reqY, cr);
@@ -776,8 +818,12 @@ function layoutFishbone(g: Graph) {
     subject: e.source.repoSubject || e.target.repoSubject || props.subject || '',
   }));
 
-  const maxY = Math.max(...nodesList.value.map(n => (n.y ?? 0) + rFor(n.contributors)));
-  svgHeight.value = Math.max(containerHeight, maxY + SVG_BOTTOM_PADDING);
+  /* The canvas is the VIEWPORT, not the content: resetView() zoom-fits the
+     world into it. It used to be sized from the lowest bubble in WORLD units
+     (`maxY + 240`), which ignored the zoom factor and left the graph stranded
+     at the top of an over-tall, scrolling canvas — the empty band under the
+     first bubble. */
+  svgHeight.value = Math.max(MIN_SVG_HEIGHT, containerHeight || DEFAULT_SVG_HEIGHT);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────-
@@ -808,7 +854,13 @@ function resetView(animated = false) {
 
   if (nodesList.value.length === 0) return;
 
-  const usableH = box.height - VIEW_TOP_OFFSET;
+  /* Vertical fit must use the scroll viewport (the measured container), NOT the
+     <svg> client rect: `svgHeight` is applied by Vue on the next tick, so right
+     after layoutAndRender() the rect can still report the previous canvas
+     height. Fitting against a stale, too-tall rect is what left the graph
+     hanging above a band of empty space. */
+  const viewportH = containerHeight || box.height;
+  const usableH = viewportH - VIEW_TOP_OFFSET;
 
   const forks = forkCount(state.graph);
   const b = contentBounds();
@@ -846,9 +898,13 @@ function resetView(animated = false) {
   const cx = box.width / 2;
   const worldCenterX = (b.minX + b.maxX) / 2;
   const tx = cx - (worldCenterX * targetScale);
-  // Position vertically with top margin
-  const targetTop = VIEW_TOP_OFFSET + RESET_TOP_MARGIN;
-  const ty = targetTop - (b.minY * targetScale);
+  /* Center vertically: distribute the leftover height above and below the
+     content instead of pinning it to the top (which left a large dead area
+     under a small graph, most visibly under a lone bubble). RESET_TOP_MARGIN
+     is now a floor, used when the content is as tall as the viewport. */
+  const scaledContentH = contentH * targetScale;
+  const topSpace = Math.max(RESET_TOP_MARGIN, (usableH - scaledContentH) / 2);
+  const ty = VIEW_TOP_OFFSET + topSpace - (b.minY * targetScale);
 
   // Validate transform values before applying
   if (!isFinite(tx) || !isFinite(ty) || !isFinite(targetScale)) {
@@ -866,7 +922,8 @@ function focusNode(n: Node) {
   /* Note: also applied to worldSel via zoomBehavior, so it now works. */
   const svg = svgRef.value!;
   const box = svg.getBoundingClientRect();
-  const usableH = box.height - VIEW_TOP_OFFSET;
+  // Same reason as in resetView(): fit against the measured viewport.
+  const usableH = (containerHeight || box.height) - VIEW_TOP_OFFSET;
   const r = rFor(n.contributors);
 
   // Calculate scale to fit the bubble with padding
