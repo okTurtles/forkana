@@ -297,3 +297,36 @@
   width: 100%;
   height: auto;
 }
+
+/* Auth pages ("page-content user signin": sign in, sign up, 2FA, WebAuthn,
+   change password, OpenID sign in) render a single short card. They used to be
+   laid out at the top of ".full.height", which additionally reserves
+   "--page-space-bottom" (64px) of dead space below the card, so the page could
+   easily grow past the viewport and push the footer out of view (#242).
+
+   Instead, let ".page-content" take the space between the navbar and the footer
+   and centre the card inside it. "margin: auto" is used rather than
+   "justify-content: center" on purpose: in flexbox auto margins resolve to 0
+   when there is no free space, so on short viewports the card starts at the top
+   and the page simply scrolls instead of being clipped at the top edge. */
+.full.height:has(> .page-content.user.signin) {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--page-spacing);
+}
+
+.page-content.user.signin {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ".ui.page.grid" covers sign in / sign up / 2FA / WebAuthn / OpenID sign in,
+   ".ui.container" covers change password */
+.page-content.user.signin > .ui.page.grid,
+.page-content.user.signin > .ui.container {
+  /* overrides ".page-content > :first-child.ui.grid" and ".ui.grid"'s negative
+     vertical margins; the grid column keeps its own 1rem vertical padding */
+  margin-top: auto;
+  margin-bottom: auto;
+}
