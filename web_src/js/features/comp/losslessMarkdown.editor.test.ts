@@ -277,6 +277,36 @@ describe('Visual edits are merged back onto the pristine source', () => {
     expect(editor.getMarkdown()).toBe(output);
   });
 
+  // The serializer rewrites the *length* of setext underlines and table delimiter rows
+  // (`==============` -> `===`, `| - | - |` -> `| --- | --- |`). normalizeLine treats rule
+  // lines as length-insensitive so these keep their original bytes too.
+  test('tables and setext headings keep their original formatting', async () => {
+    const article = [
+      'Setext Heading',
+      '==============',
+      '',
+      'An intro_paragraph here.',
+      '',
+      '| a | b |',
+      '| - | - |',
+      '| 1 | 2 |',
+      '',
+      'See [ref][1] at the end.',
+      '',
+      '[1]: https://example.com/x',
+      '',
+    ].join('\n');
+    const {editor} = createEditor(article);
+    expect(editor.getMarkdown()).toBe(article);
+    editInVisual(editor, 'An intro_paragraph here.', 'An intro_paragraph, edited.');
+    await flush();
+    const output: string = editor.getMarkdown();
+    expect(output).toContain('==============');
+    expect(output).toContain('| - | - |');
+    expect(output).toContain('See [ref][1] at the end.');
+    expect(output).toContain('[1]: https://example.com/x');
+  });
+
   test('a whole-document rewrite falls back to the serialization', async () => {
     const {editor, textarea} = createEditor(SAMPLE);
     const view = wysiwygView(editor);

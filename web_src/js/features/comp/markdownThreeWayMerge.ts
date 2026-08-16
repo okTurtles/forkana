@@ -34,6 +34,12 @@ const ESCAPED_PUNCTUATION_RE = /\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~\\])/g;
 const UNORDERED_BULLET_RE = /^(\s*)[*+-](\s)/;
 const ORDERED_MARKER_RE = /^(\s*\d{1,9})[.)](\s)/;
 const SPACE_RUN_RE = /[ \t]+/g;
+// Setext underlines (`====`) and table delimiter rows (`| --- |`) only have to be *long
+// enough*, so the serializer freely rewrites their length. Detect a line made purely of rule
+// characters and collapse each run to one, which makes `====` and `===` compare equal without
+// letting a rule line ever match anything else.
+const RULE_LINE_RE = /^[\s|:=-]+$/;
+const RULE_RUN_RE = /(=+|-+)/g;
 
 // Product of the two line counts above which the O(n*m) LCS is not worth running. A 1500x1500
 // document is ~2.2M cells (~9MB as Uint32Array) and still completes in a few milliseconds;
@@ -50,8 +56,11 @@ const MIN_BASE_COVERAGE = 0.5;
 // Reduces a line to the form both the pristine source and the serialization agree on.
 // Deliberately lossy: it exists only for comparison, never for output.
 export function normalizeLine(line: string): string {
-  return line
-    .replace(ESCAPED_PUNCTUATION_RE, '$1')
+  const unescaped = line.replace(ESCAPED_PUNCTUATION_RE, '$1');
+  if (RULE_LINE_RE.test(unescaped)) {
+    return unescaped.replace(RULE_RUN_RE, (run) => run[0]).replace(SPACE_RUN_RE, ' ').trimEnd();
+  }
+  return unescaped
     .replace(UNORDERED_BULLET_RE, '$1-$2')
     .replace(ORDERED_MARKER_RE, '$1.$2')
     .replace(SPACE_RUN_RE, ' ')

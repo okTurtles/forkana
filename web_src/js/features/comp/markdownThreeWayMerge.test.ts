@@ -36,6 +36,15 @@ describe('normalizeLine', () => {
     expect(normalizeLine('trailing   ')).toBe('trailing');
   });
 
+  test('treats setext underlines and table delimiter rows as length-insensitive', () => {
+    expect(normalizeLine('======')).toBe(normalizeLine('==='));
+    expect(normalizeLine('| --- | --- |')).toBe(normalizeLine('| - | - |'));
+    // alignment markers still distinguish delimiter rows
+    expect(normalizeLine('| :-- | --: |')).not.toBe(normalizeLine('| --- | --- |'));
+    // a rule line never collides with ordinary text
+    expect(normalizeLine('---')).not.toBe(normalizeLine('- item'));
+  });
+
   test('keeps genuinely different lines different', () => {
     expect(normalizeLine('hello world')).not.toBe(normalizeLine('hello worlds'));
     expect(normalizeLine('[a](b)')).not.toBe(normalizeLine('[a](c)'));
