@@ -27,8 +27,23 @@ function syncTransferConfirmInput(): void {
 }
 
 // Resets the "new owner" field back to its searchable state, called when the owner is
-// cleared and every time the transfer modal is reopened.
-let resetTransferOwnerSearch = (): void => {};
+// cleared and every time the transfer modal is reopened. The settings markup is
+// re-rendered in place and the modal is absent for archived articles, so the elements
+// are resolved on every call instead of being captured once.
+function resetTransferOwnerSearch(): void {
+  transferOwnerSelected = false;
+  const elSearch = document.querySelector<HTMLElement>('#article-transfer-owner-search');
+  if (!elSearch) return;
+
+  const elInput = elSearch.querySelector<HTMLInputElement>('input[name="new_owner_name"]');
+  const elSelection = elSearch.querySelector<HTMLElement>('#article-transfer-owner-selection');
+  elInput.value = '';
+  elSelection.querySelector<HTMLImageElement>('#article-transfer-owner-avatar').src = '';
+  elSelection.querySelector<HTMLElement>('#article-transfer-owner-name').textContent = '';
+  hideElem(elSelection);
+  showElem(elInput.closest<HTMLElement>('.ui.input'));
+  syncTransferConfirmInput();
+}
 
 // Turns the "new owner" field into a search box listing the users the article can be
 // transferred to. A user is shown by their full name, falling back to the username,
@@ -43,16 +58,6 @@ function initArticleTransferOwnerSearch(): void {
   const elSelection = elSearch.querySelector<HTMLElement>('#article-transfer-owner-selection');
   const elAvatar = elSelection.querySelector<HTMLImageElement>('#article-transfer-owner-avatar');
   const elName = elSelection.querySelector<HTMLElement>('#article-transfer-owner-name');
-
-  resetTransferOwnerSearch = () => {
-    transferOwnerSelected = false;
-    elInput.value = '';
-    elAvatar.src = '';
-    elName.textContent = '';
-    hideElem(elSelection);
-    showElem(elPrompt);
-    syncTransferConfirmInput();
-  };
 
   fomanticQuery(elSearch).search({
     minCharacters: 3,
