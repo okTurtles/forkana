@@ -1,4 +1,4 @@
-import {addDelegatedEventListener, queryElems} from '../utils/dom.ts';
+import {queryElems} from '../utils/dom.ts';
 import type {DOMEvent} from '../utils/dom.ts';
 
 // Explore pages (repos, subjects, users) share the same borderless filter/sort search bar
@@ -13,17 +13,13 @@ const tabLinkSelector = 'a[data-explore-tab-link]';
 // Search field of the explore page, every tab searches with the same "q" parameter.
 const searchInputSelector = '.page-content.explore input[type="search"][name="q"]';
 
-// True while a click on an explore tab link is being processed. Clicking a tab blurs the search
-// field, which fires its "change" event and would otherwise navigate to the current tab and cancel
-// the tab switch.
-let switchingTab = false;
-
 // Update the "q" parameter of the explore tab links so switching tabs keeps whatever is currently
 // in the search field, without relying on any browser storage (explore is available to anonymous
 // users, and switching tabs is a plain server-rendered page load).
 function updateTabLinks(keyword: string): void {
   queryElems<HTMLAnchorElement>(document, tabLinkSelector, (tabLink) => {
-    const url = new URL(tabLink.href, window.location.href);
+    // the "href" property of an anchor is already resolved against the document
+    const url = new URL(tabLink.href);
     if (keyword) {
       url.searchParams.set('q', keyword);
     } else {
@@ -34,13 +30,22 @@ function updateTabLinks(keyword: string): void {
 }
 
 export function initExploreSearch() {
+  // The explore navbar carries the keyword over in its tab links (see updateTabLinks), which also
+  // changes how the keyword field itself is submitted, see below. The same search bar is rendered
+  // without that navbar on other pages (profiles, organizations, the admin repository list).
+  const tabsCarryKeyword = Boolean(document.querySelector(tabLinkSelector));
+
   for (const searchForm of document.querySelectorAll<HTMLFormElement>(searchFormSelectors)) {
     searchForm.addEventListener('change', (e: DOMEvent<Event, HTMLInputElement>) => {
       e.preventDefault();
 
-      // the tab link click that caused this change event takes precedence, that link already
-      // carries the current keyword in its own URL
-      if (switchingTab) return;
+      // The keyword field fires "change" once it loses focus with an edited value, no matter what
+      // the user does next: click a tab, move the focus towards one with the keyboard (which first
+      // steps through the search button), or click anywhere else. Reloading the current tab from
+      // here cancels that tab switch and takes the focus with it, so on the explore pages the
+      // keyword field keeps its own submit paths (the Enter key and the search button) and the tab
+      // links carry whatever has been typed over themselves.
+      if (tabsCarryKeyword && e.target.name === 'q') return;
 
       const params = new URLSearchParams();
       for (const [key, value] of new FormData(searchForm).entries()) {
@@ -60,18 +65,9 @@ export function initExploreSearch() {
     });
   }
 
-  if (!document.querySelector(tabLinkSelector)) return;
+  if (!tabsCarryKeyword) return;
 
   queryElems<HTMLInputElement>(document, searchInputSelector, (searchInput) => {
     searchInput.addEventListener('input', () => updateTabLinks(searchInput.value.trim()));
-  });
-
-  // "pointerdown" fires before the search field loses focus, so the flag is set before the
-  // resulting "change" event. It is reset in a timeout, which runs after that event.
-  addDelegatedEventListener(document, 'pointerdown', tabLinkSelector, () => {
-    switchingTab = true;
-    setTimeout(() => {
-      switchingTab = false;
-    }, 0);
   });
 }

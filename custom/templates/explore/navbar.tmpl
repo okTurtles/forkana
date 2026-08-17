@@ -12,7 +12,7 @@
 		</a>
 	{{end}}
 	<!-- {{if not .OrganizationsPageIsDisabled}}
-	<a class="{{if .PageIsExploreOrganizations}}active {{end}}item" href="{{AppSubUrl}}/explore/organizations">
+	<a class="{{if .PageIsExploreOrganizations}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/organizations?" AppSubUrl) "q" .Keyword}}">
 		{{svg "octicon-organization"}} {{ctx.Locale.Tr "explore.organizations"}}
 	</a>
 	{{end}} -->
