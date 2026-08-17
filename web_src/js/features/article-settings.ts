@@ -1,5 +1,6 @@
 import {fomanticQuery} from '../modules/fomantic/base.ts';
 import {addDelegatedEventListener, hideElem, showElem} from '../utils/dom.ts';
+import {htmlEscape} from '../utils/html.ts';
 
 // The transfer modal additionally requires an owner picked from the search results,
 // the button state depends on both the confirmation input and that selection.
@@ -64,8 +65,12 @@ function initArticleTransferOwnerSearch(): void {
       onResponse(response: any) {
         const results = [];
         for (const user of response.data) {
+          const name = user.full_name || user.login;
           results.push({
-            title: user.full_name || user.login,
+            // the result template renders "title" as HTML (preserveHTML), the raw value
+            // is kept separately for the selected-owner display
+            title: htmlEscape(name),
+            rawName: name,
             image: user.avatar_url,
           });
         }
@@ -76,7 +81,7 @@ function initArticleTransferOwnerSearch(): void {
       transferOwnerSelected = Boolean(result?.title);
       if (!transferOwnerSelected) return;
       elAvatar.src = result.image ?? '';
-      elName.textContent = result.title;
+      elName.textContent = result.rawName ?? '';
       hideElem(elPrompt);
       showElem(elSelection);
       syncTransferConfirmInput();
