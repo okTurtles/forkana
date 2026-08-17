@@ -45,10 +45,6 @@ const LABEL_GAP_UPDATED_INNER = 6;   // Gap between two lines of updated text
 const CHAR_WIDTH_RATIO_LABEL = 0.62; // width of a label char as a ratio of font size
 const CHAR_WIDTH_RATIO_SMALL = 0.62; // ...and of small text, which is mostly digits
 
-/* === BUTTON SIZING === */
-const BUTTON_MARGIN_TOP = 24;        // Margin between copy and button in screen pixels (1.5rem = 24px)
-const BUTTON_MIN_RADIUS = 80;        // Minimum bubble radius (in screen pixels) to show button
-
 const props = defineProps<{
   id: string;
   x: number; y: number;          // world coordinates (graph space)
@@ -65,10 +61,11 @@ const props = defineProps<{
   compareState?: 'none' | 'first' | 'second';  // compare selection state
 }>();
 
-/* Emits so the parent can wire up interactions without D3 binding. */
+/* Emits so the parent can wire up interactions without D3 binding. Opening the
+   article is no longer a per-bubble affordance: clicking a bubble opens the
+   detail view (ArticleDetailView.vue), and "Read full article" lives there. */
 const emit = defineEmits<{
   (e: "click", id: string, ev: MouseEvent): void;
-  (e: "view", id: string, ev: MouseEvent): void;
 }>();
 
 /* Label fit model in *screen pixels* so it looks consistent across zoom.
@@ -183,22 +180,8 @@ watch(() => [props.k, props.r, props.updatedAt, props.contributors, props.detail
 /* Convenience computed transform strings */
 const gTransform = computed(() => `translate(${props.x},${props.y})`);
 
-const showButton = computed(() => {
-  if (!props.isActive) return false;
-  const pixelRadius = props.r * props.k;
-  return pixelRadius >= BUTTON_MIN_RADIUS;
-});
-
 /* Pointer handlers relay events upward (so parent can focus). */
 function onClick(ev: MouseEvent) { emit("click", props.id, ev); }
-function onView(ev: MouseEvent | KeyboardEvent) {
-  ev.preventDefault();
-  ev.stopPropagation();
-  // Convert KeyboardEvent to MouseEvent-like object for consistency
-  const mouseEv = ev as MouseEvent;
-  emit("view", props.id, mouseEv);
-}
-
 /* Keyboard navigation support */
 function onKeyDown(ev: KeyboardEvent) {
   if (ev.key === 'Enter' || ev.key === ' ') {
@@ -264,14 +247,6 @@ function onKeyDown(ev: KeyboardEvent) {
           <div>Last updated</div>
           <div :style="`margin-top: ${LABEL_GAP_UPDATED_INNER}px;`">{{ formattedDate }}</div>
         </div>
-
-        <!-- View article button: only if active and bubble is large enough -->
-        <button
-          v-if="showButton" class="view-button" :style="`margin-top: ${BUTTON_MARGIN_TOP}px;`" @click="onView"
-          @keydown.enter.prevent="onView" @keydown.space.prevent="onView" aria-label="View article details"
-        >
-          View article
-        </button>
       </div>
     </foreignObject>
   </g>
@@ -349,37 +324,4 @@ function onKeyDown(ev: KeyboardEvent) {
   pointer-events: none;
 }
 
-/* View article button - HTML button with proper styling */
-.html-label-wrapper .view-button {
-  background-color: var(--color-primary);
-  color: var(--color-primary-contrast);
-  font-size: 14px;
-  font-weight: 600;
-  padding: 0.38rem 0.5rem;
-  border: none;
-  border-radius: 0.375rem;
-  cursor: pointer;
-  opacity: 0.95;
-  transition: background-color 0.2s ease, opacity 0.2s ease;
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-
-.html-label-wrapper .view-button:hover {
-  background-color: var(--color-primary-dark, #1d4ed8);
-  opacity: 1;
-}
-
-.html-label-wrapper .view-button:focus {
-  outline: 2px solid var(--color-surface);
-  outline-offset: 2px;
-  background-color: var(--color-primary);
-}
-
-.html-label-wrapper .view-button:active {
-  transform: scale(0.98);
-}
 </style>

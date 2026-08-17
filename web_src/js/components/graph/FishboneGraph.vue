@@ -15,7 +15,7 @@ import { select } from "d3-selection";
 // @ts-ignore - d3-selection types may not be available in CI environment
 import type { Selection } from "d3-selection";
 // @ts-ignore - d3-zoom types may not be available in CI environment
-import { zoom, zoomIdentity } from "d3-zoom";
+import { zoom, zoomIdentity, zoomTransform } from "d3-zoom";
 // @ts-ignore - d3-zoom types may not be available in CI environment
 import type { ZoomBehavior, ZoomTransform } from "d3-zoom";
 
@@ -23,6 +23,8 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
+import ArticleDetailView from "./ArticleDetailView.vue";
+import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import { bubbleLabelDetailFor, bubbleRadiusFor, singleArticleScreenDiameter } from "./bubble-size.ts";
 
 // Inline types replacing former seeds module
@@ -41,6 +43,10 @@ type Node = {
   repoName?: string;
   repoSubject?: string;
   fullName?: string;
+  /* Repository description — the article's excerpt in the detail view. Already
+     part of the fork-graph payload (api.Repository.Description), so no
+     server-side change was needed for it. */
+  description?: string;
   isEmpty?: boolean;
 };
 type Graph = Record<string, Node>;
@@ -150,7 +156,6 @@ const RADIUS_MIN_SCALE = 0.65;            // Minimum overall radius scale to avo
 const FILL_FRACTION_MIN = 0.55;      // Minimum horizontal fill fraction for few forks
 const FILL_FRACTION_MAX = 0.90;      // Maximum horizontal fill fraction for many forks
 const VERTICAL_FILL_FRACTION = 0.86; // Vertical fill fraction of usable height
-const FOCUS_PADDING = 24;            // Padding when focusing on a single node
 /* Single-article on-screen sizing lives in ./bubble-size.ts
    (singleArticleScreenDiameter) so radius and zoom targets stay in sync. */
 
@@ -539,6 +544,7 @@ function buildGraphFromApi(root: any): Graph {
       repo?.subject ?? repo?.subject_slug ?? repo?.subject_name ?? repoName ?? null;
     const fullName: string | null = repo?.full_name ?? (ownerName && repoName ? `${ownerName}/${repoName}` : null);
     const isEmpty: boolean = repo?.empty === true;
+    const description: string = typeof repo?.description === 'string' ? repo.description : '';
 
     // If repository is not empty but contributors shows 0, it means stats are still generating
     // In this case, we know there's at least 1 contributor (the person who created the content)
@@ -556,6 +562,7 @@ function buildGraphFromApi(root: any): Graph {
       repoName: repoName ?? undefined,
       repoSubject: repoSubject ?? undefined,
       fullName: fullName ?? undefined,
+      description: description || undefined,
       isEmpty: isEmpty,
     };
     if (!node.repoSubject && parentId === null && props.subject) {
@@ -1037,32 +1044,10 @@ function resetView(animated = false) {
   currentK.value = targetScale;
 }
 
-/* Click focus: center selected bubble and fit fully */
-function focusNode(n: Node) {
-  /* Note: also applied to worldSel via zoomBehavior, so it now works. */
-  const svg = svgRef.value!;
-  const box = svg.getBoundingClientRect();
-  // Same reason as in resetView(): fit against the measured viewport.
-  const usableH = graphViewportHeight() - VIEW_TOP_OFFSET;
-  const r = rFor(n.contributors);
-
-  // Calculate scale to fit the bubble with padding
-  const sx = (box.width - 2 * FOCUS_PADDING) / (2 * r);
-  const sy = (usableH - 2 * FOCUS_PADDING) / (2 * r);
-  const scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.min(sx, sy)));
-
-  // Center the node in the viewport
-  const cx = box.width / 2;
-  const cy = VIEW_TOP_OFFSET + usableH / 2;
-  const tx = cx - (n.x! * scale);
-  const ty = cy - (n.y! * scale);
-  /* Same bound as a manual pan: focusing a bubble at the edge of the graph
-     frames it as closely as the clamp allows rather than pulling the rest of
-     the graph off screen (and then snapping back on the next gesture). */
-  const t = constrainToViewport(zoomIdentity.translate(tx, ty).scale(scale), zoomExtent());
-  svgSel.transition().duration(VIEW_TRANSITION_DURATION).call(zoomBehavior.transform as any, t);
-  currentK.value = scale;
-}
+/* NOTE: focusNode() lived here — it zoomed the canvas onto the clicked bubble.
+   Clicking a bubble now opens ArticleDetailView instead, which draws that one
+   article at a fixed size over the canvas, so the zoom-to-a-node path had no
+   caller left. FOCUS_PADDING went with it. */
 
 /* ─────────────────────────────────────────────────────────────────────────────-
    RENDER PIPELINE (layout→derive arrays→Vue renders)
@@ -1152,12 +1137,14 @@ onMounted(async () => {
   await fetchForkGraphAndSet();
   window.addEventListener('repo:selection-updated', handleExternalSelection as EventListener);
   window.addEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
+  window.addEventListener('keydown', onDetailKeydown);
 });
 
 onBeforeUnmount(() => {
   if (ro) ro.disconnect();
   window.removeEventListener('repo:selection-updated', handleExternalSelection as EventListener);
   window.removeEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
+  window.removeEventListener('keydown', onDetailKeydown);
 });
 
 /* Derived for template binding */
@@ -1185,6 +1172,92 @@ function persistSelectionDetail(detail: RepoSelectionDetail | null) {
 }
 
 /* Click handler: focus and persist selected article (owner/subject) */
+/* ──────────────────────────────────────────────────────────────────────────────
+   ARTICLE DETAIL VIEW (click a bubble → that article, large, with its actions)
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/** The article being shown large, or null for the normal graph. */
+const detailNode = ref<Node | null>(null);
+const historyOpen = ref(false);
+/** The pan/zoom the graph was at when the detail view opened, so "Back" can
+   put the user back exactly where they were rather than re-fitting. */
+let transformBeforeDetail: ZoomTransform | null = null;
+
+/** Ancestors of the detail node, oldest last — the lineage the design lists:
+   the article itself, then "Fork of:" each parent up to the subject root. */
+const historyEntries = computed<HistoryEntry[]>(() => {
+  const start = detailNode.value;
+  if (!start) return [];
+  const out: HistoryEntry[] = [];
+  let cur: Node | undefined = start;
+  const guard = new Set<NodeId>();
+  while (cur && !guard.has(cur.id)) {
+    guard.add(cur.id);
+    const owner = cur.repoOwner ?? cur.fullName?.split('/')[0] ?? '';
+    const title = cur.repoSubject ?? cur.repoName ?? cur.fullName ?? cur.id;
+    out.push({
+      id: cur.id,
+      title: owner ? `${owner} / ${title}` : title,
+      isFork: out.length > 0,
+      /* NOTE: there is no "point of contention" TEXT anywhere in the model
+         today — the graph only marks contention as the junction dots between a
+         fork and its parent, and the compare page names the two owners. The
+         nearest real text is the fork's own repository description, so that is
+         what is shown; a dedicated field would need a server-side change. */
+      contention: cur.description,
+      owner: owner || undefined,
+      isCurrent: cur.id === start.id,
+    });
+    cur = cur.parentId ? state.graph[cur.parentId] : undefined;
+  }
+  return out;
+});
+
+/** The design expands the oldest ancestor — the original point of contention. */
+const historyExpandedId = computed(() => {
+  const entries = historyEntries.value;
+  return entries.length ? entries[entries.length - 1].id : null;
+});
+
+function openDetail(n: Node) {
+  transformBeforeDetail = svgRef.value ? zoomTransform(svgRef.value) : null;
+  detailNode.value = n;
+  historyOpen.value = false;
+  announceToScreenReader(`Opened ${n.fullName || n.id}`);
+}
+
+function closeDetail() {
+  detailNode.value = null;
+  historyOpen.value = false;
+  /* Restore the exact view the user left, not a fresh fit. */
+  if (transformBeforeDetail && svgSel) {
+    svgSel.call(zoomBehavior.transform as any, transformBeforeDetail);
+    currentK.value = transformBeforeDetail.k;
+  }
+  transformBeforeDetail = null;
+}
+
+function onDetailRead() {
+  const n = detailNode.value;
+  if (n) onBubbleView(n);
+}
+
+function onDetailFullHistory() {
+  const n = detailNode.value;
+  if (!n) return;
+  const owner = n.repoOwner ?? n.fullName?.split('/')[0] ?? '';
+  const repo = n.repoName ?? n.fullName?.split('/')[1] ?? '';
+  if (!owner || !repo) return;
+  const suburl = window.config?.suburl || '';
+  window.location.href = `${suburl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits`;
+}
+
+function onDetailKeydown(ev: KeyboardEvent) {
+  if (ev.key !== 'Escape') return;
+  if (historyOpen.value) historyOpen.value = false;
+  else if (detailNode.value) closeDetail();
+}
+
 function onBubbleClick(n: Node) {
   // In compare mode, use compare selection logic instead
   if (isCompareMode.value) {
@@ -1192,7 +1265,7 @@ function onBubbleClick(n: Node) {
     return;
   }
 
-  focusNode(n);
+  openDetail(n);
   const detail = getSelectionDetailFromNode(n);
   if (!detail) return;
   const payload = { ...detail };
@@ -1419,6 +1492,20 @@ function goToComparison() {
           :default-branch="props.defaultBranch"
         />
       </div>
+      <!-- Detail view (#284): one article, large, with its excerpt and
+             actions. Sits over the canvas; the graph keeps its transform. -->
+      <ArticleDetailView
+        v-if="detailNode"
+        :contributors="detailNode.contributors" :description="detailNode.description"
+        :updated-at="detailNode.updatedAt"
+        @back="closeDetail" @read="onDetailRead" @history="historyOpen = true"
+      >
+        <ArticleHistoryPopup
+          v-if="historyOpen" :entries="historyEntries" :expanded-id="historyExpandedId"
+          @close="historyOpen = false" @view-full-history="onDetailFullHistory"
+        />
+      </ArticleDetailView>
+
       <!-- End graph-container -->
 
       <div ref="legendRef">
