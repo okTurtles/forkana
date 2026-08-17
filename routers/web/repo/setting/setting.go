@@ -896,6 +896,22 @@ func handleArticleSettingsPostTransfer(ctx *context.Context) {
 		return
 	}
 
+	// The candidate search already hides these users, but the rule has to hold for a
+	// crafted request and for a recipient who acquired an article on this subject in
+	// the meantime. The transfer itself only guards against a repository name clash.
+	if repo.SubjectID > 0 {
+		existing, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, newOwner.ID, repo.SubjectID)
+		if err != nil {
+			ctx.ServerError("GetRepositoryByOwnerIDAndSubjectID", err)
+			return
+		}
+		if existing != nil {
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_has_article"))
+			ctx.Redirect(redirectURL)
+			return
+		}
+	}
+
 	// Close the GitRepo if open
 	if ctx.Repo.GitRepo != nil {
 		ctx.Repo.GitRepo.Close()

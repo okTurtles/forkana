@@ -146,6 +146,34 @@ func TestArticleSettingsTransfer(t *testing.T) {
 	})
 }
 
+func TestArticleSettingsTransferRecipientHasArticleOnSubject(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	recipient := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+	// the candidate search hides such users, the handler has to reject them as well
+	sameSubject := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: recipient.ID})
+	sameSubject.SubjectID = repo.SubjectID
+	_, err := db.GetEngine(t.Context()).ID(sameSubject.ID).Cols("subject_id").Update(sameSubject)
+	require.NoError(t, err)
+
+	session := loginUser(t, owner.Name)
+	articleSettingsURL := fmt.Sprintf("/article/%s/%s?view=article&mode=settings", owner.Name, subjectName)
+	req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name),
+		transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.FullName))
+	resp := session.MakeRequest(t, req, http.StatusSeeOther)
+	assert.Equal(t, articleSettingsURL, test.RedirectURL(resp))
+
+	flash := NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, "GET", articleSettingsURL), http.StatusOK).Body).Find(".flash-message")
+	require.Equal(t, 1, flash.Length())
+	assert.Contains(t, flash.Text(), "The new owner already has an article on this subject.")
+
+	unchanged := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
+	assert.Equal(t, repo_model.RepositoryReady, unchanged.Status)
+	unittest.AssertNotExistsBean(t, &repo_model.RepoTransfer{RepoID: repo.ID})
+}
+
 func TestArticleSettingsTransferCandidates(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
