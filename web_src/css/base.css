@@ -94,7 +94,6 @@ body {
      scrollbar, so a horizontally scrolling page (wide diffs, tables) does not
      gain a spurious vertical scrollbar. */
   min-height: 100%;
-  font-size: 14px;
   line-height: 20px;
   font-family: var(--fonts-regular);
   color: var(--color-text);

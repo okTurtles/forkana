@@ -298,33 +298,55 @@
   height: auto;
 }
 
-/* Auth pages ("page-content user signin": sign in, sign up, 2FA, WebAuthn,
-   change password, OpenID sign in) render a single short card. They used to be
-   laid out at the top of ".full.height", which additionally reserves
+/* Auth pages render a single short card and nothing else. They used to be laid
+   out at the top of ".full.height", which additionally reserves
    "--page-space-bottom" (64px) of dead space below the card, so the page could
    easily grow past the viewport and push the footer out of view (#242).
 
    Instead, let ".page-content" take the space between the navbar and the footer
-   and centre the card inside it. "margin: auto" is used rather than
+   and center the card inside it. "margin: auto" is used rather than
    "justify-content: center" on purpose: in flexbox auto margins resolve to 0
    when there is no free space, so on short viewports the card starts at the top
-   and the page simply scrolls instead of being clipped at the top edge. */
-.full.height:has(> .page-content.user.signin) {
+   and the page simply scrolls instead of being clipped at the top edge. That is
+   also what makes this safe for the taller members of the group (link account
+   with both tabs, activate/reset password with a flash message): they simply
+   keep the old top-aligned layout when they outgrow the viewport.
+
+   The class list is the set of auth pages that share this one-card layout:
+     .signin        templates/user/auth/{signin,signup,twofa,twofa_scratch,
+                    webauthn,change_passwd,signin_openid}.tmpl
+                    (note "signup.tmpl" also uses the "signin" class)
+     .signup        templates/user/auth/signup_openid_{connect,register}.tmpl
+     .activate      templates/user/auth/{activate,activate_prompt,
+                    prohibit_login}.tmpl
+     .link-account  templates/user/auth/link_account.tmpl
+     .forgot.password / .reset.password
+                    templates/user/auth/{forgot,reset}_passwd.tmpl
+   Deliberately excluded: ".page-content.oauth2-authorize-application-box"
+   (templates/user/auth/grant.tmpl), whose consent screen is a variable-length
+   list of scopes rather than a fixed short card. */
+.full.height:has(> .page-content.user:is(.signin, .signup, .activate, .link-account, .forgot.password, .reset.password)) {
   display: flex;
   flex-direction: column;
+  /* ".full.height" reserves "--page-space-bottom" (64px) below the last page
+     element, which is meant to keep dense content pages off the footer. On these
+     pages the single card is already centered with auto margins, so those 64px
+     are pure dead space at the bottom of the page -- and they are what tipped
+     the page over the viewport height and pushed the footer out of view (#242).
+     "--page-spacing" (16px) is the right gap for a page with one element. */
   padding-bottom: var(--page-spacing);
 }
 
-.page-content.user.signin {
+.page-content.user:is(.signin, .signup, .activate, .link-account, .forgot.password, .reset.password) {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
 }
 
-/* ".ui.page.grid" covers sign in / sign up / 2FA / WebAuthn / OpenID sign in,
-   ".ui.container" covers change password */
-.page-content.user.signin > .ui.page.grid,
-.page-content.user.signin > .ui.container {
+/* ".ui.page.grid" covers most of them, ".ui.container" covers change password
+   and OpenID register; on link account and OpenID register the rule targets the
+   card below the secondary nav, which stays at the top as its own flex item. */
+.page-content.user:is(.signin, .signup, .activate, .link-account, .forgot.password, .reset.password) > :is(.ui.page.grid, .ui.container) {
   /* overrides ".page-content > :first-child.ui.grid" and ".ui.grid"'s negative
      vertical margins; the grid column keeps its own 1rem vertical padding */
   margin-top: auto;
