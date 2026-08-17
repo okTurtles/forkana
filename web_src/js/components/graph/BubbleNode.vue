@@ -7,6 +7,7 @@
 
 import { computed, watch, reactive } from "vue";
 import { formatDateYMD } from '../../utils/time.ts';
+import type { BubbleLabelDetail } from './bubble-size.ts';
 
 /* ──────────────────────────────────────────────────────────────────────────────
    LABEL LAYOUT CONSTANTS (all values explained to avoid "magic numbers")
@@ -14,6 +15,8 @@ import { formatDateYMD } from '../../utils/time.ts';
 
 /* === FONT SIZING === */
 const FONT_SIZE_COUNT_MIN = 10;      // Minimum font size for contributor count
+const FONT_SCALE_MIN = 0.62;         // Type may shrink to this to honour the tier's detail
+const FONT_SIZE_FLOOR = 8;           // ...but never below this, in screen px: it stops being legible
 const FONT_SIZE_COUNT_MAX = 34;      // Maximum font size for contributor count
 const FONT_SIZE_COUNT_SCALE = 0.95;  // Scale factor: count font size = on-screen radius * scale
 const FONT_SIZE_LABEL = 12;          // Fixed font size for "Contributor(s)" label
@@ -21,7 +24,13 @@ const FONT_SIZE_SMALL = 11;          // Font size for "Last updated" lines
 const FONT_SIZE_COMBINED = 22;       // Font size for combined count + label (1.375rem)
 
 /* === LABEL SPACING === */
-const LABEL_PADDING = 12;            // Breathing room between bubble edge and labels, in SCREEN px
+/* Breathing room between the arc and the text, in SCREEN px. Proportional to
+   the bubble rather than constant: 12px is right on a large circle but eats a
+   quarter of a small one's diameter, which is what used to stop mid-sized
+   bubbles from showing their "Contributors" line at all. */
+const LABEL_PADDING_RATIO = 0.12;    // fraction of the on-screen radius
+const LABEL_PADDING_MAX = 12;        // ...capped, so big bubbles are not hollow
+const LABEL_PADDING_MIN = 4;         // ...and floored, so small ones still breathe
 const LABEL_GAP_PRIMARY = 6;         // Gap between count and contributor label
 const LABEL_GAP_SECONDARY = 6;       // Gap between contributor label and updated block
 const LABEL_GAP_UPDATED_INNER = 6;   // Gap between two lines of updated text
@@ -41,6 +50,10 @@ const props = defineProps<{
   k: number;                      // current zoom scale (world→screen)
   contributors: number;           // primary number (always shown)
   updatedAt?: string;             // secondary line if visible
+  /* What this bubble's SIZE TIER is meant to say (bubble-size.ts). A floor,
+     not a ceiling: a bubble drawn large enough shows more than its tier asks
+     for, and one drawn small shrinks its type to honour it. */
+  detail?: BubbleLabelDetail;
   isActive?: boolean;
   isCompareMode?: boolean;        // whether compare mode is active
   compareState?: 'none' | 'first' | 'second';  // compare selection state
@@ -77,78 +90,89 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 /* Recompute label visibility whenever r or k or updatedAt change. */
 function recomputeFit() {
   const k = props.k, r = props.r;
-  const Dpx = 2 * r * k;                    // bubble diameter on screen
-  /* Labels are rendered at a constant SCREEN size (the foreignObject is
-     inverse-scaled by 1/k), so their padding is a screen-space value too.
-     Multiplying it by k used to double the breathing room when zoomed in and
-     shrink it when zoomed out, i.e. the fit model contradicted what was
-     actually drawn. `Dpx` below is already in screen px. */
-  const pad = LABEL_PADDING;                // breathing room, in screen px
-  const availW = Dpx - 2 * pad;
-  const availH = Dpx - 2 * pad;
-
-  // Count font scales with the ON-SCREEN radius (r * k), clamped to min/max.
-  // Labels are rendered at a constant screen size (the foreignObject is
-  // inverse-scaled by 1/k), so the world radius alone is not a reliable
-  // budget: with the tiered radii from bubble-size.ts every bubble would
-  // otherwise pin to FONT_SIZE_COUNT_MAX and overflow small circles when
-  // zoomed out. Using the screen radius keeps the count inside the circle at
-  // the smallest tier and at low zoom levels.
+  /* Everything here is in SCREEN px: the label group is inverse-scaled by 1/k,
+     so its type is drawn at a constant size whatever the zoom. */
   const screenR = r * k;
-  const fsCount = Math.min(FONT_SIZE_COUNT_MAX, Math.max(FONT_SIZE_COUNT_MIN, screenR * FONT_SIZE_COUNT_SCALE));
-  const fsLabel = FONT_SIZE_LABEL;
-  const fsSmall = FONT_SIZE_SMALL;
-  const fsCombined = FONT_SIZE_COMBINED;
-
-  // Estimate text widths using character width ratios
-  const labelTextStr = getLabelText(props.contributors);
-  const wLabel = labelTextStr.length * fsLabel * CHAR_WIDTH_RATIO_LABEL;
-
-  // For combined layout: estimate width of "123 Contributors" on one line
-  const countStr = String(props.contributors);
-  const wCombined = (countStr.length + 1 + labelTextStr.length) * fsCombined * CHAR_WIDTH_RATIO_LABEL;
+  const pad = Math.max(LABEL_PADDING_MIN, Math.min(LABEL_PADDING_MAX, screenR * LABEL_PADDING_RATIO));
+  const inner = Math.max(0, screenR - pad);             // usable radius for text
 
   const hasUpd = !!props.updatedAt;
+  const labelTextStr = getLabelText(props.contributors);
+  const countStr = String(props.contributors);
   const updLine1 = "Last updated";
   const updLine2 = formattedDate.value;
-  const wUpd = Math.max(
-    updLine1.length * fsSmall * CHAR_WIDTH_RATIO_SMALL,
-    updLine2.length * fsSmall * CHAR_WIDTH_RATIO_SMALL
-  );
 
-  // Check if combined layout fits (count + label on same line with 1.375rem font)
-  const showCombined = (wCombined <= availW) && (fsCombined <= availH / 2);
+  /* Does a block of text of this size fit INSIDE the circle? Corners, not a
+     bounding square: that is what actually has to clear the arc, and it is
+     what the visual regression harness measures. */
+  const fitsInCircle = (w: number, h: number) => (w * w + h * h) <= 4 * inner * inner;
 
-  // Check if separate label fits (fallback to stacked layout)
-  const showLabel = !showCombined && (wLabel <= availW) && (fsCount / 2 + LABEL_GAP_PRIMARY + fsLabel <= availH / 2);
+  /* Geometry of one candidate rendering, at a uniform type scale `s`.
+     level 0 = count, 1 = count + label, 2 = count + label + updated block. */
+  const measure = (level: number, s: number, combined: boolean) => {
+    const fsCount = Math.min(FONT_SIZE_COUNT_MAX, Math.max(FONT_SIZE_COUNT_MIN, screenR * FONT_SIZE_COUNT_SCALE)) * s;
+    const fsLabel = FONT_SIZE_LABEL * s;
+    const fsSmall = FONT_SIZE_SMALL * s;
+    const fsCombined = FONT_SIZE_COMBINED * s;
 
-  // Calculate updated block space requirements
-  const updatedBlockHeight = hasUpd ? (fsSmall * 2 + LABEL_GAP_UPDATED_INNER) : 0;
-  const primaryHeight = showCombined ? fsCombined : fsCount;
-  const labelHeight = showLabel ? (LABEL_GAP_PRIMARY + fsLabel) : 0;
+    let w: number, h: number;
+    if (level >= 1 && combined) {
+      w = (countStr.length + 1 + labelTextStr.length) * fsCombined * CHAR_WIDTH_RATIO_LABEL;
+      h = fsCombined;
+    } else {
+      w = countStr.length * fsCount * CHAR_WIDTH_RATIO_LABEL;
+      h = fsCount;
+      if (level >= 1) {
+        w = Math.max(w, labelTextStr.length * fsLabel * CHAR_WIDTH_RATIO_LABEL);
+        h += LABEL_GAP_PRIMARY + fsLabel;
+      }
+    }
+    if (level >= 2) {
+      w = Math.max(w,
+        updLine1.length * fsSmall * CHAR_WIDTH_RATIO_SMALL,
+        updLine2.length * fsSmall * CHAR_WIDTH_RATIO_SMALL);
+      h += (level >= 1 ? LABEL_GAP_SECONDARY : LABEL_GAP_PRIMARY) + (2 * fsSmall + LABEL_GAP_UPDATED_INNER);
+    }
+    return {w, h, fsCount, fsLabel, fsSmall, fsCombined, smallest: level >= 2 ? fsSmall : (level >= 1 && !combined ? fsLabel : fsCount)};
+  };
 
-  const showUpdated = hasUpd && (wUpd <= availW) &&
-    (primaryHeight / 2 + (showCombined || showLabel ? LABEL_GAP_SECONDARY : LABEL_GAP_PRIMARY) + updatedBlockHeight <= availH / 2);
+  /* The tier's floor, capped by what there is anything to show at all. */
+  const detail = props.detail ?? 'count';
+  const floor = Math.min(detail === 'full' ? 2 : detail === 'label' ? 1 : 0, hasUpd ? 2 : 1);
 
-  // Calculate total stack height and vertical centering shift
-  const stackPx = primaryHeight
-    + labelHeight
-    + (showUpdated ? ((showCombined || showLabel ? LABEL_GAP_SECONDARY : LABEL_GAP_PRIMARY) + updatedBlockHeight) : 0);
-  const shiftPx = (stackPx / 2 - primaryHeight / 2);
+  /* Best rendering: the most detailed level that fits at full size, never less
+     than the tier floor. To honour the floor the type is allowed to shrink,
+     down to FONT_SCALE_MIN and never past FONT_SIZE_FLOOR — if even that will
+     not fit, detail is dropped rather than spilled outside the circle. */
+  let chosen = measure(0, 1, false);
+  let level = 0, combined = false;
+  for (let lv = hasUpd ? 2 : 1; lv >= 0; lv--) {
+    const asCombined = lv >= 1 ? measure(lv, 1, true) : null;
+    const asStacked = measure(lv, 1, false);
+    if (asCombined && fitsInCircle(asCombined.w, asCombined.h)) { chosen = asCombined; level = lv; combined = true; break; }
+    if (fitsInCircle(asStacked.w, asStacked.h)) { chosen = asStacked; level = lv; combined = false; break; }
+  }
+  if (level < floor) {
+    for (let s = 1; s >= FONT_SCALE_MIN - 1e-9; s -= 0.02) {
+      const cand = measure(floor, s, false);
+      if (cand.smallest < FONT_SIZE_FLOOR) break;
+      if (fitsInCircle(cand.w, cand.h)) { chosen = cand; level = floor; combined = false; break; }
+    }
+  }
 
-  fit.showCombined = showCombined;
-  fit.showLabel = showLabel;
-  fit.showUpdated = showUpdated;
-  fit.shiftPx = shiftPx;
-  fit.fsCount = fsCount;
-  fit.fsLabel = fsLabel;
-  fit.fsSmall = fsSmall;
-  fit.fsCombined = fsCombined;
-  fit.stackPx = stackPx;
+  fit.showCombined = level >= 1 && combined;
+  fit.showLabel = level >= 1 && !combined;
+  fit.showUpdated = level >= 2;
+  fit.fsCount = chosen.fsCount;
+  fit.fsLabel = chosen.fsLabel;
+  fit.fsSmall = chosen.fsSmall;
+  fit.fsCombined = chosen.fsCombined;
+  fit.stackPx = chosen.h;
+  fit.shiftPx = 0;
 }
 
 /* Run once and whenever driving props change. */
-watch(() => [props.k, props.r, props.updatedAt, props.contributors], recomputeFit, { immediate: true });
+watch(() => [props.k, props.r, props.updatedAt, props.contributors, props.detail], recomputeFit, { immediate: true });
 
 /* Convenience computed transform strings */
 const gTransform = computed(() => `translate(${props.x},${props.y})`);

@@ -2,6 +2,7 @@ import {
   BUBBLE_SIZE_TIERS,
   SINGLE_ARTICLE_SCREEN_DIAMETER_MAX,
   SINGLE_ARTICLE_SCREEN_DIAMETER_MIN,
+  bubbleLabelDetailFor,
   bubbleRadiusFor,
   bubbleTierFor,
   singleArticleScreenDiameter,
@@ -17,14 +18,32 @@ test('exactly four predefined sizes, strictly increasing', () => {
 
 test('contributor count maps to the expected tier', () => {
   expect(bubbleTierFor(0).name).toBe('S');
-  expect(bubbleTierFor(1).name).toBe('S');
   expect(bubbleTierFor(2).name).toBe('S');
   expect(bubbleTierFor(3).name).toBe('M');
-  expect(bubbleTierFor(5).name).toBe('M');
-  expect(bubbleTierFor(6).name).toBe('L');
-  expect(bubbleTierFor(14).name).toBe('L');
-  expect(bubbleTierFor(15).name).toBe('XL');
+  expect(bubbleTierFor(23).name).toBe('M');
+  expect(bubbleTierFor(24).name).toBe('L');
+  expect(bubbleTierFor(149).name).toBe('L');
+  expect(bubbleTierFor(150).name).toBe('XL');
   expect(bubbleTierFor(5000).name).toBe('XL');
+});
+
+test('the ramp is steep enough to read as a hierarchy', () => {
+  const [S, M, L, XL] = BUBBLE_SIZE_TIERS;
+  // Figma node-id=641-61415: the biggest bubble is ~2.5x a mid one across and
+  // ~4x a small one. A flat ramp makes every bubble look the same.
+  expect(XL.radius / S.radius).toBeGreaterThanOrEqual(3);
+  expect(XL.radius / L.radius).toBeGreaterThanOrEqual(1.4);
+  expect(M.radius / S.radius).toBeGreaterThanOrEqual(1.4);
+});
+
+test('label detail follows the size tier, matching the design frame', () => {
+  // The numbers are the ones drawn in Figma node-id=641-61415.
+  for (const small of [1, 23]) expect(bubbleLabelDetailFor(small)).toBe('count');
+  for (const mid of [67, 111, 119]) expect(bubbleLabelDetailFor(mid)).toBe('label');
+  for (const large of [180, 309, 335, 538]) expect(bubbleLabelDetailFor(large)).toBe('full');
+  // A lone article is pinned to the smallest tier, so it asks for nothing more
+  // than its count — the view-fit still draws it big enough to show more.
+  expect(bubbleLabelDetailFor(400, {singleArticle: true})).toBe('count');
 });
 
 test('a single-article subject always uses the smallest tier', () => {
@@ -44,11 +63,11 @@ test('radius is the tier radius, not a value relative to the graph', () => {
   const [S, M, L, XL] = BUBBLE_SIZE_TIERS;
   expect(bubbleRadiusFor(1)).toBe(S.radius);
   expect(bubbleRadiusFor(4)).toBe(M.radius);
-  expect(bubbleRadiusFor(8)).toBe(L.radius);
-  expect(bubbleRadiusFor(20)).toBe(XL.radius);
-  // A 4-contributor article is the same size whether or not a 20-contributor
+  expect(bubbleRadiusFor(50)).toBe(L.radius);
+  expect(bubbleRadiusFor(200)).toBe(XL.radius);
+  // A 4-contributor article is the same size whether or not a 200-contributor
   // fork exists, and is smaller than it.
-  expect(bubbleRadiusFor(4)).toBeLessThan(bubbleRadiusFor(20));
+  expect(bubbleRadiusFor(4)).toBeLessThan(bubbleRadiusFor(200));
 });
 
 test('viewport attenuation multiplies the tier radius', () => {

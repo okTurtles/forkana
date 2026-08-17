@@ -24,25 +24,42 @@
 
    SIZE SCALE
    ----------
-   Radii sit on the 8px design grid used throughout the graph layout
-   (LANE_PAD 8, BUBBLE_PAD 8, STEM 12/18, LABEL_PADDING 12, elbow 20-36), and
-   the diameters are whole rem steps (16px), ramping by 2rem per tier:
+   Radii sit on the 8px design grid used throughout the graph layout (LANE_PAD
+   8, BUBBLE_PAD 8, STEM 12/18, LABEL_PADDING 12, elbow 20-36):
 
-       S  -> d 112px (7rem)   r 56
-       M  -> d 144px (9rem)   r 72
-       L  -> d 176px (11rem)  r 88
-       XL -> d 208px (13rem)  r 104
+       S  -> d  80px  r 40
+       M  -> d 128px  r 64
+       L  -> d 192px  r 96
+       XL -> d 288px  r 144
 
-   The smallest tier is deliberately kept at r=56 (not smaller) because
-   BubbleNode.vue needs roughly 110-130px of on-screen diameter before the
-   "<n> Contributors" label stops fitting inside the circle. See
-   SINGLE_ARTICLE_SCREEN_DIAMETER_MIN below for the on-screen floor.
+   The ramp is deliberately steep — XL is 3.6x S across, and 1.5x L. An earlier
+   version of this table ran 56/72/88/104, only 1.9x end to end, and the result
+   read as one uniform blob: in Figma node-id=641-61415 the biggest bubble is
+   roughly 2.5x the diameter of a mid one and 4x a small one. The hierarchy is
+   the point of the tiers, so the steps have to be obvious.
 
-   NOTE FOR DESIGN REVIEW: the exact values below are derived from the existing
-   spacing scale in this codebase, NOT read from Figma node-id=641-61415 (which
-   was not accessible when this was implemented). If Figma specifies different
-   radii/thresholds, change ONLY the table below — nothing else hardcodes a
-   bubble size. */
+   Size also decides how much a bubble SAYS — see `labelDetail`. That is why
+   the two matter together and live in the same table.
+
+   THRESHOLDS
+   ----------
+   The bands are read off the same Figma frame, whose bubbles are 1, 23 (small,
+   count only), 67/111/119 (mid, count + "Contributors") and 180/309/335/538
+   (large, count + "Contributors" + "Last updated" + date). So the boundaries
+   sit between 23 and 67, and between 119 and 180; the lowest boundary keeps a
+   brand-new article visibly smaller than an established one.
+
+   CONSEQUENCE WORTH CONFIRMING WITH DESIGN: on these thresholds a typical
+   repository with 5-20 contributors lands in M and shows only its count. That
+   follows the Figma, where 23 contributors is already drawn as a small bubble,
+   but it does mean the "Contributors" line is reserved for genuinely large
+   articles. If real data should read differently, change ONLY the table below
+   — nothing else hardcodes a bubble size or its label detail. */
+
+/** How much text a bubble carries. Each step adds to the one before it:
+   'count' = the number only, 'label' = + "Contributor(s)",
+   'full'  = + "Last updated" and the date. */
+export type BubbleLabelDetail = 'count' | 'label' | 'full';
 
 export type BubbleSizeTier = {
   /** Design name of the tier, used in comments/tests and for debugging. */
@@ -51,19 +68,23 @@ export type BubbleSizeTier = {
   minContributors: number;
   /** Bubble radius in world units (== CSS px at zoom level 1). */
   radius: number;
+  /** The text this tier is meant to carry, whatever the current zoom is.
+     BubbleNode treats it as a FLOOR: it shrinks the type to honour it, and
+     shows more when a bubble happens to be drawn large enough. */
+  labelDetail: BubbleLabelDetail;
 };
 
 /* The four predefined bubble sizes, ordered smallest → largest.
    A bubble takes the LAST tier whose `minContributors` it reaches, so the
    thresholds read as: 1-2 → S, 3-5 → M, 6-14 → L, 15+ → XL.
    The bands widen as they go up because contributor counts are long-tailed:
-   most articles have a handful of contributors, so the low bands must be
-   narrow to stay informative while the top band absorbs the outliers. */
+   the low bands stay narrow to stay informative while the top band absorbs
+   the outliers. */
 export const BUBBLE_SIZE_TIERS: readonly BubbleSizeTier[] = [
-  {name: 'S', minContributors: 0, radius: 56},   // d 112px — solo / brand new article
-  {name: 'M', minContributors: 3, radius: 72},   // d 144px — small collaboration
-  {name: 'L', minContributors: 6, radius: 88},   // d 176px — established article
-  {name: 'XL', minContributors: 15, radius: 104}, // d 208px — flagship article
+  {name: 'S', minContributors: 0, radius: 40, labelDetail: 'count'},    // solo / brand new
+  {name: 'M', minContributors: 3, radius: 64, labelDetail: 'count'},    // small collaboration
+  {name: 'L', minContributors: 24, radius: 96, labelDetail: 'label'},   // established article
+  {name: 'XL', minContributors: 150, radius: 144, labelDetail: 'full'}, // flagship article
 ] as const;
 
 /* A subject with exactly one article has nothing to compare against: the
@@ -76,9 +97,11 @@ export const SINGLE_ARTICLE_TIER_INDEX = 0;
    bubble to a target size, so shrinking the radius alone would just be undone
    by a larger zoom factor.
 
-   MIN is the legibility floor — below ~150px of on-screen diameter the
-   stacked "<count>" + "Contributors" labels in BubbleNode.vue start to be
-   clipped. MAX/WIDTH_RATIO keep the bubble to roughly a fifth of the viewport
+   MIN is the legibility floor: a lone bubble is the whole view, so it should
+   comfortably carry its count, its label and its date. It is expressed on
+   SCREEN, not in world units, so it is unaffected by the tier radius above —
+   the view-fit zoom makes up the difference either way.
+   MAX/WIDTH_RATIO keep the bubble to roughly a fifth of the viewport
    width instead of the previous 40% (was 220..480px, i.e. 440px on a 1100px
    container — the "disproportionately large" bubble from issue #284). */
 export const SINGLE_ARTICLE_SCREEN_DIAMETER_MIN = 180;
@@ -107,6 +130,11 @@ function bubbleTierIndexFor(contributors: number, opts: BubbleSizeOptions = {}):
 /** The tier record a given contributor count maps to. */
 export function bubbleTierFor(contributors: number, opts: BubbleSizeOptions = {}): BubbleSizeTier {
   return BUBBLE_SIZE_TIERS[bubbleTierIndexFor(contributors, opts)];
+}
+
+/** The text a bubble of this size is meant to carry. See BubbleLabelDetail. */
+export function bubbleLabelDetailFor(contributors: number, opts: BubbleSizeOptions = {}): BubbleLabelDetail {
+  return bubbleTierFor(contributors, opts).labelDetail;
 }
 
 /** Bubble radius in world units, tier-snapped and viewport-attenuated. */

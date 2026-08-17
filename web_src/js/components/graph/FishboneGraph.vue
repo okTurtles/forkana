@@ -23,7 +23,7 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
-import { bubbleRadiusFor, singleArticleScreenDiameter } from "./bubble-size.ts";
+import { bubbleLabelDetailFor, bubbleRadiusFor, singleArticleScreenDiameter } from "./bubble-size.ts";
 
 // Inline types replacing former seeds module
 type Side = -1 | 1;
@@ -578,6 +578,12 @@ function rFor(n: number) {
     singleArticle: state.isSingleArticle,
     scale: state.radiusScale || 1,
   });
+}
+
+/* What a bubble of this size tier is meant to say. Paired with rFor(): the
+   same tier decides both, so size and content can never disagree. */
+function detailFor(n: number) {
+  return bubbleLabelDetailFor(n, { singleArticle: state.isSingleArticle });
 }
 
 function getRoot(g: Graph) { return Object.values(g).find(n => n.parentId === null) ?? null; }
@@ -1257,6 +1263,7 @@ function goToComparison() {
             <BubbleNode
               v-for="n in nodesList" :key="n.id" :id="n.id" :x="(n as any).x" :y="(n as any).y"
               :r="(rFor(n.contributors))" :contributors="n.contributors" :updated-at="n.updatedAt" :k="kComputed"
+              :detail="detailFor(n.contributors)"
               :is-active="selectedNodeId === n.id" :is-compare-mode="isCompareMode"
               :compare-state="getCompareState(n.id)" @click="() => onBubbleClick(n)" @view="() => onBubbleView(n)"
             />
