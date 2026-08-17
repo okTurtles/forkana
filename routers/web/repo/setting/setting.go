@@ -1097,8 +1097,6 @@ func handleSettingsPostDelete(ctx *context.Context) {
 		return
 	}
 
-	subjectID := repo.SubjectID
-
 	// Close the gitrepository before doing this.
 	if ctx.Repo.GitRepo != nil {
 		ctx.Repo.GitRepo.Close()
@@ -1109,18 +1107,6 @@ func handleSettingsPostDelete(ctx *context.Context) {
 		return
 	}
 	log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
-
-	// The subject only exists to group articles, so drop it once its last article is gone.
-	if subjectID > 0 {
-		count, err := repo_model.CountRepositoriesBySubject(ctx, subjectID)
-		if err != nil {
-			log.Error("CountRepositoriesBySubject [%d]: %v", subjectID, err)
-		} else if count == 0 {
-			if err := repo_model.DeleteSubject(ctx, subjectID); err != nil {
-				log.Error("DeleteSubject [%d]: %v", subjectID, err)
-			}
-		}
-	}
 
 	if fromArticle {
 		ctx.Flash.Success(ctx.Tr("repo.settings.article_delete_success"))

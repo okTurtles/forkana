@@ -292,6 +292,13 @@ func DeleteRepositoryDirectly(ctx context.Context, repoID int64, ignoreOrgTeams 
 		return err
 	}
 
+	// A subject only exists to group articles, so drop it once its last article is gone.
+	// This runs in the same transaction as the repository delete, so a concurrent
+	// create/fork attaching to the subject keeps it alive.
+	if _, err := repo_model.DeleteSubjectIfOrphaned(ctx, repo.SubjectID); err != nil {
+		return fmt.Errorf("delete orphaned subject [%d]: %w", repo.SubjectID, err)
+	}
+
 	if err = committer.Commit(); err != nil {
 		return err
 	}

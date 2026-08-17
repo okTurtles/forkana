@@ -241,6 +241,26 @@ func DeleteSubject(ctx context.Context, id int64) error {
 	return err
 }
 
+// DeleteSubjectIfOrphaned deletes the subject once no repository references it anymore
+// and reports whether it was deleted. The check and the delete are a single statement, so
+// a repository attached to the subject by a concurrent transaction keeps the subject alive.
+func DeleteSubjectIfOrphaned(ctx context.Context, id int64) (bool, error) {
+	if id <= 0 {
+		return false, nil
+	}
+
+	res, err := db.Exec(ctx,
+		"DELETE FROM `subject` WHERE id = ? AND NOT EXISTS (SELECT 1 FROM `repository` WHERE subject_id = ?)", id, id)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
 // FindSubjects finds subjects based on options
 func FindSubjects(ctx context.Context, opts FindSubjectsOptions) ([]*Subject, int64, error) {
 	sess := db.GetEngine(ctx).Where(opts.ToConds())
