@@ -23,7 +23,7 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
-import ArticleDetailView from "./ArticleDetailView.vue";
+import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import { bubbleLabelDetailFor, bubbleRadiusFor, singleArticleScreenDiameter } from "./bubble-size.ts";
 
@@ -510,6 +510,7 @@ async function fetchForkGraphAndSet() {
       await nextTick();
       resetView();
       restoreSelectionAfterGraphLoad();
+      maybeOpenSoloDetail();
       announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
     } else {
       announceToScreenReader('No fork data available');
@@ -1239,16 +1240,56 @@ const historyExpandedId = computed(() => {
   return entries.length ? entries[entries.length - 1].id : null;
 });
 
-function openDetail(n: Node) {
+/** The bubble the open detail view grew out of, in screen px, or null when it
+   was opened without one (single-article subject). */
+const detailOrigin = ref<DetailOrigin | null>(null);
+
+/** True while the detail view IS the view: a subject with one article opens
+   straight into it, and there is no graph state worth going back to, so no
+   Back control is rendered and Escape has nothing to do. */
+const detailPinned = ref(false);
+
+/** Set to ask ArticleDetailView for its closing animation; the teardown
+   happens in finishDetailClose() when it reports back. */
+const detailClosing = ref(false);
+
+/** Where a node's bubble is on screen right now, for the open/close zoom.
+   Derived from the layout coordinates and the live zoom transform rather than
+   from the DOM, so it is exact and needs no lookup by id. */
+function screenCircleFor(n: Node): DetailOrigin | null {
+  const svg = svgRef.value;
+  if (!svg || n.x === undefined || n.y === undefined) return null;
+  const t = zoomTransform(svg);
+  const box = svg.getBoundingClientRect();
+  const r = rFor(n.contributors) * t.k;
+  if (!(r > 0)) return null;
+  return { cx: box.left + t.applyX(n.x), cy: box.top + t.applyY(n.y), r };
+}
+
+function openDetail(n: Node, opts: { origin?: DetailOrigin | null; pinned?: boolean } = {}) {
   transformBeforeDetail = svgRef.value ? zoomTransform(svgRef.value) : null;
   detailSize.value = computeDetailSize();
+  detailOrigin.value = opts.origin ?? null;
+  detailPinned.value = opts.pinned === true;
+  /* Re-opening while a close is still playing: cancel the close rather than
+     let its timer tear down the view we just opened. */
+  detailClosing.value = false;
   detailNode.value = n;
   historyOpen.value = false;
   announceToScreenReader(`Opened ${n.fullName || n.id}`);
 }
 
+/** Ask for the close. The view animates, then calls finishDetailClose(). */
 function closeDetail() {
+  if (!detailNode.value || detailPinned.value) return;
+  historyOpen.value = false;   /* the popup does not travel with the circle */
+  detailClosing.value = true;
+}
+
+function finishDetailClose() {
   detailNode.value = null;
+  detailClosing.value = false;
+  detailOrigin.value = null;
   historyOpen.value = false;
   /* Restore the exact view the user left, not a fresh fit. */
   if (transformBeforeDetail && svgSel) {
@@ -1256,6 +1297,18 @@ function closeDetail() {
     currentK.value = transformBeforeDetail.k;
   }
   transformBeforeDetail = null;
+}
+
+/* #284: a subject with a single article opens directly in the detail view.
+   The lone bubble is pinned to the smallest tier and carries nothing to
+   compare against, so the graph state behind it is not worth a click — the
+   article itself is what the page is for. There is no source bubble to fly
+   from, so the view cross-fades in, and Back is not rendered. */
+function maybeOpenSoloDetail() {
+  if (!state.isSingleArticle || detailNode.value) return;
+  const root = getRoot(state.graph);
+  if (!root) return;
+  openDetail(root, { pinned: true });
 }
 
 function onDetailRead() {
@@ -1286,7 +1339,7 @@ function onBubbleClick(n: Node) {
     return;
   }
 
-  openDetail(n);
+  openDetail(n, { origin: screenCircleFor(n) });
   const detail = getSelectionDetailFromNode(n);
   if (!detail) return;
   const payload = { ...detail };
@@ -1525,7 +1578,9 @@ function goToComparison() {
           v-if="detailNode"
           :contributors="detailNode.contributors" :description="detailNode.description"
           :updated-at="detailNode.updatedAt" :size="detailSize"
+          :origin="detailOrigin" :show-back="!detailPinned" :closing="detailClosing"
           @back="closeDetail" @read="onDetailRead" @history="historyOpen = true"
+          @closed="finishDetailClose"
         >
           <ArticleHistoryPopup
             v-if="historyOpen" :entries="historyEntries" :expanded-id="historyExpandedId"
