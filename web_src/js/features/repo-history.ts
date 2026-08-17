@@ -249,10 +249,15 @@ export function initRepoHistory() {
   function syncArchivedNotice(doc: Document) {
     if (!archivedNoticeEl) return;
     const incoming = doc.querySelector<HTMLElement>('#article-archived-notice');
-    const incomingText = archivedNoticeText(incoming);
-    isArchivedArticle = Boolean(incomingText);
-    const text = archivedNoticeEl.querySelector('[data-role="article-archived-text"]');
-    if (text) text.textContent = incomingText;
+    const incomingEl = incoming?.querySelector('[data-role="article-archived-text"]');
+    isArchivedArticle = Boolean(archivedNoticeText(incoming));
+    const currentEl = archivedNoticeEl.querySelector('[data-role="article-archived-text"]');
+    if (currentEl) {
+      // the notice holds an <absolute-date> element, so the node is replaced rather than
+      // its text: a textContent copy would leave the ISO fallback instead of the localised date
+      if (incomingEl) currentEl.replaceWith(document.importNode(incomingEl, true));
+      else currentEl.textContent = '';
+    }
     updateArchivedNoticeVisibility();
   }
 
