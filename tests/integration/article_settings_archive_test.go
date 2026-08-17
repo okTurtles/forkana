@@ -137,7 +137,8 @@ func TestArticleArchivedReadOnly(t *testing.T) {
 		AssertHTMLElement(t, htmlDoc, `[data-article-tab="read"]`, true)
 	})
 
-	t.Run("EditorRoutesForbidden", func(t *testing.T) {
+	// archived write endpoints stay hidden behind a 404, as everywhere else in Gitea
+	t.Run("EditorRoutesNotFound", func(t *testing.T) {
 		csrf := GetUserCSRFToken(t, session)
 		editorPath := fmt.Sprintf("/article/%s/%s", owner.Name, subjectName)
 
@@ -167,7 +168,7 @@ func TestArticleArchivedReadOnly(t *testing.T) {
 						"commit_choice": "direct",
 					})
 				}
-				session.MakeRequest(t, req, http.StatusForbidden)
+				session.MakeRequest(t, req, http.StatusNotFound)
 			})
 		}
 	})
