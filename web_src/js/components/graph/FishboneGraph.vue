@@ -1123,6 +1123,8 @@ onMounted(async () => {
     if (Math.abs(w - containerWidth) > 2) { containerWidth = Math.min(w, 1100); changed = true; }
     if (Math.abs(h - containerHeight) > 2) { containerHeight = h; changed = true; }
     if (changed) {
+      /* The detail circle is sized from the container, so it has to follow it. */
+      if (detailNode.value) detailSize.value = computeDetailSize();
       if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
       pendingRaf = requestAnimationFrame(() => {
         layoutAndRender();
@@ -1179,6 +1181,24 @@ function persistSelectionDetail(detail: RepoSelectionDetail | null) {
 /** The article being shown large, or null for the normal graph. */
 const detailNode = ref<Node | null>(null);
 const historyOpen = ref(false);
+
+/* Diameter of the big circle, in screen px. The design draws it at 430, but it
+   is drawn INSIDE the canvas box, so it must also fit that box: on a narrow
+   viewport or a short canvas it is capped to what the container can show
+   (minus a margin), and the spacing inside it scales with it — see
+   ArticleDetailView.vue. Recomputed when the detail opens and on resize while
+   it is open, so it can never end up sized for a stale container. */
+const DETAIL_DIAMETER_DESIGN = 430;   // design size of the detail circle (px)
+const DETAIL_CONTAINER_MARGIN = 24;   // breathing room between circle and canvas edge
+const DETAIL_DIAMETER_MIN = 200;      // below this the stack is unreadable anyway
+const detailSize = ref(DETAIL_DIAMETER_DESIGN);
+
+function computeDetailSize(): number {
+  const w = containerWidth || DEFAULT_CONTAINER_WIDTH;
+  const h = svgHeight.value || graphViewportHeight();
+  const fits = Math.min(DETAIL_DIAMETER_DESIGN, w - DETAIL_CONTAINER_MARGIN * 2, h - DETAIL_CONTAINER_MARGIN * 2);
+  return Math.round(Math.max(DETAIL_DIAMETER_MIN, fits));
+}
 /** The pan/zoom the graph was at when the detail view opened, so "Back" can
    put the user back exactly where they were rather than re-fitting. */
 let transformBeforeDetail: ZoomTransform | null = null;
@@ -1221,6 +1241,7 @@ const historyExpandedId = computed(() => {
 
 function openDetail(n: Node) {
   transformBeforeDetail = svgRef.value ? zoomTransform(svgRef.value) : null;
+  detailSize.value = computeDetailSize();
   detailNode.value = n;
   historyOpen.value = false;
   announceToScreenReader(`Opened ${n.fullName || n.id}`);
@@ -1491,21 +1512,27 @@ function goToComparison() {
           v-if="!hasData" :owner="props.owner" :repo="props.repo" :subject="props.subject"
           :default-branch="props.defaultBranch"
         />
-      </div>
-      <!-- Detail view (#284): one article, large, with its excerpt and
-             actions. Sits over the canvas; the graph keeps its transform. -->
-      <ArticleDetailView
-        v-if="detailNode"
-        :contributors="detailNode.contributors" :description="detailNode.description"
-        :updated-at="detailNode.updatedAt"
-        @back="closeDetail" @read="onDetailRead" @history="historyOpen = true"
-      >
-        <ArticleHistoryPopup
-          v-if="historyOpen" :entries="historyEntries" :expanded-id="historyExpandedId"
-          @close="historyOpen = false" @view-full-history="onDetailFullHistory"
-        />
-      </ArticleDetailView>
 
+        <!-- Detail view (#284): one article, large, with its excerpt and
+             actions. It MUST stay inside .graph-container: the layer is
+             position:absolute/inset:0 with an opaque background, so anywhere
+             else it resolves against a positioned ancestor further up the page
+             and paints over the page chrome (navbar, view tabs, Compare
+             button, legend) — the "lost wrapper" from review. Inside the
+             container it covers exactly the canvas box and nothing else, and
+             the <svg> stays mounted underneath so the box keeps its height. -->
+        <ArticleDetailView
+          v-if="detailNode"
+          :contributors="detailNode.contributors" :description="detailNode.description"
+          :updated-at="detailNode.updatedAt" :size="detailSize"
+          @back="closeDetail" @read="onDetailRead" @history="historyOpen = true"
+        >
+          <ArticleHistoryPopup
+            v-if="historyOpen" :entries="historyEntries" :expanded-id="historyExpandedId"
+            @close="historyOpen = false" @view-full-history="onDetailFullHistory"
+          />
+        </ArticleDetailView>
+      </div>
       <!-- End graph-container -->
 
       <div ref="legendRef">

@@ -66,6 +66,11 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 </template>
 
 <style scoped>
+/* The layer fills its container — which is .graph-container, the canvas box —
+   and nothing beyond it. It is deliberately position:absolute (never fixed,
+   never teleported): everything outside the box (navbar, subject title, view
+   tabs, Compare button, and the legend below the box) must stay visible and
+   untouched while the detail view is open. */
 .detail-layer {
   position: absolute;
   inset: 0;
@@ -77,6 +82,10 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
   justify-content: flex-start;
   padding-left: 12%;
   background: var(--color-body, #fff);
+  /* Follow the canvas box's own rounded frame instead of squaring it off, and
+     keep the circle and the history card clipped to it. */
+  border-radius: inherit;
+  overflow: hidden;
 }
 
 .detail-back {
@@ -121,12 +130,33 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 /* Kept inside the inscribed square of the circle (d / sqrt(2) ≈ 0.7d) so no
    line can touch the arc, then trimmed a little further for breathing room. */
 .detail-content {
+  /* Vertical rhythm from the design, on the 8px grid at the design size
+     (430px circle): count → 16 → excerpt → 24 → "Read full article" → 16 →
+     "View history" → 24 → "Last updated". The two steps are expressed as a
+     fraction of the circle so a circle that had to shrink (narrow viewport,
+     short canvas) keeps the same proportions and the stack still fits inside
+     the arc: 0.0372 × 430 = 16, 0.0558 × 430 = 24. */
+  --detail-gap-tight: clamp(8px, calc(var(--detail-size, 430px) * 0.0372), 16px);
+  --detail-gap-loose: clamp(12px, calc(var(--detail-size, 430px) * 0.0558), 24px);
+
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
   width: 64%;
   text-align: center;
+}
+
+/* Two classes deep on purpose: the elements below reset `margin`, and a
+   single-class rule here would lose to them on source order. */
+.detail-content > .detail-description,
+.detail-content > .detail-history {
+  margin-top: var(--detail-gap-tight);
+}
+
+/* The two wider steps in the rhythm. */
+.detail-content > .detail-read,
+.detail-content > .detail-updated {
+  margin-top: var(--detail-gap-loose);
 }
 
 .detail-count {
@@ -152,7 +182,7 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 }
 
 .btn-neutral {
-  padding: 8px 14px;
+  padding: 8px 16px;
   border: 1px solid var(--color-secondary, #d1d5db);
   border-radius: 8px;
   background: var(--color-body, #fff);
@@ -187,7 +217,7 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin: 2px 0 0;
+  margin: 0;              /* the stack's rhythm owns the spacing above this */
   font-size: 11px;
   font-style: italic;
   line-height: 1.3;
@@ -203,6 +233,13 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 
   .detail-content {
     width: 68%;
+  }
+
+  /* The circle is much smaller here while the rhythm above only scales down to
+     a floor, so the excerpt gives up its fourth line rather than let the stack
+     grow past the arc. */
+  .detail-description {
+    -webkit-line-clamp: 3;
   }
 }
 </style>
