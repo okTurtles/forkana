@@ -21,7 +21,7 @@ const FONT_SIZE_SMALL = 11;          // Font size for "Last updated" lines
 const FONT_SIZE_COMBINED = 22;       // Font size for combined count + label (1.375rem)
 
 /* === LABEL SPACING === */
-const LABEL_PADDING = 12;            // Breathing room between bubble edge and labels
+const LABEL_PADDING = 12;            // Breathing room between bubble edge and labels, in SCREEN px
 const LABEL_GAP_PRIMARY = 6;         // Gap between count and contributor label
 const LABEL_GAP_SECONDARY = 6;       // Gap between contributor label and updated block
 const LABEL_GAP_UPDATED_INNER = 6;   // Gap between two lines of updated text
@@ -78,7 +78,12 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 function recomputeFit() {
   const k = props.k, r = props.r;
   const Dpx = 2 * r * k;                    // bubble diameter on screen
-  const pad = LABEL_PADDING * k;            // breathing room (scaled to zoom)
+  /* Labels are rendered at a constant SCREEN size (the foreignObject is
+     inverse-scaled by 1/k), so their padding is a screen-space value too.
+     Multiplying it by k used to double the breathing room when zoomed in and
+     shrink it when zoomed out, i.e. the fit model contradicted what was
+     actually drawn. `Dpx` below is already in screen px. */
+  const pad = LABEL_PADDING;                // breathing room, in screen px
   const availW = Dpx - 2 * pad;
   const availH = Dpx - 2 * pad;
 

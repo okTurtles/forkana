@@ -23,11 +23,10 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
-import {bubbleRadiusFor, singleArticleScreenDiameter} from "./bubble-size.ts";
+import { bubbleRadiusFor, singleArticleScreenDiameter } from "./bubble-size.ts";
 
 // Inline types replacing former seeds module
 type Side = -1 | 1;
-type SeedKey = 'reference';
 type NodeId = string;
 type Node = {
   id: NodeId;
@@ -35,7 +34,6 @@ type Node = {
   parentId: NodeId | null;
   children: NodeId[];
   updatedAt?: string;
-  sideHint?: Side;
   x?: number;
   y?: number;
   depth?: number;
@@ -149,13 +147,15 @@ const FOCUS_PADDING = 24;            // Padding when focusing on a single node
    (singleArticleScreenDiameter) so radius and zoom targets stay in sync. */
 
 /* === SVG LAYOUT === */
-const DEFAULT_SVG_HEIGHT = 1000;     // Initial SVG canvas height (before the container is measured)
 const MIN_SVG_HEIGHT = 320;          // Never collapse the canvas below this
 const CONTENT_BOUNDS_EXTRA = 16;     // Extra horizontal padding for elbow overhang
 const VIEW_TOP_OFFSET = 12;          // Top offset for view calculations
 const DEFAULT_CONTAINER_WIDTH = 1100;   // Default container width when not measured
+/* ONE default for "container height we have not measured yet". There used to be
+   two (DEFAULT_SVG_HEIGHT 1000 and DEFAULT_CONTAINER_HEIGHT 800) that meant the
+   same thing and disagreed, so the first layout was fitted against one value
+   and drawn at the other. */
 const DEFAULT_CONTAINER_HEIGHT = 800;   // Default container height when not measured
-const FALLBACK_WINDOW_HEIGHT = 900;     // Fallback height if window is unavailable
 
 /* === API PARAMETERS === */
 const API_CONTRIBUTOR_DAYS = 90;     // Number of days to look back for contributor counts
@@ -173,9 +173,6 @@ const SCREEN_READER_ANNOUNCEMENT_DURATION = 1000;  // How long to show SR announ
 
 const state = reactive({
   graph: {} as Graph,
-
-  /* Scenario key */
-  scenario: "reference" as SeedKey,
 
   /* Layout dials (manual when auto=false; hints when auto=true) */
   elbowR: ELBOW_R_DEFAULT,
@@ -204,8 +201,9 @@ const trunksList = ref<{ x: number; y1: number; y2: number; id: string }[]>([]);
 const jointDots = ref<{ x: number; y: number; id: string; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
 
 /* SVG/zoom plumbing */
-const svgHeight = ref(DEFAULT_SVG_HEIGHT);
+const svgHeight = ref(DEFAULT_CONTAINER_HEIGHT);
 const svgRef = ref<SVGSVGElement | null>(null);
+const legendRef = ref<HTMLDivElement | null>(null);
 /* IMPORTANT: This is the single world group that Vue renders into AND
    that d3-zoom transforms. This fixes the "graph doesn't move" bug. */
 const worldRef = ref<SVGGElement | null>(null);
@@ -488,6 +486,10 @@ async function fetchForkGraphAndSet() {
       // Wait for Vue to update the DOM with the new graph data before calculating layout
       await nextTick();
       layoutAndRender();
+      /* One more tick: layoutAndRender() is what makes `hasData` true, so the
+         legend only exists in the DOM after Vue has flushed. resetView() needs
+         its height to know how much canvas the graph actually gets. */
+      await nextTick();
       resetView();
       restoreSelectionAfterGraphLoad();
       announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
@@ -604,7 +606,7 @@ function applyResponsiveDials() {
   const forks = forkCount(state.graph);
   const maxKids = parentMaxChildren(state.graph);
   const w = containerWidth;
-  const ch = containerHeight || ((typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : FALLBACK_WINDOW_HEIGHT);
+  const ch = containerHeight || DEFAULT_CONTAINER_HEIGHT;
 
   // Normalize width to 0..1 range based on breakpoints
   const widthFactor = Math.min(1, Math.max(0, (w - WIDTH_BREAKPOINT_MIN) / (WIDTH_BREAKPOINT_MAX - WIDTH_BREAKPOINT_MIN)));
@@ -647,6 +649,14 @@ type HRun = { x0: number; x1: number; y: number };
 /* A bubble already placed in a lane. The RADIUS is stored, not a pre-baked
    interval, so the clearance is always recomputed from the two real radii. */
 type LaneSlot = { y: number; r: number };
+/* The vertical column a subtree-bearing bubble's trunk WILL descend through,
+   before that trunk exists. A node's trunk is only created once the node is
+   processed as a parent, which happens after the whole generation above it has
+   been placed — so until then its extent is unknown and the entire column
+   below it has to be treated as occupied. Once the trunk is real it moves into
+   `trunks`, where the exact extent is known and a bubble can simply be placed
+   below it instead. */
+type TrunkColumn = { id: NodeId; x: number };
 
 /* ── SEPARATION RULES ──────────────────────────────────────────────────────
    Everything that keeps bubbles apart goes through these two helpers. They
@@ -657,6 +667,16 @@ type LaneSlot = { y: number; r: number };
 /** Minimum centre-to-centre distance so two bubbles do not touch. */
 function bubbleSeparation(rA: number, rB: number) {
   return rA + rB + state.bubblePad;
+}
+
+/** Height available to the SVG canvas: the measured container minus anything
+   else inside its scroll box (the legend sits under the graph). Without this
+   the canvas was given the FULL container height, the legend was pushed past
+   the fold and the container grew a scrollbar — the dead space this branch set
+   out to remove, reintroduced from the other end. */
+function graphViewportHeight() {
+  const legendH = legendRef.value?.offsetHeight ?? 0;
+  return Math.max(MIN_SVG_HEIGHT, (containerHeight || DEFAULT_CONTAINER_HEIGHT) - legendH);
 }
 
 /** Y of the first child lane under a parent, derived from the PARENT'S OWN
@@ -710,11 +730,22 @@ function layoutFishbone(g: Graph) {
 
   const discs: Disc[] = [{ x: root.x, y: root.y, r: rFor(root.contributors), id: root.id }];
   const trunks: SegV[] = []; const arcs: Arc[] = []; const runs: HRun[] = [];
+  /* Trunks that are going to exist but do not yet — see TrunkColumn. Global,
+     not per parent: a trunk descending from one branch reaches into the rows
+     where the NEXT branch's children get placed, so nephews need the same
+     protection siblings do. */
+  const pendingTrunks: TrunkColumn[] = [];
   const parents = Object.values(g).filter((n: any) => n.depth !== undefined).sort((a: any, b: any) => (a.depth - b.depth));
 
   for (const p of parents) {
     const kids = p.children.map(id => g[id]).filter((n): n is Node => n !== undefined);
     if (!kids.length) continue;
+
+    /* This parent's trunk is created at the end of this iteration, and its own
+       children are always at least `hOffset` clear of its column, so it stops
+       being a pending obstacle now. */
+    const pendingIdx = pendingTrunks.findIndex(t => t.id === p.id);
+    if (pendingIdx >= 0) pendingTrunks.splice(pendingIdx, 1);
 
     const px = p.x ?? 0, py = p.y ?? 0, pr = rFor(p.contributors);
     const yStart = py + pr + STEM_LEN_PARENT;
@@ -724,20 +755,21 @@ function layoutFishbone(g: Graph) {
 
     const leftLane: LaneSlot[] = [];
     const rightLane: LaneSlot[] = [];
+    /* Trunk columns already claimed in each lane. A child that has children of
+       its own grows a TRUNK straight down from itself towards them, and that
+       trunk is only created later (when that child is processed as a parent),
+       so the trunk-vs-bubble check below cannot see it yet. Siblings otherwise
+       share a column — their x differs only by their radii — so a later
+       sibling in the same lane would sit on that trunk. Recorded here and
+       avoided explicitly, for any number of subtree-bearing siblings. */
+    const leftBlockers: TrunkColumn[] = [];
+    const rightBlockers: TrunkColumn[] = [];
     let turn: Side = -1;
 
-    const baseOrder = (state.scenario === "reference") ? kids.slice()
-      : kids.slice().sort((a, b) => rFor(b.contributors) - rFor(a.contributors));
-    /* Children that have children of their own grow a TRUNK downwards from
-       themselves, and siblings share a column (their x differs only by their
-       radii), so anything placed below such a child would end up sitting on
-       that trunk — and the trunk-vs-bubble check further down can only see
-       trunks that already exist, which a sibling's does not yet. Placing the
-       subtree-bearing children last puts them at the bottom of their lane with
-       nothing below them; two of them also land on opposite sides, because the
-       side is chosen by whichever lane is still free higher up. `sort` is
-       stable, so the order above is otherwise preserved. */
-    const ordered = baseOrder.sort((a, b) => (a.children.length ? 1 : 0) - (b.children.length ? 1 : 0));
+    /* Childless children first: they can then never end up below a sibling's
+       trunk, which keeps the common shapes as compact as possible. `sort` is
+       stable, so the API order is otherwise preserved. */
+    const ordered = kids.slice().sort((a, b) => (a.children.length ? 1 : 0) - (b.children.length ? 1 : 0));
     let prevJoint = yStart - state.branchSpacing;
 
     const reserveLane = (lane: LaneSlot[], y: number, r: number) => lane.push({ y, r });
@@ -746,16 +778,29 @@ function layoutFishbone(g: Graph) {
       if (!c) continue; // Skip undefined nodes
       const cr = rFor(c.contributors);
 
+      /* Lane choice: prefer a lane with no trunk column in it, so two
+         subtree-bearing siblings land on opposite sides and neither has to be
+         pushed outboard. Otherwise take whichever lane can hold the bubble
+         higher up. */
+      const yL = clearLane(leftLane, baseY, cr), yR = clearLane(rightLane, baseY, cr);
+      const freeL = !leftBlockers.length, freeR = !rightBlockers.length;
       let side: Side;
-      if (state.scenario === "reference" && c.sideHint) side = c.sideHint;
-      else {
-        /* Put the bubble in whichever lane can take it higher up. */
-        const yL = clearLane(leftLane, baseY, cr), yR = clearLane(rightLane, baseY, cr);
-        side = (yL === yR) ? (turn = (turn === -1 ? +1 : -1)) : (yL < yR ? -1 : +1);
-      }
+      if (freeL !== freeR) side = freeL ? -1 : +1;
+      else side = (yL === yR) ? (turn = (turn === -1 ? +1 : -1)) : (yL < yR ? -1 : +1);
 
       const minOffset = Math.max(state.hOffset, state.pathPad + 1, R + state.pathPad + 1);
-      const cx = px + side * (cr + minOffset);
+      let cx = px + side * (cr + minOffset);
+      /* Shift OUTBOARD (never inboard, that is where the parent is) until this
+         bubble clears every pending trunk column. Distances come from the
+         bubble's real radius, so a bigger tier is pushed further out. Iterated
+         to a fixed point because clearing one column can enter another. */
+      for (let pass = 0; pass <= pendingTrunks.length; pass++) {
+        let moved = false;
+        for (const bl of pendingTrunks) {
+          if (Math.abs(cx - bl.x) < cr + state.pathPad) { cx = bl.x + side * (cr + state.pathPad); moved = true; }
+        }
+        if (!moved) break;
+      }
 
       let reqY = Math.max(baseY, yStart + R, prevJoint + state.branchSpacing + R);
       reqY = clearLane(side === -1 ? leftLane : rightLane, reqY, cr);
@@ -801,6 +846,12 @@ function layoutFishbone(g: Graph) {
 
       (c as any).x = cx; (c as any).y = reqY;
       reserveLane(side === -1 ? leftLane : rightLane, reqY, cr);
+      /* This child will grow a trunk at cx once its own children are laid out:
+         claim the column until then, for every bubble placed after it. */
+      if (c.children.length) {
+        pendingTrunks.push({ id: c.id, x: cx });
+        (side === -1 ? leftBlockers : rightBlockers).push({ id: c.id, x: cx });
+      }
       discs.push({ x: cx, y: reqY, r: cr, id: c.id });
       arcs.push({ cx: px, cy: reqY, r: R });
       runs.push({ x0: px + side * R, x1: cx - side * STEM_LEN_CHILD, y: reqY });
@@ -852,7 +903,7 @@ function layoutFishbone(g: Graph) {
      (`maxY + 240`), which ignored the zoom factor and left the graph stranded
      at the top of an over-tall, scrolling canvas — the empty band under the
      first bubble. */
-  svgHeight.value = Math.max(MIN_SVG_HEIGHT, containerHeight || DEFAULT_SVG_HEIGHT);
+  svgHeight.value = graphViewportHeight();
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────-
@@ -888,7 +939,8 @@ function resetView(animated = false) {
      after layoutAndRender() the rect can still report the previous canvas
      height. Fitting against a stale, too-tall rect is what left the graph
      hanging above a band of empty space. */
-  const viewportH = containerHeight || box.height;
+  const viewportH = graphViewportHeight();
+  svgHeight.value = viewportH;   // the legend may have appeared since the layout ran
   const usableH = viewportH - VIEW_TOP_OFFSET;
 
   const forks = forkCount(state.graph);
@@ -952,7 +1004,7 @@ function focusNode(n: Node) {
   const svg = svgRef.value!;
   const box = svg.getBoundingClientRect();
   // Same reason as in resetView(): fit against the measured viewport.
-  const usableH = (containerHeight || box.height) - VIEW_TOP_OFFSET;
+  const usableH = graphViewportHeight() - VIEW_TOP_OFFSET;
   const r = rFor(n.contributors);
 
   // Calculate scale to fit the bubble with padding
@@ -1320,7 +1372,9 @@ function goToComparison() {
       </div>
       <!-- End graph-container -->
 
-      <LegendFishbone v-if="hasData"/>
+      <div ref="legendRef">
+        <LegendFishbone v-if="hasData"/>
+      </div>
 
       <!-- Compare Popup Modal -->
       <ArticleComparePopup
@@ -1345,6 +1399,13 @@ function goToComparison() {
 /* Graph container for relative positioning of overlays */
 .graph-container {
   position: relative;
+}
+
+/* The canvas must be block-level: an inline <svg> also reserves a few px of
+   baseline descender space underneath it, which is enough to push the legend
+   past the fold and give the (overflow:auto) graph box a scrollbar. */
+.graph-container > svg {
+  display: block;
 }
 
 /* Hide graph content when showing states, but keep SVG rendered */

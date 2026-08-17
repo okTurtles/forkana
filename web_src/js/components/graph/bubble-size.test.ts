@@ -37,9 +37,17 @@ test('a single-article subject always uses the smallest tier', () => {
   expect(bubbleRadiusFor(400, {singleArticle: true})).toBeLessThan(bubbleRadiusFor(400));
 });
 
-test('radius is stable when siblings appear (no relative normalisation)', () => {
-  // Same contributor count => same size, regardless of the rest of the graph.
-  expect(bubbleRadiusFor(4)).toBe(bubbleRadiusFor(4));
+test('radius is the tier radius, not a value relative to the graph', () => {
+  // The old formula normalised against the largest contributor count in the
+  // graph, so these numbers moved whenever a sibling was added or removed.
+  // Assert the actual table values instead of comparing a call to itself.
+  const [S, M, L, XL] = BUBBLE_SIZE_TIERS;
+  expect(bubbleRadiusFor(1)).toBe(S.radius);
+  expect(bubbleRadiusFor(4)).toBe(M.radius);
+  expect(bubbleRadiusFor(8)).toBe(L.radius);
+  expect(bubbleRadiusFor(20)).toBe(XL.radius);
+  // A 4-contributor article is the same size whether or not a 20-contributor
+  // fork exists, and is smaller than it.
   expect(bubbleRadiusFor(4)).toBeLessThan(bubbleRadiusFor(20));
 });
 

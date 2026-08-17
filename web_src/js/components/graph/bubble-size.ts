@@ -83,7 +83,7 @@ export const SINGLE_ARTICLE_TIER_INDEX = 0;
    container — the "disproportionately large" bubble from issue #284). */
 export const SINGLE_ARTICLE_SCREEN_DIAMETER_MIN = 180;
 export const SINGLE_ARTICLE_SCREEN_DIAMETER_MAX = 240;
-export const SINGLE_ARTICLE_SCREEN_WIDTH_RATIO = 0.20;
+export const SINGLE_ARTICLE_SCREEN_WIDTH_RATIO = 0.2;
 
 export type BubbleSizeOptions = {
   /** True when the whole subject holds a single article (no forks at all). */
@@ -92,8 +92,9 @@ export type BubbleSizeOptions = {
   scale?: number;
 };
 
-/** Index into BUBBLE_SIZE_TIERS for a given contributor count. */
-export function bubbleTierIndexFor(contributors: number, opts: BubbleSizeOptions = {}): number {
+/** Index into BUBBLE_SIZE_TIERS for a given contributor count.
+   Not exported: `bubbleTierFor` is the tier accessor callers should use. */
+function bubbleTierIndexFor(contributors: number, opts: BubbleSizeOptions = {}): number {
   if (opts.singleArticle) return SINGLE_ARTICLE_TIER_INDEX;
   const n = Number.isFinite(contributors) ? contributors : 0;
   let index = 0;
@@ -110,7 +111,8 @@ export function bubbleTierFor(contributors: number, opts: BubbleSizeOptions = {}
 
 /** Bubble radius in world units, tier-snapped and viewport-attenuated. */
 export function bubbleRadiusFor(contributors: number, opts: BubbleSizeOptions = {}): number {
-  const scale = Number.isFinite(opts.scale as number) && (opts.scale as number) > 0 ? (opts.scale as number) : 1;
+  const requested = opts.scale;
+  const scale = typeof requested === 'number' && Number.isFinite(requested) && requested > 0 ? requested : 1;
   return bubbleTierFor(contributors, opts).radius * scale;
 }
 
