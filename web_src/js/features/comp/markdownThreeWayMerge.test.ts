@@ -207,15 +207,46 @@ describe('mergeVisualEdit', () => {
   });
 });
 
-// The normalization of the two stable inputs is memoized across keystrokes; make sure the
-// cache cannot serve a stale or cross-document answer.
-test('repeated merges of different documents stay correct (normalization cache)', () => {
-  const docs = ['a_one\n\nb_two', 'c_three\n\nd_four', 'e_five\n\nf_six', 'g_seven\n\nh_eight'];
-  for (let round = 0; round < 3; round++) {
-    for (const ours of docs) {
-      const b = serialize(ours);
-      const theirs = `${b}\n\nextra\\_line`;
-      expect(mergeVisualEdit(ours, b, theirs)).toBe(`${ours}\n\nextra\\_line`);
+// The normalization of the two stable inputs, and the base<->ours alignment computed from
+// them, are memoized across keystrokes. These tests pin that the caches cannot serve a stale
+// or cross-document answer.
+describe('memoization', () => {
+  test('repeated merges of different documents stay correct (normalization cache)', () => {
+    const docs = ['a_one\n\nb_two', 'c_three\n\nd_four', 'e_five\n\nf_six', 'g_seven\n\nh_eight'];
+    for (let round = 0; round < 3; round++) {
+      for (const ours of docs) {
+        const b = serialize(ours);
+        const theirs = `${b}\n\nextra\\_line`;
+        expect(mergeVisualEdit(ours, b, theirs)).toBe(`${ours}\n\nextra\\_line`);
+      }
     }
-  }
+  });
+
+  // A Visual -> Source -> Visual round trip produces a new baseline for the same source, so
+  // the alignment cache must key on both inputs, not just the source.
+  test('the same source with a different baseline is re-aligned, not reused', () => {
+    const ours = 'x_one\n\ny_two\n\nz_three';
+    const baseA = serialize(ours);
+    // A baseline whose lines sit at different indices than baseA's.
+    const baseB = serialize(`lead_in\n\n${ours}`);
+
+    expect(mergeVisualEdit(ours, baseA, baseA.replace('y\\_two', 'y\\_two!')))
+      .toBe('x_one\n\ny\\_two!\n\nz_three');
+    expect(mergeVisualEdit(ours, baseB, baseB.replace('y\\_two', 'y\\_two!')))
+      .toBe('lead\\_in\n\nx_one\n\ny\\_two!\n\nz_three');
+    // ...and back again, in case the second call poisoned the first's entry.
+    expect(mergeVisualEdit(ours, baseA, baseA.replace('y\\_two', 'y\\_two?')))
+      .toBe('x_one\n\ny\\_two?\n\nz_three');
+  });
+
+  test('cycling more source/baseline pairs than the cache holds stays correct', () => {
+    const docs = Array.from({length: 8}, (_, i) => `alpha_${i}\n\nbeta_${i}\n\ngamma_${i}`);
+    for (let round = 0; round < 3; round++) {
+      for (const ours of docs) {
+        const b = serialize(ours);
+        const theirs = b.replace(/beta\\_(\d)/, 'beta\\_$1 edited');
+        expect(mergeVisualEdit(ours, b, theirs)).toBe(ours.replace(/beta_(\d)/, 'beta\\_$1 edited'));
+      }
+    }
+  });
 });
