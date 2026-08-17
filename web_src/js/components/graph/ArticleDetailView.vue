@@ -77,10 +77,13 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
   z-index: 10;
   display: flex;
   align-items: center;
-  /* Slightly left of centre, as in the design: the history card sits in the
-     space this leaves on the right. */
-  justify-content: flex-start;
-  padding-left: 12%;
+  /* Centred in the canvas box, horizontally and vertically. The mockup drew the
+     circle left of centre with the history card in the space it left on the
+     right, but a bubble that sits off-centre in an otherwise empty box reads as
+     a layout bug — so the circle owns the centre and the history card overlaps
+     its right edge instead (see ArticleHistoryPopup, which positions itself
+     from the same centre and clamps to this box's right edge). */
+  justify-content: center;
   background: var(--color-body, #fff);
   /* Follow the canvas box's own rounded frame instead of squaring it off, and
      keep the circle and the history card clipped to it. */
@@ -226,11 +229,8 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 }
 
 @media (width <= 767px) {
-  .detail-layer {
-    justify-content: center;
-    padding-left: 0;
-  }
-
+  /* (the circle is centred at every width now, so there is nothing to undo
+     here — only the contents of the smaller circle need adjusting) */
   .detail-content {
     width: 68%;
   }

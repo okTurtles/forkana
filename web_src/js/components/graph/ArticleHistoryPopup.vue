@@ -110,11 +110,31 @@ function toggle(id: string) {
   position: absolute;
   z-index: 21;
   top: 50%;
+
   /* Beside the big bubble, overlapping its right edge as the design shows.
-     `--detail-size` and the 12% inset come from ArticleDetailView. */
-  left: calc(12% + min(var(--detail-size, 430px), 84vw) - 48px);
+     The circle is CENTRED in the layer (see ArticleDetailView), so its right
+     edge is `50% + d/2` and the card starts OVERLAP px inside that. `d` is the
+     circle's rendered diameter — the same min() ArticleDetailView applies, so
+     the two can never disagree about where the arc actually is.
+
+     The second term is the clamp: on a container too narrow to hold the card
+     at that offset, the card stops at the box's right edge instead of hanging
+     out of it (the layer is overflow:hidden, so it would simply be cut off).
+     The bubble does not move to make room — it stays centred and the card
+     overlaps it further, which is the same relationship, just tighter. */
+  --history-width: 320px;
+  --history-edge-gap: 12px;
+  --history-overlap: 48px;
+  --detail-diameter: min(var(--detail-size, 430px), 84vw);
+
+  left: min(
+    calc(50% + var(--detail-diameter) / 2 - var(--history-overlap)),
+    calc(100% - var(--history-width) - var(--history-edge-gap))
+  );
   transform: translateY(-50%);
-  width: 320px;
+  width: var(--history-width);
+  /* Last-resort guard for a box narrower than the card itself. */
+  max-width: calc(100% - var(--history-edge-gap) * 2);
   max-height: 86%;
   display: flex;
   flex-direction: column;
@@ -280,6 +300,9 @@ function toggle(id: string) {
     top: auto;
     left: 0;
     width: 100%;
+    /* the desktop card clamps its width to the canvas box; the sheet spans the
+       whole viewport edge to edge and must drop that clamp */
+    max-width: none;
     max-height: 55vh;
     border: none;
     border-radius: 16px 16px 0 0;
