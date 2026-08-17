@@ -115,9 +115,12 @@ export class ToastCommentEditor {
     // actually edit in the visual editor (issue #262). Installs itself on top of the widget
     // patch, loads the initial content, and overrides getMarkdown/setMarkdown so every
     // existing call site below (and value()) stays lossless with no further changes.
-    // Kept on the instance so destroy() can detach it: unlike the previous `events.change`
-    // editor option, this listener lives on the textarea and would otherwise outlive the
-    // editor and stack up if the same container is initialized again.
+    // Kept on the instance so destroy() can detach it. Unlike the previous `events.change`
+    // editor option, this listener lives on the textarea rather than on the editor. Nothing
+    // calls destroy() today — every caller either reuses the existing instance
+    // (getToastCommentEditor) or replaces the whole container element, which takes the
+    // textarea and its listener with it — so this is housekeeping for a future explicit
+    // teardown, not a fix for a leak that can happen now.
     this.onTextareaChange = () => triggerEditorContentChanged(this.container);
     this.textarea.addEventListener('change', this.onTextareaChange);
     installLosslessMarkdownTracker(this.editor, this.textarea);
