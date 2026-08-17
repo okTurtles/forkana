@@ -90,9 +90,13 @@ const ELBOW_R_DEFAULT = 28;   // Default elbow corner radius
 const BUBBLE_PAD_DEFAULT = 8;   // Minimum clearance between bubbles
 const PATH_PAD_DEFAULT = 8;   // Minimum clearance between a bubble and a connector
 
-/* === ZOOM/PAN CONSTRAINTS === */
-const ZOOM_MIN = 0.35;          // Minimum zoom level (35% scale)
+/* === ZOOM/PAN CONSTRAINTS ===
+   The canvas is FINITE (issue #104): the graph can be panned and zoomed, but
+   never right out of the window. See constrainToViewport(). */
+const ZOOM_MIN = 0.35;          // Absolute minimum zoom level (35% scale)
 const ZOOM_MAX = 3.5;           // Maximum zoom level (350% scale)
+const MIN_VISIBLE_PX = 80;      // Content must always keep this much inside the viewport, per axis
+const ZOOM_OUT_FIT_FRACTION = 0.5; // ...and may not shrink below half of the zoom-to-fit scale
 
 /* === VIEW RESET PARAMETERS === */
 const RESET_TOP_MARGIN = 40;    // Minimum top margin when resetting the view
@@ -216,6 +220,11 @@ let svgSel!: Selection<SVGSVGElement, unknown, null, undefined>;
 let worldSel!: Selection<SVGGElement, unknown, null, undefined>;
 let zoomBehavior!: ZoomBehavior<Element, unknown>;
 const currentK = ref(1);
+/* Smallest bubble radius in the current graph, cached at layout time: the
+   pan/zoom constraint reads it on every zoom event. */
+let smallestRadius = 0;
+/* Zoom-to-fit scale from the last resetView(), the floor for zooming out. */
+let fitScale = 1;
 
 /* ──────────────────────────────────────────────────────────────────────────────
    COMPARE MODE STATE
@@ -870,6 +879,63 @@ function contentBounds() {
   return { minX: minX - extraX, maxX: maxX + extraX, minY, maxY };
 }
 
+/** How much of the content has to stay on screen, in px, at this zoom.
+   Never less than MIN_VISIBLE_PX, and at least half the smallest bubble's
+   on-screen diameter — the issue's requirement is "part of a bubble is always
+   in the viewable area", so the margin has to grow with the bubbles. */
+function requiredVisiblePx(k: number) {
+  return Math.max(MIN_VISIBLE_PX, smallestRadius * k);
+}
+
+/** d3-zoom `constrain` hook: given a candidate transform, return one that keeps
+   a BUBBLE in view (issue #104 — the canvas used to be infinite in x and y, so
+   the graph could be flung out of the window and be hard to find again).
+
+   The guarantee is the one the issue asks for, literally: at least one bubble
+   always keeps `requiredVisiblePx` of itself inside the viewport on both axes
+   (or all of itself, when it is smaller than that). Panning across a large
+   graph is unaffected — the rule only bites when EVERY bubble has left — and
+   then the transform is nudged back by the smallest correction that returns
+   the nearest bubble to the edge. Clamping the bounding box instead is not
+   enough: a box corner can be on screen while every bubble in it is not.
+
+   This is preferred over a translateExtent, which is computed for one zoom
+   level and then fights the zoom-to-fit at every other one. */
+function constrainToViewport(t: ZoomTransform, extent: [[number, number], [number, number]]): ZoomTransform {
+  if (!nodesList.value.length) return t;
+  const [[vx0, vy0], [vx1, vy1]] = extent;
+  const need = requiredVisiblePx(t.k);
+
+  let bestDx = 0, bestDy = 0, bestCost = Infinity;
+  for (const n of nodesList.value) {
+    const r = rFor(n.contributors) * t.k;
+    const cx = t.applyX(n.x ?? 0), cy = t.applyY(n.y ?? 0);
+    const x0 = cx - r, x1 = cx + r, y0 = cy - r, y1 = cy + r;
+    /* A bubble smaller than the margin only has to be wholly visible. */
+    const needX = Math.min(need, x1 - x0), needY = Math.min(need, y1 - y0);
+
+    let dx = 0, dy = 0;
+    if (x1 < vx0 + needX) dx = (vx0 + needX) - x1;
+    else if (x0 > vx1 - needX) dx = (vx1 - needX) - x0;
+    if (y1 < vy0 + needY) dy = (vy0 + needY) - y1;
+    else if (y0 > vy1 - needY) dy = (vy1 - needY) - y0;
+
+    if (!dx && !dy) return t;              // this bubble is already in view
+    const cost = dx * dx + dy * dy;
+    if (cost < bestCost) { bestCost = cost; bestDx = dx; bestDy = dy; }
+  }
+  /* `translate` works in pre-scale units, so convert from the screen px above. */
+  return t.translate(bestDx / t.k, bestDy / t.k);
+}
+
+/** Keep the zoom-out floor tied to the current fit, so the graph can always be
+   made bigger than half the size it lands at, and never shrink to a speck. */
+function applyScaleExtent() {
+  if (!zoomBehavior) return;
+  const min = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fitScale * ZOOM_OUT_FIT_FRACTION));
+  zoomBehavior.scaleExtent([min, ZOOM_MAX]);
+}
+
 function resetView(animated = false) {
   /* Centering fix: apply transform to worldSel (the same <g> Vue renders). */
   if (!nodesList.value.length) return; // Guard against empty graph
@@ -940,6 +1006,12 @@ function resetView(animated = false) {
     return;
   }
 
+  /* Record the fit before applying it: the zoom-out floor is relative to it,
+     and the constraint needs the bounds that go with the current layout. */
+  fitScale = targetScale;
+  smallestRadius = Math.min(...nodesList.value.map((n) => rFor(n.contributors)));
+  applyScaleExtent();
+
   const t = zoomIdentity.translate(tx, ty).scale(targetScale);
   (animated ? svgSel.transition().duration(VIEW_TRANSITION_DURATION) : svgSel).call(zoomBehavior.transform as any, t);
 
@@ -990,6 +1062,12 @@ onMounted(async () => {
 
   zoomBehavior = zoom()
     .scaleExtent([ZOOM_MIN, ZOOM_MAX])
+    /* Finite canvas (#104). d3 runs this on every interactive gesture and on
+       translateBy/scaleBy — i.e. on the wheel-pan path below. resetView() and
+       focusNode() set a transform directly, which d3 does NOT pass through
+       constrain, but both centre what they are showing, so they satisfy it by
+       construction and stay free to frame the graph however they like. */
+    .constrain(constrainToViewport as any)
     /* Filter: pinch and ctrl+wheel zoom; plain wheel should pan (handled below). */
     .filter((event: any) => event.type === "wheel" ? event.ctrlKey : true)
     .on("zoom", (e: any) => {
