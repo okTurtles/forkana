@@ -839,17 +839,25 @@ func ArticleTransferCandidates(ctx *context.Context) {
 
 // resolveArticleTransferRecipient finds the transfer recipient by their first and
 // last name, which is what the article transfer modal asks for. Users without a full
-// name are listed by their username instead, so that is tried as a fallback. It
-// reports the failure through a flash message and returns nil when the name is unusable.
+// name are listed by their username instead, so that is tried as a fallback. Only the
+// active users the candidate search lists for the doer are accepted, so that a crafted
+// request cannot reach a hidden account or confirm that it exists. It reports the
+// failure through a flash message and returns nil when the name is unusable.
 func resolveArticleTransferRecipient(ctx *context.Context, name string) *user_model.User {
 	candidates, err := user_model.GetUsersByFullName(ctx, name)
 	if err != nil {
 		ctx.ServerError("GetUsersByFullName", err)
 		return nil
 	}
+	visible := make([]*user_model.User, 0, len(candidates))
+	for _, candidate := range candidates {
+		if user_model.IsUserVisibleToViewer(ctx, candidate, ctx.Doer) {
+			visible = append(visible, candidate)
+		}
+	}
 
 	var recipient *user_model.User
-	switch len(candidates) {
+	switch len(visible) {
 	case 0:
 		recipient, err = user_model.GetUserByName(ctx, strings.TrimSpace(name))
 		if err != nil {
@@ -860,8 +868,13 @@ func resolveArticleTransferRecipient(ctx *context.Context, name string) *user_mo
 			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
 			return nil
 		}
+		if !recipient.IsActive || recipient.ProhibitLogin ||
+			!user_model.IsUserVisibleToViewer(ctx, recipient, ctx.Doer) {
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
+			return nil
+		}
 	case 1:
-		recipient = candidates[0]
+		recipient = visible[0]
 	default:
 		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_ambiguous"))
 		return nil

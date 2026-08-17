@@ -1055,9 +1055,10 @@ func GetUserByName(ctx context.Context, name string) (*User, error) {
 	return u, nil
 }
 
-// GetUsersByFullName returns the individual users whose full name matches the given
-// one. The comparison is case-insensitive and full names are not unique, so the
-// caller has to handle the ambiguous case.
+// GetUsersByFullName returns the active individual users whose full name matches the
+// given one. The comparison is case-insensitive and full names are not unique, so the
+// caller has to handle the ambiguous case. Visibility is not checked here, the caller
+// has to filter for the viewer.
 func GetUsersByFullName(ctx context.Context, fullName string) ([]*User, error) {
 	fullName = strings.TrimSpace(fullName)
 	if fullName == "" {
@@ -1067,6 +1068,8 @@ func GetUsersByFullName(ctx context.Context, fullName string) ([]*User, error) {
 	return users, db.GetEngine(ctx).
 		Where("LOWER(full_name) = ?", strings.ToLower(fullName)).
 		And("type = ?", UserTypeIndividual).
+		And("is_active = ?", true).
+		And("prohibit_login = ?", false).
 		Find(&users)
 }
 
