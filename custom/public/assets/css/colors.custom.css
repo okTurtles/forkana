@@ -1,4 +1,5 @@
-/* Forkana light theme variables overriding theme-gitea-light */
+/* Forkana light palette. Since this PR it is the baseline for *every* theme rather than an
+   override scoped to theme-gitea-light — see the comment above the :root block below. */
 [data-theme="gitea-light"] gitea-theme-meta-info {
   --theme-display-name: "Light";
 }
@@ -111,8 +112,15 @@
 
 /* Colorblind diff colors — orange (removed) vs blue (added).
    Both hues are distinguishable by protanopes and deuteranopes.
-   Opacity is high enough to be clearly visible against white. */
-[data-theme="gitea-light-protanopia-deuteranopia"] {
+   Opacity is high enough to be clearly visible against white.
+
+   "gitea-auto-protanopia-deuteranopia" ("System (Colorblind)") must be listed here too:
+   theme-gitea-light-protanopia-deuteranopia.css declares its colorblind palette on :root,
+   and the :root baseline above — same specificity, later in the cascade — would otherwise
+   overwrite it with the standard red/green-ish diff colors.
+   Under a dark OS preference colors-dark.custom.css overrides all eight tokens again. */
+[data-theme="gitea-light-protanopia-deuteranopia"],
+[data-theme="gitea-auto-protanopia-deuteranopia"] {
   --color-diff-removed-linenum-bg: #ffb77c80; /* 50% orange — line number bg */
   --color-diff-removed-row-bg: #ffb77c40;     /* 25% orange — content bg */
   --color-diff-removed-word-bg: #ffb77ccc;    /* 80% orange — word highlight */
