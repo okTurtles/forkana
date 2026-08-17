@@ -1084,7 +1084,7 @@ func handleSettingsPostDelete(ctx *context.Context) {
 	}
 
 	// The article settings UI confirms the deletion with "<owner>/<subject>" and
-	// must return to the owner profile instead of the repository settings page.
+	// returns to the article settings view instead of the repository settings page.
 	fromArticle := ctx.FormBool("redirect_to_article")
 	if fromArticle {
 		if form.ArticleName != ctx.Repo.Owner.Name+"/"+repo.GetSubject(ctx) {
@@ -1113,7 +1113,9 @@ func handleSettingsPostDelete(ctx *context.Context) {
 	} else {
 		ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
 	}
-	ctx.Redirect(ctx.Repo.Owner.HomeLink())
+	// The dashboard renders base/alert, so the flash above stays visible; the owner
+	// profile template does not.
+	ctx.Redirect(ctx.Repo.Owner.DashboardLink())
 }
 
 func handleSettingsPostDeleteWiki(ctx *context.Context) {
