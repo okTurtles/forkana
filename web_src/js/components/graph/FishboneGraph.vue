@@ -72,6 +72,9 @@ const LS_REPO_KEY = 'selectedArticleRepo';
 const STEM_LEN_PARENT = 12;     // Short vertical stem extending from parent bubble
 const STEM_LEN_CHILD = 18;      // Short vertical stem extending to child bubble
 const FIRST_LANE_CLEARANCE = 24; // Breathing room under the parent, on the 8px grid (3 × 8)
+/* Which side the FIRST child of a node goes to; the rest alternate from there.
+   The design starts on the right (its first child is also the biggest one). */
+const FIRST_CHILD_SIDE: Side = 1;
 
 /* === LAYOUT DEFAULTS (used in manual mode or as auto-tuning hints) === */
 const BRANCH_SPACING_DEFAULT = 28;   // Default vertical gap between branch joints on trunk
@@ -79,12 +82,13 @@ const LANE_PAD_DEFAULT = 12;   // Default padding between bubbles in same lane
 const H_OFFSET_DEFAULT = 48;   // Default horizontal rib length (parent to child)
 const ELBOW_R_DEFAULT = 28;   // Default elbow corner radius
 
-/* === COLLISION CLEARANCES ===
+/* === CLEARANCES ===
    These are CLEARANCES ONLY: every separation rule adds them on top of the two
-   bubbles' actual radii (see bubbleSeparation/laneSeparation below), so the
-   layout stays correct if the tier table in ./bubble-size.ts changes. */
+   bubbles' ACTUAL radii (see bubbleSeparation / subtreeStackGap in the layout
+   engine), so the layout stays correct if the tier table in ./bubble-size.ts
+   changes. */
 const BUBBLE_PAD_DEFAULT = 8;   // Minimum clearance between bubbles
-const PATH_PAD_DEFAULT = 8;   // Minimum clearance between bubbles and paths
+const PATH_PAD_DEFAULT = 8;   // Minimum clearance between a bubble and a connector
 
 /* === ZOOM/PAN CONSTRAINTS === */
 const ZOOM_MIN = 0.35;          // Minimum zoom level (35% scale)
@@ -640,33 +644,45 @@ function applyResponsiveDials() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────-
-   LAYOUT ENGINE (deterministic fishbone; analytic collision pushing)
-   ─────────────────────────────────────────────────────────────────────────── */
-type Disc = { x: number; y: number; r: number; id?: string };
-type SegV = { x: number; y1: number; y2: number };
-type Arc = { cx: number; cy: number; r: number };
-type HRun = { x0: number; x1: number; y: number };
-/* A bubble already placed in a lane. The RADIUS is stored, not a pre-baked
-   interval, so the clearance is always recomputed from the two real radii. */
-type LaneSlot = { y: number; r: number };
-/* The vertical column a subtree-bearing bubble's trunk WILL descend through,
-   before that trunk exists. A node's trunk is only created once the node is
-   processed as a parent, which happens after the whole generation above it has
-   been placed — so until then its extent is unknown and the entire column
-   below it has to be treated as occupied. Once the trunk is real it moves into
-   `trunks`, where the exact extent is known and a bubble can simply be placed
-   below it instead. */
-type TrunkColumn = { id: NodeId; x: number };
+   LAYOUT ENGINE — recursive fishbone (tidy-tree specialised to the design)
+
+   Every node owns its OWN short vertical trunk, descending from the bottom of
+   its bubble. Its children hang off that trunk with a short elbow + rib,
+   alternating sides (the design puts the first, usually biggest, child on the
+   right). A child is not placed as a lone bubble: its ENTIRE SUBTREE is laid
+   out first and then positioned as one rigid block, which is what keeps the
+   picture free of crossing connectors. Two invariants do all the work:
+
+     (A) a child's whole subtree stays on ITS SIDE of the parent's trunk
+         column (shifted outboard after layout if its own descendants reach
+         back in), so the parent trunk never runs through it and two subtrees
+         on opposite sides can never meet;
+     (B) subtrees on the SAME side are stacked vertically, clear of each
+         other's bounding boxes, so a rib leaving the trunk for the next one
+         always passes below everything already placed there.
+
+   Together they mean connectors can only meet at a junction they share, so no
+   global obstacle lists, no collision pushing and no trunk-column bookkeeping
+   are needed — the previous versions of this file carried all three.
+
+   Everything below is derived from the ACTUAL tier radii in ./bubble-size.ts
+   plus the clearance dials, so changing the tier table cannot invalidate it. */
+
+/** Axis-aligned bounds of a laid-out subtree, in world units. */
+type Bbox = { minX: number; maxX: number; minY: number; maxY: number };
 
 /* ── SEPARATION RULES ──────────────────────────────────────────────────────
-   Everything that keeps bubbles apart goes through these two helpers. They
-   take the two ACTUAL radii (whatever ./bubble-size.ts hands out) and add a
-   clearance dial, so no rule anywhere assumes a bubble size. If the tier table
-   grows, the spacing grows with it. */
+   The two clearance rules, both taking the two real radii and adding a dial. */
 
 /** Minimum centre-to-centre distance so two bubbles do not touch. */
 function bubbleSeparation(rA: number, rB: number) {
   return rA + rB + state.bubblePad;
+}
+
+/** Vertical gap between one subtree's bottom edge and the next bubble's edge
+   on the same side of a trunk. */
+function subtreeStackGap() {
+  return Math.max(2 * state.lanePad, state.bubblePad);
 }
 
 /** Height available to the SVG canvas: the measured container minus anything
@@ -689,28 +705,90 @@ function firstLaneY(parentY: number, parentR: number, elbowR: number) {
   return parentY + parentR + STEM_LEN_PARENT + elbowR + FIRST_LANE_CLEARANCE;
 }
 
-/** Minimum vertical centre distance for two bubbles sharing a lane.
-   Lanes are resolved on the Y axis only (bubbles in one lane can sit at
-   different X), so this is deliberately the conservative case: it is applied
-   regardless of the horizontal gap, and is never smaller than
-   `bubbleSeparation`. */
-function laneSeparation(rA: number, rB: number) {
-  return rA + rB + Math.max(2 * state.lanePad, state.bubblePad);
+function unionBbox(a: Bbox, b: Bbox): Bbox {
+  return {
+    minX: Math.min(a.minX, b.minX), maxX: Math.max(a.maxX, b.maxX),
+    minY: Math.min(a.minY, b.minY), maxY: Math.max(a.maxY, b.maxY),
+  };
 }
 
-/** Lowest y >= `y` at which a bubble of radius `r` clears every slot already
-   in `lane`. Iterated to a fixed point: moving past one slot can push the
-   bubble into another one, and the lane is not guaranteed to be sorted. */
-function clearLane(lane: LaneSlot[], y: number, r: number) {
-  for (let pass = 0; pass <= lane.length; pass++) {
-    let moved = false;
-    for (const slot of lane) {
-      const need = laneSeparation(r, slot.r);
-      if (Math.abs(y - slot.y) < need) { y = slot.y + need; moved = true; }
+/** Move a node and every descendant sideways. The shift is RIGID, so the
+   subtree's internal geometry — and with it invariants (A) and (B) inside that
+   subtree — is unchanged. */
+function shiftSubtree(g: Graph, id: NodeId, dx: number) {
+  const n = g[id];
+  if (!n) return;
+  n.x = (n.x ?? 0) + dx;
+  for (const childId of n.children) shiftSubtree(g, childId, dx);
+}
+
+/** Lay out the subtree rooted at `n`, whose own x/y are already fixed, and
+   return its bounding box (bubbles + trunk) in world units. */
+function layoutSubtree(g: Graph, n: Node, ownSide: Side = FIRST_CHILD_SIDE, seen: Set<NodeId> = new Set()): Bbox {
+  if (seen.has(n.id)) return { minX: n.x ?? 0, maxX: n.x ?? 0, minY: n.y ?? 0, maxY: n.y ?? 0 };
+  seen.add(n.id);
+
+  const nx = n.x ?? 0, ny = n.y ?? 0, nr = rFor(n.contributors);
+  let box: Bbox = { minX: nx - nr, maxX: nx + nr, minY: ny - nr, maxY: ny + nr };
+
+  const kids = n.children.map((id) => g[id]).filter((c): c is Node => c !== undefined);
+  if (!kids.length) return box;
+
+  const R = state.elbowR;
+  /* How far out the child sits from the trunk. `hOffset` is the design's short
+     rib; the other two terms keep the elbow itself drawable. */
+  const minOffset = Math.max(state.hOffset, state.pathPad + 1, R + state.pathPad + 1);
+
+  /* Start on the side this node itself hangs on, so a subtree grows AWAY from
+     its parent's trunk instead of doubling back under it. Doubling back is
+     legal — invariant (A) just slides the block outboard — but it costs a long
+     rib, and the design's ribs are short. The root has no parent trunk to grow
+     away from, so it starts on FIRST_CHILD_SIDE (right, as in the design). */
+  let side: Side = ownSide;
+  /* Bottom edge of the last subtree placed on each side — invariant (B). */
+  let bottomLeft = -Infinity, bottomRight = -Infinity;
+  /* Where the previous rib left the trunk, so junctions stay distinguishable. */
+  let prevJoint = ny + nr + STEM_LEN_PARENT - state.branchSpacing;
+  let lastJoint = ny + nr + STEM_LEN_PARENT;
+
+  for (const c of kids) {
+    const cr = rFor(c.contributors);
+    const cx = nx + side * (cr + minOffset);
+
+    let cy = Math.max(
+      /* just below the parent bubble — the design's tight vertical rhythm */
+      firstLaneY(ny, nr, R),
+      /* far enough down the trunk for this rib's junction to be its own */
+      prevJoint + state.branchSpacing + R,
+      /* clear of everything already hanging on this side — invariant (B) */
+      (side === -1 ? bottomLeft : bottomRight) + subtreeStackGap() + cr,
+    );
+    /* Exact (not axis-aligned) clearance from the parent bubble, so a child can
+       sit as close as the design draws it without ever touching. */
+    const sep = bubbleSeparation(cr, nr), dx = Math.abs(cx - nx);
+    if (dx < sep) cy = Math.max(cy, ny + Math.sqrt(sep * sep - dx * dx));
+
+    c.x = cx; c.y = cy;
+    let sub = layoutSubtree(g, c, side, seen);
+
+    /* Invariant (A): the subtree may have grown back towards the parent trunk
+       (a grandchild placed on the inboard side). Slide the whole block
+       outboard until it clears the trunk column by `pathPad`. */
+    const intrusion = side === 1 ? (nx + state.pathPad) - sub.minX : sub.maxX - (nx - state.pathPad);
+    if (intrusion > 0) {
+      shiftSubtree(g, c.id, side * intrusion);
+      sub = {...sub, minX: sub.minX + side * intrusion, maxX: sub.maxX + side * intrusion};
     }
-    if (!moved) return y;
+
+    if (side === -1) bottomLeft = sub.maxY; else bottomRight = sub.maxY;
+    box = unionBbox(box, sub);
+    prevJoint = cy - R;
+    lastJoint = cy - R;
+    side = -side as Side;
   }
-  return y;
+
+  /* The trunk itself: from the bottom of the bubble to the last junction. */
+  return unionBbox(box, { minX: nx, maxX: nx, minY: ny + nr, maxY: lastJoint });
 }
 
 function layoutFishbone(g: Graph) {
@@ -727,143 +805,7 @@ function layoutFishbone(g: Graph) {
   const root: any = getRoot(g);
   // Note: root is guaranteed to exist here since we checked nodeCount above
   root.x = 0; root.y = 0;
-
-  const discs: Disc[] = [{ x: root.x, y: root.y, r: rFor(root.contributors), id: root.id }];
-  const trunks: SegV[] = []; const arcs: Arc[] = []; const runs: HRun[] = [];
-  /* Trunks that are going to exist but do not yet — see TrunkColumn. Global,
-     not per parent: a trunk descending from one branch reaches into the rows
-     where the NEXT branch's children get placed, so nephews need the same
-     protection siblings do. */
-  const pendingTrunks: TrunkColumn[] = [];
-  const parents = Object.values(g).filter((n: any) => n.depth !== undefined).sort((a: any, b: any) => (a.depth - b.depth));
-
-  for (const p of parents) {
-    const kids = p.children.map(id => g[id]).filter((n): n is Node => n !== undefined);
-    if (!kids.length) continue;
-
-    /* This parent's trunk is created at the end of this iteration, and its own
-       children are always at least `hOffset` clear of its column, so it stops
-       being a pending obstacle now. */
-    const pendingIdx = pendingTrunks.findIndex(t => t.id === p.id);
-    if (pendingIdx >= 0) pendingTrunks.splice(pendingIdx, 1);
-
-    const px = p.x ?? 0, py = p.y ?? 0, pr = rFor(p.contributors);
-    const yStart = py + pr + STEM_LEN_PARENT;
-    const R = state.elbowR;
-    /* First lane for THIS parent, derived from its radius (not from depth). */
-    const baseY = firstLaneY(py, pr, R);
-
-    const leftLane: LaneSlot[] = [];
-    const rightLane: LaneSlot[] = [];
-    /* Trunk columns already claimed in each lane. A child that has children of
-       its own grows a TRUNK straight down from itself towards them, and that
-       trunk is only created later (when that child is processed as a parent),
-       so the trunk-vs-bubble check below cannot see it yet. Siblings otherwise
-       share a column — their x differs only by their radii — so a later
-       sibling in the same lane would sit on that trunk. Recorded here and
-       avoided explicitly, for any number of subtree-bearing siblings. */
-    const leftBlockers: TrunkColumn[] = [];
-    const rightBlockers: TrunkColumn[] = [];
-    let turn: Side = -1;
-
-    /* Childless children first: they can then never end up below a sibling's
-       trunk, which keeps the common shapes as compact as possible. `sort` is
-       stable, so the API order is otherwise preserved. */
-    const ordered = kids.slice().sort((a, b) => (a.children.length ? 1 : 0) - (b.children.length ? 1 : 0));
-    let prevJoint = yStart - state.branchSpacing;
-
-    const reserveLane = (lane: LaneSlot[], y: number, r: number) => lane.push({ y, r });
-
-    for (const c of ordered) {
-      if (!c) continue; // Skip undefined nodes
-      const cr = rFor(c.contributors);
-
-      /* Lane choice: prefer a lane with no trunk column in it, so two
-         subtree-bearing siblings land on opposite sides and neither has to be
-         pushed outboard. Otherwise take whichever lane can hold the bubble
-         higher up. */
-      const yL = clearLane(leftLane, baseY, cr), yR = clearLane(rightLane, baseY, cr);
-      const freeL = !leftBlockers.length, freeR = !rightBlockers.length;
-      let side: Side;
-      if (freeL !== freeR) side = freeL ? -1 : +1;
-      else side = (yL === yR) ? (turn = (turn === -1 ? +1 : -1)) : (yL < yR ? -1 : +1);
-
-      const minOffset = Math.max(state.hOffset, state.pathPad + 1, R + state.pathPad + 1);
-      let cx = px + side * (cr + minOffset);
-      /* Shift OUTBOARD (never inboard, that is where the parent is) until this
-         bubble clears every pending trunk column. Distances come from the
-         bubble's real radius, so a bigger tier is pushed further out. Iterated
-         to a fixed point because clearing one column can enter another. */
-      for (let pass = 0; pass <= pendingTrunks.length; pass++) {
-        let moved = false;
-        for (const bl of pendingTrunks) {
-          if (Math.abs(cx - bl.x) < cr + state.pathPad) { cx = bl.x + side * (cr + state.pathPad); moved = true; }
-        }
-        if (!moved) break;
-      }
-
-      let reqY = Math.max(baseY, yStart + R, prevJoint + state.branchSpacing + R);
-      reqY = clearLane(side === -1 ? leftLane : rightLane, reqY, cr);
-
-      const pathPad = state.pathPad;
-
-      /* Bubble vs every bubble already placed — INCLUDING the parent, so a
-         large parent tier can never swallow a child. Uses the two real radii. */
-      for (const d of discs) {
-        const dx = cx - d.x, sum = bubbleSeparation(cr, d.r), absx = Math.abs(dx);
-        if (absx < sum) reqY = Math.max(reqY, d.y + Math.sqrt(sum * sum - absx * absx));
-      }
-      for (const a of arcs) {
-        const dx = cx - a.cx, sum = cr + a.r + pathPad, absx = Math.abs(dx);
-        if (absx < sum) reqY = Math.max(reqY, a.cy + Math.sqrt(sum * sum - absx * absx));
-      }
-      for (const r of runs) {
-        const A = Math.min(r.x0, r.x1), B = Math.max(r.x0, r.x1);
-        const xClamp = Math.max(A, Math.min(cx, B));
-        const dx = cx - xClamp, need = cr + pathPad;
-        if (Math.abs(dx) < need) reqY = Math.max(reqY, r.y + Math.sqrt(need * need - dx * dx));
-      }
-      for (const d of discs) {
-        if (d.id === p.id) continue;
-        const dx = px - d.x, sum = R + d.r + pathPad, absx = Math.abs(dx);
-        if (absx < sum) reqY = Math.max(reqY, d.y + Math.sqrt(sum * sum - absx * absx));
-      }
-      {
-        const run0 = px + side * R, run1 = cx - side * STEM_LEN_CHILD; const A = Math.min(run0, run1), B = Math.max(run0, run1);
-        for (const d of discs) {
-          const xC = Math.max(A, Math.min(d.x, B)); const dx = d.x - xC, need = d.r + pathPad;
-          if (Math.abs(dx) < need) reqY = Math.max(reqY, d.y + Math.sqrt(need * need - dx * dx));
-        }
-      }
-      for (const s of trunks) if (Math.abs(cx - s.x) < cr + pathPad && reqY <= s.y2) reqY = s.y2 + cr + pathPad;
-
-      /* Re-clear the lane: the path/disc constraints above may have moved the
-         bubble down into a slot it had already cleared. Only ever moves down,
-         so the constraints above stay satisfied. */
-      reqY = clearLane(side === -1 ? leftLane : rightLane, reqY, cr);
-      /* NO cap on reqY here: the previous `Math.min(reqY, baseY + MAX_REF_DROP)`
-         discarded the collision result and is what let bubbles overlap. */
-
-      (c as any).x = cx; (c as any).y = reqY;
-      reserveLane(side === -1 ? leftLane : rightLane, reqY, cr);
-      /* This child will grow a trunk at cx once its own children are laid out:
-         claim the column until then, for every bubble placed after it. */
-      if (c.children.length) {
-        pendingTrunks.push({ id: c.id, x: cx });
-        (side === -1 ? leftBlockers : rightBlockers).push({ id: c.id, x: cx });
-      }
-      discs.push({ x: cx, y: reqY, r: cr, id: c.id });
-      arcs.push({ cx: px, cy: reqY, r: R });
-      runs.push({ x0: px + side * R, x1: cx - side * STEM_LEN_CHILD, y: reqY });
-      prevJoint = reqY - R;
-    }
-
-    const childYs = p.children.map(id => (g as any)[id]?.y ?? baseY).filter((y): y is number => y !== undefined);
-    const lastJoint = (childYs.length ? Math.max(...childYs) - state.elbowR : yStart);
-    trunks.push({ x: px, y1: py + pr, y2: lastJoint });
-
-    if (!discs.find(d => d.id === p.id)) discs.push({ x: px, y: py, r: pr, id: p.id });
-  }
+  layoutSubtree(g, root);
 
   // Prepare arrays for Vue rendering
   nodesList.value = Object.values(g) as any;
