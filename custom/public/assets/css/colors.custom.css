@@ -1,4 +1,5 @@
-/* Forkana light theme variables overriding theme-gitea-light */
+/* Forkana light palette. Since this PR it is the baseline for *every* theme rather than an
+   override scoped to theme-gitea-light — see the comment above the :root block below. */
 [data-theme="gitea-light"] gitea-theme-meta-info {
   --theme-display-name: "Light";
 }
@@ -7,8 +8,14 @@
   --theme-display-name: "Light (Colorblind)";
 }
 
-[data-theme="gitea-light"],
-[data-theme="gitea-light-protanopia-deuteranopia"] {
+/* The light palette is the baseline for every theme, so it is declared on :root rather than
+   scoped to the explicit light themes. Scoping it left every token below undefined under
+   "gitea-auto" (the default theme, which keeps data-theme="gitea-auto" on <html>), so rules
+   such as `.review-modal { background: var(--color-surface); }` became invalid at computed
+   value time and fell back to `transparent` (#285).
+   colors-dark.custom.css is linked after this file and overrides all of these tokens for the
+   explicit dark themes and for "gitea-auto" under a dark OS preference. */
+:root {
   --color-primary: #4E40FA;
   --color-primary-contrast: #ffffff;
   --color-primary-hover: #3C2EED;
@@ -105,8 +112,15 @@
 
 /* Colorblind diff colors — orange (removed) vs blue (added).
    Both hues are distinguishable by protanopes and deuteranopes.
-   Opacity is high enough to be clearly visible against white. */
-[data-theme="gitea-light-protanopia-deuteranopia"] {
+   Opacity is high enough to be clearly visible against white.
+
+   "gitea-auto-protanopia-deuteranopia" ("System (Colorblind)") must be listed here too:
+   theme-gitea-light-protanopia-deuteranopia.css declares its colorblind palette on :root,
+   and the :root baseline above — same specificity, later in the cascade — would otherwise
+   overwrite it with the standard red/green-ish diff colors.
+   Under a dark OS preference colors-dark.custom.css overrides all eight tokens again. */
+[data-theme="gitea-light-protanopia-deuteranopia"],
+[data-theme="gitea-auto-protanopia-deuteranopia"] {
   --color-diff-removed-linenum-bg: #ffb77c80; /* 50% orange — line number bg */
   --color-diff-removed-row-bg: #ffb77c40;     /* 25% orange — content bg */
   --color-diff-removed-word-bg: #ffb77ccc;    /* 80% orange — word highlight */
