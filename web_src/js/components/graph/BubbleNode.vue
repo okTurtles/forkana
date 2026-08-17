@@ -35,9 +35,15 @@ const LABEL_GAP_PRIMARY = 6;         // Gap between count and contributor label
 const LABEL_GAP_SECONDARY = 6;       // Gap between contributor label and updated block
 const LABEL_GAP_UPDATED_INNER = 6;   // Gap between two lines of updated text
 
-/* === TEXT WIDTH ESTIMATION (for fit calculations) === */
-const CHAR_WIDTH_RATIO_LABEL = 0.56; // Approximate width of label chars as ratio of font size
-const CHAR_WIDTH_RATIO_SMALL = 0.52; // Approximate width of small text chars as ratio of font size
+/* === TEXT WIDTH ESTIMATION (for fit calculations) ===
+   Deliberately generous. These decide whether a line is shown at all, and the
+   font they will be rendered in is not the font this code can measure: production
+   loads Inter, a fallback stack is used elsewhere, and digits (in a date) are
+   wider than lowercase in most faces. Over-estimating means a line is dropped a
+   little earlier than strictly necessary; under-estimating means it is drawn
+   overflowing the circle, which is the failure we are avoiding. */
+const CHAR_WIDTH_RATIO_LABEL = 0.62; // width of a label char as a ratio of font size
+const CHAR_WIDTH_RATIO_SMALL = 0.62; // ...and of small text, which is mostly digits
 
 /* === BUTTON SIZING === */
 const BUTTON_MARGIN_TOP = 24;        // Margin between copy and button in screen pixels (1.5rem = 24px)
@@ -300,6 +306,16 @@ function onKeyDown(ev: KeyboardEvent) {
   pointer-events: none;
   height: 100%;
   width: 100%;
+  /* Never wrap a label. The <foreignObject> this sits in is 2r WORLD units
+     wide, and it is inverse-scaled by 1/k, so its on-screen width is 2r px
+     whatever the zoom — while the circle around it is 2rk px. Zoomed in, the
+     box is therefore NARROWER than the circle it labels, and "Last updated"
+     or the date would break onto two lines inside a bubble with room to
+     spare. The lines are centred, so a nowrap line simply overflows the box
+     symmetrically; whether there is room for it in the CIRCLE is decided by
+     recomputeFit(), which measures single-line widths. Inherited by every
+     label line. */
+  white-space: nowrap;
 }
 
 /* Combined layout: count and label on same line with larger font */

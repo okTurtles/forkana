@@ -95,8 +95,8 @@ const PATH_PAD_DEFAULT = 8;   // Minimum clearance between a bubble and a connec
    never right out of the window. See constrainToViewport(). */
 const ZOOM_MIN = 0.35;          // Absolute minimum zoom level (35% scale)
 const ZOOM_MAX = 3.5;           // Maximum zoom level (350% scale)
-const MIN_VISIBLE_PX = 80;      // Content must always keep this much inside the viewport, per axis
-const ZOOM_OUT_FIT_FRACTION = 0.5; // ...and may not shrink below half of the zoom-to-fit scale
+const PAN_SLACK_PX = 80;        // How far past "useful" the graph may be dragged, per axis
+const ZOOM_OUT_FIT_FRACTION = 0.5; // ...and it may not shrink below half of the zoom-to-fit scale
 
 /* === VIEW RESET PARAMETERS === */
 const RESET_TOP_MARGIN = 40;    // Minimum top margin when resetting the view
@@ -220,9 +220,9 @@ let svgSel!: Selection<SVGSVGElement, unknown, null, undefined>;
 let worldSel!: Selection<SVGGElement, unknown, null, undefined>;
 let zoomBehavior!: ZoomBehavior<Element, unknown>;
 const currentK = ref(1);
-/* Smallest bubble radius in the current graph, cached at layout time: the
-   pan/zoom constraint reads it on every zoom event. */
-let smallestRadius = 0;
+/* Bubble bounds in world units, cached at layout time: the pan constraint
+   reads them on every zoom event and should not walk the graph. */
+let contentBox = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 /* Zoom-to-fit scale from the last resetView(), the floor for zooming out. */
 let fitScale = 1;
 
@@ -879,53 +879,69 @@ function contentBounds() {
   return { minX: minX - extraX, maxX: maxX + extraX, minY, maxY };
 }
 
-/** How much of the content has to stay on screen, in px, at this zoom.
-   Never less than MIN_VISIBLE_PX, and at least half the smallest bubble's
-   on-screen diameter — the issue's requirement is "part of a bubble is always
-   in the viewable area", so the margin has to grow with the bubbles. */
-function requiredVisiblePx(k: number) {
-  return Math.max(MIN_VISIBLE_PX, smallestRadius * k);
+/** Bounds of the BUBBLES alone, in world units. contentBounds() pads the x
+   range for elbow overhang, which is right for the zoom-to-fit but wrong for a
+   pan limit — the padding is empty space, and clamping to it just lets the
+   bubbles themselves drift that much further out. */
+function bubbleBounds() {
+  const xs0: number[] = [], xs1: number[] = [], ys0: number[] = [], ys1: number[] = [];
+  for (const n of nodesList.value) {
+    const r = rFor(n.contributors);
+    xs0.push((n.x ?? 0) - r); xs1.push((n.x ?? 0) + r);
+    ys0.push((n.y ?? 0) - r); ys1.push((n.y ?? 0) + r);
+  }
+  return { minX: Math.min(...xs0), maxX: Math.max(...xs1), minY: Math.min(...ys0), maxY: Math.max(...ys1) };
 }
 
-/** d3-zoom `constrain` hook: given a candidate transform, return one that keeps
-   a BUBBLE in view (issue #104 — the canvas used to be infinite in x and y, so
-   the graph could be flung out of the window and be hard to find again).
+/** Pan clamp for ONE axis, in screen px. Returns how far the content has to
+   move to get back inside the allowed range.
 
-   The guarantee is the one the issue asks for, literally: at least one bubble
-   always keeps `requiredVisiblePx` of itself inside the viewport on both axes
-   (or all of itself, when it is smaller than that). Panning across a large
-   graph is unaffected — the rule only bites when EVERY bubble has left — and
-   then the transform is nudged back by the smallest correction that returns
-   the nearest bubble to the edge. Clamping the bounding box instead is not
-   enough: a box corner can be on screen while every bubble in it is not.
+   Larger than the viewport: the content has to keep covering it, give or take
+   `slack` of empty space at either edge — so you can scroll from one end of a
+   big graph to the other and no further.
 
-   This is preferred over a translateExtent, which is computed for one zoom
-   level and then fights the zoom-to-fit at every other one. */
+   Smaller than the viewport (the usual case after zoom-to-fit): only `slack`
+   of play either side of the centred position — the graph can be nudged, not
+   flung. */
+function clampAxis(c0: number, c1: number, v0: number, v1: number, slack: number) {
+  if (c1 - c0 > v1 - v0) {
+    if (c0 > v0 + slack) return (v0 + slack) - c0;   // empty band at the start
+    if (c1 < v1 - slack) return (v1 - slack) - c1;   // empty band at the end
+    return 0;
+  }
+  const offset = (c0 + c1) / 2 - (v0 + v1) / 2;      // how far off-centre it sits
+  if (offset > slack) return slack - offset;
+  if (offset < -slack) return -slack - offset;
+  return 0;
+}
+
+/** d3-zoom `constrain` hook: bound panning so the graph cannot be dragged away
+   (issue #104 — the canvas used to be infinite in x and y, so the bubbles could
+   be flung out of the window and be hard to find again).
+
+   A conventional clamp on the content's bounding box, per axis, with
+   PAN_SLACK_PX of give. An earlier version of this only stopped the LAST bubble
+   from leaving, which technically bounded the canvas but still let the graph be
+   dragged almost entirely off screen in every direction.
+
+   It is deliberately not a `translateExtent`: that is derived for one zoom
+   level and then fights the zoom-to-fit at every other one, whereas this reads
+   the same at any scale because it is recomputed from the live transform. */
 function constrainToViewport(t: ZoomTransform, extent: [[number, number], [number, number]]): ZoomTransform {
   if (!nodesList.value.length) return t;
   const [[vx0, vy0], [vx1, vy1]] = extent;
-  const need = requiredVisiblePx(t.k);
-
-  let bestDx = 0, bestDy = 0, bestCost = Infinity;
-  for (const n of nodesList.value) {
-    const r = rFor(n.contributors) * t.k;
-    const cx = t.applyX(n.x ?? 0), cy = t.applyY(n.y ?? 0);
-    const x0 = cx - r, x1 = cx + r, y0 = cy - r, y1 = cy + r;
-    /* A bubble smaller than the margin only has to be wholly visible. */
-    const needX = Math.min(need, x1 - x0), needY = Math.min(need, y1 - y0);
-
-    let dx = 0, dy = 0;
-    if (x1 < vx0 + needX) dx = (vx0 + needX) - x1;
-    else if (x0 > vx1 - needX) dx = (vx1 - needX) - x0;
-    if (y1 < vy0 + needY) dy = (vy0 + needY) - y1;
-    else if (y0 > vy1 - needY) dy = (vy1 - needY) - y0;
-
-    if (!dx && !dy) return t;              // this bubble is already in view
-    const cost = dx * dx + dy * dy;
-    if (cost < bestCost) { bestCost = cost; bestDx = dx; bestDy = dy; }
-  }
+  const dx = clampAxis(t.applyX(contentBox.minX), t.applyX(contentBox.maxX), vx0, vx1, PAN_SLACK_PX);
+  const dy = clampAxis(t.applyY(contentBox.minY), t.applyY(contentBox.maxY), vy0, vy1, PAN_SLACK_PX);
+  if (!dx && !dy) return t;
   /* `translate` works in pre-scale units, so convert from the screen px above. */
-  return t.translate(bestDx / t.k, bestDy / t.k);
+  return t.translate(dx / t.k, dy / t.k);
+}
+
+/** The viewport d3 uses for this SVG, for the two places that build a transform
+   themselves and then have to honour the same bound. */
+function zoomExtent(): [[number, number], [number, number]] {
+  const box = svgRef.value?.getBoundingClientRect();
+  return [[0, 0], [box?.width ?? containerWidth, box?.height ?? graphViewportHeight()]];
 }
 
 /** Keep the zoom-out floor tied to the current fit, so the graph can always be
@@ -1009,10 +1025,13 @@ function resetView(animated = false) {
   /* Record the fit before applying it: the zoom-out floor is relative to it,
      and the constraint needs the bounds that go with the current layout. */
   fitScale = targetScale;
-  smallestRadius = Math.min(...nodesList.value.map((n) => rFor(n.contributors)));
+  contentBox = bubbleBounds();
   applyScaleExtent();
 
-  const t = zoomIdentity.translate(tx, ty).scale(targetScale);
+  /* d3 does not run `constrain` on a transform set directly, so honour the pan
+     bound here. Centred content satisfies it anyway; this keeps the two paths
+     from ever disagreeing. */
+  const t = constrainToViewport(zoomIdentity.translate(tx, ty).scale(targetScale), zoomExtent());
   (animated ? svgSel.transition().duration(VIEW_TRANSITION_DURATION) : svgSel).call(zoomBehavior.transform as any, t);
 
   currentK.value = targetScale;
@@ -1037,7 +1056,10 @@ function focusNode(n: Node) {
   const cy = VIEW_TOP_OFFSET + usableH / 2;
   const tx = cx - (n.x! * scale);
   const ty = cy - (n.y! * scale);
-  const t = zoomIdentity.translate(tx, ty).scale(scale);
+  /* Same bound as a manual pan: focusing a bubble at the edge of the graph
+     frames it as closely as the clamp allows rather than pulling the rest of
+     the graph off screen (and then snapping back on the next gesture). */
+  const t = constrainToViewport(zoomIdentity.translate(tx, ty).scale(scale), zoomExtent());
   svgSel.transition().duration(VIEW_TRANSITION_DURATION).call(zoomBehavior.transform as any, t);
   currentK.value = scale;
 }
