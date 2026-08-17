@@ -1,6 +1,6 @@
 // Integration tests for the lossless markdown tracker against the REAL Toast UI Editor
 // (issue #262). losslessMarkdown.test.ts and markdownThreeWayMerge.test.ts exercise the
-// pieces against hand-written fakes; these tests pin the actual Toast UI 3.2.2 behaviour the
+// pieces against hand-written fakes; these tests pin the actual Toast UI 3.2.2 behavior the
 // fakes imitate, so they cannot silently drift apart after a dependency bump.
 //
 // Visual-mode edits are made by dispatching ProseMirror transactions straight at the WYSIWYG
@@ -39,7 +39,7 @@ const SAMPLE = [
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function createEditor(initialValue: string, initialEditType: 'markdown' | 'wysiwyg' = 'wysiwyg', widgets = false) {
+function createEditor(initialValue: string, initialEditType: 'markdown' | 'wysiwyg' = 'wysiwyg', withWidgetRules = false) {
   const el = document.createElement('div');
   document.body.append(el);
   const textarea = document.createElement('textarea');
@@ -47,7 +47,7 @@ function createEditor(initialValue: string, initialEditType: 'markdown' | 'wysiw
   document.body.append(textarea);
   const ref = {current: null as any};
   const options: any = {el, initialEditType, usageStatistics: false};
-  if (widgets) options.widgetRules = [createBase64WidgetRule(() => ref.current)];
+  if (withWidgetRules) options.widgetRules = [createBase64WidgetRule(() => ref.current)];
   const editor = new Editor(options);
   ref.current = editor;
   // Same install order as toast-editor.ts / ToastCommentEditor.ts.
@@ -60,7 +60,8 @@ function wysiwygView(editor: any) {
   return editor.wwEditor.view;
 }
 
-// Replaces `needle` with `replacement` inside the WYSIWYG document.
+// Replaces `needle` with `replacement` inside the WYSIWYG document, leaving the caret right
+// after the replacement — where a user who just typed it would have left it.
 function editInVisual(editor: any, needle: string, replacement: string) {
   const view = wysiwygView(editor);
   let hit: {from: number, to: number} | null = null;
@@ -73,7 +74,11 @@ function editInVisual(editor: any, needle: string, replacement: string) {
     return !hit;
   });
   if (!hit) throw new Error(`text not found in the WYSIWYG document: ${needle}`);
-  view.dispatch(view.state.tr.replaceWith(hit.from, hit.to, view.state.schema.text(replacement)));
+  // `Selection` is not importable here: Toast UI bundles its own copy of prosemirror-state.
+  const selectionCtor: any = view.state.selection.constructor;
+  let tr = view.state.tr.replaceWith(hit.from, hit.to, view.state.schema.text(replacement));
+  tr = tr.setSelection(selectionCtor.near(tr.doc.resolve(hit.from + replacement.length)));
+  view.dispatch(tr);
 }
 
 function deleteParagraphInVisual(editor: any, needle: string) {
@@ -246,9 +251,9 @@ describe('Visual edits are merged back onto the pristine source', () => {
 
   test('a base64 image survives an unrelated Visual edit', async () => {
     const image = `![alt text](data:image/png;base64,${'A'.repeat(60)}==)`;
-    const document_ = `Intro_paragraph here.\n\n${image}\n\nOutro with [a ref][1].\n\n[1]: https://example.com/x\n`;
-    const {editor} = createEditor(document_, 'wysiwyg', true);
-    expect(editor.getMarkdown()).toBe(document_);
+    const article = `Intro_paragraph here.\n\n${image}\n\nOutro with [a ref][1].\n\n[1]: https://example.com/x\n`;
+    const {editor} = createEditor(article, 'wysiwyg', true);
+    expect(editor.getMarkdown()).toBe(article);
     editInVisual(editor, 'Intro_paragraph here.', 'Intro_paragraph here, edited.');
     await flush();
     const output: string = editor.getMarkdown();
@@ -307,6 +312,101 @@ describe('Visual edits are merged back onto the pristine source', () => {
     expect(output).toContain('[1]: https://example.com/x');
   });
 
+  // Switching to Source mode replaces the editor's document with the merged text, and that
+  // replacement has to pass cursorToEnd=true (see the comment in losslessMarkdown.ts), which
+  // on its own drops the caret at the bottom of the article. The caret is captured before the
+  // replacement and re-applied after it.
+  describe('the caret survives the switch to Source mode', () => {
+    const caretLine = (editor: any): number => editor.getSelection()[0][0];
+    const lastLine = (editor: any): number => editor.getMarkdown().split('\n').length;
+
+    // Makes the same edit on an editor with no tracker installed and reports where Toast UI
+    // puts the caret on its own. That is the position the writeback must not destroy: it is
+    // both what the editor did before this feature existed and what a user expects.
+    async function untrackedCaretLine(needle: string, replacement: string): Promise<number> {
+      const el = document.createElement('div');
+      document.body.append(el);
+      const editor: any = new Editor({el, initialEditType: 'wysiwyg', usageStatistics: false});
+      installBase64WidgetPatch(editor);
+      editor.setMarkdown(SAMPLE);
+      editInVisual(editor, needle, replacement);
+      await flush();
+      editor.changeMode('markdown');
+      await flush();
+      return caretLine(editor);
+    }
+
+    test('after a Visual edit the caret stays where Toast UI would have put it', async () => {
+      const needle = 'A middle paragraph that will be edited.';
+      const replacement = 'A middle paragraph that was edited!';
+      const {editor} = createEditor(SAMPLE);
+      editInVisual(editor, needle, replacement);
+      await flush();
+      editor.changeMode('markdown');
+      await flush();
+      expect(caretLine(editor)).toBe(await untrackedCaretLine(needle, replacement));
+      // ...which is the edited line, in the middle of the article, not its end.
+      expect(editor.getMarkdown().split('\n')[caretLine(editor) - 1]).toBe(replacement);
+      expect(caretLine(editor)).toBeLessThan(lastLine(editor));
+    });
+
+    // The merged line is the shorter, unescaped spelling, so the column Toast UI mapped
+    // against the serialized document can point past its end.
+    test('the caret survives an edit on a line the serializer escapes', async () => {
+      const needle = 'and snake_case_word.';
+      const replacement = 'and snake_case_word, extended.';
+      const {editor} = createEditor(SAMPLE);
+      editInVisual(editor, needle, replacement);
+      await flush();
+      editor.changeMode('markdown');
+      await flush();
+      const line = caretLine(editor);
+      expect(line).toBe(await untrackedCaretLine(needle, replacement));
+      expect(line).toBeLessThan(lastLine(editor));
+      // The column is clamped into the line, so the position is always valid.
+      const [[, ch]] = editor.getSelection();
+      expect(ch).toBeLessThanOrEqual(editor.getMarkdown().split('\n')[line - 1].length + 1);
+    });
+
+    test('with no Visual edit at all the caret still lands near where it was', async () => {
+      const {editor} = createEditor(SAMPLE);
+      const view = wysiwygView(editor);
+      const selectionCtor: any = view.state.selection.constructor;
+      // Inside "An inline [link](...) too." — line 12 of SAMPLE, well before the end.
+      let hit = 0;
+      view.state.doc.descendants((node: any, pos: number) => {
+        if (hit) return false;
+        if (node.isText && node.text?.includes('An inline')) hit = pos + 3;
+        return !hit;
+      });
+      view.dispatch(view.state.tr.setSelection(selectionCtor.near(view.state.doc.resolve(hit))));
+      editor.changeMode('markdown');
+      await flush();
+      expect(editor.getMarkdown()).toBe(SAMPLE); // still lossless
+      // Toast UI's own mapping is only line-accurate, so allow its off-by-one; the point is
+      // that the caret is at the paragraph the user was in and not at the end of the article.
+      expect(caretLine(editor)).toBeGreaterThanOrEqual(12);
+      expect(caretLine(editor)).toBeLessThanOrEqual(13);
+    });
+
+    test('the restored caret does not break a later mode switch', async () => {
+      const {editor} = createEditor(SAMPLE);
+      editInVisual(editor, 'Intro paragraph about the topic.', 'Intro paragraph, rewritten.');
+      await flush();
+      for (let i = 0; i < 2; i++) {
+        editor.changeMode('markdown');
+        await flush();
+        editor.changeMode('wysiwyg');
+        await flush();
+      }
+      editor.changeMode('markdown');
+      await flush();
+      const output: string = editor.getMarkdown();
+      expect(output).toContain('Intro paragraph, rewritten.');
+      expect(output).toContain(DEFINITION_LINE);
+    });
+  });
+
   test('a whole-document rewrite falls back to the serialization', async () => {
     const {editor, textarea} = createEditor(SAMPLE);
     const view = wysiwygView(editor);
@@ -315,7 +415,7 @@ describe('Visual edits are merged back onto the pristine source', () => {
     await flush();
     const output: string = editor.getMarkdown();
     expect(output).not.toContain('Research program');
-    expect(output).toContain('Everything_replaced'.replace('_', '\\_'));
+    expect(output).toContain('Everything\\_replaced');
     expect(textarea.value).toBe(output);
   });
 });

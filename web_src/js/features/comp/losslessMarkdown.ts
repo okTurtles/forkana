@@ -13,7 +13,7 @@
 //     actually touched: the serialization is three-way merged back onto the pristine source
 //     (see markdownThreeWayMerge.ts), so untouched paragraphs keep their original bytes and
 //     their reference links keep rendering. When that merge cannot be done confidently the
-//     whole serialization is used, which is the pre-merge behaviour.
+//     whole serialization is used, which is the pre-merge behavior.
 //
 // It installs itself by overriding `editor.getMarkdown`/`editor.setMarkdown` (the same
 // pattern as installBase64WidgetPatch, which must be installed first so widget-placeholder
@@ -23,18 +23,61 @@ import {mergeVisualEdit} from './markdownThreeWayMerge.ts';
 
 // Minimal structural surface of Toast UI Editor used by the tracker, so the fast unit tests
 // in losslessMarkdown.test.ts can drive it with a fake editor. The real editor is exercised
-// separately in losslessMarkdown.editor.test.ts, which pins the Toast UI behaviours the fake
+// separately in losslessMarkdown.editor.test.ts, which pins the Toast UI behaviors the fake
 // imitates (event order, lossy serialization) so the two cannot drift apart.
 export type LosslessEditor = {
   isMarkdownMode(): boolean;
   getMarkdown(): string;
   setMarkdown(markdown: string, cursorToEnd?: boolean): void;
   on(event: string, handler: (...args: unknown[]) => void): void;
+  // Optional: used only to put the caret back after the Source-mode writeback below. Toast UI
+  // reports markdown-mode positions as 1-based [line, ch] pairs. The unit-test fakes omit
+  // these, and the caret restore is skipped when they are absent.
+  getSelection?(): unknown;
+  setSelection?(start: unknown, end: unknown): void;
 };
+
+// A 1-based [line, ch] position in the markdown (Source) editor.
+type MarkdownPos = [number, number];
+
+// Reads the markdown-mode caret/selection, or null if it is unavailable or not in the
+// markdown-mode shape (in WYSIWYG mode Toast UI returns two flat numbers instead).
+function readMarkdownSelection(editor: LosslessEditor): [MarkdownPos, MarkdownPos] | null {
+  if (!editor.getSelection || !editor.setSelection) return null;
+  let selection: unknown;
+  try {
+    selection = editor.getSelection();
+  } catch {
+    return null; // no selection to preserve
+  }
+  if (!Array.isArray(selection) || selection.length !== 2) return null;
+  const positions: MarkdownPos[] = [];
+  for (const end of selection) {
+    if (!Array.isArray(end) || typeof end[0] !== 'number' || typeof end[1] !== 'number') return null;
+    positions.push([end[0], end[1]]);
+  }
+  return [positions[0], positions[1]];
+}
+
+// Puts the caret back after the document was replaced, clamped into the new text so the
+// position is always structurally valid (an out-of-range position makes Toast UI throw).
+function restoreMarkdownSelection(editor: LosslessEditor, selection: [MarkdownPos, MarkdownPos] | null, text: string): void {
+  if (!selection || !editor.setSelection) return;
+  const lines = text.split('\n');
+  const clamp = ([line, ch]: MarkdownPos): MarkdownPos => {
+    const clampedLine = Math.min(Math.max(line, 1), lines.length);
+    return [clampedLine, Math.min(Math.max(ch, 1), lines[clampedLine - 1].length + 1)];
+  };
+  try {
+    editor.setSelection(clamp(selection[0]), clamp(selection[1]));
+  } catch {
+    // Leave the caret where setMarkdown(cursorToEnd) put it rather than break the mode switch.
+  }
+}
 
 // Resolves the markdown to commit for a WYSIWYG serialization, merging the user's Visual
 // edit back onto the pristine source. `null` from mergeVisualEdit means "not confident",
-// and the serialization is used wholesale (the behaviour before the merge existed).
+// and the serialization is used wholesale (the behavior before the merge existed).
 function resolveSerialization(pristine: string, baseline: string, serialized: string): string {
   return mergeVisualEdit(pristine, baseline, serialized) ?? serialized;
 }
@@ -139,10 +182,22 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
       // length), and Toast UI's next mode switch reuses that broken position to restore the
       // WYSIWYG selection, throwing "Index N out of range" from inside ProseMirror. Passing
       // true makes it call moveCursorToEnd instead, which is always structurally valid.
+      //
+      // On its own that would drop the user at the bottom of the article after every Visual
+      // edit, so the caret is captured and re-applied explicitly. By the time this microtask
+      // runs the core has already restored the caret itself (it does so synchronously, while
+      // emitting `changeMode`), mapped against the serialized document. The merge emits
+      // exactly one line per serialized line, in order (the safety invariant in
+      // markdownThreeWayMerge.ts), so the line number carries over unchanged; only the column
+      // can shift, because the merged line may be the shorter unescaped spelling. Both are
+      // clamped into the new text, which is what makes the restored position structurally
+      // valid where the auto-mapped one was not.
       queueMicrotask(() => {
         // The user may have switched modes again before the microtask ran.
         if (!editor.isMarkdownMode()) return;
+        const selection = readMarkdownSelection(editor);
         applyMarkdown(sourceText, true);
+        restoreMarkdownSelection(editor, selection, sourceText);
       });
     }
     syncTextarea();
