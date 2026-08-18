@@ -9,10 +9,13 @@
    TWO RENDERINGS
    --------------
    * RESTING — one of the five ladder sizes (22/34/58/90/126, see
-     bubble-size.ts). What it may say is decided by its rung and measured
-     against the arc, so a line is dropped rather than drawn outside the
-     circle. 22 and 34 say nothing at all: there is no legible type at that
-     size, which is exactly why hover exists.
+     bubble-size.ts). EVERY rung shows its contributor count, at the fixed size
+     its rung carries (9/12/14/22px — never a size derived from the radius, so
+     nothing re-sizes while a bubble grows). The count is never dropped and
+     never shrunk: if it is too wide for the circle it arrives here already
+     abbreviated (bubbleCountTextFor -> "1k", "12k"). The SECONDARY lines are
+     what give way — they shrink, and then drop, to keep the block inside the
+     arc.
    * EXPANDED — 202px, the article's card: count, excerpt and last-updated.
      It is laid out with ordinary CSS inside the <foreignObject> rather than
      through the fit model — at 202px everything it carries has room — and it
@@ -28,15 +31,15 @@ import type { BubbleLabelDetail } from './bubble-size.ts';
    LABEL LAYOUT CONSTANTS (all values explained to avoid "magic numbers")
    ─────────────────────────────────────────────────────────────────────────── */
 
-/* === FONT SIZING === */
-const FONT_SIZE_COUNT_MIN = 10;      // Minimum font size for contributor count
-const FONT_SCALE_MIN = 0.5;          // Type may shrink to this to keep a line
+/* === FONT SIZING ===
+   The COUNT's size is not here: it comes from the rung (bubble-size.ts) and is
+   passed in, fixed. Only the secondary lines are sized here, and only they are
+   allowed to shrink — by a single uniform scale, so the block keeps its
+   proportions — to keep a line that would otherwise not fit. */
+const SECONDARY_SCALE_MIN = 0.5;     // Secondary lines may shrink to half...
 const FONT_SIZE_FLOOR = 8;           // ...but never below this, in screen px: it stops being legible
-const FONT_SIZE_COUNT_MAX = 34;      // Maximum font size for contributor count
-const FONT_SIZE_COUNT_SCALE = 0.95;  // Scale factor: count font size = on-screen radius * scale
-const FONT_SIZE_LABEL = 12;          // Fixed font size for "Contributor(s)" label
-const FONT_SIZE_SMALL = 11;          // Font size for "Last updated" lines
-const FONT_SIZE_COMBINED = 22;       // Font size for combined count + label (1.375rem)
+const FONT_SIZE_LABEL = 12;          // Base font size for the "Contributor(s)" label
+const FONT_SIZE_SMALL = 11;          // Base font size for the "Last updated" lines
 
 /* === LABEL SPACING === */
 /* Breathing room between the arc and the text, in SCREEN px. Proportional to
@@ -57,8 +60,9 @@ const LABEL_GAP_UPDATED_INNER = 6;   // Gap between two lines of updated text
    wider than lowercase in most faces. Over-estimating means a line is dropped a
    little earlier than strictly necessary; under-estimating means it is drawn
    overflowing the circle, which is the failure we are avoiding. */
-const CHAR_WIDTH_RATIO_LABEL = 0.62; // width of a label char as a ratio of font size
+const CHAR_WIDTH_RATIO_LABEL = 0.62; // width of a label char as a ratio of font size (measured 0.594)
 const CHAR_WIDTH_RATIO_SMALL = 0.62; // ...and of small text, which is mostly digits
+const CHAR_WIDTH_RATIO_COUNT = 0.7;  // digits are wider: measured 0.696 (see bubble-size.ts)
 
 const props = defineProps<{
   id: string;
@@ -66,6 +70,12 @@ const props = defineProps<{
   r: number;                      // bubble radius (graph units)
   k: number;                      // current zoom scale (world→screen)
   contributors: number;           // primary number (always shown)
+  /* The count as it is to be WRITTEN — already abbreviated if this rung is too
+     small to spell it out (bubble-size.ts), so this component never has to
+     decide between shrinking the count and hiding it. */
+  countText: string;
+  /* ...and the size to write it at: this rung's rung-fixed 9/12/14/22px. */
+  countFontSize: number;
   updatedAt?: string;             // secondary line if visible
   description?: string;           // article excerpt, expanded state only
   /* What this bubble's RUNG is meant to say (bubble-size.ts). A CEILING: a
@@ -74,6 +84,10 @@ const props = defineProps<{
   detail?: BubbleLabelDetail;
   /* True for the hovered/focused/first-tapped bubble: 202px, whole card. */
   expanded?: boolean;
+  /* True while this bubble's RADIUS is being animated. The label is hidden for
+     the duration and not recomputed, so no text is ever caught mid-scale: it
+     fades out, the circle moves, and the final text fades back in. */
+  frozen?: boolean;
   isActive?: boolean;             // selected article (persisted selection)
   isCompareMode?: boolean;        // whether compare mode is active
   compareState?: 'none' | 'first' | 'second';  // compare selection state
@@ -90,15 +104,11 @@ const emit = defineEmits<{
 /* Label fit model in *screen pixels* so it looks consistent across zoom.
    We inverse-scale the label group by 1/k. */
 const fit = reactive({
-  showCount: false,
   showLabel: false,
   showUpdated: false,
-  showCombined: false,  // True if enough space for count + label on same line
-  // font sizes in px (on screen)
-  fsCount: FONT_SIZE_LABEL,
+  // secondary font sizes in px (on screen); the count's is props.countFontSize
   fsLabel: FONT_SIZE_LABEL,
   fsSmall: FONT_SIZE_SMALL,
-  fsCombined: FONT_SIZE_COMBINED,
 });
 
 /* Label text: simple helper function for pluralization (not computed to avoid unnecessary reactivity) */
@@ -107,18 +117,21 @@ const getLabelText = (count: number) => count === 1 ? "Contributor" : "Contribut
 /* Format date to yyyy-mm-dd using shared utility */
 const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 
-/* Recompute label visibility whenever r or k or updatedAt change. */
+/* Recompute which SECONDARY lines a bubble can carry, and at what size.
+   The count is not part of this decision: it is always drawn, at its rung's
+   size, in the string it was given. */
 function recomputeFit() {
   const k = props.k, r = props.r;
   /* Everything here is in SCREEN px: the label group is inverse-scaled by 1/k,
      so its type is drawn at a constant size whatever the zoom. */
   const screenR = r * k;
   const pad = Math.max(LABEL_PADDING_MIN, Math.min(LABEL_PADDING_MAX, screenR * LABEL_PADDING_RATIO));
-  const inner = Math.max(0, screenR - pad);             // usable radius for text
+  const inner = Math.max(0, screenR - pad);             // usable radius for the block
 
   const hasUpd = !!props.updatedAt;
   const labelTextStr = getLabelText(props.contributors);
-  const countStr = String(props.contributors);
+  const fsCount = props.countFontSize;
+  const countW = props.countText.length * fsCount * CHAR_WIDTH_RATIO_COUNT;
   const updLine1 = "Last updated";
   const updLine2 = formattedDate.value;
 
@@ -127,84 +140,68 @@ function recomputeFit() {
      what the visual regression harness measures. */
   const fitsInCircle = (w: number, h: number) => (w * w + h * h) <= 4 * inner * inner;
 
-  /* Geometry of one candidate rendering, at a uniform type scale `s`.
-     level 0 = count, 1 = count + label, 2 = count + label + updated block. */
-  const measure = (level: number, s: number, combined: boolean) => {
-    const fsCount = Math.min(FONT_SIZE_COUNT_MAX, Math.max(FONT_SIZE_COUNT_MIN, screenR * FONT_SIZE_COUNT_SCALE)) * s;
+  /* Geometry of one candidate rendering, with the secondary lines at scale `s`.
+     level 1 = count + label, 2 = count + label + updated block. The count line
+     is a constant in all of them — that is the point. */
+  const measure = (level: number, s: number) => {
     const fsLabel = FONT_SIZE_LABEL * s;
     const fsSmall = FONT_SIZE_SMALL * s;
-    const fsCombined = FONT_SIZE_COMBINED * s;
-
-    let w: number, h: number;
-    if (level >= 1 && combined) {
-      w = (countStr.length + 1 + labelTextStr.length) * fsCombined * CHAR_WIDTH_RATIO_LABEL;
-      h = fsCombined;
-    } else {
-      w = countStr.length * fsCount * CHAR_WIDTH_RATIO_LABEL;
-      h = fsCount;
-      if (level >= 1) {
-        w = Math.max(w, labelTextStr.length * fsLabel * CHAR_WIDTH_RATIO_LABEL);
-        h += LABEL_GAP_PRIMARY + fsLabel;
-      }
-    }
+    let w = Math.max(countW, labelTextStr.length * fsLabel * CHAR_WIDTH_RATIO_LABEL);
+    let h = fsCount + LABEL_GAP_PRIMARY + fsLabel;
+    let smallest = fsLabel;
     if (level >= 2) {
       w = Math.max(w,
         updLine1.length * fsSmall * CHAR_WIDTH_RATIO_SMALL,
         updLine2.length * fsSmall * CHAR_WIDTH_RATIO_SMALL);
-      h += (level >= 1 ? LABEL_GAP_SECONDARY : LABEL_GAP_PRIMARY) + (2 * fsSmall + LABEL_GAP_UPDATED_INNER);
+      h += LABEL_GAP_SECONDARY + (2 * fsSmall + LABEL_GAP_UPDATED_INNER);
+      smallest = fsSmall;
     }
-    return {w, h, fsCount, fsLabel, fsSmall, fsCombined,
-      smallest: level >= 2 ? fsSmall : (level >= 1 && !combined ? fsLabel : fsCount)};
+    return {w, h, fsLabel, fsSmall, smallest};
   };
 
-  /* The rung's CEILING, capped by what there is anything to show at all.
-     'none' is level -1: the 22px and 34px rungs carry no text. */
-  const detail = props.detail ?? 'none';
-  const ceiling = Math.min(
-    detail === 'full' ? 2 : detail === 'label' ? 1 : detail === 'count' ? 0 : -1,
-    hasUpd ? 2 : 1,
-  );
+  /* The rung's CEILING for the secondary lines, capped by what there is to
+     show at all. */
+  const detail = props.detail ?? 'count';
+  const ceiling = Math.min(detail === 'full' ? 2 : detail === 'label' ? 1 : 0, hasUpd ? 2 : 1);
 
-  /* The most detailed rendering the rung allows THAT FITS. Type may shrink
-     (down to FONT_SCALE_MIN, never past FONT_SIZE_FLOOR) to keep a level; if
-     even the count will not fit at its smallest, the bubble shows nothing
-     rather than spill outside the arc. Both directions matter: at 58px a
-     three-digit count has to shrink, and at 22px nothing is shown at all. */
+  /* The most detailed rendering the rung allows THAT FITS. The secondary lines
+     may shrink (to SECONDARY_SCALE_MIN, never past FONT_SIZE_FLOOR) to keep a
+     level; failing that the level is dropped. Dropping every level leaves the
+     count alone, which is always drawn. */
   let chosen: ReturnType<typeof measure> | null = null;
-  let level = -1, combined = false;
+  let level = 0;
   outer:
-  for (let lv = ceiling; lv >= 0; lv--) {
-    for (let s = 1; s >= FONT_SCALE_MIN - 1e-9; s -= 0.02) {
-      const asCombined = lv >= 1 ? measure(lv, s, true) : null;
-      const asStacked = measure(lv, s, false);
-      if (asCombined && asCombined.smallest >= FONT_SIZE_FLOOR && fitsInCircle(asCombined.w, asCombined.h)) {
-        chosen = asCombined; level = lv; combined = true; break outer;
-      }
-      if (asStacked.smallest >= FONT_SIZE_FLOOR && fitsInCircle(asStacked.w, asStacked.h)) {
-        chosen = asStacked; level = lv; combined = false; break outer;
+  for (let lv = ceiling; lv >= 1; lv--) {
+    for (let sc = 1; sc >= SECONDARY_SCALE_MIN - 1e-9; sc -= 0.02) {
+      const cand = measure(lv, sc);
+      if (cand.smallest >= FONT_SIZE_FLOOR && fitsInCircle(cand.w, cand.h)) {
+        chosen = cand; level = lv; break outer;
       }
     }
   }
 
-  fit.showCount = level >= 0;
-  fit.showCombined = level >= 1 && combined;
-  fit.showLabel = level >= 1 && !combined;
+  fit.showLabel = level >= 1;
   fit.showUpdated = level >= 2;
-  fit.fsCount = chosen?.fsCount ?? FONT_SIZE_COUNT_MIN;
   fit.fsLabel = chosen?.fsLabel ?? FONT_SIZE_LABEL;
   fit.fsSmall = chosen?.fsSmall ?? FONT_SIZE_SMALL;
-  fit.fsCombined = chosen?.fsCombined ?? FONT_SIZE_COMBINED;
 }
 
-/* Run once and whenever driving props change. */
+/* Run once and whenever driving props change — EXCEPT while `frozen`, when the
+   bubble's radius is mid-animation. Skipping the recompute is what stops the
+   type being interpolated: the label keeps the size it had (hidden, so nobody
+   sees it), and the first recompute after the freeze lifts uses the settled
+   radius, at which point it fades back in. */
 watch(
-  () => [props.k, props.r, props.updatedAt, props.contributors, props.detail, props.expanded],
-  recomputeFit,
+  () => [props.k, props.r, props.updatedAt, props.contributors, props.countText,
+    props.countFontSize, props.detail, props.expanded, props.frozen],
+  () => { if (!props.frozen) recomputeFit(); },
   {immediate: true},
 );
 
 /* Convenience computed transform strings */
 const gTransform = computed(() => `translate(${props.x},${props.y})`);
+/* The expanded card has room to spell the number out, whatever the resting
+   rung had to abbreviate it to. */
 const countLabel = computed(() => `${props.contributors} ${getLabelText(props.contributors)}`);
 
 /* Pointer handlers relay events upward (so the parent can grow this bubble and
@@ -241,7 +238,8 @@ function onKeyDown(ev: KeyboardEvent) {
 <template>
   <!-- One node group at (x,y); we let the parent group receive the world transform -->
   <g
-    class="node cursor-pointer select-none" :class="{ 'is-expanded': expanded }" :transform="gTransform" role="button"
+    class="node cursor-pointer select-none" :class="{ 'is-expanded': expanded, 'is-frozen': frozen }"
+    :transform="gTransform" role="button"
     :aria-label="`Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
     :aria-pressed="isActive ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
     @pointerdown="onPointerDown" @pointerenter="onPointerEnter" @pointerleave="onPointerLeave"
@@ -276,32 +274,23 @@ function onKeyDown(ev: KeyboardEvent) {
         </div>
       </div>
 
-      <!-- RESTING: whatever this rung says, measured against the arc. -->
+      <!-- RESTING: the count, always, at its rung's size; then whatever
+           secondary lines this rung asks for AND the arc has room for. -->
       <div v-else xmlns="http://www.w3.org/1999/xhtml" class="html-label-wrapper">
-        <!-- Combined layout: count and label on same line with larger font -->
-        <div v-if="fit.showCombined" class="combined" :style="`font-size: ${fit.fsCombined}px;`">
-          {{ contributors }} {{ getLabelText(contributors) }}
+        <div class="count" :style="`font-size: ${countFontSize}px;`">{{ countText }}</div>
+
+        <!-- "Contributors/Contributor": only if it fits -->
+        <div
+          v-if="fit.showLabel" class="label"
+          :style="`font-size: ${fit.fsLabel}px; margin-top: ${LABEL_GAP_PRIMARY}px;`"
+        >
+          {{ getLabelText(contributors) }}
         </div>
 
-        <!-- Stacked layout: count and label on separate lines (fallback) -->
-        <template v-else>
-          <div v-if="fit.showCount" class="count" :style="`font-size: ${fit.fsCount}px;`">
-            {{ contributors }}
-          </div>
-
-          <!-- "Contributors/Contributor": only if fits -->
-          <div
-            v-if="fit.showLabel" class="label"
-            :style="`font-size: ${fit.fsLabel}px; margin-top: ${LABEL_GAP_PRIMARY}px;`"
-          >
-            {{ getLabelText(contributors) }}
-          </div>
-        </template>
-
-        <!-- "Last updated …": only if fits -->
+        <!-- "Last updated …": only if it fits -->
         <div
           v-if="fit.showUpdated" class="updated"
-          :style="`font-size: ${fit.fsSmall}px; margin-top: ${fit.showCombined || fit.showLabel ? LABEL_GAP_SECONDARY : LABEL_GAP_PRIMARY}px;`"
+          :style="`font-size: ${fit.fsSmall}px; margin-top: ${LABEL_GAP_SECONDARY}px;`"
         >
           <div>Last updated</div>
           <div :style="`margin-top: ${LABEL_GAP_UPDATED_INNER}px;`">{{ formattedDate }}</div>
@@ -335,6 +324,32 @@ function onKeyDown(ev: KeyboardEvent) {
    inert. */
 .node.is-expanded {
   cursor: default;
+}
+
+/* ── LABEL OPACITY IS DECOUPLED FROM THE GEOMETRY ────────────────────────
+   A bubble's text used to be re-laid-out on every frame of the hover reflow,
+   so it grew and shrank with the circle — "a bit junky". It no longer moves at
+   all: while the radius is animating the group is `is-frozen`, the label is
+   hidden (fast, 80ms) and NOT recomputed, and the settled text fades back in
+   (120ms) once the circle has stopped. So at any frame the type is either
+   invisible or at a final size — never at an interpolated one. The count's
+   size is a rung constant (bubble-size.ts), so it never interpolates even
+   when it is visible. */
+.html-label-wrapper {
+  opacity: 1;
+  transition: opacity 120ms linear;
+}
+
+.node.is-frozen .html-label-wrapper {
+  opacity: 0;
+  transition: opacity 80ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .html-label-wrapper,
+  .node.is-frozen .html-label-wrapper {
+    transition: none;
+  }
 }
 
 /* HTML Label Wrapper - efficient text rendering */

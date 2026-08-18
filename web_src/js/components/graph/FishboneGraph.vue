@@ -36,7 +36,8 @@ import ArticleComparePopup from "./ArticleComparePopup.vue";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import {
-  BUBBLE_HOVER_RADIUS, bubbleLabelDetailFor, bubbleRadiusFor, maxContributors,
+  BUBBLE_HOVER_RADIUS, bubbleCountFontFor, bubbleCountTextFor, bubbleLabelDetailFor,
+  bubbleRadiusFor, maxContributors,
 } from "./bubble-size.ts";
 
 // Inline types replacing former seeds module
@@ -638,6 +639,17 @@ function detailFor(n: number) {
   return bubbleLabelDetailFor(n, state.maxContributors);
 }
 
+/* The count as it is written in the circle, and the size it is written at.
+   Both come from the rung, so neither depends on the radius being animated —
+   see ./bubble-size.ts. */
+function countTextFor(n: number) {
+  return bubbleCountTextFor(n, state.maxContributors);
+}
+
+function countFontFor(n: number) {
+  return bubbleCountFontFor(n, state.maxContributors);
+}
+
 function getRoot(g: Graph) { return Object.values(g).find(n => n.parentId === null) ?? null; }
 
 function computeDepths(g: Graph) {
@@ -863,6 +875,12 @@ let framePlacements: Placements = new Map();
    hovered layout is re-registered against, see computeLayout(). */
 let restingPlacements: Placements = new Map();
 let reflowRaf: number | null = null;
+/** Bubbles whose RADIUS is being animated right now. Their labels are hidden
+   and left uncomputed for the duration, so no text is ever drawn mid-scale;
+   see BubbleNode's `frozen` prop. Only the bubble that is actually changing
+   size is in here — the neighbours merely slide, and their type never moves,
+   so blanking them too would just make the whole graph blink. */
+const labelFrozen = ref<Set<NodeId>>(new Set());
 
 /** Run the layout engine with `expandedId` (if any) blown up to the hover
    radius, and return where every node lands.
@@ -967,6 +985,7 @@ function easeInOut(t: number): number {
 function cancelReflow() {
   if (reflowRaf !== null) cancelAnimationFrame(reflowRaf);
   reflowRaf = null;
+  if (labelFrozen.value.size) labelFrozen.value = new Set();
 }
 
 /** Tween every node from where it is drawn now to `target`.
@@ -981,6 +1000,14 @@ function animateTo(g: Graph, target: Placements, onSettle?: () => void) {
     onSettle?.();
     return;
   }
+  /* Whose type must sit still: the bubbles whose radius actually changes. */
+  const morphing = new Set<NodeId>();
+  for (const [id, to] of target) {
+    const f = from.get(id);
+    if (f && Math.abs(f.r - to.r) > 0.5) morphing.add(id);
+  }
+  labelFrozen.value = morphing;
+
   const start = performance.now();
   const tick = (now: number) => {
     const t = Math.min(1, (now - start) / HOVER_REFLOW_MS);
@@ -999,6 +1026,10 @@ function animateTo(g: Graph, target: Placements, onSettle?: () => void) {
       reflowRaf = requestAnimationFrame(tick);
     } else {
       reflowRaf = null;
+      /* Geometry has settled: let the labels recompute at the final radius and
+         fade back in. This is the only place the freeze is lifted on a
+         completed tween, so the fade can never start early. */
+      if (labelFrozen.value.size) labelFrozen.value = new Set();
       onSettle?.();
     }
   };
@@ -1849,7 +1880,9 @@ function goToComparison() {
                 :r="f.r" :contributors="f.node.contributors" :updated-at="f.node.updatedAt"
                 :description="f.node.description" :k="kComputed"
                 :detail="detailFor(f.node.contributors)"
-                :expanded="expandedId === f.node.id"
+                :count-text="countTextFor(f.node.contributors)"
+                :count-font-size="countFontFor(f.node.contributors)"
+                :expanded="expandedId === f.node.id" :frozen="labelFrozen.has(f.node.id)"
                 :is-active="selectedNodeId === f.node.id" :is-compare-mode="isCompareMode"
                 :compare-state="getCompareState(f.node.id)"
                 @click="() => onBubbleClick(f.node)" @hover="(id, on, pt) => onBubbleHover(id, on, pt)"
