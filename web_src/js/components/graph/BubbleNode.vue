@@ -13,11 +13,12 @@
      against the arc, so a line is dropped rather than drawn outside the
      circle. 22 and 34 say nothing at all: there is no legible type at that
      size, which is exactly why hover exists.
-   * EXPANDED — 202px, the whole article card: count, excerpt, last-updated,
-     and (once the bubble has been CLICKED, `active`) its two actions. This is
-     laid out with ordinary CSS inside the <foreignObject> rather than through
-     the fit model: at 202px everything the card carries has room, and the two
-     buttons need to be real, focusable, clickable elements. */
+   * EXPANDED — 202px, the article's card: count, excerpt and last-updated.
+     It is laid out with ordinary CSS inside the <foreignObject> rather than
+     through the fit model — at 202px everything it carries has room — and it
+     carries NO actions: hover says what the article IS, and clicking it opens
+     the article on its own (ArticleDetailView, 425px, centred), which is where
+     "Read full article" and "View history" live. */
 
 import { computed, watch, reactive } from "vue";
 import { formatDateYMD } from '../../utils/time.ts';
@@ -71,10 +72,8 @@ const props = defineProps<{
      bubble never says more than its rung asks for, and says less (or shrinks
      its type) rather than spill a line outside the circle. */
   detail?: BubbleLabelDetail;
-  /* True for the hovered/focused/opened bubble: 202px, whole card. */
+  /* True for the hovered/focused/first-tapped bubble: 202px, whole card. */
   expanded?: boolean;
-  /* True once the expanded bubble has been CLICKED: adds the two actions. */
-  active?: boolean;
   isActive?: boolean;             // selected article (persisted selection)
   isCompareMode?: boolean;        // whether compare mode is active
   compareState?: 'none' | 'first' | 'second';  // compare selection state
@@ -86,8 +85,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "click", id: string, ev: MouseEvent): void;
   (e: "hover", id: string, on: boolean, pointerType: string): void;
-  (e: "read", id: string): void;
-  (e: "history", id: string): void;
 }>();
 
 /* Label fit model in *screen pixels* so it looks consistent across zoom.
@@ -270,16 +267,9 @@ function onKeyDown(ev: KeyboardEvent) {
       style="overflow: visible; pointer-events: none;"
     >
       <!-- EXPANDED (202px): the whole card, laid out by CSS. -->
-      <div
-        v-if="expanded" xmlns="http://www.w3.org/1999/xhtml"
-        class="html-label-wrapper expanded-wrapper" :class="{ 'is-active': active }"
-      >
+      <div v-if="expanded" xmlns="http://www.w3.org/1999/xhtml" class="html-label-wrapper expanded-wrapper">
         <div class="combined expanded-count">{{ countLabel }}</div>
         <div v-if="description" class="expanded-description">{{ description }}</div>
-        <template v-if="active">
-          <button class="expanded-read" type="button" @click.stop="emit('read', id)">Read full article</button>
-          <button class="expanded-history" type="button" @click.stop="emit('history', id)">View history</button>
-        </template>
         <div v-if="updatedAt" class="expanded-updated">
           <div>Last updated</div>
           <div>{{ formattedDate }}</div>
@@ -428,53 +418,12 @@ function onKeyDown(ev: KeyboardEvent) {
   font-size: 10px;
   line-height: 1.35;
   color: var(--color-text-secondary);
-  /* Three lines when the card is only being read (hover), two once the two
-     actions are in it as well — the circle's height budget is fixed. */
+  /* Three lines: what the circle's height budget allows next to the count and
+     the date. The whole excerpt is in the opened (425px) view. */
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
-}
-
-.expanded-wrapper.is-active .expanded-description {
-  -webkit-line-clamp: 2;
-}
-
-.expanded-read,
-.expanded-history {
-  /* The label layer is inert so the graph underneath keeps its own pointer
-     behaviour; the buttons opt back in. */
-  pointer-events: auto;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.expanded-read {
-  padding: 4px 10px;
-  border: 1px solid var(--color-secondary, #d1d5db);
-  border-radius: 8px;
-  background: var(--color-body, #fff);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text, #111827);
-}
-
-.expanded-read:hover {
-  background: var(--color-hover, #f9fafb);
-}
-
-/* A button that reads as bold text: no border, no background. */
-.expanded-history {
-  padding: 0;
-  border: none;
-  background: transparent;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--color-text, #111827);
-}
-
-.expanded-history:hover {
-  text-decoration: underline;
 }
 
 .expanded-updated {

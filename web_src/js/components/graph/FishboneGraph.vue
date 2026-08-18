@@ -14,8 +14,10 @@
    article in this graph, and the view renders at zoom 1 so those numbers are
    what a ruler on the screen measures. Hovering (or focusing) a bubble grows
    it to 202px and RE-RUNS THE LAYOUT around it, tweening every node from where
-   it is to where it now belongs; clicking adds that article's two actions to
-   the card inside it. See the HOVER / OPEN section. */
+   it is to where it now belongs; CLICKING that bubble opens the article on its
+   own — a 425px circle centred in the canvas, with the graph behind it not
+   drawn at all (ArticleDetailView.vue). Hover says what the article IS, click
+   says what you can DO with it. See the HOVER / OPEN section. */
 
 import { onMounted, reactive, ref, onBeforeUnmount, nextTick, computed } from "vue";
 // @ts-ignore - d3-selection types may not be available in CI environment
@@ -31,6 +33,7 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
+import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import {
   BUBBLE_HOVER_RADIUS, bubbleLabelDetailFor, bubbleRadiusFor, maxContributors,
@@ -1191,10 +1194,9 @@ function layoutAndRender() {
      registered against (computeLayout), so it has to exist and be current
      before one is asked for. */
   restingPlacements = computeLayout(state.graph, null);
-  if (expandedId.value !== null && !restingPlacements.has(expandedId.value)) {
-    hoveredId.value = null;
-    activeId.value = null;
-  }
+  /* A re-layout can drop the node the view was pointing at (a refetch). */
+  if (expandedId.value !== null && !restingPlacements.has(expandedId.value)) hoveredId.value = null;
+  if (detailNode.value && !restingPlacements.has(detailNode.value.id)) finishDetailClose();
   setFrame(state.graph, expandedId.value === null
     ? restingPlacements
     : computeLayout(state.graph, expandedId.value));
@@ -1231,8 +1233,8 @@ onMounted(async () => {
   svgSel.on("click.bg", (ev: any) => {
     const target = ev.target as Element;
     if (!target.closest("g.node")) {
-      /* Clicking the background is how you put an opened bubble away — there
-         is no "< Back" control any more. */
+      if (detailNode.value) return;   // the opened article owns the view; Back closes it
+      /* Clicking empty canvas drops the hover and re-centres the graph. */
       collapseAll();
       resetView(true);
       applySelection(null, null);
@@ -1268,6 +1270,8 @@ onMounted(async () => {
     if (Math.abs(w - containerWidth) > 2) { containerWidth = Math.min(w, 1100); changed = true; }
     if (Math.abs(h - containerHeight) > 2) { containerHeight = h; changed = true; }
     if (changed) {
+      /* The opened circle is sized from the container, so it has to follow it. */
+      if (detailNode.value) { detailSize.value = computeDetailSize(); updateHistoryAnchor(); }
       if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
       pendingRaf = requestAnimationFrame(() => {
         layoutAndRender();
@@ -1338,12 +1342,19 @@ function persistSelectionDetail(detail: RepoSelectionDetail | null) {
    bubble in place would have broken all four.
    ─────────────────────────────────────────────────────────────────────────── */
 
-/** Hovered (pointer or keyboard focus) and opened (clicked) bubble. `active`
-   is the one with buttons; either of them makes a bubble expanded. */
+/** The bubble drawn at 202px in the graph: hovered with a pointer, focused
+   with the keyboard, or first-tapped on a touch screen. */
 const hoveredId = ref<NodeId | null>(null);
-const activeId = ref<NodeId | null>(null);
-const expandedId = computed<NodeId | null>(() => activeId.value ?? hoveredId.value);
+const expandedId = computed<NodeId | null>(() => hoveredId.value);
+/** The article OPENED by a click — drawn by ArticleDetailView at 425px in the
+   centre of the canvas, with the graph not rendered behind it. */
+const detailNode = ref<Node | null>(null);
 const historyOpen = ref(false);
+
+/** The graph is not merely covered while an article is open: its bubbles and
+   connectors are not rendered at all. It comes back the moment the close
+   starts, so the circle visibly shrinks back INTO its bubble. */
+const graphRendered = computed(() => detailNode.value === null || detailClosing.value);
 
 /** Pointer type of the gesture in progress. Touch has no hover, so a tap has
    to mean one of two things depending on what is already expanded — see
@@ -1376,6 +1387,17 @@ function reflow() {
        about the shape the graph settled into — otherwise a graph that grew
        under the hover could be panned by the old bound. */
     contentBox = bubbleBounds();
+    /* ...and the clamp has to be RE-APPLIED, not just updated: d3 only runs
+       `constrain` on a gesture, so a reflow that happens after the last one
+       (hover a bubble near the edge, then stop moving) can leave the graph
+       outside the bound it would now enforce, with nothing to pull it back
+       until the user pans again. Re-running it here converges immediately and
+       is a no-op whenever the transform already satisfies the bound. */
+    if (svgRef.value && zoomBehavior && svgSel) {
+      const t = zoomTransform(svgRef.value);
+      const clamped = constrainToViewport(t, zoomExtent());
+      if (clamped !== t) svgSel.call(zoomBehavior.transform as any, clamped);
+    }
     updateHistoryAnchor();
   });
   updateHistoryAnchor();
@@ -1388,12 +1410,7 @@ function setHovered(id: NodeId | null, immediate = false) {
     hoverTimer = null;
     if (id !== null && performance.now() < hoverSuppressedUntil) return;
     if (hoveredId.value === id) return;
-    /* Only ever one expanded bubble: hovering a different one drops the
-       previously opened card. */
-    if (id !== null && activeId.value !== null && activeId.value !== id) {
-      activeId.value = null;
-      historyOpen.value = false;
-    }
+    if (detailNode.value) return;   // an open article owns the view
     hoveredId.value = id;
     reflow();
     const n = nodeById(id);
@@ -1415,9 +1432,8 @@ function collapseAll() {
   if (focused instanceof HTMLElement || focused instanceof SVGElement) {
     if (containerRef.value?.contains(focused)) focused.blur();
   }
-  if (hoveredId.value === null && activeId.value === null) return;
+  if (hoveredId.value === null) return;
   hoveredId.value = null;
-  activeId.value = null;
   reflow();
 }
 
@@ -1432,15 +1448,9 @@ function onBubbleHover(id: NodeId, on: boolean, pointerType: string) {
      the <g> takes focus on the same gesture. */
   if (pointerType !== 'keyboard') lastPointerType = pointerType;
   if (pointerType === 'touch') return;
-  if (on) {
-    setHovered(id);
-  } else if (hoveredId.value === id && activeId.value === null) {
-    setHovered(null);
-  } else if (hoveredId.value === id) {
-    /* An opened bubble stays open when the pointer leaves; only the hover
-       part of the state is dropped. */
-    hoveredId.value = activeId.value;
-  }
+  if (detailNode.value) return;    // the graph is not on screen to be hovered
+  if (on) setHovered(id);
+  else if (hoveredId.value === id) setHovered(null);
 }
 
 function onBubbleClick(n: Node) {
@@ -1450,19 +1460,16 @@ function onBubbleClick(n: Node) {
     return;
   }
 
-  /* Touch: the first tap is the hover (card, no buttons), the second opens it.
-     Tapping a different bubble starts that bubble at its first tap. */
-  if (lastPointerType === 'touch' && expandedId.value !== n.id) {
+  /* Touch: the first tap does what hover does (202px in place, info, no
+     actions), the second opens the article. Tapping a different bubble starts
+     that bubble at its first tap. Mouse and keyboard skip straight to the
+     open, since they have already had their hover. */
+  if (lastPointerType === 'touch' && hoveredId.value !== n.id) {
     setHovered(n.id, true);
     return;
   }
 
-  if (activeId.value !== n.id) {
-    activeId.value = n.id;
-    hoveredId.value = n.id;
-    historyOpen.value = false;
-    reflow();
-  }
+  openDetail(n);
 
   const detail = getSelectionDetailFromNode(n);
   if (!detail) return;
@@ -1474,6 +1481,103 @@ function onBubbleClick(n: Node) {
   window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
 }
 
+/* ── THE OPENED ARTICLE (425px, centred) ──────────────────────────────────
+   Clicking the hovered bubble opens the article on its own: ArticleDetailView
+   draws it as a 425px circle in the middle of the canvas, flying out of the
+   202px bubble that was clicked, and the graph stops being rendered behind it.
+   Back (or Escape) reverses the flight and puts the graph back exactly as it
+   was — the resting layout and the pan/zoom the user had. */
+
+/** Diameter of the opened circle, in screen px. The design draws it at 425,
+   but it is drawn INSIDE the canvas box, so it must also fit that box: on a
+   narrow viewport or a short canvas it is capped to what the container can
+   show (minus a margin), and the spacing inside it scales with it — see
+   ArticleDetailView.vue. */
+const DETAIL_DIAMETER_DESIGN = 425;   // design size of the opened circle (px)
+const DETAIL_CONTAINER_MARGIN = 24;   // breathing room between circle and canvas edge
+const DETAIL_DIAMETER_MIN = 200;      // below this the stack is unreadable anyway
+const detailSize = ref(DETAIL_DIAMETER_DESIGN);
+/** The bubble the view grew out of, in screen px — the 202px hovered one. */
+const detailOrigin = ref<DetailOrigin | null>(null);
+/** Set to ask ArticleDetailView for its closing animation; the teardown
+   happens in finishDetailClose() when it reports back. */
+const detailClosing = ref(false);
+/** The pan/zoom the graph was at when the article opened, so Back restores the
+   view the user left rather than re-fitting. */
+let transformBeforeDetail: ZoomTransform | null = null;
+
+function computeDetailSize(): number {
+  const w = containerWidth || DEFAULT_CONTAINER_WIDTH;
+  const h = svgHeight.value || graphViewportHeight();
+  const fits = Math.min(DETAIL_DIAMETER_DESIGN, w - DETAIL_CONTAINER_MARGIN * 2, h - DETAIL_CONTAINER_MARGIN * 2);
+  return Math.round(Math.max(DETAIL_DIAMETER_MIN, fits));
+}
+
+/** Where a node's bubble is on screen right now, for the open/close flight.
+   Derived from the rendered placement and the live zoom transform rather than
+   from the DOM, so it is exact and needs no lookup by id. */
+function screenCircleFor(id: NodeId): DetailOrigin | null {
+  const svg = svgRef.value;
+  const p = framePlacements.get(id);
+  if (!svg || !p) return null;
+  const t = zoomTransform(svg);
+  const box = svg.getBoundingClientRect();
+  const r = p.r * t.k;
+  if (!(r > 0)) return null;
+  return { cx: box.left + t.applyX(p.x), cy: box.top + t.applyY(p.y), r };
+}
+
+function openDetail(n: Node) {
+  if (detailNode.value?.id === n.id && !detailClosing.value) return;
+  if (hoverTimer !== null) { window.clearTimeout(hoverTimer); hoverTimer = null; }
+  cancelReflow();
+  transformBeforeDetail = svgRef.value ? zoomTransform(svgRef.value) : null;
+  detailSize.value = computeDetailSize();
+  /* Fly out of whatever is on screen: the 202px hovered bubble if this came
+     from a hover (mouse, keyboard, second tap), its resting size otherwise. */
+  detailOrigin.value = screenCircleFor(n.id);
+  detailClosing.value = false;   // re-opening mid-close cancels the close
+  detailNode.value = n;
+  historyOpen.value = false;
+  nextTick(updateHistoryAnchor);
+  announceToScreenReader(`Opened ${n.fullName || n.id}`);
+}
+
+/** Ask for the close. The view animates, then calls finishDetailClose(). */
+function closeDetail() {
+  if (!detailNode.value || detailClosing.value) return;
+  historyOpen.value = false;   /* the popup does not travel with the circle */
+  /* Put the graph back NOW, behind the shrinking circle, and at rest: the
+     circle is flying back into a bubble, so that bubble has to be there. The
+     hover is dropped, which is also what the user asked for by leaving. */
+  hoveredId.value = null;
+  setFrame(state.graph, restingPlacements);
+  contentBox = bubbleBounds();
+  if (transformBeforeDetail && svgSel) {
+    svgSel.call(zoomBehavior.transform as any, transformBeforeDetail);
+    currentK.value = transformBeforeDetail.k;
+  }
+  /* ...and do not let the pointer sitting over a bubble re-expand it while the
+     circle is still on its way back. */
+  hoverSuppressedUntil = performance.now() + HOVER_DISMISS_GUARD_MS;
+  detailClosing.value = true;
+}
+
+function finishDetailClose() {
+  detailNode.value = null;
+  detailClosing.value = false;
+  detailOrigin.value = null;
+  historyOpen.value = false;
+  transformBeforeDetail = null;
+  hoverSuppressedUntil = performance.now() + HOVER_DISMISS_GUARD_MS;
+}
+
+/** "Read full article" inside the opened circle. */
+function onDetailRead() {
+  const n = detailNode.value;
+  if (n) onBubbleView(n);
+}
+
 /* ── HISTORY POPUP ────────────────────────────────────────────────────────
    Kept from the detail view, and still the same component (desktop side card,
    bottom sheet under 768px). Only its anchor changed: it used to hang off a
@@ -1482,7 +1586,7 @@ function onBubbleClick(n: Node) {
 /** Ancestors of the opened node, oldest last — the lineage the design lists:
    the article itself, then "Fork of:" each parent up to the subject root. */
 const historyEntries = computed<HistoryEntry[]>(() => {
-  const start = nodeById(activeId.value);
+  const start = detailNode.value;
   if (!start) return [];
   const out: HistoryEntry[] = [];
   let cur: Node | undefined = start;
@@ -1523,15 +1627,25 @@ const historyExpandedId = computed(() => {
    of its height (see ArticleHistoryPopup), which together guarantee the card is
    inside the box whatever the bubble is doing near an edge. */
 function updateHistoryAnchor() {
-  const svg = svgRef.value;
   const box = containerRef.value?.querySelector('.graph-container') as HTMLElement | null;
-  const p = activeId.value !== null ? framePlacements.get(activeId.value) : null;
-  if (!svg || !box || !p) return;
-  const t = zoomTransform(svg);
-  const svgBox = svg.getBoundingClientRect();
+  if (!box) return;
   const boxRect = box.getBoundingClientRect();
-  const x = (svgBox.left - boxRect.left) + t.applyX(p.x) + p.r * t.k;
-  const y = (svgBox.top - boxRect.top) + t.applyY(p.y);
+  let x: number, y: number;
+  if (detailNode.value) {
+    /* The opened article is a circle centred in this box: the card hangs off
+       its right edge, exactly as the design draws it. */
+    const d = Math.min(detailSize.value, boxRect.width * 0.84);
+    x = boxRect.width / 2 + d / 2;
+    y = boxRect.height / 2;
+  } else {
+    const svg = svgRef.value;
+    const p = hoveredId.value !== null ? framePlacements.get(hoveredId.value) : null;
+    if (!svg || !p) return;
+    const t = zoomTransform(svg);
+    const svgBox = svg.getBoundingClientRect();
+    x = (svgBox.left - boxRect.left) + t.applyX(p.x) + p.r * t.k;
+    y = (svgBox.top - boxRect.top) + t.applyY(p.y);
+  }
   historyAnchor.x = Math.round(Math.max(0, Math.min(boxRect.width, x)));
   historyAnchor.y = Math.round(Math.max(boxRect.height * 0.35, Math.min(boxRect.height * 0.65, y)));
 }
@@ -1543,7 +1657,7 @@ function onHistoryOpen() {
 
 /** "View full history" in the card: the repository's commit log. */
 function onDetailFullHistory() {
-  const n = nodeById(activeId.value);
+  const n = detailNode.value;
   if (!n) return;
   const owner = n.repoOwner ?? n.fullName?.split('/')[0] ?? '';
   const repo = n.repoName ?? n.fullName?.split('/')[1] ?? '';
@@ -1552,10 +1666,12 @@ function onDetailFullHistory() {
   window.location.href = `${suburl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits`;
 }
 
-/** Escape backs out one level: the History card, then the expanded bubble. */
+/** Escape backs out exactly one level each time: the History card, then the
+   opened article (same as Back), then the hovered bubble. */
 function onGraphKeydown(ev: KeyboardEvent) {
   if (ev.key !== 'Escape') return;
   if (historyOpen.value) historyOpen.value = false;
+  else if (detailNode.value) closeDetail();
   else if (expandedId.value !== null) collapseAll();
 }
 
@@ -1684,51 +1800,61 @@ function goToComparison() {
             </filter>
           </defs>
 
-          <!-- WORLD GROUP: Vue renders here, and d3-zoom transforms this exact <g> -->
+          <!-- WORLD GROUP: Vue renders here, and d3-zoom transforms this exact
+               <g>. Its CONTENTS are v-if'd on `graphRendered`: while an article
+               is open there is no bubble and no connector in the document at
+               all — the graph is hidden, not merely covered. The <g> itself
+               always exists, so the d3 selection taken on mount stays valid. -->
           <g ref="worldRef">
-            <!-- Trunks (vertical) -->
-            <line
-              v-for="t in trunksList" :key="t.id" class="trunk" :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
-              stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
-            />
+            <template v-if="graphRendered">
+              <!-- Trunks (vertical) -->
+              <line
+                v-for="t in trunksList" :key="t.id" class="trunk" :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
+                stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
+              />
 
-            <!-- Branch elbows + runs (one path per edge) -->
-            <path
-              v-for="e in edgesList" :key="`${e.source.node.id}-${e.target.node.id}`" class="branch" fill="none"
-              stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round" opacity="0.9"
-              :d="`M ${e.ex} ${e.ey} C ${e.ex} ${e.ey + 0.5522847498307936 * state.elbowR}, ${e.ex + e.side * 0.5522847498307936 * state.elbowR} ${e.hy}, ${e.hx} ${e.hy} L ${e.cx} ${e.cy}`"
-            />
+              <!-- Branch elbows + runs (one path per edge). `data-edge` pairs a
+                 path with the joint dot sitting on it, for the harness check
+                 that a dot is ON its connector in EVERY frame of a reflow. -->
+              <path
+                v-for="e in edgesList" :key="`${e.source.node.id}-${e.target.node.id}`"
+                :data-edge="`${e.source.node.id}-${e.target.node.id}`" class="branch" fill="none"
+                stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round" opacity="0.9"
+                :d="`M ${e.ex} ${e.ey} C ${e.ex} ${e.ey + 0.5522847498307936 * state.elbowR}, ${e.ex + e.side * 0.5522847498307936 * state.elbowR} ${e.hy}, ${e.hx} ${e.hy} L ${e.cx} ${e.cy}`"
+              />
 
-            <!-- Child stems -->
-            <line
-              v-for="e in edgesList" :key="`stem-${e.source.node.id}-${e.target.node.id}`" class="child-stem" :x1="e.sx1"
-              :y1="e.sy1" :x2="e.sx2" :y2="e.sy2" stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
-              opacity="0.9"
-            />
+              <!-- Child stems -->
+              <line
+                v-for="e in edgesList" :key="`stem-${e.source.node.id}-${e.target.node.id}`" class="child-stem" :x1="e.sx1"
+                :y1="e.sy1" :x2="e.sx2" :y2="e.sy2" stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
+                opacity="0.9"
+              />
 
-            <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
-            <circle
-              v-for="j in jointDots" :key="`joint-${j.id}`" class="joint-parent" :cx="j.x" :cy="j.y" r="6"
-              fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="2" style="cursor: pointer; transition: all 0.15s ease;"
-              role="button" tabindex="0" :aria-label="`Compare ${j.sourceOwner} with ${j.targetOwner}`"
-              @click.stop="() => onJointClick(j)" @keydown.enter.stop="() => onJointClick(j)"
-              @keydown.space.stop="() => onJointClick(j)"
-            />
+              <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
+              <circle
+                v-for="j in jointDots" :key="`joint-${j.id}`" :data-edge="j.id" class="joint-parent"
+                :cx="j.x" :cy="j.y" r="6"
+                fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="2"
+                style="cursor: pointer;"
+                role="button" tabindex="0" :aria-label="`Compare ${j.sourceOwner} with ${j.targetOwner}`"
+                @click.stop="() => onJointClick(j)" @keydown.enter.stop="() => onJointClick(j)"
+                @keydown.space.stop="() => onJointClick(j)"
+              />
 
-            <!-- Bubbles (component handles labels independently). Every
+              <!-- Bubbles (component handles labels independently). Every
                  coordinate and radius comes from the current frame, so a
                  bubble mid-reflow and the rib attached to it agree. -->
-            <BubbleNode
-              v-for="f in nodesList" :key="f.node.id" :id="f.node.id" :x="f.x" :y="f.y"
-              :r="f.r" :contributors="f.node.contributors" :updated-at="f.node.updatedAt"
-              :description="f.node.description" :k="kComputed"
-              :detail="detailFor(f.node.contributors)"
-              :expanded="expandedId === f.node.id" :active="activeId === f.node.id"
-              :is-active="selectedNodeId === f.node.id" :is-compare-mode="isCompareMode"
-              :compare-state="getCompareState(f.node.id)"
-              @click="() => onBubbleClick(f.node)" @hover="(id, on, pt) => onBubbleHover(id, on, pt)"
-              @read="() => onBubbleView(f.node)" @history="onHistoryOpen"
-            />
+              <BubbleNode
+                v-for="f in nodesList" :key="f.node.id" :id="f.node.id" :x="f.x" :y="f.y"
+                :r="f.r" :contributors="f.node.contributors" :updated-at="f.node.updatedAt"
+                :description="f.node.description" :k="kComputed"
+                :detail="detailFor(f.node.contributors)"
+                :expanded="expandedId === f.node.id"
+                :is-active="selectedNodeId === f.node.id" :is-compare-mode="isCompareMode"
+                :compare-state="getCompareState(f.node.id)"
+                @click="() => onBubbleClick(f.node)" @hover="(id, on, pt) => onBubbleHover(id, on, pt)"
+              />
+            </template>
           </g>
         </svg>
 
@@ -1781,6 +1907,23 @@ function goToComparison() {
           :default-branch="props.defaultBranch"
         />
 
+        <!-- The opened article (#284): one article, 425px, centred, with its
+             excerpt and its actions. It MUST stay inside .graph-container: the
+             layer is position:absolute/inset:0 with an opaque background, so
+             anywhere else it resolves against a positioned ancestor further up
+             the page and paints over the page chrome (navbar, view tabs,
+             Compare button, legend). Inside the container it covers exactly the
+             canvas box and nothing else, and the <svg> stays mounted underneath
+             so the box keeps its height. -->
+        <ArticleDetailView
+          v-if="detailNode"
+          :contributors="detailNode.contributors" :description="detailNode.description"
+          :updated-at="detailNode.updatedAt" :size="detailSize"
+          :origin="detailOrigin" :closing="detailClosing"
+          @back="closeDetail" @read="onDetailRead" @history="onHistoryOpen"
+          @closed="finishDetailClose"
+        />
+
         <!-- History card (#284). It MUST stay inside .graph-container: the
              desktop card is position:absolute and resolves against the nearest
              positioned ancestor, and anywhere else it would paint over the page
@@ -1792,7 +1935,7 @@ function goToComparison() {
              itself would have nowhere to land. It is a zero-height static
              block, so it adds nothing to the box. -->
         <div
-          v-if="historyOpen && activeId" class="history-anchor"
+          v-if="historyOpen && (detailNode || hoveredId)" class="history-anchor"
           :style="{ '--history-anchor-x': historyAnchor.x + 'px', '--history-anchor-y': historyAnchor.y + 'px' }"
         >
           <ArticleHistoryPopup
@@ -1966,7 +2109,21 @@ function goToComparison() {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Joint-parent hover/focus effects for clickable points of contention */
+/* Joint-parent hover/focus effects for clickable points of contention.
+
+   THE TRANSITION IS PER-PROPERTY, NEVER `all`. `cx`/`cy` are CSS-animatable
+   geometry properties in Chrome, so an `all 0.15s ease` here (which is what
+   this element used to carry inline) gave every per-frame position the JS
+   reflow tween writes its OWN 150ms eased animation on top. The dots then
+   trailed the ribs they sit on by up to 30px mid-flight and kept drifting for
+   ~200ms after the layout had settled — "late and doesn't seem attached to the
+   line". The connectors themselves have no transition, which is why only the
+   dots came adrift. Colour and stroke may still animate: they are not
+   geometry, and they are the whole point of the hover affordance. */
+.joint-parent {
+  transition: fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
 .joint-parent:hover {
   stroke: var(--color-primary, #2563eb) !important;
   stroke-width: 3 !important;
