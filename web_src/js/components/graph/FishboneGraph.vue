@@ -175,7 +175,6 @@ const LANE_PAD_COMPLEXITY_WEIGHT = 0.3;  // Weight of complexity factor in lane 
 /* === SVG LAYOUT === */
 const MIN_SVG_HEIGHT = 320;          // Never collapse the canvas below this
 const CONTENT_BOUNDS_EXTRA = 16;     // Extra horizontal padding for elbow overhang
-const VIEW_TOP_OFFSET = 12;          // Top offset for view calculations
 const DEFAULT_CONTAINER_WIDTH = 1100;   // Default container width when not measured
 /* ONE default for "container height we have not measured yet". There used to be
    two (DEFAULT_SVG_HEIGHT 1000 and DEFAULT_CONTAINER_HEIGHT 800) that meant the
@@ -497,6 +496,7 @@ async function fetchForkGraphAndSet() {
       console.warn('FishboneGraph: apiUrl not provided');
       errorMessage.value = 'No API URL provided';
       isLoading.value = false;
+      syncCanvasHeight();
       return;
     }
     const urlObj = new URL(props.apiUrl, window.location.origin);
@@ -525,6 +525,7 @@ async function fetchForkGraphAndSet() {
       console.error('FishboneGraph: API error', res.status);
       errorMessage.value = errorText;
       isLoading.value = false;
+      syncCanvasHeight();
       announceToScreenReader(errorText);
       return;
     }
@@ -548,6 +549,10 @@ async function fetchForkGraphAndSet() {
       restoreSelectionAfterGraphLoad();
       announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
     } else {
+      /* No article yet: the "Create the first article" bubble is centred in the
+         canvas box by CSS, so the box has to be the size of the space it has. */
+      await nextTick();
+      syncCanvasHeight();
       announceToScreenReader('No fork data available');
     }
   } catch (err) {
@@ -555,6 +560,7 @@ async function fetchForkGraphAndSet() {
     console.error('FishboneGraph: failed to fetch graph', err);
     errorMessage.value = errorText;
     isLoading.value = false;
+    syncCanvasHeight();
     announceToScreenReader(errorText);
   }
 }
@@ -758,6 +764,21 @@ function subtreeStackGap() {
 function graphViewportHeight() {
   const legendH = legendRef.value?.offsetHeight ?? 0;
   return Math.max(MIN_SVG_HEIGHT, (containerHeight || DEFAULT_CONTAINER_HEIGHT) - legendH);
+}
+
+/** Give the canvas box the height it actually has, in EVERY state.
+
+   This used to happen only where a layout ran — setFrame() and resetView() —
+   and both of those return early when there is no graph to draw. A subject with
+   no article yet never reaches either, so `svgHeight` kept its placeholder
+   (DEFAULT_CONTAINER_HEIGHT, 800px) and the canvas box was 800px tall inside a
+   730px (desktop) or 494px (phone) container. The "Create the first article"
+   bubble is centred in that box by CSS, so it was centred in a box taller than
+   the one on screen — 35px low on a desktop, 153px low on a phone. That is the
+   "not centered vertically" report, and it is a measurement bug, not an offset
+   to nudge. Called from mount, resize, and every branch of the fetch. */
+function syncCanvasHeight() {
+  svgHeight.value = graphViewportHeight();
 }
 
 /** Y of the first child lane under a parent, derived from the PARENT'S OWN
@@ -970,7 +991,7 @@ function setFrame(g: Graph, placements: Placements) {
      lowest bubble in WORLD units (`maxY + 240`), which left the graph stranded
      at the top of an over-tall, scrolling canvas — the empty band under the
      first bubble. */
-  svgHeight.value = graphViewportHeight();
+  syncCanvasHeight();
 }
 
 function prefersReducedMotion(): boolean {
@@ -1146,8 +1167,7 @@ function resetView(animated = false) {
      height. Fitting against a stale, too-tall rect is what left the graph
      hanging above a band of empty space. */
   const viewportH = graphViewportHeight();
-  svgHeight.value = viewportH;   // the legend may have appeared since the layout ran
-  const usableH = viewportH - VIEW_TOP_OFFSET;
+  syncCanvasHeight();            // the legend may have appeared since the layout ran
 
   const b = contentBounds();
   const contentW = b.maxX - b.minX, contentH = b.maxY - b.minY;
@@ -1165,7 +1185,7 @@ function resetView(animated = false) {
   const targetScale = RESET_SCALE;
   fitScale = Math.min(RESET_SCALE, Math.min(
     box.width / Math.max(1, contentW),
-    usableH / Math.max(1, contentH),
+    viewportH / Math.max(1, contentH),
   ));
 
   // Center horizontally
@@ -1174,12 +1194,18 @@ function resetView(animated = false) {
   const tx = cx - (worldCenterX * targetScale);
   /* Centre vertically when the graph fits, pin it to the top when it does not:
      at 1:1 a tall graph is read from the root downwards and panned, and
-     starting it half-way up would hide the root. */
+     starting it half-way up would hide the root.
+
+     The free space is measured against the WHOLE canvas box. It used to be
+     measured against the box minus a 12px top gutter, and then the gutter was
+     added back on top of the centred position — so every graph, a lone bubble
+     included, sat exactly half a gutter (6px) below the centre of the box it
+     was supposed to be centred in. */
   const scaledContentH = contentH * targetScale;
-  const topSpace = scaledContentH + 2 * RESET_TOP_MARGIN <= usableH
-    ? (usableH - scaledContentH) / 2
+  const topSpace = scaledContentH + 2 * RESET_TOP_MARGIN <= viewportH
+    ? (viewportH - scaledContentH) / 2
     : RESET_TOP_MARGIN;
-  const ty = VIEW_TOP_OFFSET + topSpace - (b.minY * targetScale);
+  const ty = topSpace - (b.minY * targetScale);
 
   // Validate transform values before applying
   if (!isFinite(tx) || !isFinite(ty)) {
@@ -1212,6 +1238,9 @@ function resetView(animated = false) {
    the node it referred to may no longer exist. */
 function layoutAndRender() {
   cancelReflow();
+  /* Before anything else, and whatever the data: the empty and error states
+     return early below and would otherwise keep a stale canvas box. */
+  syncCanvasHeight();
   /* The denominator of every size ratio (./bubble-size.ts). Must be set before
      any rFor() call. */
   state.maxContributors = maxContributors(Object.values(state.graph).map((n) => n.contributors));
@@ -1294,6 +1323,9 @@ onMounted(async () => {
   const rect0 = el.getBoundingClientRect();
   containerWidth = rect0.width;
   containerHeight = rect0.height;
+  /* ...so the loading and empty states get a correctly sized box too, not the
+     DEFAULT_CONTAINER_HEIGHT placeholder. */
+  syncCanvasHeight();
   ro = new ResizeObserver((entries) => {
     const rect = entries[0].contentRect;
     const w = rect.width;
@@ -1302,6 +1334,10 @@ onMounted(async () => {
     if (Math.abs(w - containerWidth) > 2) { containerWidth = Math.min(w, 1100); changed = true; }
     if (Math.abs(h - containerHeight) > 2) { containerHeight = h; changed = true; }
     if (changed) {
+      /* Synchronously, before the re-layout: a resize with no data (the empty
+         state) never reaches layoutAndRender's queue below, and even with data
+         the box should not be a frame stale. */
+      syncCanvasHeight();
       /* The opened circle is sized from the container, so it has to follow it. */
       if (detailNode.value) { detailSize.value = computeDetailSize(); updateHistoryAnchor(); }
       if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
