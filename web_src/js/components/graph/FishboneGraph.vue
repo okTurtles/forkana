@@ -329,6 +329,7 @@ let ro: ResizeObserver | null = null;
 let containerWidth = DEFAULT_CONTAINER_WIDTH;
 let containerHeight = DEFAULT_CONTAINER_HEIGHT;
 let pendingRaf: number | null = null;
+let pointerCleanup: (() => void) | null = null;
 
 /* ──────────────────────────────────────────────────────────────────────────────
    PROPS & API CONFIGURATION
@@ -1313,6 +1314,19 @@ onMounted(async () => {
   });
   ro.observe(el);
 
+  /* Where the pointer is. Read only when an article view finishes closing, to
+     ask whether the bubble it landed on is genuinely under the cursor. */
+  const trackPointer = (ev: PointerEvent) => {
+    if (ev.pointerType === 'touch') { pointerClient.x = -1; pointerClient.y = -1; return; }
+    pointerClient.x = ev.clientX; pointerClient.y = ev.clientY;
+  };
+  window.addEventListener('pointermove', trackPointer, {passive: true});
+  window.addEventListener('pointerdown', (ev: PointerEvent) => {
+    closedByKeyboard = false;      // a real press: not a keyboard close
+    trackPointer(ev);
+  }, {passive: true});
+  pointerCleanup = () => window.removeEventListener('pointermove', trackPointer);
+
   /* Initial fetch from API */
   await fetchForkGraphAndSet();
   window.addEventListener('repo:selection-updated', handleExternalSelection as EventListener);
@@ -1322,6 +1336,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (ro) ro.disconnect();
+  pointerCleanup?.();
   cancelReflow();
   if (hoverTimer !== null) window.clearTimeout(hoverTimer);
   window.removeEventListener('repo:selection-updated', handleExternalSelection as EventListener);
@@ -1392,6 +1407,12 @@ const graphRendered = computed(() => detailNode.value === null || detailClosing.
    onBubbleClick(). */
 let lastPointerType = 'mouse';
 let hoverTimer: number | null = null;
+/** Where the pointer is, in client px, so a closing article view can ask
+   whether it is genuinely over a bubble. -1 until the pointer is seen. */
+const pointerClient = {x: -1, y: -1};
+/** True when the article view was closed from the keyboard (Escape, or Back
+   activated without a pointer): focus is then handed back to the bubble. */
+let closedByKeyboard = false;
 /* Set by an explicit dismissal (Escape, background click). Escape means "put
    this away", so for a moment afterwards nothing may grow a bubble again —
    without it the dismissal re-expands the bubble it just closed: unmounting
@@ -1527,6 +1548,10 @@ function onBubbleClick(n: Node) {
 const DETAIL_DIAMETER_DESIGN = 425;   // design size of the opened circle (px)
 const DETAIL_CONTAINER_MARGIN = 24;   // breathing room between circle and canvas edge
 const DETAIL_DIAMETER_MIN = 200;      // below this the stack is unreadable anyway
+/* How long the closing flight owns the view: ArticleDetailView's 120ms content
+   fade + 80ms delay + 300ms travel, plus a frame. Nothing may grow a bubble
+   while it is in the air. */
+const DETAIL_CLOSE_GUARD_MS = 520;
 const detailSize = ref(DETAIL_DIAMETER_DESIGN);
 /** The bubble the view grew out of, in screen px — the 202px hovered one. */
 const detailOrigin = ref<DetailOrigin | null>(null);
@@ -1576,11 +1601,11 @@ function openDetail(n: Node) {
 
 /** Ask for the close. The view animates, then calls finishDetailClose(). */
 function closeDetail() {
-  if (!detailNode.value || detailClosing.value) return;
+  const node = detailNode.value;
+  if (!node || detailClosing.value) return;
   historyOpen.value = false;   /* the popup does not travel with the circle */
   /* Put the graph back NOW, behind the shrinking circle, and at rest: the
-     circle is flying back into a bubble, so that bubble has to be there. The
-     hover is dropped, which is also what the user asked for by leaving. */
+     circle is flying back into a bubble, so that bubble has to be there. */
   hoveredId.value = null;
   setFrame(state.graph, restingPlacements);
   contentBox = bubbleBounds();
@@ -1588,19 +1613,74 @@ function closeDetail() {
     svgSel.call(zoomBehavior.transform as any, transformBeforeDetail);
     currentK.value = transformBeforeDetail.k;
   }
-  /* ...and do not let the pointer sitting over a bubble re-expand it while the
-     circle is still on its way back. */
-  hoverSuppressedUntil = performance.now() + HOVER_DISMISS_GUARD_MS;
+  /* WHERE THE CIRCLE LANDS, recomputed here rather than reused from the open.
+     `detailOrigin` was captured when the article was opened — off the 202px
+     HOVERED bubble — so the circle used to shrink to 202 and then be swapped
+     for a 126px (or 22px) bubble underneath: "the size of the shrinking bubble
+     just before it reveals the original bubble is a bit too big". Reading the
+     resting frame now makes the whole close one continuous motion, 425 straight
+     down to that bubble's own ladder diameter, ending exactly on it.
+
+     Whether that bubble is hovered afterwards is a separate question, answered
+     by the ordinary rules in finishDetailClose() — the animation passing over
+     it is not an answer. */
+  detailOrigin.value = screenCircleFor(node.id);
+  /* Its label waits for the landing, so the resting count fades in at its rung
+     size instead of being uncovered halfway through the flight. */
+  labelFrozen.value = new Set([node.id]);
+  /* Nothing may expand while the circle is on its way — including a pointer
+     that happens to be resting over a bubble. That is re-read at the end. */
+  hoverSuppressedUntil = performance.now() + DETAIL_CLOSE_GUARD_MS;
   detailClosing.value = true;
 }
 
 function finishDetailClose() {
+  const closedId = detailNode.value?.id ?? null;
   detailNode.value = null;
   detailClosing.value = false;
   detailOrigin.value = null;
   historyOpen.value = false;
   transformBeforeDetail = null;
-  hoverSuppressedUntil = performance.now() + HOVER_DISMISS_GUARD_MS;
+  /* The circle has landed on the bubble at its resting size and the graph is
+     whole again: release the label (it fades in at its rung font) and drop the
+     suppression, because from here the ordinary rules apply. */
+  labelFrozen.value = new Set();
+  hoverSuppressedUntil = 0;
+
+  /* Should anything be hovered now? Ask the same question the pointer asks
+     anywhere else, from live evidence only — never "the animation finished
+     here, so hover this". Two honest sources: where the pointer actually is,
+     and the focus a keyboard-driven close owes back to the bubble it opened. */
+  const byKeyboard = closedByKeyboard;
+  closedByKeyboard = false;
+  nextTick(() => {
+    if (byKeyboard && closedId) {
+      /* Returning focus to the control that opened a view is standard; the
+         `focusin` that follows expands the bubble exactly as a keyboard hover
+         does anywhere else, rather than this function deciding it. */
+      const el = svgRef.value?.querySelector(`g.node[data-node-id="${cssEscape(closedId)}"]`);
+      (el as SVGGElement | null)?.focus?.();
+      return;
+    }
+    const id = nodeUnderPointer();
+    if (id !== null) setHovered(id, true);
+  });
+}
+
+/** Which bubble the pointer is over right now, or null. A live hit test, not
+   remembered state, so it cannot claim a hover the user is not making. */
+function nodeUnderPointer(): NodeId | null {
+  if (typeof document === 'undefined' || pointerClient.x < 0) return null;
+  const el = document.elementFromPoint(pointerClient.x, pointerClient.y);
+  const g = (el as Element | null)?.closest?.('g.node') as SVGGElement | null;
+  const id = g?.getAttribute('data-node-id') ?? null;
+  return id && state.graph[id] ? id : null;
+}
+
+/** CSS.escape with a fallback, for the attribute lookup above. */
+function cssEscape(value: string): string {
+  const api = (window as unknown as {CSS?: {escape?: (v: string) => string}}).CSS;
+  return typeof api?.escape === 'function' ? api.escape(value) : value.replace(/["\\]/g, '\\$&');
 }
 
 /** "Read full article" inside the opened circle. */
@@ -1702,7 +1782,7 @@ function onDetailFullHistory() {
 function onGraphKeydown(ev: KeyboardEvent) {
   if (ev.key !== 'Escape') return;
   if (historyOpen.value) historyOpen.value = false;
-  else if (detailNode.value) closeDetail();
+  else if (detailNode.value) { closedByKeyboard = true; closeDetail(); }
   else if (expandedId.value !== null) collapseAll();
 }
 

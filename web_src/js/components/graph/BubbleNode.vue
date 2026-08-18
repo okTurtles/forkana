@@ -239,7 +239,7 @@ function onKeyDown(ev: KeyboardEvent) {
   <!-- One node group at (x,y); we let the parent group receive the world transform -->
   <g
     class="node cursor-pointer select-none" :class="{ 'is-expanded': expanded, 'is-frozen': frozen }"
-    :transform="gTransform" role="button"
+    :transform="gTransform" :data-node-id="id" role="button"
     :aria-label="`Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
     :aria-pressed="isActive ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
     @pointerdown="onPointerDown" @pointerenter="onPointerEnter" @pointerleave="onPointerLeave"
