@@ -35,8 +35,13 @@ const props = defineProps<{
   updatedAt?: string;
   /* Diameter of the circle in screen px. */
   size?: number;
-  /* The bubble this view came from, for the open/close zoom. */
+  /* The bubble this view came from, for the open/close zoom. Null when the
+     view was not opened from one — a solo subject, which loads straight into
+     it and therefore just fades in. */
   origin?: DetailOrigin | null;
+  /* False on a solo subject: the article IS the page, there is no graph behind
+     it and nothing to go back to, so the control is not rendered at all. */
+  showBack?: boolean;
   /* Flipped by the parent to ask for the closing animation; the parent unmounts
      us when we emit "closed". */
   closing?: boolean;
@@ -52,6 +57,7 @@ const emit = defineEmits<{
 const diameter = computed(() => props.size ?? 425);
 const label = computed(() => (props.contributors === 1 ? 'Contributor' : 'Contributors'));
 const formattedDate = computed(() => formatDateYMD(props.updatedAt));
+const showBack = computed(() => props.showBack !== false);
 
 /* ──────────────────────────────────────────────────────────────────────────────
    OPEN/CLOSE ZOOM
@@ -108,7 +114,8 @@ onMounted(() => {
      while this is open), so park focus on Back. It is the way out of this view
      and it must be reachable without a mouse; Escape does the same thing from
      anywhere. Programmatic focus after a click does not draw a focus ring
-     (:focus-visible), so this costs the mouse user nothing. */
+     (:focus-visible), so this costs the mouse user nothing. No Back on a solo
+     subject, and nothing to move focus to: the page starts here. */
   requestAnimationFrame(() => backRef.value?.focus());
   if (prefersReducedMotion()) {
     entered.value = true;    // instant swap, no travel, no fade
@@ -117,7 +124,8 @@ onMounted(() => {
   const el = bubbleRef.value;
   const from = originTransform();
   if (!el || !from) {
-    /* Opened without a source bubble (single-article subject): subtle fade. */
+    /* No source bubble to fly out of — a solo subject loads straight into this
+       view — so it simply fades in. */
     requestAnimationFrame(() => { entered.value = true; });
     return;
   }
@@ -166,7 +174,7 @@ onBeforeUnmount(clearTimer);
     class="detail-layer" :class="{'is-open': entered, 'is-closing': leaving}"
     :style="{'--detail-size': diameter + 'px'}"
   >
-    <button ref="backRef" class="detail-back" @click="emit('back')">
+    <button v-if="showBack" ref="backRef" class="detail-back" @click="emit('back')">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>

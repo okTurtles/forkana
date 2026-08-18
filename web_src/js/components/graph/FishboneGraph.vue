@@ -19,7 +19,7 @@
    drawn at all (ArticleDetailView.vue). Hover says what the article IS, click
    says what you can DO with it. See the HOVER / OPEN section. */
 
-import { onMounted, reactive, ref, onBeforeUnmount, nextTick, computed } from "vue";
+import { onMounted, reactive, ref, onBeforeUnmount, nextTick, computed, watch } from "vue";
 // @ts-ignore - d3-selection types may not be available in CI environment
 import { select } from "d3-selection";
 // @ts-ignore - d3-selection types may not be available in CI environment
@@ -1294,7 +1294,7 @@ onMounted(async () => {
   svgSel.on("click.bg", (ev: any) => {
     const target = ev.target as Element;
     if (!target.closest("g.node")) {
-      if (detailNode.value) return;   // the opened article owns the view; Back closes it
+      if (openArticle.value) return;  // the article owns the view; Back (if any) closes it
       /* Clicking empty canvas drops the hover and re-centres the graph. */
       collapseAll();
       resetView(true);
@@ -1339,7 +1339,7 @@ onMounted(async () => {
          the box should not be a frame stale. */
       syncCanvasHeight();
       /* The opened circle is sized from the container, so it has to follow it. */
-      if (detailNode.value) { detailSize.value = computeDetailSize(); updateHistoryAnchor(); }
+      if (openArticle.value) { detailSize.value = computeDetailSize(); updateHistoryAnchor(); }
       if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
       pendingRaf = requestAnimationFrame(() => {
         layoutAndRender();
@@ -1433,10 +1433,29 @@ const expandedId = computed<NodeId | null>(() => hoveredId.value);
 const detailNode = ref<Node | null>(null);
 const historyOpen = ref(false);
 
+/** A subject with exactly ONE article: there is no graph to speak of — no
+   forks, no comparison, nothing to hover — so the page IS that article, and it
+   opens straight into the 425px view. A live computed, deliberately: add a
+   fork and the subject becomes an ordinary graph on the next load of the data,
+   with no flag left set from before. (`hasData` keeps the no-article state out
+   of this: that one belongs to CreateFirstArticleBubble.) */
+const isSoloSubject = computed(() => hasData.value && Object.keys(state.graph).length === 1);
+
+/** The article on screen: the one that was clicked, or — on a solo subject —
+   the only one there is. */
+const openArticle = computed<Node | null>(
+  () => detailNode.value ?? (isSoloSubject.value ? getRoot(state.graph) : null),
+);
+
+/** True when the article view IS the page: nothing was clicked to get here, so
+   there is nowhere to go Back to and nothing for Escape to dismiss. */
+const soloPinned = computed(() => detailNode.value === null && openArticle.value !== null);
+
 /** The graph is not merely covered while an article is open: its bubbles and
    connectors are not rendered at all. It comes back the moment the close
-   starts, so the circle visibly shrinks back INTO its bubble. */
-const graphRendered = computed(() => detailNode.value === null || detailClosing.value);
+   starts, so the circle visibly shrinks back INTO its bubble. On a solo
+   subject it is never rendered at all. */
+const graphRendered = computed(() => openArticle.value === null || detailClosing.value);
 
 /** Pointer type of the gesture in progress. Touch has no hover, so a tap has
    to mean one of two things depending on what is already expanded — see
@@ -1498,7 +1517,7 @@ function setHovered(id: NodeId | null, immediate = false) {
     hoverTimer = null;
     if (id !== null && performance.now() < hoverSuppressedUntil) return;
     if (hoveredId.value === id) return;
-    if (detailNode.value) return;   // an open article owns the view
+    if (openArticle.value) return;   // an open article owns the view
     hoveredId.value = id;
     reflow();
     const n = nodeById(id);
@@ -1536,7 +1555,7 @@ function onBubbleHover(id: NodeId, on: boolean, pointerType: string) {
      the <g> takes focus on the same gesture. */
   if (pointerType !== 'keyboard') lastPointerType = pointerType;
   if (pointerType === 'touch') return;
-  if (detailNode.value) return;    // the graph is not on screen to be hovered
+  if (openArticle.value) return;   // the graph is not on screen to be hovered
   if (on) setHovered(id);
   else if (hoveredId.value === id) setHovered(null);
 }
@@ -1721,7 +1740,7 @@ function cssEscape(value: string): string {
 
 /** "Read full article" inside the opened circle. */
 function onDetailRead() {
-  const n = detailNode.value;
+  const n = openArticle.value;
   if (n) onBubbleView(n);
 }
 
@@ -1733,7 +1752,7 @@ function onDetailRead() {
 /** Ancestors of the opened node, oldest last — the lineage the design lists:
    the article itself, then "Fork of:" each parent up to the subject root. */
 const historyEntries = computed<HistoryEntry[]>(() => {
-  const start = detailNode.value;
+  const start = openArticle.value;
   if (!start) return [];
   const out: HistoryEntry[] = [];
   let cur: Node | undefined = start;
@@ -1778,7 +1797,7 @@ function updateHistoryAnchor() {
   if (!box) return;
   const boxRect = box.getBoundingClientRect();
   let x: number, y: number;
-  if (detailNode.value) {
+  if (openArticle.value) {
     /* The opened article is a circle centred in this box: the card hangs off
        its right edge, exactly as the design draws it. */
     const d = Math.min(detailSize.value, boxRect.width * 0.84);
@@ -1797,6 +1816,16 @@ function updateHistoryAnchor() {
   historyAnchor.y = Math.round(Math.max(boxRect.height * 0.35, Math.min(boxRect.height * 0.65, y)));
 }
 
+/* The circle is sized from the container, and on a solo subject nothing
+   "opens" it — it is simply there once the data lands. Size it whenever an
+   article appears, after the DOM has settled so the canvas box is measured. */
+watch(openArticle, async (article) => {
+  if (!article) return;
+  await nextTick();
+  detailSize.value = computeDetailSize();
+  updateHistoryAnchor();
+}, {immediate: true});
+
 function onHistoryOpen() {
   historyOpen.value = true;
   updateHistoryAnchor();
@@ -1804,7 +1833,7 @@ function onHistoryOpen() {
 
 /** "View full history" in the card: the repository's commit log. */
 function onDetailFullHistory() {
-  const n = detailNode.value;
+  const n = openArticle.value;
   if (!n) return;
   const owner = n.repoOwner ?? n.fullName?.split('/')[0] ?? '';
   const repo = n.repoName ?? n.fullName?.split('/')[1] ?? '';
@@ -1814,7 +1843,11 @@ function onDetailFullHistory() {
 }
 
 /** Escape backs out exactly one level each time: the History card, then the
-   opened article (same as Back), then the hovered bubble. */
+   opened article (same as Back), then the hovered bubble.
+
+   On a solo subject it stops after the History card: `detailNode` is null there
+   (nothing was clicked), so there is no close to run — which is the point.
+   Escape must not be able to leave that user staring at an empty canvas. */
 function onGraphKeydown(ev: KeyboardEvent) {
   if (ev.key !== 'Escape') return;
   if (historyOpen.value) historyOpen.value = false;
@@ -2065,10 +2098,11 @@ function goToComparison() {
              canvas box and nothing else, and the <svg> stays mounted underneath
              so the box keeps its height. -->
         <ArticleDetailView
-          v-if="detailNode"
-          :contributors="detailNode.contributors" :description="detailNode.description"
-          :updated-at="detailNode.updatedAt" :size="detailSize"
-          :origin="detailOrigin" :closing="detailClosing"
+          v-if="openArticle"
+          :contributors="openArticle.contributors" :description="openArticle.description"
+          :updated-at="openArticle.updatedAt" :size="detailSize"
+          :origin="soloPinned ? null : detailOrigin" :show-back="!soloPinned"
+          :closing="detailClosing"
           @back="closeDetail" @read="onDetailRead" @history="onHistoryOpen"
           @closed="finishDetailClose"
         />
@@ -2084,7 +2118,7 @@ function goToComparison() {
              itself would have nowhere to land. It is a zero-height static
              block, so it adds nothing to the box. -->
         <div
-          v-if="historyOpen && (detailNode || hoveredId)" class="history-anchor"
+          v-if="historyOpen && (openArticle || hoveredId)" class="history-anchor"
           :style="{ '--history-anchor-x': historyAnchor.x + 'px', '--history-anchor-y': historyAnchor.y + 'px' }"
         >
           <ArticleHistoryPopup
