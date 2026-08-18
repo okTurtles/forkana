@@ -173,6 +173,61 @@ describe('mergeVisualEdit', () => {
     expect(merged).toContain('[1]: https://e.com/x');
   });
 
+  // Adversarial cases for the SUBSTITUTION RULE. normalizeLine is deliberately permissive, so
+  // for each of these the pristine line and the user's line normalize to the SAME string while
+  // rendering completely differently. Restoring the pristine bytes would silently revert an
+  // intentional edit, so every one of them must keep the user's line byte-for-byte — in both
+  // the in-place (Pass 1) and the moved/retyped (Pass 2) variant.
+  describe('an edit that only adds or removes markdown syntax is never reverted', () => {
+    // [label, pristine line, baseline line as Toast UI shows it, the user's edited line].
+    // The baseline values are what the real serializer emits (pinned in
+    // losslessMarkdown.editor.test.ts): it keeps `\*..\*` and `\#` escapes, but drops the
+    // escapes from `\[..\]`.
+    const cases: Array<[string, string, string, string]> = [
+      ['literal asterisks made italic', '\\*emphasis\\*', '\\*emphasis\\*', '*emphasis*'],
+      ['italic made literal', '*emphasis*', '*emphasis*', '\\*emphasis\\*'],
+      ['literal hash made a heading', '\\# literal hash', '\\# literal hash', '# literal hash'],
+      ['heading made literal', '# a heading', '# a heading', '\\# a heading'],
+      ['literal brackets made link syntax', '\\[literal\\]', '[literal]', '[literal](/x)'],
+      ['indented code dedented to a paragraph', '    code line', '    code line', ' code line'],
+      ['paragraph indented into code', ' code line', ' code line', '    code line'],
+      ['hard line break removed', 'line with break  ', 'line with break  ', 'line with break'],
+      ['hard line break added', 'line with break', 'line with break', 'line with break  '],
+      ['thematic break made a bullet', '---', '---', '-'],
+      ['bullet made a thematic break', '-', '-', '---'],
+    ];
+
+    for (const [label, pristine, baseline, edited] of cases) {
+      test(`in place: ${label}`, () => {
+        const ours = `Intro_line.\n\n${pristine}\n\nOutro_line.`;
+        const base = `Intro\\_line.\n\n${baseline}\n\nOutro\\_line.`;
+        const theirs = `Intro\\_line.\n\n${edited}\n\nOutro\\_line.`;
+        const merged = mergeVisualEdit(ours, base, theirs);
+        expect(merged).toBe(`Intro_line.\n\n${edited}\n\nOutro_line.`);
+      });
+
+      test(`moved: ${label}`, () => {
+        // The user deleted the line and retyped the edited form at the end of the document.
+        const ours = `Intro_line.\n\n${pristine}\n\nOutro_line.`;
+        const base = `Intro\\_line.\n\n${baseline}\n\nOutro\\_line.`;
+        const theirs = `Intro\\_line.\n\nOutro\\_line.\n\n${edited}`;
+        const merged = mergeVisualEdit(ours, base, theirs);
+        expect(merged).toBe(`Intro_line.\n\nOutro_line.\n\n${edited}`);
+      });
+
+      // The other half of the contract: when the user leaves the line alone, the pristine
+      // spelling still comes back. Without this the tests above would pass on a merge that
+      // simply never substitutes anything.
+      test(`untouched: ${label}`, () => {
+        const ours = `Intro_line.\n\n${pristine}\n\nOutro_line.`;
+        const base = `Intro\\_line.\n\n${baseline}\n\nOutro\\_line.`;
+        const theirs = `Intro\\_line, edited.\n\n${baseline}\n\nOutro\\_line.`;
+        const merged = mergeVisualEdit(ours, base, theirs);
+        expect(merged).toBe(`Intro\\_line, edited.\n\n${pristine}\n\nOutro_line.`);
+      });
+    }
+  });
+
   describe('fallbacks', () => {
     test('reports base-unrecognized when the baseline does not line up with the source', () => {
       const stats: MergeStats = {};

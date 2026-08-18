@@ -15,18 +15,40 @@
 //   ours   = the pristine markdown source (what the user's file actually contains)
 //   theirs = the serialization after the user's Visual edit
 //
-// Everything is compared on a *normalized* form of each line (see normalizeLine) that undoes
-// the serializer's cosmetic damage. That is what makes the merge possible at all: `ours` and
+// ALIGNMENT is done on a *normalized* form of each line (see normalizeLine) that undoes the
+// serializer's cosmetic damage. That is what makes the merge possible at all: `ours` and
 // `base` differ on nearly every line in raw bytes, but are equal once normalized, so a raw
-// diff3 would report a conflict everywhere.
+// diff3 would report a conflict everywhere. Normalization is deliberately permissive, and
+// therefore NOT semantics-preserving: it strips backslash escapes, collapses space runs and
+// canonicalizes list markers, so `\*literal\*` and `*italic*`, or `\# text` and `# text`,
+// or an indented code line and a paragraph, all normalize to the same string even though
+// they render completely differently.
 //
-// SAFETY INVARIANT: every line emitted by the merge is normalization-equal to the `theirs`
-// line at the same position, and the emitted lines are exactly `theirs`' lines, in order.
-// In other words the result always says the same thing as the document the user is looking
-// at in the editor; the merge only ever chooses a *spelling* for a line (the user's original
-// bytes instead of the re-escaped ones). mergeVisualEdit re-checks this invariant before
-// returning and falls back if it does not hold, so a bug here degrades to the old
-// "use the serialization" behavior instead of corrupting an article.
+// SUBSTITUTION RULE: because of that, normalization-equality is used only to decide which
+// lines *correspond*, never to decide that a pristine line may replace an editor line. A
+// pristine `ours` line is substituted for a `theirs` line only when that `theirs` line is
+// BYTE-IDENTICAL to the `base` line it aligned to. That is positive evidence that the user
+// did not touch the line: it is exactly what Toast UI itself produced when Visual mode was
+// entered, and `base` is by construction the serialization of `ours`, so the pristine line is
+// the very text that produced it. Every other line is emitted exactly as the editor produced
+// it. This is a per-line decision; refusing to substitute costs one line its original
+// spelling, never the whole document.
+//
+// This is what makes an edit that consists only of adding or removing markdown syntax safe.
+// A user who selects `\*emphasis\*` and makes it italic produces `*emphasis*`, which is
+// normalization-equal to the pristine line but not byte-equal to the baseline, so the
+// merge keeps the user's version instead of silently reverting it. Note that comparing
+// against `base` is what carries the signal: (ours, theirs) alone cannot tell "the user
+// removed an escape" from "the serializer removed an escape", and the serializer does both
+// (it drops `\[`/`\]` escapes from some paragraphs, and re-indents nested list items from
+// two spaces to four).
+//
+// SAFETY INVARIANT: the output has exactly `theirs`' lines, in order, and every line is
+// either `theirs`' own bytes or a pristine line whose baseline the user left untouched.
+// mergeVisualEdit re-checks precisely that before returning — re-deriving each substitution
+// from `base` rather than re-asserting a normalized comparison — and falls back if it does
+// not hold, so a bug here degrades to the old "use the serialization" behavior instead of
+// corrupting an article.
 
 // Backslash escapes the serializer adds (`\[`, `\_`, `\.`, ...). CommonMark only honors a
 // backslash before ASCII punctuation, which is exactly the set the serializer uses.
@@ -237,39 +259,59 @@ export function mergeVisualEdit(
 
   // Pass 1 — lines the user left alone, in place. A `theirs` line that the LCS ties back to a
   // `base` line, which in turn ties back to a pristine source line, is emitted with the user's
-  // original bytes.
+  // original bytes — but only if it is byte-identical to that baseline line (the SUBSTITUTION
+  // RULE at the top of the file). A line the user retyped, re-emphasized or re-indented is not
+  // byte-identical to the baseline and keeps the editor's spelling.
   const merged: string[] = new Array<string>(theirLines.length);
-  // Provenance: the `ours` line each merged line was taken from, or -1 for "emitted verbatim
-  // from theirs". Used by the invariant re-check below.
-  const sourceOfMerged: number[] = new Array<number>(theirLines.length).fill(-1);
+  // Provenance: the `base` line each substitution was justified by, or -1 for "emitted
+  // verbatim from theirs". The invariant re-check below re-derives the substitution from it.
+  const baseOfMerged: number[] = new Array<number>(theirLines.length).fill(-1);
   const usedOurLines = new Set<number>();
   for (let theirIdx = 0; theirIdx < theirLines.length; theirIdx++) {
     const baseIdx = baseIndexOfTheirs.get(theirIdx);
-    const ourIdx = baseIdx === undefined ? undefined : ourIndexOfBase.get(baseIdx);
+    if (baseIdx === undefined || theirLines[theirIdx] !== baseLines[baseIdx]) continue;
+    const ourIdx = ourIndexOfBase.get(baseIdx);
     if (ourIdx === undefined || usedOurLines.has(ourIdx)) continue;
     merged[theirIdx] = ourLines[ourIdx];
-    sourceOfMerged[theirIdx] = ourIdx;
+    baseOfMerged[theirIdx] = baseIdx;
     usedOurLines.add(ourIdx);
   }
 
   // Pass 2 — moved lines. An LCS is monotonic, so a block the user dragged elsewhere in the
-  // Visual editor falls out of the alignment and would be re-emitted in its escaped form.
-  // Any still-unassigned `theirs` line that is normalization-equal to a source line nobody
-  // has claimed yet is the same content in a new place, so reuse the original bytes.
-  const unusedOurLinesByNorm = new Map<string, number[]>();
-  for (let ourIdx = 0; ourIdx < ourLines.length; ourIdx++) {
-    if (usedOurLines.has(ourIdx)) continue;
-    const bucket = unusedOurLinesByNorm.get(normOurs[ourIdx]);
-    if (bucket) bucket.push(ourIdx); else unusedOurLinesByNorm.set(normOurs[ourIdx], [ourIdx]);
+  // Visual editor falls out of the alignment and would be re-emitted in its escaped form. A
+  // still-unassigned `theirs` line that is byte-identical to a baseline line nobody has
+  // claimed is the same untouched content in a new place, so reuse the original bytes. The
+  // match is on baseline bytes, not on the normalized form: a line the user moved AND changed
+  // (`\*emphasis\*` deleted and retyped as `*emphasis*` elsewhere) is not byte-identical to
+  // any baseline line and so keeps the editor's spelling.
+  const unclaimedBaseByText = new Map<string, number[]>();
+  for (let baseIdx = 0; baseIdx < baseLines.length; baseIdx++) {
+    const ourIdx = ourIndexOfBase.get(baseIdx);
+    if (ourIdx === undefined || usedOurLines.has(ourIdx)) continue;
+    const bucket = unclaimedBaseByText.get(baseLines[baseIdx]);
+    if (bucket) bucket.push(baseIdx); else unclaimedBaseByText.set(baseLines[baseIdx], [baseIdx]);
   }
   let preserved = 0;
   for (let theirIdx = 0; theirIdx < theirLines.length; theirIdx++) {
     if (merged[theirIdx] === undefined) {
-      const bucket = unusedOurLinesByNorm.get(normTheirs[theirIdx]);
-      const ourIdx = bucket?.shift();
+      const bucket = unclaimedBaseByText.get(theirLines[theirIdx]);
+      let ourIdx: number | undefined;
+      let baseIdx: number | undefined;
+      while (bucket?.length) {
+        const candidateBase = bucket.shift();
+        const candidate = ourIndexOfBase.get(candidateBase);
+        if (candidate !== undefined && !usedOurLines.has(candidate)) {
+          ourIdx = candidate;
+          baseIdx = candidateBase;
+          break;
+        }
+      }
       // Genuinely new or genuinely changed: emit exactly what the editor produced.
       merged[theirIdx] = ourIdx === undefined ? theirLines[theirIdx] : ourLines[ourIdx];
-      if (ourIdx !== undefined) sourceOfMerged[theirIdx] = ourIdx;
+      if (ourIdx !== undefined) {
+        baseOfMerged[theirIdx] = baseIdx;
+        usedOurLines.add(ourIdx);
+      }
     }
     if (merged[theirIdx] !== theirLines[theirIdx]) preserved++;
   }
@@ -280,15 +322,22 @@ export function mergeVisualEdit(
     return null;
   }
   for (let i = 0; i < merged.length; i++) {
-    // A line emitted verbatim from `theirs` satisfies the invariant by construction, and a
-    // line taken from the pristine source already had its normalized form computed into
-    // normOurs, so the check is a lookup rather than a second normalization pass over the
-    // whole document on every keystroke. What it verifies is unchanged: that the line this
-    // merge chose really does say the same thing as the line the user is looking at — i.e.
-    // that the alignment chain (theirs -> base -> ours) picked the right source line.
-    const ourIdx = sourceOfMerged[i];
-    if (ourIdx === -1) continue;
-    if (normOurs[ourIdx] !== normTheirs[i]) {
+    const baseIdx = baseOfMerged[i];
+    if (baseIdx === -1) {
+      // Nothing was substituted here, so the editor's line must have survived untouched.
+      if (merged[i] !== theirLines[i]) {
+        stats.fallbackReason = 'invariant-violated';
+        return null;
+      }
+      continue;
+    }
+    // Re-derive the substitution from `base` instead of re-asserting a normalized comparison:
+    // the user's line must be byte-identical to the baseline line that justified the
+    // substitution, and the emitted line must be exactly the pristine line that baseline was
+    // produced from. A normalized comparison here would accept the very confusions the
+    // SUBSTITUTION RULE exists to reject, which is why it is not used.
+    const ourIdx = ourIndexOfBase.get(baseIdx);
+    if (theirLines[i] !== baseLines[baseIdx] || ourIdx === undefined || merged[i] !== ourLines[ourIdx]) {
       stats.fallbackReason = 'invariant-violated';
       return null;
     }

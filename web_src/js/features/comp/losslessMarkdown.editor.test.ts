@@ -407,6 +407,56 @@ describe('Visual edits are merged back onto the pristine source', () => {
     });
   });
 
+  // The merge aligns lines on a permissive normalized form, so an edit that consists only of
+  // adding or removing markdown syntax normalizes to the same string as the pristine line.
+  // Substituting the pristine bytes there would silently revert the user; these pin that it
+  // does not happen with the real editor and the real serializer.
+  describe('edits that only add or remove markdown syntax are not reverted', () => {
+    test('applying italic in Visual mode survives the merge', async () => {
+      const article = 'Intro_line here.\n\nMake emphasis italic now.\n\nOutro with [a ref][1].\n\n[1]: https://example.com/x\n';
+      const {editor} = createEditor(article);
+      expect(editor.getMarkdown()).toBe(article);
+
+      const view = wysiwygView(editor);
+      let hit: {from: number, to: number} | null = null;
+      view.state.doc.descendants((node: any, pos: number) => {
+        if (hit) return false;
+        if (node.isText && typeof node.text === 'string') {
+          const at = node.text.indexOf('emphasis');
+          if (at >= 0) hit = {from: pos + at, to: pos + at + 'emphasis'.length};
+        }
+        return !hit;
+      });
+      if (!hit) throw new Error('text not found in the WYSIWYG document');
+      const selectionCtor: any = view.state.selection.constructor;
+      view.dispatch(view.state.tr.setSelection(selectionCtor.create(view.state.doc, hit.from, hit.to)));
+      editor.exec('italic');
+      await flush();
+
+      const output: string = editor.getMarkdown();
+      // The user's emphasis is kept...
+      expect(output).toContain('Make *emphasis* italic now.');
+      // ...and the rest of the article is still pristine.
+      expect(output).toContain('Outro with [a ref][1].');
+      expect(output).toContain('[1]: https://example.com/x');
+    });
+
+    // The serializer drops the escapes from `\[..\]` (but keeps them on `\*..\*`), so for
+    // these lines the baseline differs from the source in a way that changes rendering. They
+    // must still come back byte-for-byte when the user edits somewhere else.
+    test('escaped punctuation the serializer rewrites survives an unrelated edit', async () => {
+      const article = 'Intro_line here.\n\n\\[not a link\\]\n\nA \\*literal\\* word.\n\nOutro [a ref][1].\n\n[1]: https://example.com/x\n';
+      const {editor} = createEditor(article);
+      expect(editor.getMarkdown()).toBe(article);
+      editInVisual(editor, 'Intro_line here.', 'Intro_line here, edited.');
+      await flush();
+      const output: string = editor.getMarkdown();
+      expect(output).toContain('\\[not a link\\]');
+      expect(output).toContain('A \\*literal\\* word.');
+      expect(output).toContain('Outro [a ref][1].');
+    });
+  });
+
   test('a whole-document rewrite falls back to the serialization', async () => {
     const {editor, textarea} = createEditor(SAMPLE);
     const view = wysiwygView(editor);
