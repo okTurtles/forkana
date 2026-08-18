@@ -1,9 +1,23 @@
 <script setup lang="ts">
 /* BubbleNode.vue
    This component is responsible for rendering ONE bubble (circle + labels).
-   It does NOT know about the graph; it only gets coordinates, radius, and a
-   zoom factor (k). When k or size changes, it re-evaluates what text fits.
-   This keeps label logic independent from layout and D3. */
+   It does NOT know about the graph; it only gets coordinates, radius, a zoom
+   factor (k) and whether it is the EXPANDED bubble (hovered/opened). When any
+   of those change it re-evaluates what text fits. This keeps label logic
+   independent from layout and D3.
+
+   TWO RENDERINGS
+   --------------
+   * RESTING — one of the five ladder sizes (22/34/58/90/126, see
+     bubble-size.ts). What it may say is decided by its rung and measured
+     against the arc, so a line is dropped rather than drawn outside the
+     circle. 22 and 34 say nothing at all: there is no legible type at that
+     size, which is exactly why hover exists.
+   * EXPANDED — 202px, the whole article card: count, excerpt, last-updated,
+     and (once the bubble has been CLICKED, `active`) its two actions. This is
+     laid out with ordinary CSS inside the <foreignObject> rather than through
+     the fit model: at 202px everything the card carries has room, and the two
+     buttons need to be real, focusable, clickable elements. */
 
 import { computed, watch, reactive } from "vue";
 import { formatDateYMD } from '../../utils/time.ts';
@@ -15,7 +29,7 @@ import type { BubbleLabelDetail } from './bubble-size.ts';
 
 /* === FONT SIZING === */
 const FONT_SIZE_COUNT_MIN = 10;      // Minimum font size for contributor count
-const FONT_SCALE_MIN = 0.62;         // Type may shrink to this to honour the tier's detail
+const FONT_SCALE_MIN = 0.5;          // Type may shrink to this to keep a line
 const FONT_SIZE_FLOOR = 8;           // ...but never below this, in screen px: it stops being legible
 const FONT_SIZE_COUNT_MAX = 34;      // Maximum font size for contributor count
 const FONT_SIZE_COUNT_SCALE = 0.95;  // Scale factor: count font size = on-screen radius * scale
@@ -52,36 +66,42 @@ const props = defineProps<{
   k: number;                      // current zoom scale (world→screen)
   contributors: number;           // primary number (always shown)
   updatedAt?: string;             // secondary line if visible
-  /* What this bubble's SIZE TIER is meant to say (bubble-size.ts). A floor,
-     not a ceiling: a bubble drawn large enough shows more than its tier asks
-     for, and one drawn small shrinks its type to honour it. */
+  description?: string;           // article excerpt, expanded state only
+  /* What this bubble's RUNG is meant to say (bubble-size.ts). A CEILING: a
+     bubble never says more than its rung asks for, and says less (or shrinks
+     its type) rather than spill a line outside the circle. */
   detail?: BubbleLabelDetail;
-  isActive?: boolean;
+  /* True for the hovered/focused/opened bubble: 202px, whole card. */
+  expanded?: boolean;
+  /* True once the expanded bubble has been CLICKED: adds the two actions. */
+  active?: boolean;
+  isActive?: boolean;             // selected article (persisted selection)
   isCompareMode?: boolean;        // whether compare mode is active
   compareState?: 'none' | 'first' | 'second';  // compare selection state
 }>();
 
-/* Emits so the parent can wire up interactions without D3 binding. Opening the
-   article is no longer a per-bubble affordance: clicking a bubble opens the
-   detail view (ArticleDetailView.vue), and "Read full article" lives there. */
+/* Emits so the parent can wire up interactions without D3 binding. The parent
+   owns the hover/active state because growing one bubble re-runs the whole
+   layout — see FishboneGraph.setHovered(). */
 const emit = defineEmits<{
   (e: "click", id: string, ev: MouseEvent): void;
+  (e: "hover", id: string, on: boolean, pointerType: string): void;
+  (e: "read", id: string): void;
+  (e: "history", id: string): void;
 }>();
 
 /* Label fit model in *screen pixels* so it looks consistent across zoom.
    We inverse-scale the label group by 1/k. */
 const fit = reactive({
+  showCount: false,
   showLabel: false,
   showUpdated: false,
   showCombined: false,  // True if enough space for count + label on same line
-  // vertical offset to keep the whole label block visually centered
-  shiftPx: 0,
   // font sizes in px (on screen)
   fsCount: FONT_SIZE_LABEL,
   fsLabel: FONT_SIZE_LABEL,
   fsSmall: FONT_SIZE_SMALL,
   fsCombined: FONT_SIZE_COMBINED,
-  stackPx: 0,
 });
 
 /* Label text: simple helper function for pluralization (not computed to avoid unnecessary reactivity) */
@@ -136,57 +156,87 @@ function recomputeFit() {
         updLine2.length * fsSmall * CHAR_WIDTH_RATIO_SMALL);
       h += (level >= 1 ? LABEL_GAP_SECONDARY : LABEL_GAP_PRIMARY) + (2 * fsSmall + LABEL_GAP_UPDATED_INNER);
     }
-    return {w, h, fsCount, fsLabel, fsSmall, fsCombined, smallest: level >= 2 ? fsSmall : (level >= 1 && !combined ? fsLabel : fsCount)};
+    return {w, h, fsCount, fsLabel, fsSmall, fsCombined,
+      smallest: level >= 2 ? fsSmall : (level >= 1 && !combined ? fsLabel : fsCount)};
   };
 
-  /* The tier's floor, capped by what there is anything to show at all. */
-  const detail = props.detail ?? 'count';
-  const floor = Math.min(detail === 'full' ? 2 : detail === 'label' ? 1 : 0, hasUpd ? 2 : 1);
+  /* The rung's CEILING, capped by what there is anything to show at all.
+     'none' is level -1: the 22px and 34px rungs carry no text. */
+  const detail = props.detail ?? 'none';
+  const ceiling = Math.min(
+    detail === 'full' ? 2 : detail === 'label' ? 1 : detail === 'count' ? 0 : -1,
+    hasUpd ? 2 : 1,
+  );
 
-  /* Best rendering: the most detailed level that fits at full size, never less
-     than the tier floor. To honour the floor the type is allowed to shrink,
-     down to FONT_SCALE_MIN and never past FONT_SIZE_FLOOR — if even that will
-     not fit, detail is dropped rather than spilled outside the circle. */
-  let chosen = measure(0, 1, false);
-  let level = 0, combined = false;
-  for (let lv = hasUpd ? 2 : 1; lv >= 0; lv--) {
-    const asCombined = lv >= 1 ? measure(lv, 1, true) : null;
-    const asStacked = measure(lv, 1, false);
-    if (asCombined && fitsInCircle(asCombined.w, asCombined.h)) { chosen = asCombined; level = lv; combined = true; break; }
-    if (fitsInCircle(asStacked.w, asStacked.h)) { chosen = asStacked; level = lv; combined = false; break; }
-  }
-  if (level < floor) {
+  /* The most detailed rendering the rung allows THAT FITS. Type may shrink
+     (down to FONT_SCALE_MIN, never past FONT_SIZE_FLOOR) to keep a level; if
+     even the count will not fit at its smallest, the bubble shows nothing
+     rather than spill outside the arc. Both directions matter: at 58px a
+     three-digit count has to shrink, and at 22px nothing is shown at all. */
+  let chosen: ReturnType<typeof measure> | null = null;
+  let level = -1, combined = false;
+  outer:
+  for (let lv = ceiling; lv >= 0; lv--) {
     for (let s = 1; s >= FONT_SCALE_MIN - 1e-9; s -= 0.02) {
-      const cand = measure(floor, s, false);
-      if (cand.smallest < FONT_SIZE_FLOOR) break;
-      if (fitsInCircle(cand.w, cand.h)) { chosen = cand; level = floor; combined = false; break; }
+      const asCombined = lv >= 1 ? measure(lv, s, true) : null;
+      const asStacked = measure(lv, s, false);
+      if (asCombined && asCombined.smallest >= FONT_SIZE_FLOOR && fitsInCircle(asCombined.w, asCombined.h)) {
+        chosen = asCombined; level = lv; combined = true; break outer;
+      }
+      if (asStacked.smallest >= FONT_SIZE_FLOOR && fitsInCircle(asStacked.w, asStacked.h)) {
+        chosen = asStacked; level = lv; combined = false; break outer;
+      }
     }
   }
 
+  fit.showCount = level >= 0;
   fit.showCombined = level >= 1 && combined;
   fit.showLabel = level >= 1 && !combined;
   fit.showUpdated = level >= 2;
-  fit.fsCount = chosen.fsCount;
-  fit.fsLabel = chosen.fsLabel;
-  fit.fsSmall = chosen.fsSmall;
-  fit.fsCombined = chosen.fsCombined;
-  fit.stackPx = chosen.h;
-  fit.shiftPx = 0;
+  fit.fsCount = chosen?.fsCount ?? FONT_SIZE_COUNT_MIN;
+  fit.fsLabel = chosen?.fsLabel ?? FONT_SIZE_LABEL;
+  fit.fsSmall = chosen?.fsSmall ?? FONT_SIZE_SMALL;
+  fit.fsCombined = chosen?.fsCombined ?? FONT_SIZE_COMBINED;
 }
 
 /* Run once and whenever driving props change. */
-watch(() => [props.k, props.r, props.updatedAt, props.contributors, props.detail], recomputeFit, { immediate: true });
+watch(
+  () => [props.k, props.r, props.updatedAt, props.contributors, props.detail, props.expanded],
+  recomputeFit,
+  {immediate: true},
+);
 
 /* Convenience computed transform strings */
 const gTransform = computed(() => `translate(${props.x},${props.y})`);
+const countLabel = computed(() => `${props.contributors} ${getLabelText(props.contributors)}`);
 
-/* Pointer handlers relay events upward (so parent can focus). */
+/* Pointer handlers relay events upward (so the parent can grow this bubble and
+   reflow the graph around it). `pointerType` travels with the event because
+   touch has no hover: the parent turns the FIRST tap into a hover and the
+   second into a click. */
 function onClick(ev: MouseEvent) { emit("click", props.id, ev); }
-/* Keyboard navigation support */
+/* pointerdown is what tells a tap from a click: a `click` event carries no
+   pointerType, and on a touch device the enter/leave pair below may not fire
+   at all. */
+function onPointerDown(ev: PointerEvent) { emit("hover", props.id, true, ev.pointerType || 'mouse'); }
+function onPointerEnter(ev: PointerEvent) { emit("hover", props.id, true, ev.pointerType || 'mouse'); }
+function onPointerLeave(ev: PointerEvent) { emit("hover", props.id, false, ev.pointerType || 'mouse'); }
+/* Keyboard: focus behaves like hover, blur dismisses it.
+   focusIN/focusOUT rather than focus/blur — the bubbling pair. It is the one
+   that reaches this handler for a real (trusted) focus on an SVG <g>, and it
+   is also the right semantics once the bubble is open: moving focus onto one
+   of its two buttons is still "inside this bubble", and only leaving the group
+   entirely dismisses it. */
+function onFocusIn() { emit("hover", props.id, true, 'keyboard'); }
+function onFocusOut(ev: FocusEvent) {
+  const next = ev.relatedTarget as Node | null;
+  if (next && (ev.currentTarget as Element).contains(next)) return;   // still inside this bubble
+  emit("hover", props.id, false, 'keyboard');
+}
 function onKeyDown(ev: KeyboardEvent) {
   if (ev.key === 'Enter' || ev.key === ' ') {
     ev.preventDefault();
-    emit("click", props.id, ev as any);
+    emit("click", props.id, ev as unknown as MouseEvent);
   }
 }
 </script>
@@ -194,9 +244,11 @@ function onKeyDown(ev: KeyboardEvent) {
 <template>
   <!-- One node group at (x,y); we let the parent group receive the world transform -->
   <g
-    class="node cursor-pointer select-none" :transform="gTransform" role="button"
+    class="node cursor-pointer select-none" :class="{ 'is-expanded': expanded }" :transform="gTransform" role="button"
     :aria-label="`Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
     :aria-pressed="isActive ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
+    @pointerdown="onPointerDown" @pointerenter="onPointerEnter" @pointerleave="onPointerLeave"
+    @focusin="onFocusIn" @focusout="onFocusOut"
   >
     <!-- Bubble circle with soft gradient & subtle stroke/shadow -->
     <circle
@@ -205,7 +257,7 @@ function onKeyDown(ev: KeyboardEvent) {
         'compare-selected-first': props.compareState === 'first',
         'compare-selected-second': props.compareState === 'second'
       }" :r="r" fill="url(#bubbleGrad)"
-      :stroke="props.compareState === 'first' || props.compareState === 'second' ? 'var(--color-primary)' : isActive ? 'var(--color-primary)' : 'var(--bubble-stroke)'"
+      :stroke="props.compareState === 'first' || props.compareState === 'second' ? 'var(--color-primary)' : isActive || expanded ? 'var(--color-primary)' : 'var(--bubble-stroke)'"
       :stroke-width="props.compareState === 'first' || props.compareState === 'second' ? 3 : 1"
       :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : 'none'"
       filter="url(#softShadow)"
@@ -217,7 +269,25 @@ function onKeyDown(ev: KeyboardEvent) {
       :x="-r" :y="-r" :width="r * 2" :height="r * 2" :transform="`scale(${1 / k})`"
       style="overflow: visible; pointer-events: none;"
     >
-      <div xmlns="http://www.w3.org/1999/xhtml" class="html-label-wrapper">
+      <!-- EXPANDED (202px): the whole card, laid out by CSS. -->
+      <div
+        v-if="expanded" xmlns="http://www.w3.org/1999/xhtml"
+        class="html-label-wrapper expanded-wrapper" :class="{ 'is-active': active }"
+      >
+        <div class="combined expanded-count">{{ countLabel }}</div>
+        <div v-if="description" class="expanded-description">{{ description }}</div>
+        <template v-if="active">
+          <button class="expanded-read" type="button" @click.stop="emit('read', id)">Read full article</button>
+          <button class="expanded-history" type="button" @click.stop="emit('history', id)">View history</button>
+        </template>
+        <div v-if="updatedAt" class="expanded-updated">
+          <div>Last updated</div>
+          <div>{{ formattedDate }}</div>
+        </div>
+      </div>
+
+      <!-- RESTING: whatever this rung says, measured against the arc. -->
+      <div v-else xmlns="http://www.w3.org/1999/xhtml" class="html-label-wrapper">
         <!-- Combined layout: count and label on same line with larger font -->
         <div v-if="fit.showCombined" class="combined" :style="`font-size: ${fit.fsCombined}px;`">
           {{ contributors }} {{ getLabelText(contributors) }}
@@ -225,8 +295,7 @@ function onKeyDown(ev: KeyboardEvent) {
 
         <!-- Stacked layout: count and label on separate lines (fallback) -->
         <template v-else>
-          <!-- Count is ALWAYS visible and centered -->
-          <div class="count" :style="`font-size: ${fit.fsCount}px;`">
+          <div v-if="fit.showCount" class="count" :style="`font-size: ${fit.fsCount}px;`">
             {{ contributors }}
           </div>
 
@@ -269,6 +338,13 @@ function onKeyDown(ev: KeyboardEvent) {
 
 .node-circle:hover {
   cursor: pointer;
+}
+
+/* The expanded bubble paints over its neighbours' connectors, and its two
+   buttons have to be clickable even though the label layer is otherwise
+   inert. */
+.node.is-expanded {
+  cursor: default;
 }
 
 /* HTML Label Wrapper - efficient text rendering */
@@ -324,4 +400,88 @@ function onKeyDown(ev: KeyboardEvent) {
   pointer-events: none;
 }
 
+/* ── EXPANDED CARD (202px bubble) ────────────────────────────────────────
+   Everything lives inside the circle's INSCRIBED SQUARE (202 / sqrt(2) ≈
+   143px), so no line can reach the arc: the stack is 60% of the diameter
+   wide (121px) and its lines are short enough that the worst corner is
+   sqrt(60.5² + 72²) ≈ 94px from the centre, inside r = 101. The sizes below
+   are what keeps that true with the buttons present — the harness measures
+   every line's far corner against the radius (matrix.py labelOverflow). */
+.expanded-wrapper {
+  width: 60%;
+  margin: 0 auto;
+  gap: 6px;
+  /* The excerpt is a paragraph and MUST wrap; the resting rule above must not
+     leak into it. */
+  white-space: normal;
+}
+
+.expanded-wrapper .expanded-count {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.expanded-description {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--color-text-secondary);
+  /* Three lines when the card is only being read (hover), two once the two
+     actions are in it as well — the circle's height budget is fixed. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.expanded-wrapper.is-active .expanded-description {
+  -webkit-line-clamp: 2;
+}
+
+.expanded-read,
+.expanded-history {
+  /* The label layer is inert so the graph underneath keeps its own pointer
+     behaviour; the buttons opt back in. */
+  pointer-events: auto;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.expanded-read {
+  padding: 4px 10px;
+  border: 1px solid var(--color-secondary, #d1d5db);
+  border-radius: 8px;
+  background: var(--color-body, #fff);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text, #111827);
+}
+
+.expanded-read:hover {
+  background: var(--color-hover, #f9fafb);
+}
+
+/* A button that reads as bold text: no border, no background. */
+.expanded-history {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text, #111827);
+}
+
+.expanded-history:hover {
+  text-decoration: underline;
+}
+
+.expanded-updated {
+  font-size: 9px;
+  font-style: italic;
+  line-height: 1.3;
+  color: var(--color-text-light-2, #6b7280);
+  white-space: nowrap;
+}
 </style>

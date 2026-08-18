@@ -3,152 +3,128 @@
 
    WHY THIS EXISTS
    ---------------
-   Bubble radii used to be interpolated linearly between a min and a max radius,
-   normalised against the largest contributor count *in the current graph*:
+   Bubble size has been through three models (issue #284):
 
-       r = R_MIN + (R_MAX - R_MIN) * (contributors / maxContributorsInGraph)
+     1. A linear interpolation between a min and a max radius, normalised
+        against the largest contributor count in the graph. A lone article
+        normalised to 1.0 and was therefore drawn at the maximum radius.
+     2. ABSOLUTE tiers: a contributor count mapped to one of four fixed radii,
+        whatever the rest of the graph looked like. That fixed (1) but was a
+        misreading of the requirement — it made a graph of five similar
+        articles render as five identical bubbles, and a graph of five small
+        ones render as five specks.
+     3. This file: a FIXED LADDER of five on-screen diameters, chosen by the
+        bubble's contributor count RELATIVE to the biggest bubble in the same
+        graph. Size is a comparison inside one subject, not an absolute
+        measure of popularity.
 
-   That had two problems (see issue #284):
+   THE MODEL
+   ---------
+       ratio = contributors / maxContributorsInGraph
 
-     1. A subject with a single article always normalised to 1.0, so the lone
-        bubble was rendered at the maximum radius — disproportionately large for
-        what is, semantically, the *smallest* possible subject.
-     2. It did not scale: because the scale is relative to the current graph,
-        the same article changed size whenever a fork was added or removed, and
-        two subjects could not be compared visually at all.
+   and `ratio` picks a rung of BUBBLE_SIZE_LADDER (the last rung whose
+   `minRatio` it reaches). Consequences, all of them deliberate:
 
-   The replacement is a tiered system: a bubble is snapped to one of FOUR
-   predefined sizes chosen from an ABSOLUTE contributor threshold. Absolute
-   thresholds mean a bubble keeps its size when new forks appear, and the same
-   contributor count always looks the same across subjects.
+     * the bubble with the most contributors has ratio 1 and is ALWAYS 126px —
+       every graph has at least one 126px bubble;
+     * a subject with a single article is that bubble, so a lone article is
+       126px (it is no longer a special case anywhere in the code);
+     * two articles with similar counts (say 40 and 38) are both 126px;
+     * the wider the proportional gap, the smaller the lesser bubble — 4
+       contributors against 300 is ratio 0.013 and lands on the bottom rung.
 
-   SIZE SCALE
-   ----------
-   Radii sit on the 8px design grid used throughout the graph layout (LANE_PAD
-   8, BUBBLE_PAD 8, STEM 12/18, LABEL_PADDING 12, elbow 20-36):
+   Nothing outside this file hardcodes a bubble diameter or its label detail:
+   change the table below and the layout, the labels and the tests follow.
 
-       S  -> d  80px  r 40
-       M  -> d 128px  r 64
-       L  -> d 192px  r 96
-       XL -> d 288px  r 144
-
-   The ramp is deliberately steep — XL is 3.6x S across, and 1.5x L. An earlier
-   version of this table ran 56/72/88/104, only 1.9x end to end, and the result
-   read as one uniform blob: in Figma node-id=641-61415 the biggest bubble is
-   roughly 2.5x the diameter of a mid one and 4x a small one. The hierarchy is
-   the point of the tiers, so the steps have to be obvious.
-
-   Size also decides how much a bubble SAYS — see `labelDetail`. That is why
-   the two matter together and live in the same table.
-
-   THRESHOLDS
-   ----------
-   The bands are read off the same Figma frame, whose bubbles are 1, 23 (small,
-   count only), 67/111/119 (mid, count + "Contributors") and 180/309/335/538
-   (large, count + "Contributors" + "Last updated" + date). So the boundaries
-   sit between 23 and 67, and between 119 and 180; the lowest boundary keeps a
-   brand-new article visibly smaller than an established one.
-
-   CONSEQUENCE WORTH CONFIRMING WITH DESIGN: on these thresholds a typical
-   repository with 5-20 contributors lands in M and shows only its count. That
-   follows the Figma, where 23 contributors is already drawn as a small bubble,
-   but it does mean the "Contributors" line is reserved for genuinely large
-   articles. If real data should read differently, change ONLY the table below
-   — nothing else hardcodes a bubble size or its label detail. */
+   EXACT PIXELS
+   ------------
+   The ladder is in SCREEN pixels, and the graph renders at zoom 1 (see
+   FishboneGraph.resetView), so a 126px bubble measures 126px on screen. There
+   is no viewport attenuation and no zoom-to-fit scaling of the resting view:
+   they would make the measured diameter something other than the ladder. */
 
 /** How much text a bubble carries. Each step adds to the one before it:
+   'none'  = no text at all (the circle is a size cue only),
    'count' = the number only, 'label' = + "Contributor(s)",
    'full'  = + "Last updated" and the date. */
-export type BubbleLabelDetail = 'count' | 'label' | 'full';
+export type BubbleLabelDetail = 'none' | 'count' | 'label' | 'full';
 
-export type BubbleSizeTier = {
-  /** Design name of the tier, used in comments/tests and for debugging. */
-  name: 'S' | 'M' | 'L' | 'XL';
-  /** Inclusive lower bound on contributors for this tier (absolute, not relative). */
-  minContributors: number;
-  /** Bubble radius in world units (== CSS px at zoom level 1). */
-  radius: number;
-  /** The text this tier is meant to carry, whatever the current zoom is.
-     BubbleNode treats it as a FLOOR: it shrinks the type to honour it, and
-     shows more when a bubble happens to be drawn large enough. */
+export type BubbleRung = {
+  /** Design name of the rung, used in comments/tests and for debugging. */
+  name: 'XS' | 'S' | 'M' | 'L' | 'XL';
+  /** Inclusive lower bound on `contributors / maxContributorsInGraph`. */
+  minRatio: number;
+  /** On-screen diameter in px (== world units, because the graph is at zoom 1). */
+  diameter: number;
+  /** The text this rung carries. BubbleNode treats it as a CEILING and drops
+     detail (or shrinks the type) only if a line will not fit inside the arc.
+     The two bottom rungs are too small for legible type at any size: 22px and
+     34px circles carry nothing, and hovering is how you read them. */
   labelDetail: BubbleLabelDetail;
 };
 
-/* The four predefined bubble sizes, ordered smallest → largest.
-   A bubble takes the LAST tier whose `minContributors` it reaches, so the
-   thresholds read as: 1-2 → S, 3-5 → M, 6-14 → L, 15+ → XL.
-   The bands widen as they go up because contributor counts are long-tailed:
-   the low bands stay narrow to stay informative while the top band absorbs
-   the outliers. */
-export const BUBBLE_SIZE_TIERS: readonly BubbleSizeTier[] = [
-  {name: 'S', minContributors: 0, radius: 40, labelDetail: 'count'},    // solo / brand new
-  {name: 'M', minContributors: 3, radius: 64, labelDetail: 'count'},    // small collaboration
-  {name: 'L', minContributors: 24, radius: 96, labelDetail: 'label'},   // established article
-  {name: 'XL', minContributors: 150, radius: 144, labelDetail: 'full'}, // flagship article
+/* THE LADDER. Five diameters, five thresholds — the only thing anyone should
+   need to edit. Ordered smallest → largest; `bubbleRungFor` takes the LAST
+   rung whose `minRatio` the ratio reaches. */
+export const BUBBLE_SIZE_LADDER: readonly BubbleRung[] = [
+  {name: 'XS', minRatio: 0, diameter: 22, labelDetail: 'none'},
+  {name: 'S', minRatio: 0.07, diameter: 34, labelDetail: 'none'},
+  {name: 'M', minRatio: 0.2, diameter: 58, labelDetail: 'count'},
+  {name: 'L', minRatio: 0.45, diameter: 90, labelDetail: 'label'},
+  {name: 'XL', minRatio: 0.75, diameter: 126, labelDetail: 'full'},
 ] as const;
 
-/* A subject with exactly one article has nothing to compare against: the
-   tiered scale is meaningless there, so it is pinned to the smallest tier.
-   This is the direct fix for issue #284 (1). */
-export const SINGLE_ARTICLE_TIER_INDEX = 0;
+/* The hovered/opened bubble: one fixed size, ~1.6x the largest rung, big
+   enough to carry the article's whole card (count, excerpt, date, and — once
+   clicked — its two actions). The layout is re-run with this radius in place
+   of the hovered node's own, which is what pushes its neighbours aside. */
+export const BUBBLE_HOVER_DIAMETER = 202;
+export const BUBBLE_HOVER_RADIUS = BUBBLE_HOVER_DIAMETER / 2;
 
-/* On-screen diameter targets for a subject that has a single article.
-   These matter as much as the radius: the view-fitting code zooms a lone
-   bubble to a target size, so shrinking the radius alone would just be undone
-   by a larger zoom factor.
-
-   MIN is the legibility floor: a lone bubble is the whole view, so it should
-   comfortably carry its count, its label and its date. It is expressed on
-   SCREEN, not in world units, so it is unaffected by the tier radius above —
-   the view-fit zoom makes up the difference either way.
-   MAX/WIDTH_RATIO keep the bubble to roughly a fifth of the viewport
-   width instead of the previous 40% (was 220..480px, i.e. 440px on a 1100px
-   container — the "disproportionately large" bubble from issue #284). */
-export const SINGLE_ARTICLE_SCREEN_DIAMETER_MIN = 180;
-export const SINGLE_ARTICLE_SCREEN_DIAMETER_MAX = 240;
-export const SINGLE_ARTICLE_SCREEN_WIDTH_RATIO = 0.2;
-
-export type BubbleSizeOptions = {
-  /** True when the whole subject holds a single article (no forks at all). */
-  singleArticle?: boolean;
-  /** Uniform viewport attenuation (small screens / busy graphs). Defaults to 1. */
-  scale?: number;
-};
-
-/** Index into BUBBLE_SIZE_TIERS for a given contributor count.
-   Not exported: `bubbleTierFor` is the tier accessor callers should use. */
-function bubbleTierIndexFor(contributors: number, opts: BubbleSizeOptions = {}): number {
-  if (opts.singleArticle) return SINGLE_ARTICLE_TIER_INDEX;
-  const n = Number.isFinite(contributors) ? contributors : 0;
-  let index = 0;
-  for (let i = 0; i < BUBBLE_SIZE_TIERS.length; i++) {
-    if (n >= BUBBLE_SIZE_TIERS[i].minContributors) index = i;
+/** Largest contributor count in a graph — the denominator of every ratio.
+   Returns 0 for an empty graph, which `contributorRatio` reads as "no
+   comparison possible" and answers 1 (everything ties for biggest). */
+export function maxContributors(counts: Iterable<number>): number {
+  let max = 0;
+  for (const c of counts) {
+    const n = Number.isFinite(c) ? c : 0;
+    if (n > max) max = n;
   }
-  return index;
+  return max;
 }
 
-/** The tier record a given contributor count maps to. */
-export function bubbleTierFor(contributors: number, opts: BubbleSizeOptions = {}): BubbleSizeTier {
-  return BUBBLE_SIZE_TIERS[bubbleTierIndexFor(contributors, opts)];
+/** `contributors / maxInGraph`, clamped to 0..1 and defined at the edges:
+   a non-positive maximum (an empty graph, or one where every article reports
+   zero contributors) means every bubble ties for the biggest, so they all get
+   ratio 1 and therefore the top rung. */
+export function contributorRatio(contributors: number, maxInGraph: number): number {
+  const n = Number.isFinite(contributors) && contributors > 0 ? contributors : 0;
+  const m = Number.isFinite(maxInGraph) && maxInGraph > 0 ? maxInGraph : 0;
+  if (m <= 0) return 1;
+  return Math.min(1, n / m);
 }
 
-/** The text a bubble of this size is meant to carry. See BubbleLabelDetail. */
-export function bubbleLabelDetailFor(contributors: number, opts: BubbleSizeOptions = {}): BubbleLabelDetail {
-  return bubbleTierFor(contributors, opts).labelDetail;
+/** The rung a bubble sits on, given its own count and the graph's maximum. */
+export function bubbleRungFor(contributors: number, maxInGraph: number): BubbleRung {
+  const ratio = contributorRatio(contributors, maxInGraph);
+  let rung = BUBBLE_SIZE_LADDER[0];
+  for (const candidate of BUBBLE_SIZE_LADDER) {
+    if (ratio >= candidate.minRatio) rung = candidate;
+  }
+  return rung;
 }
 
-/** Bubble radius in world units, tier-snapped and viewport-attenuated. */
-export function bubbleRadiusFor(contributors: number, opts: BubbleSizeOptions = {}): number {
-  const requested = opts.scale;
-  const scale = typeof requested === 'number' && Number.isFinite(requested) && requested > 0 ? requested : 1;
-  return bubbleTierFor(contributors, opts).radius * scale;
+/** On-screen diameter in px — one of the five ladder values, nothing else. */
+export function bubbleDiameterFor(contributors: number, maxInGraph: number): number {
+  return bubbleRungFor(contributors, maxInGraph).diameter;
 }
 
-/** Target on-screen diameter for the lone bubble of a single-article subject. */
-export function singleArticleScreenDiameter(containerWidth: number): number {
-  const fromWidth = Math.floor((containerWidth || 0) * SINGLE_ARTICLE_SCREEN_WIDTH_RATIO);
-  return Math.max(
-    SINGLE_ARTICLE_SCREEN_DIAMETER_MIN,
-    Math.min(fromWidth, SINGLE_ARTICLE_SCREEN_DIAMETER_MAX),
-  );
+/** Bubble radius in world units (== screen px at zoom 1). */
+export function bubbleRadiusFor(contributors: number, maxInGraph: number): number {
+  return bubbleRungFor(contributors, maxInGraph).diameter / 2;
+}
+
+/** The text a bubble of this size carries. See BubbleLabelDetail. */
+export function bubbleLabelDetailFor(contributors: number, maxInGraph: number): BubbleLabelDetail {
+  return bubbleRungFor(contributors, maxInGraph).labelDetail;
 }

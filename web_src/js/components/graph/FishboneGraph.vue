@@ -1,13 +1,21 @@
 <script setup lang="ts">
 /* FishboneGraph.vue
    Interactive fork repository graph with fishbone layout.
-   
+
    Key features:
    - Transforms the <g> group (ref="worldRef") that Vue renders into
    - Sets `touch-action: none` on the <svg> for pinch zoom on touch devices
    - All interactions (pan/zoom/click/background reset) wired through d3-zoom
    - Responsive auto-tuning based on container size and graph complexity
-   - Accessibility support with ARIA labels and keyboard navigation */
+   - Accessibility support with ARIA labels and keyboard navigation
+
+   SIZES ARE ON-SCREEN PIXELS (#284). Every bubble is one of the five diameters
+   in ./bubble-size.ts, picked by its contributor count relative to the biggest
+   article in this graph, and the view renders at zoom 1 so those numbers are
+   what a ruler on the screen measures. Hovering (or focusing) a bubble grows
+   it to 202px and RE-RUNS THE LAYOUT around it, tweening every node from where
+   it is to where it now belongs; clicking adds that article's two actions to
+   the card inside it. See the HOVER / OPEN section. */
 
 import { onMounted, reactive, ref, onBeforeUnmount, nextTick, computed } from "vue";
 // @ts-ignore - d3-selection types may not be available in CI environment
@@ -23,9 +31,10 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
-import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
-import { bubbleLabelDetailFor, bubbleRadiusFor, singleArticleScreenDiameter } from "./bubble-size.ts";
+import {
+  BUBBLE_HOVER_RADIUS, bubbleLabelDetailFor, bubbleRadiusFor, maxContributors,
+} from "./bubble-size.ts";
 
 // Inline types replacing former seeds module
 type Side = -1 | 1;
@@ -43,9 +52,9 @@ type Node = {
   repoName?: string;
   repoSubject?: string;
   fullName?: string;
-  /* Repository description — the article's excerpt in the detail view. Already
-     part of the fork-graph payload (api.Repository.Description), so no
-     server-side change was needed for it. */
+  /* Repository description — the article's excerpt, shown inside the expanded
+     (202px) bubble. Already part of the fork-graph payload
+     (api.Repository.Description), so no server-side change was needed. */
   description?: string;
   isEmpty?: boolean;
 };
@@ -62,9 +71,13 @@ const LS_REPO_KEY = 'selectedArticleRepo';
    ─────────────────────────────────────────────────────────────────────────── */
 
 /* === BUBBLE SIZING ===
-   Bubble radii are NOT computed here: they are snapped to one of four
-   predefined tiers defined in ./bubble-size.ts (issue #284). That module is
-   the single place where sizes and their contributor thresholds live. */
+   Bubble radii are NOT computed here: every bubble takes one of the five
+   diameters on the ladder in ./bubble-size.ts (22/34/58/90/126), chosen by its
+   contributor count RELATIVE to the biggest article in this graph. That module
+   is the single place where the sizes and their thresholds live.
+
+   The ladder is in SCREEN pixels, which is why resetView() below renders at
+   zoom 1 instead of zooming to fit: a 126px bubble has to measure 126px. */
 
 /* === VERTICAL LAYOUT ===
    Generations are NOT a fixed distance apart. A constant LEVEL_GAP (240px) used
@@ -104,7 +117,14 @@ const ZOOM_MAX = 3.5;           // Maximum zoom level (350% scale)
 const PAN_SLACK_PX = 80;        // How far past "useful" the graph may be dragged, per axis
 const ZOOM_OUT_FIT_FRACTION = 0.5; // ...and it may not shrink below half of the zoom-to-fit scale
 
-/* === VIEW RESET PARAMETERS === */
+/* === VIEW RESET PARAMETERS ===
+   "Reset view" means: put the graph back at ZOOM 1, centred in the canvas box.
+   It used to mean "zoom to fit", which is incompatible with the ladder — the
+   sizes in ./bubble-size.ts are on-screen pixels, and a fit scale of 0.62
+   would draw the 126px bubble at 78px. A graph taller than the canvas is
+   pinned to the top (RESET_TOP_MARGIN) and panned instead of being shrunk;
+   the pan clamp keeps it reachable and stops it being flung away. */
+const RESET_SCALE = 1;          // The graph renders at 1:1 — see ./bubble-size.ts
 const RESET_TOP_MARGIN = 40;    // Minimum top margin when resetting the view
 /* NOTE: a MAX_REF_DROP constant used to cap how far a child could be pushed
    down (baseY + 130). It was applied AFTER collision resolution and therefore
@@ -115,8 +135,6 @@ const RESET_TOP_MARGIN = 40;    // Minimum top margin when resetting the view
 /* === RESPONSIVE BREAKPOINTS & FACTORS === */
 const WIDTH_BREAKPOINT_MIN = 480;    // Minimum container width for responsive calculations
 const WIDTH_BREAKPOINT_MAX = 1200;   // Maximum container width for responsive calculations
-const HEIGHT_BREAKPOINT_MIN = 640;   // Minimum container height for radius scaling
-const HEIGHT_BREAKPOINT_MAX = 1080;  // Maximum container height for radius scaling
 const COMPLEXITY_THRESHOLD = 10;     // Number of forks to reach full complexity factor
 const FANOUT_THRESHOLD = 6;          // Number of children to reach full fanout factor
 
@@ -143,21 +161,12 @@ const LANE_PAD_EXTRA = 12;      // Extra lane padding at maximum responsiveness
 const LANE_PAD_WIDTH_WEIGHT = 0.5;    // Weight of width factor in lane padding
 const LANE_PAD_COMPLEXITY_WEIGHT = 0.3;  // Weight of complexity factor in lane padding
 
-/* === RADIUS SCALING (for vertical fit without scrolling) === */
-const RADIUS_HEIGHT_MIN_FACTOR = 0.7;     // Minimum height-based radius multiplier
-const RADIUS_HEIGHT_MAX_FACTOR = 1.0;     // Maximum height-based radius multiplier
-// Calculate range from min to max for readability
-const RADIUS_HEIGHT_RANGE_FACTOR = RADIUS_HEIGHT_MAX_FACTOR - RADIUS_HEIGHT_MIN_FACTOR;
-const RADIUS_FORK_MAX_REDUCTION = 0.20;   // Maximum reduction from fork count (20%)
-const RADIUS_FORK_STEP = 0.02;            // Reduction per fork (2% per fork)
-const RADIUS_MIN_SCALE = 0.65;            // Minimum overall radius scale to avoid over-shrinking
-
-/* === VIEW FITTING (reset/focus zoom calculations) === */
-const FILL_FRACTION_MIN = 0.55;      // Minimum horizontal fill fraction for few forks
-const FILL_FRACTION_MAX = 0.90;      // Maximum horizontal fill fraction for many forks
-const VERTICAL_FILL_FRACTION = 0.86; // Vertical fill fraction of usable height
-/* Single-article on-screen sizing lives in ./bubble-size.ts
-   (singleArticleScreenDiameter) so radius and zoom targets stay in sync. */
+/* NOTE: a RADIUS_* block used to attenuate every radius by container height and
+   fork count, and a FILL_FRACTION_* block decided how much of the viewport the
+   zoom-to-fit should fill. Both are gone: bubble diameters are now exact
+   on-screen pixels from the ladder, so neither a radius multiplier nor a fit
+   scale may touch them. The zoom-to-fit scale is still COMPUTED (fitScale) —
+   it is the floor for zooming out — but never applied to the resting view. */
 
 /* === SVG LAYOUT === */
 const MIN_SVG_HEIGHT = 320;          // Never collapse the canvas below this
@@ -178,6 +187,17 @@ const API_LIMIT = 50;                // Maximum number of forks to fetch per req
 /* === ANIMATION DURATIONS === */
 const VIEW_TRANSITION_DURATION = 420;  // Duration of zoom/pan animations in milliseconds
 const SCREEN_READER_ANNOUNCEMENT_DURATION = 1000;  // How long to show SR announcements
+/* Hover reflow: the layout is re-run with the hovered node at 101px radius and
+   every node TWEENED from where it is to where it lands. One tween, no physics
+   — see animateTo(). 220ms is the middle of the 200-250ms band the design
+   asks for; the whole move is interruptible (a new hover starts from the
+   positions currently on screen, so there is never a jump). */
+const HOVER_REFLOW_MS = 220;
+/* Pointer debounce. Sweeping the mouse across a row of bubbles would otherwise
+   re-run the layout on every pointerenter; instead the LAST bubble the pointer
+   settled on wins, one reflow. Also swallows the enter/leave pair when the
+   pointer crosses a gap between two bubbles. */
+const HOVER_DEBOUNCE_MS = 60;
 
 /* ──────────────────────────────────────────────────────────────────────────────
    STATE
@@ -196,19 +216,30 @@ const state = reactive({
   pathPad: PATH_PAD_DEFAULT,
 
   auto: true,                             // responsive auto-tuning toggle
-  /* True when the subject holds a single article (no forks): its bubble is
-     pinned to the smallest tier instead of being sized by contributors. */
-  isSingleArticle: false,
-  /* Additional global attenuation to reduce bubble sizes for small screens / many forks */
-  radiusScale: 1,
+  /* Largest contributor count in the graph — the denominator every bubble's
+     size ratio is taken against (./bubble-size.ts). Recomputed with the
+     layout, so adding or removing a fork can resize the whole graph, which is
+     the point of a relative scale. */
+  maxContributors: 0,
 });
 
-/* Derived arrays used for Vue rendering (instead of D3 joins) */
+/* Derived arrays used for Vue rendering (instead of D3 joins).
+
+   EVERY rendered coordinate comes from ONE snapshot — a Placement per node —
+   rather than from the Node objects themselves. The layout engine still writes
+   x/y onto the nodes, but that is the TARGET; what is on screen may be a tween
+   frame between the resting layout and the hovered one. Deriving the ribs,
+   trunks and joints from the same snapshot as the bubbles is what keeps a
+   connector attached to its bubble mid-flight. */
+type Placement = { x: number; y: number; r: number };
+type Placements = Map<NodeId, Placement>;
+type FrameNode = { node: Node; x: number; y: number; r: number };
+
 type EdgeGeom = {
-  source: Node; target: Node; side: Side;
+  source: FrameNode; target: FrameNode; side: Side;
   ex: number; ey: number; hx: number; hy: number; cx: number; cy: number; sx1: number; sy1: number; sx2: number; sy2: number;
 };
-const nodesList = ref<Node[]>([]);
+const nodesList = ref<FrameNode[]>([]);
 const edgesList = ref<EdgeGeom[]>([]);
 const trunksList = ref<{ x: number; y1: number; y2: number; id: string }[]>([]);
 const jointDots = ref<{ x: number; y: number; id: string; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
@@ -510,7 +541,6 @@ async function fetchForkGraphAndSet() {
       await nextTick();
       resetView();
       restoreSelectionAfterGraphLoad();
-      maybeOpenSoloDetail();
       announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
     } else {
       announceToScreenReader('No fork data available');
@@ -586,21 +616,23 @@ function buildGraphFromApi(root: any): Graph {
    HELPERS (math + graph)
    ─────────────────────────────────────────────────────────────────────────── */
 
-/* Radius for a bubble with `n` contributors.
-   Sizes come from the four-tier table in ./bubble-size.ts (absolute
-   contributor thresholds, so a bubble does not resize when siblings appear).
-   `radiusScale` is the uniform viewport attenuation applied on top. */
-function rFor(n: number) {
-  return bubbleRadiusFor(n, {
-    singleArticle: state.isSingleArticle,
-    scale: state.radiusScale || 1,
-  });
+/* Radius of a bubble, in world units (== screen px, the view is at zoom 1).
+   One of the five ladder values from ./bubble-size.ts, chosen by this node's
+   contributors against the graph maximum — EXCEPT for the one node the layout
+   is currently being run "expanded" for, which is 101 (202px across). That
+   override is the entire hover mechanism: the same layout engine, one radius
+   swapped, and every separation rule downstream reads it. */
+let layoutExpandedId: NodeId | null = null;
+
+function rFor(n: Node) {
+  if (layoutExpandedId !== null && n.id === layoutExpandedId) return BUBBLE_HOVER_RADIUS;
+  return bubbleRadiusFor(n.contributors, state.maxContributors);
 }
 
-/* What a bubble of this size tier is meant to say. Paired with rFor(): the
-   same tier decides both, so size and content can never disagree. */
+/* What a bubble of this size is meant to say. Paired with rFor(): the same
+   rung decides both, so size and content can never disagree. */
 function detailFor(n: number) {
-  return bubbleLabelDetailFor(n, { singleArticle: state.isSingleArticle });
+  return bubbleLabelDetailFor(n, state.maxContributors);
 }
 
 function getRoot(g: Graph) { return Object.values(g).find(n => n.parentId === null) ?? null; }
@@ -633,7 +665,6 @@ function applyResponsiveDials() {
   const forks = forkCount(state.graph);
   const maxKids = parentMaxChildren(state.graph);
   const w = containerWidth;
-  const ch = containerHeight || DEFAULT_CONTAINER_HEIGHT;
 
   // Normalize width to 0..1 range based on breakpoints
   const widthFactor = Math.min(1, Math.max(0, (w - WIDTH_BREAKPOINT_MIN) / (WIDTH_BREAKPOINT_MAX - WIDTH_BREAKPOINT_MIN)));
@@ -656,14 +687,9 @@ function applyResponsiveDials() {
   // Calculate lane padding (bubble clearance)
   state.lanePad = Math.round(LANE_PAD_BASE + LANE_PAD_EXTRA * Math.max(widthFactor * LANE_PAD_WIDTH_WEIGHT, complexity * LANE_PAD_COMPLEXITY_WEIGHT));
 
-  // Compute a gentle attenuation for bubble sizes to improve vertical fit without scrolling
-  // Height factor: smaller screens → smaller bubbles
-  const heightNorm = Math.min(1, Math.max(0, (ch - HEIGHT_BREAKPOINT_MIN) / (HEIGHT_BREAKPOINT_MAX - HEIGHT_BREAKPOINT_MIN)));
-  const heightFactor = RADIUS_HEIGHT_MIN_FACTOR + RADIUS_HEIGHT_RANGE_FACTOR * heightNorm;
-  // Fork factor: more forks → smaller bubbles
-  const forksFactor = 1 - Math.min(RADIUS_FORK_MAX_REDUCTION, forks * RADIUS_FORK_STEP);
-  // Combine and clamp to avoid over-shrinking
-  state.radiusScale = Math.max(RADIUS_MIN_SCALE, Math.min(1, heightFactor * forksFactor));
+  /* NOTE: bubble radii used to be attenuated here by container height and fork
+     count. They are exact on-screen pixels now (./bubble-size.ts), so nothing
+     may scale them — a tall graph is panned, not shrunk. */
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────-
@@ -751,7 +777,7 @@ function layoutSubtree(g: Graph, n: Node, ownSide: Side = FIRST_CHILD_SIDE, seen
   if (seen.has(n.id)) return { minX: n.x ?? 0, maxX: n.x ?? 0, minY: n.y ?? 0, maxY: n.y ?? 0 };
   seen.add(n.id);
 
-  const nx = n.x ?? 0, ny = n.y ?? 0, nr = rFor(n.contributors);
+  const nx = n.x ?? 0, ny = n.y ?? 0, nr = rFor(n);
   let box: Bbox = { minX: nx - nr, maxX: nx + nr, minY: ny - nr, maxY: ny + nr };
 
   const kids = n.children.map((id) => g[id]).filter((c): c is Node => c !== undefined);
@@ -775,7 +801,7 @@ function layoutSubtree(g: Graph, n: Node, ownSide: Side = FIRST_CHILD_SIDE, seen
   let lastJoint = ny + nr + STEM_LEN_PARENT;
 
   for (const c of kids) {
-    const cr = rFor(c.contributors);
+    const cr = rFor(c);
     const cx = nx + side * (cr + minOffset);
 
     let cy = Math.max(
@@ -814,61 +840,166 @@ function layoutSubtree(g: Graph, n: Node, ownSide: Side = FIRST_CHILD_SIDE, seen
   return unionBbox(box, { minX: nx, maxX: nx, minY: ny + nr, maxY: lastJoint });
 }
 
-function layoutFishbone(g: Graph) {
-  const nodeCount = Object.keys(g).length;
-  if (nodeCount === 0) {
-    nodesList.value = [];
-    edgesList.value = [];
-    trunksList.value = [];
-    jointDots.value = [];
-    return;
-  }
+/* ─────────────────────────────────────────────────────────────────────────────-
+   LAYOUT → PLACEMENTS → FRAME → TWEEN
 
+   computeLayout()  runs the engine above for a given "expanded" node and
+                    returns one Placement per node. Pure output: nothing is
+                    rendered from it directly.
+   setFrame()       derives the ribs, trunks, joints and bubble list from ONE
+                    set of placements. Whatever it is handed is what is drawn,
+                    so a half-finished tween is still a consistent picture.
+   animateTo()      interpolates between the placements on screen and a new
+                    set. This is the hover reflow: no simulation, no forces —
+                    one lerp per node over HOVER_REFLOW_MS.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/** The placements currently ON SCREEN (mid-tween while one is running). */
+let framePlacements: Placements = new Map();
+/** The resting layout — the one with nothing expanded. Also the anchor the
+   hovered layout is re-registered against, see computeLayout(). */
+let restingPlacements: Placements = new Map();
+let reflowRaf: number | null = null;
+
+/** Run the layout engine with `expandedId` (if any) blown up to the hover
+   radius, and return where every node lands.
+
+   The whole result is then TRANSLATED so the expanded node's centre is exactly
+   where it sits in the resting layout. Without that the hovered bubble moves
+   out from under the pointer as it grows (its own centre is derived from its
+   radius), the pointer leaves it, the layout collapses, the pointer is back
+   over it — a loop. Anchoring it makes the interaction what it says it is:
+   THIS bubble grows in place, the others are pushed aside. A rigid translation
+   cannot affect any separation or crossing property. */
+function computeLayout(g: Graph, expandedId: NodeId | null): Placements {
+  layoutExpandedId = expandedId;
   computeDepths(g);
-  const root: any = getRoot(g);
-  // Note: root is guaranteed to exist here since we checked nodeCount above
+  const root = getRoot(g);
+  const out: Placements = new Map();
+  if (!root) { layoutExpandedId = null; return out; }
   root.x = 0; root.y = 0;
   layoutSubtree(g, root);
 
-  // Prepare arrays for Vue rendering
-  nodesList.value = Object.values(g) as any;
+  let dx = 0, dy = 0;
+  if (expandedId !== null) {
+    const anchor = restingPlacements.get(expandedId);
+    const moved = g[expandedId];
+    if (anchor && moved) { dx = anchor.x - (moved.x ?? 0); dy = anchor.y - (moved.y ?? 0); }
+  }
+  for (const n of Object.values(g)) {
+    out.set(n.id, {x: (n.x ?? 0) + dx, y: (n.y ?? 0) + dy, r: rFor(n)});
+  }
+  layoutExpandedId = null;
+  return out;
+}
 
-  const links = nodesList.value
-    .filter(n => n.parentId && g[n.parentId])
-    .map(n => ({ source: (g as any)[n.parentId!], target: n }));
+/** Derive everything Vue renders from one set of placements. */
+function setFrame(g: Graph, placements: Placements) {
+  framePlacements = placements;
+  const at = (id: NodeId): Placement => placements.get(id) ?? {x: 0, y: 0, r: 0};
+
+  const frame: FrameNode[] = [];
+  for (const n of Object.values(g)) {
+    const p = at(n.id);
+    frame.push({node: n, x: p.x, y: p.y, r: p.r});
+  }
+  /* DOM ORDER IS STABLE, deliberately. An earlier version drew the expanded
+     bubble last so it could not be painted over — but SVG has no z-index, so
+     "last" means MOVING the element in the DOM, and moving a focused element
+     makes Chrome drop the focus. With focus behaving like hover that turned
+     into a loop: focus grows the bubble, the move blurs it, the blur collapses
+     it. Nothing needs the reordering anyway: the layout guarantees no bubble
+     overlaps another and no connector passes through one (matrix.py measures
+     both at zero), so there is nothing that could paint over the expanded
+     bubble in the first place. */
+  nodesList.value = frame;
+
+  const byId = new Map(frame.map((f) => [f.node.id, f]));
   const R = state.elbowR;
-  const edges = links.map(l => {
-    const side: Side = (l.target.x! >= l.source.x!) ? +1 : -1;
-    const ex = l.source.x!, ey = l.target.y! - R, hx = ex + side * R, hy = l.target.y!;
-    const rt = rFor(l.target.contributors), cx = l.target.x! - side * (rt + STEM_LEN_CHILD), cy = hy;
-    const sx1 = l.target.x! - side * rt, sy1 = hy, sx2 = cx, sy2 = cy;
-    return { source: l.source, target: l.target, side, ex, ey, hx, hy, cx, cy, sx1, sy1, sx2, sy2 };
-  });
+  const edges: EdgeGeom[] = [];
+  for (const target of frame) {
+    const pid = target.node.parentId;
+    const source = pid ? byId.get(pid) : undefined;
+    if (!source) continue;
+    const side: Side = (target.x >= source.x) ? +1 : -1;
+    const ex = source.x, ey = target.y - R, hx = ex + side * R, hy = target.y;
+    const cx = target.x - side * (target.r + STEM_LEN_CHILD), cy = hy;
+    const sx1 = target.x - side * target.r, sy1 = hy, sx2 = cx, sy2 = cy;
+    edges.push({source, target, side, ex, ey, hx, hy, cx, cy, sx1, sy1, sx2, sy2});
+  }
   edgesList.value = edges;
 
-  trunksList.value = nodesList.value.filter(n => n.children.length > 0).map(n => {
-    const rs = rFor(n.contributors);
-    const yStart = n.y! + rs + STEM_LEN_PARENT;
-    const ys = n.children.map(id => g[id]).filter((c): c is Node => c !== undefined).map(c => (c as any).y! - R);
-    const y2 = Math.max(yStart, ...ys);
-    return { x: n.x!, y1: n.y! + rs, y2, id: n.id };
+  trunksList.value = frame.filter((f) => f.node.children.length > 0).map((f) => {
+    const yStart = f.y + f.r + STEM_LEN_PARENT;
+    const ys = f.node.children.map((id) => byId.get(id)).filter((c): c is FrameNode => !!c).map((c) => c.y - R);
+    return {x: f.x, y1: f.y + f.r, y2: Math.max(yStart, ...ys), id: f.node.id};
   });
 
   jointDots.value = edges.map(e => ({
     x: e.ex,
     y: e.ey,
-    id: `${e.source.id}-${e.target.id}`,
-    sourceOwner: e.source.repoOwner || e.source.fullName?.split('/')[0] || '',
-    targetOwner: e.target.repoOwner || e.target.fullName?.split('/')[0] || '',
-    subject: e.source.repoSubject || e.target.repoSubject || props.subject || '',
+    id: `${e.source.node.id}-${e.target.node.id}`,
+    sourceOwner: e.source.node.repoOwner || e.source.node.fullName?.split('/')[0] || '',
+    targetOwner: e.target.node.repoOwner || e.target.node.fullName?.split('/')[0] || '',
+    subject: e.source.node.repoSubject || e.target.node.repoSubject || props.subject || '',
   }));
 
-  /* The canvas is the VIEWPORT, not the content: resetView() zoom-fits the
-     world into it. It used to be sized from the lowest bubble in WORLD units
-     (`maxY + 240`), which ignored the zoom factor and left the graph stranded
+  /* The canvas is the VIEWPORT, not the content. It used to be sized from the
+     lowest bubble in WORLD units (`maxY + 240`), which left the graph stranded
      at the top of an over-tall, scrolling canvas — the empty band under the
      first bubble. */
   svgHeight.value = graphViewportHeight();
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/** Standard ease (the "ease-in-out" of the design system), as a scalar. */
+function easeInOut(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function cancelReflow() {
+  if (reflowRaf !== null) cancelAnimationFrame(reflowRaf);
+  reflowRaf = null;
+}
+
+/** Tween every node from where it is drawn now to `target`.
+   Interruptible by construction: a second call reads the CURRENT frame as its
+   starting point, so a hover that lands mid-reflow continues from the picture
+   on screen instead of snapping back. */
+function animateTo(g: Graph, target: Placements, onSettle?: () => void) {
+  cancelReflow();
+  const from = framePlacements;
+  if (!from.size || prefersReducedMotion()) {
+    setFrame(g, target);
+    onSettle?.();
+    return;
+  }
+  const start = performance.now();
+  const tick = (now: number) => {
+    const t = Math.min(1, (now - start) / HOVER_REFLOW_MS);
+    const e = easeInOut(t);
+    const cur: Placements = new Map();
+    for (const [id, to] of target) {
+      const f = from.get(id) ?? to;
+      cur.set(id, {
+        x: f.x + (to.x - f.x) * e,
+        y: f.y + (to.y - f.y) * e,
+        r: f.r + (to.r - f.r) * e,
+      });
+    }
+    setFrame(g, cur);
+    if (t < 1) {
+      reflowRaf = requestAnimationFrame(tick);
+    } else {
+      reflowRaf = null;
+      onSettle?.();
+    }
+  };
+  reflowRaf = requestAnimationFrame(tick);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────-
@@ -878,10 +1009,10 @@ function contentBounds() {
   if (nodesList.value.length === 0) {
     return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
   }
-  const minX = Math.min(...nodesList.value.map(n => (n.x ?? 0) - rFor(n.contributors)));
-  const maxX = Math.max(...nodesList.value.map(n => (n.x ?? 0) + rFor(n.contributors)));
-  const minY = Math.min(...nodesList.value.map(n => (n.y ?? 0) - rFor(n.contributors)));
-  const maxY = Math.max(...nodesList.value.map(n => (n.y ?? 0) + rFor(n.contributors)));
+  const minX = Math.min(...nodesList.value.map(n => n.x - n.r));
+  const maxX = Math.max(...nodesList.value.map(n => n.x + n.r));
+  const minY = Math.min(...nodesList.value.map(n => n.y - n.r));
+  const maxY = Math.max(...nodesList.value.map(n => n.y + n.r));
   // Account for elbow overhang beyond rightmost/leftmost bubbles
   const extraX = state.hOffset + state.elbowR + STEM_LEN_CHILD + CONTENT_BOUNDS_EXTRA;
   return { minX: minX - extraX, maxX: maxX + extraX, minY, maxY };
@@ -894,9 +1025,8 @@ function contentBounds() {
 function bubbleBounds() {
   const xs0: number[] = [], xs1: number[] = [], ys0: number[] = [], ys1: number[] = [];
   for (const n of nodesList.value) {
-    const r = rFor(n.contributors);
-    xs0.push((n.x ?? 0) - r); xs1.push((n.x ?? 0) + r);
-    ys0.push((n.y ?? 0) - r); ys1.push((n.y ?? 0) + r);
+    xs0.push(n.x - n.r); xs1.push(n.x + n.r);
+    ys0.push(n.y - n.r); ys1.push(n.y + n.r);
   }
   return { minX: Math.min(...xs0), maxX: Math.max(...xs1), minY: Math.min(...ys0), maxY: Math.max(...ys1) };
 }
@@ -956,7 +1086,10 @@ function zoomExtent(): [[number, number], [number, number]] {
    made bigger than half the size it lands at, and never shrink to a speck. */
 function applyScaleExtent() {
   if (!zoomBehavior) return;
-  const min = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fitScale * ZOOM_OUT_FIT_FRACTION));
+  /* `fitScale` is capped at 1 before it gets here (resetView): the resting
+     view IS 1, and a floor above it would clamp the graph the moment it
+     loaded. */
+  const min = Math.min(RESET_SCALE, Math.max(ZOOM_MIN, fitScale * ZOOM_OUT_FIT_FRACTION));
   zoomBehavior.scaleExtent([min, ZOOM_MAX]);
 }
 
@@ -981,7 +1114,6 @@ function resetView(animated = false) {
   svgHeight.value = viewportH;   // the legend may have appeared since the layout ran
   const usableH = viewportH - VIEW_TOP_OFFSET;
 
-  const forks = forkCount(state.graph);
   const b = contentBounds();
   const contentW = b.maxX - b.minX, contentH = b.maxY - b.minY;
 
@@ -990,49 +1122,37 @@ function resetView(animated = false) {
     return;
   }
 
-  // Calculate fill fraction based on number of forks (more forks = fill more of viewport)
-  const fillFrac = FILL_FRACTION_MIN + (FILL_FRACTION_MAX - FILL_FRACTION_MIN) * Math.min(1, forks / COMPLEXITY_THRESHOLD);
-
-  // Calculate scale to fit content horizontally and vertically
-  const scaleW = (box.width * fillFrac) / Math.max(1, contentW);
-  const scaleH = (usableH * VERTICAL_FILL_FRACTION) / Math.max(1, contentH);
-
-  let targetScale = Math.min(scaleW, scaleH);
-  /* Special handling for a subject with a SINGLE article: there is nothing to
-     fit against, so pin the lone bubble to a modest on-screen diameter.
-     Previously this applied to graphs with up to one fork and targeted
-     220-480px, which blew the bubble up to ~40% of the viewport (issue #284).
-     Graphs that already have a fork now go through the normal fit path. */
-  if (state.isSingleArticle) {
-    const root = getRoot(state.graph);
-    if (root) {
-      const r = rFor(root.contributors);
-      const sBubble = singleArticleScreenDiameter(box.width) / (2 * r);
-      // `min` (not `max`): never zoom past the target just to fill the canvas.
-      targetScale = Math.min(ZOOM_MAX, sBubble);
-    }
-  }
+  /* THE VIEW IS 1:1. The bubble sizes are on-screen pixels (./bubble-size.ts),
+     so the resting view may not be scaled at all — "reset view" now means
+     "centre the content at zoom 1", not "zoom to fit". The fit scale is still
+     computed, capped at 1, purely as the floor for how far out the user may
+     zoom manually (applyScaleExtent). */
+  const targetScale = RESET_SCALE;
+  fitScale = Math.min(RESET_SCALE, Math.min(
+    box.width / Math.max(1, contentW),
+    usableH / Math.max(1, contentH),
+  ));
 
   // Center horizontally
   const cx = box.width / 2;
   const worldCenterX = (b.minX + b.maxX) / 2;
   const tx = cx - (worldCenterX * targetScale);
-  /* Center vertically: distribute the leftover height above and below the
-     content instead of pinning it to the top (which left a large dead area
-     under a small graph, most visibly under a lone bubble). RESET_TOP_MARGIN
-     is now a floor, used when the content is as tall as the viewport. */
+  /* Centre vertically when the graph fits, pin it to the top when it does not:
+     at 1:1 a tall graph is read from the root downwards and panned, and
+     starting it half-way up would hide the root. */
   const scaledContentH = contentH * targetScale;
-  const topSpace = Math.max(RESET_TOP_MARGIN, (usableH - scaledContentH) / 2);
+  const topSpace = scaledContentH + 2 * RESET_TOP_MARGIN <= usableH
+    ? (usableH - scaledContentH) / 2
+    : RESET_TOP_MARGIN;
   const ty = VIEW_TOP_OFFSET + topSpace - (b.minY * targetScale);
 
   // Validate transform values before applying
-  if (!isFinite(tx) || !isFinite(ty) || !isFinite(targetScale)) {
+  if (!isFinite(tx) || !isFinite(ty)) {
     return;
   }
 
   /* Record the fit before applying it: the zoom-out floor is relative to it,
      and the constraint needs the bounds that go with the current layout. */
-  fitScale = targetScale;
   contentBox = bubbleBounds();
   applyScaleExtent();
 
@@ -1046,19 +1166,38 @@ function resetView(animated = false) {
 }
 
 /* NOTE: focusNode() lived here — it zoomed the canvas onto the clicked bubble.
-   Clicking a bubble now opens ArticleDetailView instead, which draws that one
-   article at a fixed size over the canvas, so the zoom-to-a-node path had no
-   caller left. FOCUS_PADDING went with it. */
+   Clicking a bubble grows it in place instead (see the HOVER/OPEN section), so
+   the zoom-to-a-node path had no caller left. FOCUS_PADDING went with it. */
 
 /* ─────────────────────────────────────────────────────────────────────────────-
    RENDER PIPELINE (layout→derive arrays→Vue renders)
    ─────────────────────────────────────────────────────────────────────────── */
+/** Full re-layout from the data: dials, the graph maximum every bubble's size
+   is relative to, then the resting layout. Drops any expanded state, because
+   the node it referred to may no longer exist. */
 function layoutAndRender() {
-  // A lone article (root with no forks) is pinned to the smallest bubble tier;
-  // must be decided before any rFor() call. See ./bubble-size.ts.
-  state.isSingleArticle = Object.keys(state.graph).length <= 1;
+  cancelReflow();
+  /* The denominator of every size ratio (./bubble-size.ts). Must be set before
+     any rFor() call. */
+  state.maxContributors = maxContributors(Object.values(state.graph).map((n) => n.contributors));
   applyResponsiveDials();          // adapt dials first
-  layoutFishbone(state.graph);     // compute x,y and derive edges/trunks/lists
+  if (!Object.keys(state.graph).length) {
+    framePlacements = new Map();
+    restingPlacements = new Map();
+    nodesList.value = []; edgesList.value = []; trunksList.value = []; jointDots.value = [];
+    return;
+  }
+  /* The RESTING layout first, always: it is the anchor an expanded layout is
+     registered against (computeLayout), so it has to exist and be current
+     before one is asked for. */
+  restingPlacements = computeLayout(state.graph, null);
+  if (expandedId.value !== null && !restingPlacements.has(expandedId.value)) {
+    hoveredId.value = null;
+    activeId.value = null;
+  }
+  setFrame(state.graph, expandedId.value === null
+    ? restingPlacements
+    : computeLayout(state.graph, expandedId.value));
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────-
@@ -1082,6 +1221,8 @@ onMounted(async () => {
       const z: ZoomTransform = e.transform; currentK.value = z.k;
       /* Apply pan/zoom to the SAME world group that holds all nodes/edges. */
       worldSel.attr("transform", z.toString());
+      /* The History card hangs off a bubble, so it travels with it. */
+      if (historyOpen.value) updateHistoryAnchor();
     });
 
   svgSel.call(zoomBehavior as any);
@@ -1090,6 +1231,9 @@ onMounted(async () => {
   svgSel.on("click.bg", (ev: any) => {
     const target = ev.target as Element;
     if (!target.closest("g.node")) {
+      /* Clicking the background is how you put an opened bubble away — there
+         is no "< Back" control any more. */
+      collapseAll();
       resetView(true);
       applySelection(null, null);
       pendingExternalSelection = null;
@@ -1124,8 +1268,6 @@ onMounted(async () => {
     if (Math.abs(w - containerWidth) > 2) { containerWidth = Math.min(w, 1100); changed = true; }
     if (Math.abs(h - containerHeight) > 2) { containerHeight = h; changed = true; }
     if (changed) {
-      /* The detail circle is sized from the container, so it has to follow it. */
-      if (detailNode.value) detailSize.value = computeDetailSize();
       if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
       pendingRaf = requestAnimationFrame(() => {
         layoutAndRender();
@@ -1140,14 +1282,16 @@ onMounted(async () => {
   await fetchForkGraphAndSet();
   window.addEventListener('repo:selection-updated', handleExternalSelection as EventListener);
   window.addEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
-  window.addEventListener('keydown', onDetailKeydown);
+  window.addEventListener('keydown', onGraphKeydown);
 });
 
 onBeforeUnmount(() => {
   if (ro) ro.disconnect();
+  cancelReflow();
+  if (hoverTimer !== null) window.clearTimeout(hoverTimer);
   window.removeEventListener('repo:selection-updated', handleExternalSelection as EventListener);
   window.removeEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
-  window.removeEventListener('keydown', onDetailKeydown);
+  window.removeEventListener('keydown', onGraphKeydown);
 });
 
 /* Derived for template binding */
@@ -1174,40 +1318,171 @@ function persistSelectionDetail(detail: RepoSelectionDetail | null) {
   }
 }
 
-/* Click handler: focus and persist selected article (owner/subject) */
 /* ──────────────────────────────────────────────────────────────────────────────
-   ARTICLE DETAIL VIEW (click a bubble → that article, large, with its actions)
+   HOVER / OPEN — one bubble grows to 202px and the graph reflows around it
+
+   There is no overlay any more. Hovering a bubble (or focusing it with the
+   keyboard) re-runs the SAME layout engine with that node's radius overridden
+   to BUBBLE_HOVER_RADIUS and tweens every node from where it is to where it
+   now belongs; clicking adds the two actions to the card inside it. That
+   replaces the 430px centred ArticleDetailView, which has been deleted along
+   with its "< Back" control and the solo-article auto-open: a lone article is
+   simply the biggest bubble in a graph of one, hovered and clicked like any
+   other.
+
+   Why re-running the layout rather than scaling one bubble: every geometric
+   guarantee the layout makes (no overlapping bubbles, no crossing connectors,
+   no connector through a bubble, a positive minimum gap) is a property of the
+   engine given a set of radii. Swap one radius and the guarantees still hold,
+   for free, in the hovered picture as well as the resting one. Scaling a
+   bubble in place would have broken all four.
    ─────────────────────────────────────────────────────────────────────────── */
 
-/** The article being shown large, or null for the normal graph. */
-const detailNode = ref<Node | null>(null);
+/** Hovered (pointer or keyboard focus) and opened (clicked) bubble. `active`
+   is the one with buttons; either of them makes a bubble expanded. */
+const hoveredId = ref<NodeId | null>(null);
+const activeId = ref<NodeId | null>(null);
+const expandedId = computed<NodeId | null>(() => activeId.value ?? hoveredId.value);
 const historyOpen = ref(false);
 
-/* Diameter of the big circle, in screen px. The design draws it at 430, but it
-   is drawn INSIDE the canvas box, so it must also fit that box: on a narrow
-   viewport or a short canvas it is capped to what the container can show
-   (minus a margin), and the spacing inside it scales with it — see
-   ArticleDetailView.vue. Recomputed when the detail opens and on resize while
-   it is open, so it can never end up sized for a stale container. */
-const DETAIL_DIAMETER_DESIGN = 430;   // design size of the detail circle (px)
-const DETAIL_CONTAINER_MARGIN = 24;   // breathing room between circle and canvas edge
-const DETAIL_DIAMETER_MIN = 200;      // below this the stack is unreadable anyway
-const detailSize = ref(DETAIL_DIAMETER_DESIGN);
+/** Pointer type of the gesture in progress. Touch has no hover, so a tap has
+   to mean one of two things depending on what is already expanded — see
+   onBubbleClick(). */
+let lastPointerType = 'mouse';
+let hoverTimer: number | null = null;
+/* Set by an explicit dismissal (Escape, background click). Escape means "put
+   this away", so for a moment afterwards nothing may grow a bubble again —
+   without it the dismissal re-expands the bubble it just closed: unmounting
+   the two buttons moves focus, the graph reflows under a stationary pointer,
+   and either can fire a fresh hover within the same few frames. */
+let hoverSuppressedUntil = 0;
+const HOVER_DISMISS_GUARD_MS = 250;
 
-function computeDetailSize(): number {
-  const w = containerWidth || DEFAULT_CONTAINER_WIDTH;
-  const h = svgHeight.value || graphViewportHeight();
-  const fits = Math.min(DETAIL_DIAMETER_DESIGN, w - DETAIL_CONTAINER_MARGIN * 2, h - DETAIL_CONTAINER_MARGIN * 2);
-  return Math.round(Math.max(DETAIL_DIAMETER_MIN, fits));
+/** The node the History card is anchored to, in canvas-box px. */
+const historyAnchor = reactive({x: 0, y: 0});
+
+function nodeById(id: NodeId | null): Node | null {
+  return id ? state.graph[id] ?? null : null;
 }
-/** The pan/zoom the graph was at when the detail view opened, so "Back" can
-   put the user back exactly where they were rather than re-fitting. */
-let transformBeforeDetail: ZoomTransform | null = null;
 
-/** Ancestors of the detail node, oldest last — the lineage the design lists:
+/** Re-run the layout for the current expanded node and animate into it. */
+function reflow() {
+  if (!Object.keys(state.graph).length) return;
+  const target = expandedId.value === null
+    ? restingPlacements
+    : computeLayout(state.graph, expandedId.value);
+  animateTo(state.graph, target, () => {
+    /* The pan clamp works off the bubbles' bounding box, so it has to be told
+       about the shape the graph settled into — otherwise a graph that grew
+       under the hover could be panned by the old bound. */
+    contentBox = bubbleBounds();
+    updateHistoryAnchor();
+  });
+  updateHistoryAnchor();
+}
+
+/** Set (or clear) the hovered bubble, debounced against pointer thrash. */
+function setHovered(id: NodeId | null, immediate = false) {
+  if (hoverTimer !== null) { window.clearTimeout(hoverTimer); hoverTimer = null; }
+  const apply = () => {
+    hoverTimer = null;
+    if (id !== null && performance.now() < hoverSuppressedUntil) return;
+    if (hoveredId.value === id) return;
+    /* Only ever one expanded bubble: hovering a different one drops the
+       previously opened card. */
+    if (id !== null && activeId.value !== null && activeId.value !== id) {
+      activeId.value = null;
+      historyOpen.value = false;
+    }
+    hoveredId.value = id;
+    reflow();
+    const n = nodeById(id);
+    if (n) announceToScreenReader(`${n.fullName || n.id}, ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
+  };
+  if (immediate || HOVER_DEBOUNCE_MS <= 0) apply();
+  else hoverTimer = window.setTimeout(apply, HOVER_DEBOUNCE_MS);
+}
+
+/** Collapse everything: no hover, no open card, no History. */
+function collapseAll() {
+  if (hoverTimer !== null) { window.clearTimeout(hoverTimer); hoverTimer = null; }
+  historyOpen.value = false;
+  hoverSuppressedUntil = performance.now() + HOVER_DISMISS_GUARD_MS;
+  /* Give up the focus as well, or the browser re-homes it on the bubble's own
+     <g> when the buttons inside it are unmounted — which reads as a fresh
+     keyboard hover and re-opens what was just dismissed. */
+  const focused = typeof document !== 'undefined' ? document.activeElement : null;
+  if (focused instanceof HTMLElement || focused instanceof SVGElement) {
+    if (containerRef.value?.contains(focused)) focused.blur();
+  }
+  if (hoveredId.value === null && activeId.value === null) return;
+  hoveredId.value = null;
+  activeId.value = null;
+  reflow();
+}
+
+/** Pointer/focus in and out of a bubble.
+   TOUCH IS IGNORED HERE: a touch pointer fires enter before the tap and leave
+   after it, which would make every tap on a phone act as a click. Touch goes
+   through onBubbleClick() instead, where the first tap expands and the second
+   opens. */
+function onBubbleHover(id: NodeId, on: boolean, pointerType: string) {
+  /* Only a real pointer updates this. Focus arrives as 'keyboard' and would
+     otherwise overwrite the 'touch' that a tap's pointerdown just recorded —
+     the <g> takes focus on the same gesture. */
+  if (pointerType !== 'keyboard') lastPointerType = pointerType;
+  if (pointerType === 'touch') return;
+  if (on) {
+    setHovered(id);
+  } else if (hoveredId.value === id && activeId.value === null) {
+    setHovered(null);
+  } else if (hoveredId.value === id) {
+    /* An opened bubble stays open when the pointer leaves; only the hover
+       part of the state is dropped. */
+    hoveredId.value = activeId.value;
+  }
+}
+
+function onBubbleClick(n: Node) {
+  // In compare mode, use compare selection logic instead
+  if (isCompareMode.value) {
+    onBubbleClickCompare(n);
+    return;
+  }
+
+  /* Touch: the first tap is the hover (card, no buttons), the second opens it.
+     Tapping a different bubble starts that bubble at its first tap. */
+  if (lastPointerType === 'touch' && expandedId.value !== n.id) {
+    setHovered(n.id, true);
+    return;
+  }
+
+  if (activeId.value !== n.id) {
+    activeId.value = n.id;
+    hoveredId.value = n.id;
+    historyOpen.value = false;
+    reflow();
+  }
+
+  const detail = getSelectionDetailFromNode(n);
+  if (!detail) return;
+  const payload = { ...detail };
+  applySelection(n, payload);
+  persistSelectionDetail(payload);
+  announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
+  window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: payload }));
+  window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
+}
+
+/* ── HISTORY POPUP ────────────────────────────────────────────────────────
+   Kept from the detail view, and still the same component (desktop side card,
+   bottom sheet under 768px). Only its anchor changed: it used to hang off a
+   circle centred in the canvas box, and now follows the opened bubble. */
+
+/** Ancestors of the opened node, oldest last — the lineage the design lists:
    the article itself, then "Fork of:" each parent up to the subject root. */
 const historyEntries = computed<HistoryEntry[]>(() => {
-  const start = detailNode.value;
+  const start = nodeById(activeId.value);
   if (!start) return [];
   const out: HistoryEntry[] = [];
   let cur: Node | undefined = start;
@@ -1240,84 +1515,35 @@ const historyExpandedId = computed(() => {
   return entries.length ? entries[entries.length - 1].id : null;
 });
 
-/** The bubble the open detail view grew out of, in screen px, or null when it
-   was opened without one (single-article subject). */
-const detailOrigin = ref<DetailOrigin | null>(null);
+/** Where the opened bubble is inside the canvas box, in px, for the History
+   card to sit beside. Derived from the rendered placement and the live zoom
+   transform, so it follows a pan.
 
-/** True while the detail view IS the view: a subject with one article opens
-   straight into it, and there is no graph state worth going back to, so no
-   Back control is rendered and Escape has nothing to do. */
-const detailPinned = ref(false);
-
-/** Set to ask ArticleDetailView for its closing animation; the teardown
-   happens in finishDetailClose() when it reports back. */
-const detailClosing = ref(false);
-
-/** Where a node's bubble is on screen right now, for the open/close zoom.
-   Derived from the layout coordinates and the live zoom transform rather than
-   from the DOM, so it is exact and needs no lookup by id. */
-function screenCircleFor(n: Node): DetailOrigin | null {
+   The Y is clamped to the middle 30% of the box and the card is limited to 70%
+   of its height (see ArticleHistoryPopup), which together guarantee the card is
+   inside the box whatever the bubble is doing near an edge. */
+function updateHistoryAnchor() {
   const svg = svgRef.value;
-  if (!svg || n.x === undefined || n.y === undefined) return null;
+  const box = containerRef.value?.querySelector('.graph-container') as HTMLElement | null;
+  const p = activeId.value !== null ? framePlacements.get(activeId.value) : null;
+  if (!svg || !box || !p) return;
   const t = zoomTransform(svg);
-  const box = svg.getBoundingClientRect();
-  const r = rFor(n.contributors) * t.k;
-  if (!(r > 0)) return null;
-  return { cx: box.left + t.applyX(n.x), cy: box.top + t.applyY(n.y), r };
+  const svgBox = svg.getBoundingClientRect();
+  const boxRect = box.getBoundingClientRect();
+  const x = (svgBox.left - boxRect.left) + t.applyX(p.x) + p.r * t.k;
+  const y = (svgBox.top - boxRect.top) + t.applyY(p.y);
+  historyAnchor.x = Math.round(Math.max(0, Math.min(boxRect.width, x)));
+  historyAnchor.y = Math.round(Math.max(boxRect.height * 0.35, Math.min(boxRect.height * 0.65, y)));
 }
 
-function openDetail(n: Node, opts: { origin?: DetailOrigin | null; pinned?: boolean } = {}) {
-  transformBeforeDetail = svgRef.value ? zoomTransform(svgRef.value) : null;
-  detailSize.value = computeDetailSize();
-  detailOrigin.value = opts.origin ?? null;
-  detailPinned.value = opts.pinned === true;
-  /* Re-opening while a close is still playing: cancel the close rather than
-     let its timer tear down the view we just opened. */
-  detailClosing.value = false;
-  detailNode.value = n;
-  historyOpen.value = false;
-  announceToScreenReader(`Opened ${n.fullName || n.id}`);
+function onHistoryOpen() {
+  historyOpen.value = true;
+  updateHistoryAnchor();
 }
 
-/** Ask for the close. The view animates, then calls finishDetailClose(). */
-function closeDetail() {
-  if (!detailNode.value || detailPinned.value) return;
-  historyOpen.value = false;   /* the popup does not travel with the circle */
-  detailClosing.value = true;
-}
-
-function finishDetailClose() {
-  detailNode.value = null;
-  detailClosing.value = false;
-  detailOrigin.value = null;
-  historyOpen.value = false;
-  /* Restore the exact view the user left, not a fresh fit. */
-  if (transformBeforeDetail && svgSel) {
-    svgSel.call(zoomBehavior.transform as any, transformBeforeDetail);
-    currentK.value = transformBeforeDetail.k;
-  }
-  transformBeforeDetail = null;
-}
-
-/* #284: a subject with a single article opens directly in the detail view.
-   The lone bubble is pinned to the smallest tier and carries nothing to
-   compare against, so the graph state behind it is not worth a click — the
-   article itself is what the page is for. There is no source bubble to fly
-   from, so the view cross-fades in, and Back is not rendered. */
-function maybeOpenSoloDetail() {
-  if (!state.isSingleArticle || detailNode.value) return;
-  const root = getRoot(state.graph);
-  if (!root) return;
-  openDetail(root, { pinned: true });
-}
-
-function onDetailRead() {
-  const n = detailNode.value;
-  if (n) onBubbleView(n);
-}
-
+/** "View full history" in the card: the repository's commit log. */
 function onDetailFullHistory() {
-  const n = detailNode.value;
+  const n = nodeById(activeId.value);
   if (!n) return;
   const owner = n.repoOwner ?? n.fullName?.split('/')[0] ?? '';
   const repo = n.repoName ?? n.fullName?.split('/')[1] ?? '';
@@ -1326,28 +1552,11 @@ function onDetailFullHistory() {
   window.location.href = `${suburl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits`;
 }
 
-function onDetailKeydown(ev: KeyboardEvent) {
+/** Escape backs out one level: the History card, then the expanded bubble. */
+function onGraphKeydown(ev: KeyboardEvent) {
   if (ev.key !== 'Escape') return;
   if (historyOpen.value) historyOpen.value = false;
-  else if (detailNode.value) closeDetail();
-}
-
-function onBubbleClick(n: Node) {
-  // In compare mode, use compare selection logic instead
-  if (isCompareMode.value) {
-    onBubbleClickCompare(n);
-    return;
-  }
-
-  openDetail(n, { origin: screenCircleFor(n) });
-  const detail = getSelectionDetailFromNode(n);
-  if (!detail) return;
-  const payload = { ...detail };
-  applySelection(n, payload);
-  persistSelectionDetail(payload);
-  announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
-  window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: payload }));
-  window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
+  else if (expandedId.value !== null) collapseAll();
 }
 
 function onBubbleView(n: Node) {
@@ -1485,14 +1694,14 @@ function goToComparison() {
 
             <!-- Branch elbows + runs (one path per edge) -->
             <path
-              v-for="e in edgesList" :key="`${e.source.id}-${e.target.id}`" class="branch" fill="none"
+              v-for="e in edgesList" :key="`${e.source.node.id}-${e.target.node.id}`" class="branch" fill="none"
               stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round" opacity="0.9"
               :d="`M ${e.ex} ${e.ey} C ${e.ex} ${e.ey + 0.5522847498307936 * state.elbowR}, ${e.ex + e.side * 0.5522847498307936 * state.elbowR} ${e.hy}, ${e.hx} ${e.hy} L ${e.cx} ${e.cy}`"
             />
 
             <!-- Child stems -->
             <line
-              v-for="e in edgesList" :key="`stem-${e.source.id}-${e.target.id}`" class="child-stem" :x1="e.sx1"
+              v-for="e in edgesList" :key="`stem-${e.source.node.id}-${e.target.node.id}`" class="child-stem" :x1="e.sx1"
               :y1="e.sy1" :x2="e.sx2" :y2="e.sy2" stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
               opacity="0.9"
             />
@@ -1506,13 +1715,19 @@ function goToComparison() {
               @keydown.space.stop="() => onJointClick(j)"
             />
 
-            <!-- Bubbles (component handles labels independently) -->
+            <!-- Bubbles (component handles labels independently). Every
+                 coordinate and radius comes from the current frame, so a
+                 bubble mid-reflow and the rib attached to it agree. -->
             <BubbleNode
-              v-for="n in nodesList" :key="n.id" :id="n.id" :x="(n as any).x" :y="(n as any).y"
-              :r="(rFor(n.contributors))" :contributors="n.contributors" :updated-at="n.updatedAt" :k="kComputed"
-              :detail="detailFor(n.contributors)"
-              :is-active="selectedNodeId === n.id" :is-compare-mode="isCompareMode"
-              :compare-state="getCompareState(n.id)" @click="() => onBubbleClick(n)" @view="() => onBubbleView(n)"
+              v-for="f in nodesList" :key="f.node.id" :id="f.node.id" :x="f.x" :y="f.y"
+              :r="f.r" :contributors="f.node.contributors" :updated-at="f.node.updatedAt"
+              :description="f.node.description" :k="kComputed"
+              :detail="detailFor(f.node.contributors)"
+              :expanded="expandedId === f.node.id" :active="activeId === f.node.id"
+              :is-active="selectedNodeId === f.node.id" :is-compare-mode="isCompareMode"
+              :compare-state="getCompareState(f.node.id)"
+              @click="() => onBubbleClick(f.node)" @hover="(id, on, pt) => onBubbleHover(id, on, pt)"
+              @read="() => onBubbleView(f.node)" @history="onHistoryOpen"
             />
           </g>
         </svg>
@@ -1566,27 +1781,25 @@ function goToComparison() {
           :default-branch="props.defaultBranch"
         />
 
-        <!-- Detail view (#284): one article, large, with its excerpt and
-             actions. It MUST stay inside .graph-container: the layer is
-             position:absolute/inset:0 with an opaque background, so anywhere
-             else it resolves against a positioned ancestor further up the page
-             and paints over the page chrome (navbar, view tabs, Compare
-             button, legend) — the "lost wrapper" from review. Inside the
-             container it covers exactly the canvas box and nothing else, and
-             the <svg> stays mounted underneath so the box keeps its height. -->
-        <ArticleDetailView
-          v-if="detailNode"
-          :contributors="detailNode.contributors" :description="detailNode.description"
-          :updated-at="detailNode.updatedAt" :size="detailSize"
-          :origin="detailOrigin" :show-back="!detailPinned" :closing="detailClosing"
-          @back="closeDetail" @read="onDetailRead" @history="historyOpen = true"
-          @closed="finishDetailClose"
+        <!-- History card (#284). It MUST stay inside .graph-container: the
+             desktop card is position:absolute and resolves against the nearest
+             positioned ancestor, and anywhere else it would paint over the page
+             chrome. It anchors to the OPENED bubble (--history-anchor-*) and
+             clamps itself to this box; under 768px it is a bottom sheet
+             instead, which is fixed to the viewport by design. -->
+        <!-- The wrapper carries the anchor: ArticleHistoryPopup has two root
+             elements (backdrop + card), so a style binding on the component
+             itself would have nowhere to land. It is a zero-height static
+             block, so it adds nothing to the box. -->
+        <div
+          v-if="historyOpen && activeId" class="history-anchor"
+          :style="{ '--history-anchor-x': historyAnchor.x + 'px', '--history-anchor-y': historyAnchor.y + 'px' }"
         >
           <ArticleHistoryPopup
-            v-if="historyOpen" :entries="historyEntries" :expanded-id="historyExpandedId"
+            :entries="historyEntries" :expanded-id="historyExpandedId"
             @close="historyOpen = false" @view-full-history="onDetailFullHistory"
           />
-        </ArticleDetailView>
+        </div>
       </div>
       <!-- End graph-container -->
 
@@ -1617,6 +1830,11 @@ function goToComparison() {
 /* Graph container for relative positioning of overlays */
 .graph-container {
   position: relative;
+}
+
+/* Carries the History card's anchor variables and nothing else. */
+.history-anchor {
+  height: 0;
 }
 
 /* The canvas must be block-level: an inline <svg> also reserves a few px of

@@ -18,7 +18,7 @@ export type HistoryEntry = {
 /* ArticleHistoryPopup.vue
    The fork lineage of one article, as a list of expandable rows.
 
-   Desktop: a card beside the big bubble of the detail view.
+   Desktop: a card beside the opened (202px) bubble in the graph.
    Narrow viewports: the same card as a bottom sheet, sliding up over the
    dimmed bubble. That switch is a CSS media query rather than a JS viewport
    check — it cannot get out of step with an actual resize, and it needs no
@@ -109,33 +109,34 @@ function toggle(id: string) {
 .history-popup {
   position: absolute;
   z-index: 21;
-  top: 50%;
 
-  /* Beside the big bubble, overlapping its right edge as the design shows.
-     The circle is CENTRED in the layer (see ArticleDetailView), so its right
-     edge is `50% + d/2` and the card starts OVERLAP px inside that. `d` is the
-     circle's rendered diameter — the same min() ArticleDetailView applies, so
-     the two can never disagree about where the arc actually is.
+  /* Beside the OPENED bubble, overlapping its right edge as the design shows.
+     `--history-anchor-x` is that bubble's right edge in canvas-box px and
+     `--history-anchor-y` its centre (FishboneGraph.updateHistoryAnchor), so
+     the card follows the article it belongs to instead of sitting in the
+     middle of the box — the bubble no longer moves to the centre when it is
+     opened, it grows where it is.
 
-     The second term is the clamp: on a container too narrow to hold the card
-     at that offset, the card stops at the box's right edge instead of hanging
-     out of it (the layer is overflow:hidden, so it would simply be cut off).
-     The bubble does not move to make room — it stays centred and the card
-     overlaps it further, which is the same relationship, just tighter. */
+     Both axes are clamped to the box: the card never hangs out of it (the
+     bubble does not move to make room, the card overlaps it further instead).
+     Vertically the anchor is clamped to the middle 30% of the box by the
+     component, and this card is at most 70% of the box tall, so
+     `anchor ± 35%` is inside the box for any bubble position. */
   --history-width: 320px;
   --history-edge-gap: 12px;
   --history-overlap: 48px;
-  --detail-diameter: min(var(--detail-size, 430px), 84vw);
 
-  left: min(
-    calc(50% + var(--detail-diameter) / 2 - var(--history-overlap)),
+  left: clamp(
+    var(--history-edge-gap),
+    calc(var(--history-anchor-x, 50%) - var(--history-overlap)),
     calc(100% - var(--history-width) - var(--history-edge-gap))
   );
+  top: var(--history-anchor-y, 50%);
   transform: translateY(-50%);
   width: var(--history-width);
   /* Last-resort guard for a box narrower than the card itself. */
   max-width: calc(100% - var(--history-edge-gap) * 2);
-  max-height: 86%;
+  max-height: 70%;
   display: flex;
   flex-direction: column;
   background: var(--color-body, #fff);
