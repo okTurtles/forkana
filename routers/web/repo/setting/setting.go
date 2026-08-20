@@ -837,46 +837,33 @@ func ArticleTransferCandidates(ctx *context.Context) {
 	ctx.JSON(http.StatusOK, map[string]any{"data": convert_service.ToUsers(ctx, ctx.Doer, users)})
 }
 
-// resolveArticleTransferRecipient finds the transfer recipient by their first and
-// last name, which is what the article transfer modal asks for. Users without a full
-// name are listed by their username instead, so that is tried as a fallback. Only the
-// active users the candidate search lists for the doer are accepted, so that a crafted
-// request cannot reach a hidden account or confirm that it exists. It reports the
-// failure through a flash message and returns nil when the name is unusable.
+// resolveArticleTransferRecipient finds the transfer recipient by their username, which
+// the article transfer modal submits while showing the full name as the display value.
+// The username is unique and indexed, so the lookup neither scans the table nor has to
+// deal with two users sharing a name. Only the active users the candidate search lists
+// for the doer are accepted, so that a crafted request cannot reach a hidden account or
+// confirm that it exists. It reports the failure through a flash message and returns nil
+// when the name is unusable.
 func resolveArticleTransferRecipient(ctx *context.Context, name string) *user_model.User {
-	candidates, err := user_model.GetUsersByFullName(ctx, name)
-	if err != nil {
-		ctx.ServerError("GetUsersByFullName", err)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
 		return nil
 	}
-	visible := make([]*user_model.User, 0, len(candidates))
-	for _, candidate := range candidates {
-		if user_model.IsUserVisibleToViewer(ctx, candidate, ctx.Doer) {
-			visible = append(visible, candidate)
+
+	recipient, err := user_model.GetUserByName(ctx, name)
+	if err != nil {
+		if !user_model.IsErrUserNotExist(err) {
+			ctx.ServerError("GetUserByName", err)
+			return nil
 		}
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
+		return nil
 	}
 
-	var recipient *user_model.User
-	switch len(visible) {
-	case 0:
-		recipient, err = user_model.GetUserByName(ctx, strings.TrimSpace(name))
-		if err != nil {
-			if !user_model.IsErrUserNotExist(err) {
-				ctx.ServerError("GetUserByName", err)
-				return nil
-			}
-			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
-			return nil
-		}
-		if !recipient.IsActive || recipient.ProhibitLogin ||
-			!user_model.IsUserVisibleToViewer(ctx, recipient, ctx.Doer) {
-			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
-			return nil
-		}
-	case 1:
-		recipient = visible[0]
-	default:
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_ambiguous"))
+	if !recipient.IsIndividual() || !recipient.IsActive || recipient.ProhibitLogin ||
+		!user_model.IsUserVisibleToViewer(ctx, recipient, ctx.Doer) {
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
 		return nil
 	}
 
@@ -888,7 +875,7 @@ func resolveArticleTransferRecipient(ctx *context.Context, name string) *user_mo
 }
 
 // handleArticleSettingsPostTransfer serves the article transfer modal, which confirms
-// with "<owner>/<subject>", identifies the recipient by full name and always reports
+// with "<owner>/<subject>", identifies the recipient by username and always reports
 // back on the article settings page.
 func handleArticleSettingsPostTransfer(ctx *context.Context) {
 	form := web.GetForm(ctx).(*forms.RepoSettingForm)

@@ -1055,24 +1055,6 @@ func GetUserByName(ctx context.Context, name string) (*User, error) {
 	return u, nil
 }
 
-// GetUsersByFullName returns the active individual users whose full name matches the
-// given one. The comparison is case-insensitive and full names are not unique, so the
-// caller has to handle the ambiguous case. Visibility is not checked here, the caller
-// has to filter for the viewer.
-func GetUsersByFullName(ctx context.Context, fullName string) ([]*User, error) {
-	fullName = strings.TrimSpace(fullName)
-	if fullName == "" {
-		return nil, nil
-	}
-	users := make([]*User, 0, 2)
-	return users, db.GetEngine(ctx).
-		Where("LOWER(full_name) = ?", strings.ToLower(fullName)).
-		And("type = ?", UserTypeIndividual).
-		And("is_active = ?", true).
-		And("prohibit_login = ?", false).
-		Find(&users)
-}
-
 // GetUserEmailsByNames returns a list of e-mails corresponds to names of users
 // that have their email notifications set to enabled or onmention.
 func GetUserEmailsByNames(ctx context.Context, names []string) []string {

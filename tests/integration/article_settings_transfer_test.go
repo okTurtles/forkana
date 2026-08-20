@@ -22,14 +22,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// transferForm builds the payload the article transfer modal submits.
-func transferForm(csrf, owner, subject, newOwnerFullName string) map[string]string {
+// transferForm builds the payload the article transfer modal submits. The modal shows
+// the recipient by full name but submits their username.
+func transferForm(csrf, owner, subject, newOwnerName string) map[string]string {
 	return map[string]string{
 		"_csrf":               csrf,
 		"action":              "transfer",
 		"redirect_to_article": "true",
 		"article_name":        owner + "/" + subject,
-		"new_owner_name":      newOwnerFullName,
+		"new_owner_name":      newOwnerName,
 	}
 }
 
@@ -60,7 +61,7 @@ func TestArticleSettingsTransfer(t *testing.T) {
 	}
 
 	t.Run("WrongArticleName", func(t *testing.T) {
-		form := transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.FullName)
+		form := transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name)
 		// the confirmation is case-sensitive on purpose
 		form["article_name"] = owner.Name + "/" + subjectName + "x"
 		post(t, form)
@@ -70,17 +71,25 @@ func TestArticleSettingsTransfer(t *testing.T) {
 		assert.Equal(t, repo_model.RepositoryReady, unchanged.Status)
 	})
 
-	t.Run("UnknownFullName", func(t *testing.T) {
-		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, "Nobody At All"))
+	t.Run("UnknownUsername", func(t *testing.T) {
+		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, "nobodyatall"))
 
-		assert.Contains(t, flashText(t), "No user was found with that first and last name.")
+		assert.Contains(t, flashText(t), "No user was found with that name.")
+		unchanged := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
+		assert.Equal(t, repo_model.RepositoryReady, unchanged.Status)
+	})
+
+	t.Run("FullNameIsNotAccepted", func(t *testing.T) {
+		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.FullName))
+
+		assert.Contains(t, flashText(t), "No user was found with that name.")
 		unchanged := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
 		assert.Equal(t, repo_model.RepositoryReady, unchanged.Status)
 	})
 
 	t.Run("Start", func(t *testing.T) {
-		// the recipient is resolved by first and last name, not by username
-		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.FullName))
+		// the recipient is resolved by username, which the modal submits
+		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name))
 
 		assert.Contains(t, flashText(t), "awaits confirmation from "+recipient.DisplayName())
 
@@ -129,7 +138,7 @@ func TestArticleSettingsTransfer(t *testing.T) {
 		unittest.AssertNotExistsBean(t, &repo_model.RepoTransfer{RepoID: repo.ID})
 	})
 
-	t.Run("StartByUsername", func(t *testing.T) {
+	t.Run("StartWithoutFullName", func(t *testing.T) {
 		// users without a full name are listed by their username, which must resolve too
 		byUsername := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
 		require.Empty(t, strings.TrimSpace(byUsername.FullName))
@@ -161,7 +170,7 @@ func TestArticleSettingsTransferRecipientHasArticleOnSubject(t *testing.T) {
 	session := loginUser(t, owner.Name)
 	articleSettingsURL := fmt.Sprintf("/article/%s/%s?view=article&mode=settings", owner.Name, subjectName)
 	req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name),
-		transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.FullName))
+		transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name))
 	resp := session.MakeRequest(t, req, http.StatusSeeOther)
 	assert.Equal(t, articleSettingsURL, test.RedirectURL(resp))
 
@@ -249,7 +258,7 @@ func TestArticleSettingsTransferUnauthorized(t *testing.T) {
 	// blocked before the handler runs, by the "settings" group admin requirement
 	session := loginUser(t, user4.Name)
 	req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name),
-		transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.FullName))
+		transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name))
 	session.MakeRequest(t, req, http.StatusNotFound)
 
 	unchanged := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})

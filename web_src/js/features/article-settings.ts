@@ -47,7 +47,8 @@ function resetTransferOwnerSearch(): void {
 
 // Turns the "new owner" field into a search box listing the users the article can be
 // transferred to. A user is shown by their full name, falling back to the username,
-// and that same value is what the backend resolves the recipient by.
+// while the submitted value is always the username, which is what the backend resolves
+// the recipient by.
 function initArticleTransferOwnerSearch(): void {
   const elSearch = document.querySelector<HTMLElement>('#article-transfer-owner-search');
   if (!elSearch) return;
@@ -76,6 +77,7 @@ function initArticleTransferOwnerSearch(): void {
             // is kept separately for the selected-owner display
             title: htmlEscape(name),
             rawName: name,
+            login: user.login,
             image: user.avatar_url,
           });
         }
@@ -83,8 +85,11 @@ function initArticleTransferOwnerSearch(): void {
       },
     },
     onSelect(result: any) {
-      transferOwnerSelected = Boolean(result?.title);
+      transferOwnerSelected = Boolean(result?.login);
       if (!transferOwnerSelected) return;
+      // the search fills the input with the displayed title, the form has to carry the
+      // username instead
+      elInput.value = result.login;
       elAvatar.src = result.image ?? '';
       elName.textContent = result.rawName ?? '';
       hideElem(elPrompt);
