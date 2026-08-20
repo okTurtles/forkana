@@ -1,0 +1,23 @@
+/* Bubble view (issue #284) — styles shared between the graph's overlay
+   components. Vue scoped styles cannot be shared between SFCs, so a rule needed
+   by more than one of them lives here instead of being copied into each: the
+   copies had already drifted (8px 16px vs 8px 14px padding) before this file
+   existed. Component-specific tweaks stay scoped in the component. */
+
+/* The neutral button of the design: light surface, subtle border. Used by
+   ArticleDetailView ("Read full article") and ArticleHistoryPopup
+   ("View full history"). */
+.btn-neutral {
+  padding: 8px 16px;
+  border: 1px solid var(--color-secondary, #d1d5db);
+  border-radius: 8px;
+  background: var(--color-body, #fff);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);   /* 600 — the value both scoped copies used */
+  color: var(--color-text, #111827);
+  cursor: pointer;
+}
+
+.btn-neutral:hover {
+  background: var(--color-hover, #f9fafb);
+}
