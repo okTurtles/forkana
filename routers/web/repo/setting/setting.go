@@ -1089,7 +1089,7 @@ func handleSettingsPostDelete(ctx *context.Context) {
 	if fromArticle {
 		if form.ArticleName != ctx.Repo.Owner.Name+"/"+repo.GetSubject(ctx) {
 			ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
-			ctx.Redirect(ctx.Repo.RepoLink + "?view=article&mode=settings")
+			ctx.Redirect(articleSettingsURL(ctx))
 			return
 		}
 	} else if repo.Name != form.RepoName {
@@ -1152,7 +1152,7 @@ func handleSettingsPostArchive(ctx *context.Context) {
 	fromArticle := ctx.FormBool("redirect_to_article")
 	redirectURL := ctx.Repo.RepoLink + "/settings"
 	if fromArticle {
-		redirectURL = ctx.Repo.RepoLink + "?view=article&mode=settings"
+		redirectURL = articleSettingsURL(ctx)
 	}
 
 	if repo.IsMirror {
