@@ -1,0 +1,53 @@
+/* Explore Subjects list — the name-first row from the Forkana design (#248).
+
+   Gitea's stock flex-list draws a rule between every row and spaces them for a repository
+   listing. The subjects list is a plain index of names, so the separators are removed and the
+   rows are tightened. Scoped to ".page-content.explore.subjects" so the flex-lists on the user
+   profile and the explore users tab keep their own treatment. */
+
+.page-content.explore.subjects .flex-list {
+  margin-top: 8px;
+}
+
+/* Drop the row separators (web_src/css/shared/flex-list.css sets a border-top here). */
+.page-content.explore.subjects .flex-list > .flex-item + .flex-item {
+  border-top: none;
+}
+
+.page-content.explore.subjects .flex-list > .flex-item {
+  padding: 6px 0;
+  gap: 6px;
+}
+
+/* Target glyph, aligned to the name's line rather than centred on the whole two-line block. */
+.page-content.explore.subjects .flex-item .flex-item-leading {
+  align-self: flex-start;
+  padding-top: 2px;
+  color: var(--color-primary);
+}
+
+.page-content.explore.subjects .flex-item .flex-item-leading .svg {
+  width: 16px;
+  height: 16px;
+}
+
+.page-content.explore.subjects .flex-item .flex-item-main {
+  gap: 0;
+}
+
+.page-content.explore.subjects .flex-item .flex-item-title a {
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.page-content.explore.subjects .flex-item .flex-item-body {
+  font-size: 12px;
+  color: var(--color-text-light-2);
+}
+
+/* Section headings: "Search results for …" and "Similar". */
+.page-content.explore.subjects .flex-list > .tw-font-bold,
+.page-content.explore.subjects .flex-list > .tw-font-semibold {
+  font-size: 14px;
+}
