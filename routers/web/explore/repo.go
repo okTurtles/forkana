@@ -633,14 +633,10 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	ctx.Data["IsRepoOwner"] = isRepoOwner
 
 	// The settings tab swaps the Transfer section for a "Cancel transfer" one while a
-	// transfer awaits the recipient's confirmation.
-	if isRepoOwner && ctx.Repo.Repository.Status == repo_model.RepositoryPendingTransfer {
-		transfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
-		if err != nil {
-			log.Error("GetPendingRepositoryTransfer [%d]: %v", ctx.Repo.Repository.ID, err)
-		} else if err := transfer.LoadRecipient(ctx); err != nil {
-			log.Error("LoadRecipient [%d]: %v", transfer.ID, err)
-		} else {
+	// transfer awaits the recipient's confirmation. The repo assignment middleware already
+	// loaded the pending transfer with its recipient, so reuse it instead of querying again.
+	if isRepoOwner {
+		if transfer, ok := ctx.Data["RepoTransfer"].(*repo_model.RepoTransfer); ok {
 			ctx.Data["ArticleTransferRecipient"] = transfer.Recipient
 		}
 	}

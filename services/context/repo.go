@@ -716,22 +716,9 @@ func RepoAssignment(ctx *Context) {
 	ctx.Data["CanCompareOrPull"] = canCompare
 	ctx.Data["PullRequestCtx"] = ctx.Repo.PullRequest
 
-	if ctx.Repo.Repository.Status == repo_model.RepositoryPendingTransfer {
-		repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
-		if err != nil {
-			ctx.ServerError("GetPendingRepositoryTransfer", err)
-			return
-		}
-
-		if err := repoTransfer.LoadAttributes(ctx); err != nil {
-			ctx.ServerError("LoadRecipient", err)
-			return
-		}
-
-		ctx.Data["RepoTransfer"] = repoTransfer
-		if ctx.Doer != nil {
-			ctx.Data["CanUserAcceptOrRejectTransfer"] = repoTransfer.CanUserAcceptOrRejectTransfer(ctx, ctx.Doer)
-		}
+	retrievePendingRepositoryTransfer(ctx)
+	if ctx.Written() {
+		return
 	}
 
 	if ctx.FormString("go-get") == "1" {
@@ -1362,21 +1349,31 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	}
 
 	// The article view shows the recipient a banner to accept or reject a pending transfer
-	if ctx.Repo.Repository.Status == repo_model.RepositoryPendingTransfer {
-		repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
-		if err != nil {
-			ctx.ServerError("GetPendingRepositoryTransfer", err)
-			return
-		}
+	retrievePendingRepositoryTransfer(ctx)
+}
 
-		if err := repoTransfer.LoadAttributes(ctx); err != nil {
-			ctx.ServerError("LoadAttributes", err)
-			return
-		}
+// retrievePendingRepositoryTransfer loads the pending transfer of the current repository into
+// the template data, together with whether the doer may accept or reject it. The transfer is
+// fully loaded via LoadAttributes, so consumers can read Recipient, Teams and Repo without
+// querying again. It is a no-op for repositories that are not awaiting a transfer.
+func retrievePendingRepositoryTransfer(ctx *Context) {
+	if ctx.Repo.Repository.Status != repo_model.RepositoryPendingTransfer {
+		return
+	}
 
-		ctx.Data["RepoTransfer"] = repoTransfer
-		if ctx.Doer != nil {
-			ctx.Data["CanUserAcceptOrRejectTransfer"] = repoTransfer.CanUserAcceptOrRejectTransfer(ctx, ctx.Doer)
-		}
+	repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
+	if err != nil {
+		ctx.ServerError("GetPendingRepositoryTransfer", err)
+		return
+	}
+
+	if err := repoTransfer.LoadAttributes(ctx); err != nil {
+		ctx.ServerError("LoadAttributes", err)
+		return
+	}
+
+	ctx.Data["RepoTransfer"] = repoTransfer
+	if ctx.Doer != nil {
+		ctx.Data["CanUserAcceptOrRejectTransfer"] = repoTransfer.CanUserAcceptOrRejectTransfer(ctx, ctx.Doer)
 	}
 }
