@@ -36,8 +36,8 @@ import ArticleComparePopup from "./ArticleComparePopup.vue";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import {
-  BUBBLE_HOVER_RADIUS, bubbleCountFontFor, bubbleCountTextFor, bubbleLabelDetailFor,
-  bubbleRadiusFor, maxContributors,
+  BUBBLE_HOVER_RADIUS, BUBBLE_UNKNOWN_RUNG, bubbleRungFor, countTextForRung,
+  maxContributors, type BubbleRung,
 } from "./bubble-size.ts";
 
 // Inline types replacing former seeds module
@@ -61,6 +61,12 @@ type Node = {
      (api.Repository.Description), so no server-side change was needed. */
   description?: string;
   isEmpty?: boolean;
+  /* The API answered 0 contributors for a repository that HAS content, which
+     means the stats are still being generated server-side, not that nobody
+     wrote it (see buildGraphFromApi). `contributors` carries a placeholder 1
+     in that case, so this flag is the only way to tell a placeholder from a
+     genuine count — and a placeholder must never define the graph maximum. */
+  statsPending?: boolean;
 };
 type Graph = Record<string, Node>;
 
@@ -224,6 +230,10 @@ const state = reactive({
      layout, so adding or removing a fork can resize the whole graph, which is
      the point of a relative scale. */
   maxContributors: 0,
+  /* True when NOT ONE node has a real contributor count yet: there is no scale
+     to compare against, so every bubble takes BUBBLE_UNKNOWN_RUNG instead of a
+     ratio. Only reachable after the retries in loadForkGraph give up. */
+  statsUnknown: false,
 });
 
 /* Derived arrays used for Vue rendering (instead of D3 joins).
@@ -486,10 +496,41 @@ function handleExternalSelection(event: Event) {
   setSelectionFromDetail(normalized);
 }
 
+/* WAITING FOR THE CONTRIBUTOR STATS.
+
+   The server computes contributor stats asynchronously and, until they are
+   ready, reports every repository as 0 contributors. Sizes here are RATIOS
+   against the biggest article, so a graph of all-zeros has no scale to draw:
+   rendering it anyway paints every bubble at the top rung (126px) and — since
+   the graph is fetched exactly once, on mount — leaves it that way until the
+   user reloads the page.
+
+   So a graph that is entirely placeholders is not drawn. The loading state is
+   held and the fetch is repeated, backing off, for as long as it is worth
+   waiting. The delays are bounded: stats generation can fail, and a spinner
+   that never resolves is worse than a rough picture. When they run out the
+   graph is drawn from the placeholders, with `statsUnknown` putting every
+   bubble on the bottom rung rather than the top. */
+const STATS_RETRY_DELAYS_MS = [1500, 2500, 4000, 6000] as const;
+let statsRetry = 0;
+let statsRetryTimer: number | null = null;
+
+function cancelStatsRetry() {
+  if (statsRetryTimer !== null) { window.clearTimeout(statsRetryTimer); statsRetryTimer = null; }
+}
+
+/** True when no article in the graph has a real contributor count yet. An empty
+   graph is not "pending" — that is the no-article state, not a slow one. */
+function graphIsAllPlaceholder(g: Graph): boolean {
+  const nodes = Object.values(g);
+  return nodes.length > 0 && nodes.every((n) => n.statsPending);
+}
+
 async function fetchForkGraphAndSet() {
   // Set loading state at the start
   isLoading.value = true;
   errorMessage.value = null;
+  cancelStatsRetry();
 
   try {
     if (!props.apiUrl) {
@@ -531,6 +572,20 @@ async function fetchForkGraphAndSet() {
     }
     const json = await res.json();
     const graph = buildGraphFromApi(json?.root);
+
+    /* Nothing real to draw yet: stay on the loading state and come back for the
+       numbers rather than rendering a graph of placeholders. state.graph is
+       deliberately NOT set — a half-real graph must never reach the layout. */
+    if (graphIsAllPlaceholder(graph) && statsRetry < STATS_RETRY_DELAYS_MS.length) {
+      const wait = STATS_RETRY_DELAYS_MS[statsRetry];
+      statsRetry++;
+      statsRetryTimer = window.setTimeout(() => {
+        statsRetryTimer = null;
+        void fetchForkGraphAndSet();
+      }, wait);
+      return;                        // isLoading stays true
+    }
+    statsRetry = 0;
     state.graph = graph;
 
     // Clear loading state before layout/render
@@ -588,9 +643,15 @@ function buildGraphFromApi(root: any): Graph {
     const isEmpty: boolean = repo?.empty === true;
     const description: string = typeof repo?.description === 'string' ? repo.description : '';
 
-    // If repository is not empty but contributors shows 0, it means stats are still generating
-    // In this case, we know there's at least 1 contributor (the person who created the content)
-    if (!isEmpty && contributors === 0) {
+    /* A repository with content has at least one commit and therefore at least
+       one contributor, so 0 on a NON-EMPTY repo never means "nobody": it means
+       the server has not finished computing the stats yet (it answers
+       TotalCount 0 while generation is in flight — services/repository/
+       fork_graph.go). Keep the placeholder 1 so a give-up render still draws
+       something, but remember that it IS a placeholder: fed into a ratio as if
+       it were real, it makes every bubble tie for biggest and paint at 126px. */
+    const statsPending: boolean = !isEmpty && contributors === 0;
+    if (statsPending) {
       contributors = 1;
     }
 
@@ -606,6 +667,7 @@ function buildGraphFromApi(root: any): Graph {
       fullName: fullName ?? undefined,
       description: description || undefined,
       isEmpty: isEmpty,
+      statsPending,
     };
     if (!node.repoSubject && parentId === null && props.subject) {
       node.repoSubject = props.subject;
@@ -635,26 +697,35 @@ function buildGraphFromApi(root: any): Graph {
    swapped, and every separation rule downstream reads it. */
 let layoutExpandedId: NodeId | null = null;
 
+/* THE one rung decision. Radius, label detail, count text and count size are
+   all read off the SAME rung, so size and content can never disagree — and
+   when no contributor count in the graph is real yet, that single decision is
+   the only place the fallback has to be made. */
+function rungFor(contributors: number): BubbleRung {
+  if (state.statsUnknown) return BUBBLE_UNKNOWN_RUNG;
+  return bubbleRungFor(contributors, state.maxContributors);
+}
+
 function rFor(n: Node) {
   if (layoutExpandedId !== null && n.id === layoutExpandedId) return BUBBLE_HOVER_RADIUS;
-  return bubbleRadiusFor(n.contributors, state.maxContributors);
+  return rungFor(n.contributors).diameter / 2;
 }
 
 /* What a bubble of this size is meant to say. Paired with rFor(): the same
    rung decides both, so size and content can never disagree. */
 function detailFor(n: number) {
-  return bubbleLabelDetailFor(n, state.maxContributors);
+  return rungFor(n).labelDetail;
 }
 
 /* The count as it is written in the circle, and the size it is written at.
    Both come from the rung, so neither depends on the radius being animated —
    see ./bubble-size.ts. */
 function countTextFor(n: number) {
-  return bubbleCountTextFor(n, state.maxContributors);
+  return countTextForRung(n, rungFor(n));
 }
 
 function countFontFor(n: number) {
-  return bubbleCountFontFor(n, state.maxContributors);
+  return rungFor(n).countFontSize;
 }
 
 function getRoot(g: Graph) { return Object.values(g).find(n => n.parentId === null) ?? null; }
@@ -1243,7 +1314,16 @@ function layoutAndRender() {
   syncCanvasHeight();
   /* The denominator of every size ratio (./bubble-size.ts). Must be set before
      any rFor() call. */
-  state.maxContributors = maxContributors(Object.values(state.graph).map((n) => n.contributors));
+  /* ONLY REAL COUNTS SET THE SCALE. A node whose stats are still generating
+     carries a placeholder 1 (buildGraphFromApi); counting those would let a
+     graph of placeholders declare its own maximum of 1, every ratio 1, and
+     every bubble the top rung. If nothing is real, there is no scale at all
+     and rungFor() falls back to BUBBLE_UNKNOWN_RUNG. */
+  const realCounts = Object.values(state.graph)
+    .filter((n) => !n.statsPending)
+    .map((n) => n.contributors);
+  state.statsUnknown = Object.keys(state.graph).length > 0 && realCounts.length === 0;
+  state.maxContributors = maxContributors(realCounts);
   applyResponsiveDials();          // adapt dials first
   if (!Object.keys(state.graph).length) {
     framePlacements = new Map();
@@ -1374,6 +1454,7 @@ onBeforeUnmount(() => {
   if (ro) ro.disconnect();
   pointerCleanup?.();
   cancelReflow();
+  cancelStatsRetry();
   if (hoverTimer !== null) window.clearTimeout(hoverTimer);
   window.removeEventListener('repo:selection-updated', handleExternalSelection as EventListener);
   window.removeEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
@@ -1410,11 +1491,17 @@ function persistSelectionDetail(detail: RepoSelectionDetail | null) {
    There is no overlay any more. Hovering a bubble (or focusing it with the
    keyboard) re-runs the SAME layout engine with that node's radius overridden
    to BUBBLE_HOVER_RADIUS and tweens every node from where it is to where it
-   now belongs; clicking adds the two actions to the card inside it. That
-   replaces the 430px centred ArticleDetailView, which has been deleted along
-   with its "< Back" control and the solo-article auto-open: a lone article is
-   simply the biggest bubble in a graph of one, hovered and clicked like any
-   other.
+   now belongs; clicking adds the two actions to the card inside it.
+
+   HOVER is in the graph; OPEN still is not. Clicking hands off to
+   ArticleDetailView (imported above, rendered near the bottom of this file),
+   which draws the article as a 425px circle in the centre of the canvas with
+   the graph not rendered behind it. Two ways in, which is why its "< Back"
+   control is conditional rather than always drawn:
+     * a click on a bubble  -> detailNode is set, Back and Escape are live;
+     * a SOLO subject       -> isSoloSubject/soloPinned, no click happened, so
+                               there is nowhere to go back to and no bubble is
+                               ever drawn (see openArticle/graphRendered).
 
    Why re-running the layout rather than scaling one bubble: every geometric
    guarantee the layout makes (no overlapping bubbles, no crossing connectors,
@@ -1847,7 +1934,13 @@ function onDetailFullHistory() {
   const repo = n.repoName ?? n.fullName?.split('/')[1] ?? '';
   if (!owner || !repo) return;
   const suburl = window.config?.suburl || '';
-  window.location.href = `${suburl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits`;
+  /* WITH A REF. A bare /commits is only absorbed by the `m.Get("/*", ...)`
+     catch-all in routers/web/web.go, which is annotated "deprecated, and kept
+     for backward compatibility" — every commits link in templates/ carries a
+     ref, and so does this one. */
+  const branch = props.defaultBranch;
+  const base = `${suburl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits`;
+  window.location.href = branch ? `${base}/branch/${encodeURIComponent(branch)}` : base;
 }
 
 /** Escape backs out exactly one level each time: the History card, then the

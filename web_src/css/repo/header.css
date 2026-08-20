@@ -68,6 +68,6 @@
 
   .secondary-nav .repo-header h1 {
     font-size: 20px !important;
-    text-align: center;
+    text-align: center !important;
   }
 }

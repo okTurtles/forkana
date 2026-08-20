@@ -396,20 +396,11 @@ onBeforeUnmount(clearTimer);
   overflow: hidden;
 }
 
-.btn-neutral {
-  padding: 8px 16px;
-  border: 1px solid var(--color-secondary, #d1d5db);
-  border-radius: 8px;
-  background: var(--color-body, #fff);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text, #111827);
-  cursor: pointer;
+/* .btn-neutral itself is global — web_src/css/features/bubble-graph.css, shared
+   with ArticleHistoryPopup. Only this button's no-wrap sits here: it is side by
+   side with another control, where a wrap would jump the row. */
+.detail-read {
   white-space: nowrap;
-}
-
-.btn-neutral:hover {
-  background: var(--color-hover, #f9fafb);
 }
 
 /* A button that reads as bold text: no border, no background. */

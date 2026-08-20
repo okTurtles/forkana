@@ -2,6 +2,7 @@ import {
   BUBBLE_HOVER_DIAMETER,
   BUBBLE_HOVER_RADIUS,
   BUBBLE_SIZE_LADDER,
+  BUBBLE_UNKNOWN_RUNG,
   bubbleDiameterFor,
   bubbleLabelDetailFor,
   bubbleRadiusFor,
@@ -9,6 +10,7 @@ import {
   bubbleCountTextFor,
   bubbleRungFor,
   contributorRatio,
+  countTextForRung,
   countCharBudget,
   formatContributorCount,
   maxContributors,
@@ -208,4 +210,31 @@ test('a bubble writes the count its own rung can hold', () => {
   expect(bubbleCountTextFor(1000, 12345)).toBe('1k');       // 22px, 3 chars
   expect(bubbleCountTextFor(300, 12345)).toBe('300');       // 22px, fits
   expect(bubbleCountTextFor(1, 1)).toBe('1');               // lone article, 126px
+});
+
+test('a graph whose stats have not arrived yet falls to the BOTTOM rung, not the top', () => {
+  /* Issue #284 review, finding 2. The API reports "still generating" as 0
+     contributors, and the graph replaces those with a placeholder 1. Fed into a
+     ratio as if real, every article ties for biggest and the whole graph paints
+     at 126px — the most misleading picture available, and (the graph being
+     fetched once) a permanent one. FishboneGraph keeps placeholders out of the
+     scale and uses this rung instead. */
+  expect(BUBBLE_UNKNOWN_RUNG.diameter).toBe(LADDER[0]);
+  expect(BUBBLE_UNKNOWN_RUNG).toBe(BUBBLE_SIZE_LADDER[0]);
+
+  // The trap it exists to avoid: an all-placeholder graph scored on its own terms.
+  expect(bubbleDiameterFor(1, maxContributors([1, 1, 1]))).toBe(126);
+  // ...and with the placeholders excluded, there is no maximum left at all.
+  expect(maxContributors([])).toBe(0);
+});
+
+test('the count still fits when it is written from a rung the caller already has', () => {
+  // countTextForRung is the same formatting bubbleCountTextFor does, for a
+  // caller that resolved the rung once and reads size and text off that one.
+  for (const rung of BUBBLE_SIZE_LADDER) {
+    expect(countTextForRung(538, rung)).toBe(
+      formatContributorCount(538, countCharBudget(rung.diameter, rung.countFontSize)),
+    );
+  }
+  expect(countTextForRung(4, BUBBLE_UNKNOWN_RUNG)).toBe('4');
 });

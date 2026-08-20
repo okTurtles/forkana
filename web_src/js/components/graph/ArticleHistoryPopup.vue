@@ -24,7 +24,7 @@ export type HistoryEntry = {
    check — it cannot get out of step with an actual resize, and it needs no
    listener. The breakpoint is the one the rest of the app uses, 768px. */
 
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 
 const props = defineProps<{
   entries: HistoryEntry[];
@@ -38,6 +38,10 @@ const emit = defineEmits<{
 }>();
 
 const expanded = ref<string | null>(props.expandedId ?? null);
+/* Track the prop, do not snapshot it: today the popup is remounted on every open
+   (v-if="historyOpen"), so the initial read is correct — but nothing in here says
+   a caller may not keep it mounted across a change of article. */
+watch(() => props.expandedId, (id) => { expanded.value = id ?? null; });
 
 function toggle(id: string) {
   expanded.value = expanded.value === id ? null : id;
@@ -270,21 +274,8 @@ function toggle(id: string) {
   width: 100%;
 }
 
-/* Shared neutral button, as in the design: light surface, subtle border. */
-.btn-neutral {
-  padding: 8px 14px;
-  border: 1px solid var(--color-secondary, #d1d5db);
-  border-radius: 8px;
-  background: var(--color-body, #fff);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text, #111827);
-  cursor: pointer;
-}
-
-.btn-neutral:hover {
-  background: var(--color-hover, #f9fafb);
-}
+/* .btn-neutral is global — web_src/css/features/bubble-graph.css, shared with
+   ArticleDetailView. */
 
 /* ── Narrow viewports: the same card as a bottom sheet ─────────────────── */
 @media (width <= 767px) {

@@ -74,7 +74,13 @@ export type BubbleRung = {
 
 /* THE LADDER. Five diameters, five thresholds — the only thing anyone should
    need to edit. Ordered smallest → largest; `bubbleRungFor` takes the LAST
-   rung whose `minRatio` the ratio reaches. */
+   rung whose `minRatio` the ratio reaches.
+
+   FIVE RUNGS IS DELIBERATE. Issue #284 and the Figma frame it links both say
+   FOUR sizes; the fifth (XS) was added so a graph with one dominant article
+   still separates the also-rans instead of flattening them onto one rung, and
+   was confirmed as wanted. The issue text is therefore NOT the spec here —
+   do not "correct" this back to four on the strength of it. */
 export const BUBBLE_SIZE_LADDER: readonly BubbleRung[] = [
   {name: 'XS', minRatio: 0, diameter: 22, countFontSize: 9, labelDetail: 'count'},
   {name: 'S', minRatio: 0.07, diameter: 34, countFontSize: 12, labelDetail: 'count'},
@@ -82,6 +88,16 @@ export const BUBBLE_SIZE_LADDER: readonly BubbleRung[] = [
   {name: 'L', minRatio: 0.45, diameter: 90, countFontSize: 22, labelDetail: 'label'},
   {name: 'XL', minRatio: 0.75, diameter: 126, countFontSize: 22, labelDetail: 'full'},
 ] as const;
+
+/* THE STATS ARE NOT IN YET. The API reports a repository whose contributor
+   stats are still being computed as 0 contributors (see the `statsPending`
+   handling in FishboneGraph), and a ratio needs a real maximum to mean
+   anything. When NOTHING in the graph has a real count there is no comparison
+   to draw, so every bubble sits on the bottom rung until the numbers arrive —
+   deliberately the SMALLEST, not the largest: `contributorRatio(0, 0)` answers
+   1 ("everything ties for biggest"), which would otherwise paint every bubble
+   at 126px, the single most misleading picture available. */
+export const BUBBLE_UNKNOWN_RUNG: BubbleRung = BUBBLE_SIZE_LADDER[0];
 
 /* The hovered/opened bubble: one fixed size, ~1.6x the largest rung, big
    enough to carry the article's whole card (count, excerpt, date, and — once
@@ -223,6 +239,12 @@ export function formatContributorCount(count: number, maxChars: number): string 
 /** What this bubble writes in its circle: the count, abbreviated if the rung
    it landed on is too small to spell it out. */
 export function bubbleCountTextFor(contributors: number, maxInGraph: number): string {
-  const rung = bubbleRungFor(contributors, maxInGraph);
-  return formatContributorCount(contributors, countCharBudget(rung.diameter, rung.countFontSize));
+  return countTextForRung(contributors, bubbleRungFor(contributors, maxInGraph));
+}
+
+/** Same, for a caller that has already resolved the rung — the graph does, so
+   that one decision drives the radius, the label detail and the count together
+   and they cannot disagree. */
+export function countTextForRung(count: number, rung: BubbleRung): string {
+  return formatContributorCount(count, countCharBudget(rung.diameter, rung.countFontSize));
 }
