@@ -1460,7 +1460,6 @@ const graphRendered = computed(() => openArticle.value === null || detailClosing
 /** Pointer type of the gesture in progress. Touch has no hover, so a tap has
    to mean one of two things depending on what is already expanded — see
    onBubbleClick(). */
-let lastPointerType = 'mouse';
 let hoverTimer: number | null = null;
 /** Where the pointer is, in client px, so a closing article view can ask
    whether it is genuinely over a bubble. -1 until the pointer is seen. */
@@ -1468,6 +1467,10 @@ const pointerClient = {x: -1, y: -1};
 /** True when the article view was closed from the keyboard (Escape, or Back
    activated without a pointer): focus is then handed back to the bubble. */
 let closedByKeyboard = false;
+/** How long after a tap begins nothing may grow a bubble. Long enough to cover
+   the focus the tap itself causes and the click that follows it, short enough
+   that the next keyboard or mouse gesture is unaffected. */
+const TOUCH_TAP_GUARD_MS = 500;
 /* Set by an explicit dismissal (Escape, background click). Escape means "put
    this away", so for a moment afterwards nothing may grow a bubble again —
    without it the dismissal re-expands the bubble it just closed: unmounting
@@ -1545,16 +1548,23 @@ function collapseAll() {
 }
 
 /** Pointer/focus in and out of a bubble.
-   TOUCH IS IGNORED HERE: a touch pointer fires enter before the tap and leave
-   after it, which would make every tap on a phone act as a click. Touch goes
-   through onBubbleClick() instead, where the first tap expands and the second
-   opens. */
+
+   TOUCH NEVER HOVERS. There is no hover on a touch screen — a touch pointer
+   fires enter before the tap and leave after it, which is a side effect of the
+   tap, not an intention — so a tap goes straight to the article
+   (onBubbleClick). The 202px state is simply not reachable that way.
+
+   The tap ALSO focuses the <g> (browsers focus a tabindex element on press),
+   and focus is a hover here, so the tap would otherwise sneak the 202px state
+   in through the keyboard path for a few frames before the article view
+   covered it. Suppressing hover for the length of the gesture closes that
+   door without giving up keyboard hover afterwards: the window is short and
+   bounded, so a Tab later on behaves normally. */
 function onBubbleHover(id: NodeId, on: boolean, pointerType: string) {
-  /* Only a real pointer updates this. Focus arrives as 'keyboard' and would
-     otherwise overwrite the 'touch' that a tap's pointerdown just recorded —
-     the <g> takes focus on the same gesture. */
-  if (pointerType !== 'keyboard') lastPointerType = pointerType;
-  if (pointerType === 'touch') return;
+  if (pointerType === 'touch') {
+    if (on) hoverSuppressedUntil = Math.max(hoverSuppressedUntil, performance.now() + TOUCH_TAP_GUARD_MS);
+    return;
+  }
   if (openArticle.value) return;   // the graph is not on screen to be hovered
   if (on) setHovered(id);
   else if (hoveredId.value === id) setHovered(null);
@@ -1567,15 +1577,13 @@ function onBubbleClick(n: Node) {
     return;
   }
 
-  /* Touch: the first tap does what hover does (202px in place, info, no
-     actions), the second opens the article. Tapping a different bubble starts
-     that bubble at its first tap. Mouse and keyboard skip straight to the
-     open, since they have already had their hover. */
-  if (lastPointerType === 'touch' && hoveredId.value !== n.id) {
-    setHovered(n.id, true);
-    return;
-  }
-
+  /* One gesture, one outcome, on every input: this opens the article. A mouse
+     has already had its hover on the way here and a keyboard its focus; a tap
+     has had neither, and gets none — it opens the article on the FIRST tap
+     (there is no useful "hover" for a finger to make). openDetail() flies the
+     circle out of whatever size the bubble is on screen right now, so a tap
+     starts from the resting ladder size and a click from the 202px hover, with
+     no special case. */
   openDetail(n);
 
   const detail = getSelectionDetailFromNode(n);
