@@ -22,17 +22,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// loadArticleRepo returns the owner, the repository and its subject name, skipping
-// the test when the fixture has no subject attached.
+// loadArticleRepo returns the owner, the repository and its subject name. Every article
+// settings test goes through here, so a fixture that lost its subject has to fail the
+// suite instead of skipping it silently.
 func loadArticleRepo(t *testing.T, repoID int64) (*user_model.User, *repo_model.Repository, string) {
 	t.Helper()
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repoID})
 	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
 
 	require.NoError(t, repo.LoadSubject(t.Context()))
-	if repo.SubjectRelation == nil {
-		t.Skipf("repo %d has no subject, skipping", repoID)
-	}
+	require.NotNil(t, repo.SubjectRelation, "repo %d fixture must have a subject", repoID)
+	require.NotEmpty(t, repo.SubjectRelation.Name, "repo %d fixture subject must have a name", repoID)
 	return owner, repo, repo.SubjectRelation.Name
 }
 
