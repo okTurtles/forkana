@@ -5,6 +5,7 @@ package integration
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -66,4 +67,40 @@ func TestExploreSubjectsSorting(t *testing.T) {
 		resp := MakeRequest(t, req, http.StatusOK)
 		assert.Equal(t, http.StatusOK, resp.Code, "Sort type %s should work", sortType)
 	}
+}
+
+func TestExploreSubjectSuggestions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	for _, name := range []string{"Moon", "Moons of Saturn", "Full Moon Party", "Sun"} {
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), name)
+		assert.NoError(t, err)
+		assert.NotNil(t, subject)
+	}
+
+	suggestPath := func(t *testing.T, path string) []string {
+		t.Helper()
+		req := NewRequest(t, "GET", path)
+		resp := MakeRequest(t, req, http.StatusOK)
+		var parsed struct {
+			Subjects []string `json:"subjects"`
+		}
+		DecodeJSON(t, resp, &parsed)
+		return parsed.Subjects
+	}
+	suggest := func(t *testing.T, keyword string) []string {
+		t.Helper()
+		return suggestPath(t, "/explore/subjects/suggestions?q="+url.QueryEscape(keyword))
+	}
+
+	// The exact match comes first, then the subjects starting with the keyword, then the rest.
+	assert.Equal(t, []string{"Moon", "Moons of Saturn", "Full Moon Party"}, suggest(t, "moon"))
+
+	// Only matching subjects are suggested, and a keyword without matches suggests nothing.
+	assert.Equal(t, []string{"Sun"}, suggest(t, "sun"))
+	assert.Empty(t, suggest(t, "nothing matches this"))
+
+	// An empty keyword, with or without the parameter itself, suggests nothing.
+	assert.Empty(t, suggest(t, ""))
+	assert.Empty(t, suggestPath(t, "/explore/subjects/suggestions"))
 }
