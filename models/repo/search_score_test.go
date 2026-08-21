@@ -251,3 +251,30 @@ func TestFallbackBehaviorWithoutKeyword(t *testing.T) {
 		assert.NotEmpty(t, repos[i].Name, "Repository should have a name")
 	}
 }
+
+func TestScoreSortingWithoutKeyword(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+
+	// Relevance ordering can be requested without anything to score against, e.g. by submitting
+	// the landing page search field empty. The search then has to fall back to a plain ordering
+	// instead of leaving the "relevance_score" placeholder in the ORDER BY clause, which would
+	// reference a non-existent column and fail the whole query.
+	for _, keyword := range []string{"", "   ", ",", " , , "} {
+		for _, sortOrder := range []string{"score", "reversescore"} {
+			t.Run(sortOrder+"/"+keyword, func(t *testing.T) {
+				repos, count, err := repo_model.SearchRepository(context.Background(), repo_model.SearchRepoOptions{
+					ListOptions: db.ListOptions{PageSize: 10},
+					Actor:       user,
+					Keyword:     keyword,
+					OrderBy:     repo_model.OrderByFlatMap[sortOrder],
+					Private:     true,
+				})
+				require.NoError(t, err, "SearchRepository should not return an error")
+				assert.Positive(t, count, "Should find some repositories")
+				assert.NotEmpty(t, repos, "Should return some repositories")
+			})
+		}
+	}
+}

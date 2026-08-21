@@ -13,7 +13,7 @@
 
 		<!-- Search + Dropdown -->
 		<div class="tw-mx-auto dropdown-anchor tw-max-w-[560px]">
-			<form class="tw-relative" action="{{AppSubUrl}}/explore/articles" method="get">
+			<form id="home-search-form" class="ignore-dirty tw-relative" action="{{AppSubUrl}}/explore/articles" method="get">
 				<span class="tw-pointer-events-none tw-absolute tw-inset-y-0 tw-left-3 tw-flex tw-items-center">
 					<svg xmlns="http://www.w3.org/2000/svg" class="tw-h-5 tw-w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
@@ -26,12 +26,18 @@
 					type="text"
 					placeholder="{{ctx.Locale.Tr "home.search_placeholder"}}"
 					autocomplete="off"
+					aria-describedby="home-search-error"
 					class="tw-w-full tw-rounded-md tw-border tw-border-input-border focus:tw-border-primary tw-outline-none tw-pl-10 tw-pr-4 tw-py-3 tw-text-[17px] tw-leading-6 tw-shadow-sm"
 				/>
 				<input type="hidden" name="only_show_relevant" value="false">
 				<input type="hidden" name="sort" value="score">
 				<input type="hidden" name="fork" value="0">
 			</form>
+
+			<!-- Validation message for an empty search, hidden until the search is submitted blank -->
+			<div id="home-search-error" class="home-search-error tw-hidden tw-text-left" role="alert">
+				{{ctx.Locale.Tr "home.search_empty_error"}}
+			</div>
 
 			<!-- Dropdown -->
 			<div id="results"

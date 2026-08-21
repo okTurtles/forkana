@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildRelevanceScoreSQL_InputValidation(t *testing.T) {
@@ -99,7 +100,7 @@ func TestBuildRelevanceScoreSQL_InputValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildRelevanceScoreSQL(tt.keyword)
+			result := buildRelevanceScoreSQL(sanitizeSearchKeywords(tt.keyword))
 
 			if tt.expectZero {
 				assert.Equal(t, "0", result, tt.description)
@@ -116,7 +117,7 @@ func TestBuildRelevanceScoreSQL_InputValidation(t *testing.T) {
 func TestBuildRelevanceScoreSQL_KeywordLimits(t *testing.T) {
 	t.Run("Exactly 10 keywords", func(t *testing.T) {
 		keyword := "a,b,c,d,e,f,g,h,i,j"
-		result := buildRelevanceScoreSQL(keyword)
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords(keyword))
 		assert.NotEqual(t, "0", result)
 		// Count the number of CASE statements (should be 10)
 		caseCount := strings.Count(result, "CASE")
@@ -125,7 +126,7 @@ func TestBuildRelevanceScoreSQL_KeywordLimits(t *testing.T) {
 
 	t.Run("More than 10 keywords", func(t *testing.T) {
 		keyword := "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o"
-		result := buildRelevanceScoreSQL(keyword)
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords(keyword))
 		assert.NotEqual(t, "0", result)
 		// Count the number of CASE statements (should be limited to 10)
 		caseCount := strings.Count(result, "CASE")
@@ -135,7 +136,7 @@ func TestBuildRelevanceScoreSQL_KeywordLimits(t *testing.T) {
 	t.Run("Individual keyword length limit", func(t *testing.T) {
 		// Create a keyword longer than 100 chars
 		longKeyword := strings.Repeat("a", 150)
-		result := buildRelevanceScoreSQL(longKeyword)
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords(longKeyword))
 		assert.NotEqual(t, "0", result)
 		// The function should still work, just with truncated keyword
 		assert.Contains(t, result, "CASE")
@@ -144,7 +145,7 @@ func TestBuildRelevanceScoreSQL_KeywordLimits(t *testing.T) {
 	t.Run("Total string length limit", func(t *testing.T) {
 		// Create a string longer than 500 chars
 		longString := strings.Repeat("keyword,", 100) // ~800 chars
-		result := buildRelevanceScoreSQL(longString)
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords(longString))
 		assert.NotEqual(t, "0", result)
 		// The function should still work, just with truncated string
 		assert.Contains(t, result, "CASE")
@@ -153,29 +154,29 @@ func TestBuildRelevanceScoreSQL_KeywordLimits(t *testing.T) {
 
 func TestBuildRelevanceScoreSQL_EdgeCases(t *testing.T) {
 	t.Run("Single character keyword", func(t *testing.T) {
-		result := buildRelevanceScoreSQL("a")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords("a"))
 		assert.NotEqual(t, "0", result)
 		assert.Contains(t, result, "CASE")
 	})
 
 	t.Run("Keyword with only commas", func(t *testing.T) {
-		result := buildRelevanceScoreSQL(",,,")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords(",,,"))
 		assert.Equal(t, "0", result, "Should return '0' for only commas")
 	})
 
 	t.Run("Keyword with spaces and commas", func(t *testing.T) {
-		result := buildRelevanceScoreSQL(" , , , ")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords(" , , , "))
 		assert.Equal(t, "0", result, "Should return '0' for only spaces and commas")
 	})
 
 	t.Run("Mixed whitespace types", func(t *testing.T) {
-		result := buildRelevanceScoreSQL("\t\n\r moon \t\n\r")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords("\t\n\r moon \t\n\r"))
 		assert.NotEqual(t, "0", result)
 		assert.Contains(t, result, "CASE")
 	})
 
 	t.Run("Newlines in keywords", func(t *testing.T) {
-		result := buildRelevanceScoreSQL("moon\nlanding")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords("moon\nlanding"))
 		assert.NotEqual(t, "0", result)
 		// Should treat as single keyword (no comma separator)
 		caseCount := strings.Count(result, "CASE")
@@ -185,20 +186,20 @@ func TestBuildRelevanceScoreSQL_EdgeCases(t *testing.T) {
 
 func TestBuildRelevanceScoreSQL_SecurityCases(t *testing.T) {
 	t.Run("SQL injection attempt - single quote", func(t *testing.T) {
-		result := buildRelevanceScoreSQL("test' OR '1'='1")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords("test' OR '1'='1"))
 		assert.NotEqual(t, "0", result)
 		// Should still generate valid SQL (placeholders prevent injection)
 		assert.Contains(t, result, "CASE")
 	})
 
 	t.Run("SQL injection attempt - comment", func(t *testing.T) {
-		result := buildRelevanceScoreSQL("test--")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords("test--"))
 		assert.NotEqual(t, "0", result)
 		assert.Contains(t, result, "CASE")
 	})
 
 	t.Run("SQL injection attempt - union", func(t *testing.T) {
-		result := buildRelevanceScoreSQL("test UNION SELECT")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords("test UNION SELECT"))
 		assert.NotEqual(t, "0", result)
 		// Should treat as single keyword (no comma)
 		caseCount := strings.Count(result, "CASE")
@@ -212,7 +213,7 @@ func TestBuildRelevanceScoreSQL_SecurityCases(t *testing.T) {
 			keywords[i] = "keyword"
 		}
 		longKeyword := strings.Join(keywords, ",")
-		result := buildRelevanceScoreSQL(longKeyword)
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords(longKeyword))
 		assert.NotEqual(t, "0", result)
 		// Should be limited to 10 keywords
 		caseCount := strings.Count(result, "CASE")
@@ -222,7 +223,7 @@ func TestBuildRelevanceScoreSQL_SecurityCases(t *testing.T) {
 	t.Run("DoS attempt - very long string", func(t *testing.T) {
 		// Try to create a 10KB string
 		longString := strings.Repeat("a", 10000)
-		result := buildRelevanceScoreSQL(longString)
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords(longString))
 		assert.NotEqual(t, "0", result)
 		// Should still work (truncated to 500 chars)
 		assert.Contains(t, result, "CASE")
@@ -231,7 +232,7 @@ func TestBuildRelevanceScoreSQL_SecurityCases(t *testing.T) {
 
 func TestBuildRelevanceScoreSQL_OutputFormat(t *testing.T) {
 	t.Run("Single keyword output format", func(t *testing.T) {
-		result := buildRelevanceScoreSQL("moon")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords("moon"))
 		// Should be wrapped in parentheses
 		assert.True(t, strings.HasPrefix(result, "("), "Result should start with (")
 		assert.True(t, strings.HasSuffix(result, ")"), "Result should end with )")
@@ -243,11 +244,53 @@ func TestBuildRelevanceScoreSQL_OutputFormat(t *testing.T) {
 	})
 
 	t.Run("Multiple keywords output format", func(t *testing.T) {
-		result := buildRelevanceScoreSQL("moon,landing")
+		result := buildRelevanceScoreSQL(sanitizeSearchKeywords("moon,landing"))
 		// Should contain addition operator for combining scores
 		assert.Contains(t, result, "+", "Multiple keywords should be combined with +")
 		// Should have 2 CASE statements
 		caseCount := strings.Count(result, "CASE")
 		assert.Equal(t, 2, caseCount)
+	})
+}
+
+func TestSanitizeSearchKeywords(t *testing.T) {
+	tests := []struct {
+		name     string
+		keyword  string
+		expected []string
+	}{
+		{"Empty string", "", nil},
+		{"Only whitespace", "   ", nil},
+		{"Only separators", " , , , ", nil},
+		{"Single keyword", "  moon  ", []string{"moon"}},
+		{"Multiple keywords", "moon, landing ,apollo", []string{"moon", "landing", "apollo"}},
+		{"Empty keywords in list", "moon,,landing", []string{"moon", "landing"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keywords := sanitizeSearchKeywords(tt.keyword)
+			if len(tt.expected) == 0 {
+				assert.Empty(t, keywords)
+			} else {
+				assert.Equal(t, tt.expected, keywords)
+			}
+		})
+	}
+
+	t.Run("Limits the number of keywords", func(t *testing.T) {
+		assert.Len(t, sanitizeSearchKeywords(strings.Repeat("moon,", 50)), maxSearchKeywords)
+	})
+
+	t.Run("Limits the length of each keyword", func(t *testing.T) {
+		keywords := sanitizeSearchKeywords(strings.Repeat("a", 150))
+		require.Len(t, keywords, 1)
+		assert.Len(t, keywords[0], maxIndividualKeywordLength)
+	})
+
+	t.Run("Limits the total length", func(t *testing.T) {
+		// each keyword is well below the individual limit, so only the total limit can cut this down
+		keywords := sanitizeSearchKeywords(strings.Repeat("ab,", 400))
+		assert.Less(t, len(strings.Join(keywords, ",")), maxSearchKeywordLength)
 	})
 }
