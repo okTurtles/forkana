@@ -54,16 +54,16 @@ func SubjectSuggestions(ctx *context.Context) {
 		ctx.ServerError("FindSimilarSubjects", err)
 		return
 	}
-	for _, subject := range similarSubjects {
-		names = append(names, subject.Name)
+	similarNames := make([]string, len(similarSubjects))
+	for i, subject := range similarSubjects {
+		similarNames[i] = subject.Name
 	}
 
 	// FindSimilarSubjects picks the matches by similarity but hands them back in the requested
 	// display order, which for a type-ahead buries the subjects that start with what has just
-	// been typed. Lift those back up, keeping the alphabetical order within each group and the
-	// exact match (already first) where it is.
+	// been typed. Lift those back up, keeping the alphabetical order within each group.
 	prefix := strings.ToLower(keyword)
-	slices.SortStableFunc(names[len(names)-len(similarSubjects):], func(a, b string) int {
+	slices.SortStableFunc(similarNames, func(a, b string) int {
 		aStarts, bStarts := strings.HasPrefix(strings.ToLower(a), prefix), strings.HasPrefix(strings.ToLower(b), prefix)
 		switch {
 		case aStarts == bStarts:
@@ -74,6 +74,7 @@ func SubjectSuggestions(ctx *context.Context) {
 			return 1
 		}
 	})
+	names = append(names, similarNames...)
 
 	ctx.JSON(http.StatusOK, map[string]any{"subjects": names})
 }

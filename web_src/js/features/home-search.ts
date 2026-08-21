@@ -41,6 +41,13 @@ class HomeSearch {
     this.input.addEventListener('focus', () => this.scheduleSearch());
     this.input.addEventListener('keydown', (e: KeyboardEvent) => this.onKeyDown(e));
 
+    // Keep the highlighted suggestion under the mouse, so that Enter opens the row the user is
+    // pointing at rather than one the arrow keys left behind.
+    this.suggestions.addEventListener('mouseover', (e: MouseEvent) => {
+      const item = (e.target as Element).closest<HTMLAnchorElement>('.home-search-suggestion');
+      this.setActive(item ? this.items().indexOf(item) : -1);
+    });
+
     // Clicking anywhere else closes the dropdown, but the click on a suggestion itself has to go
     // through first, so listen for the bubbled event instead of the field losing focus.
     document.addEventListener('click', (e: MouseEvent) => {
@@ -87,8 +94,7 @@ class HomeSearch {
     this.suggestions.replaceChildren(...names.map((name, i) => createElementFromHTML(
       html`<a id="home-search-suggestion-${i}" class="home-search-suggestion" role="option" aria-selected="false" href="${appSubUrl}/subject/${htmlRaw(pathEscapeSegments(name))}">${htmlRaw(highlightKeyword(name, keyword))}</a>`,
     )));
-    this.input.removeAttribute('aria-activedescendant');
-    this.activeIndex = -1;
+    this.setActive(-1);
     if (!names.length) {
       this.close();
       return;
@@ -100,9 +106,9 @@ class HomeSearch {
   private close(): void {
     if (this.debounceTimer !== null) clearTimeout(this.debounceTimer);
     this.debounceTimer = null;
+    this.setActive(-1);
     hideElem(this.suggestions);
     this.input.setAttribute('aria-expanded', 'false');
-    this.activeIndex = -1;
   }
 
   private items(): HTMLAnchorElement[] {
@@ -122,7 +128,8 @@ class HomeSearch {
       const step = e.key === 'ArrowDown' ? 1 : -1;
       // Stepping past either end goes back to the keyword the user typed, like a browser's own
       // address bar does.
-      this.setActive(this.activeIndex + step >= items.length || this.activeIndex + step < -1 ? -1 : this.activeIndex + step);
+      const nextIndex = this.activeIndex + step;
+      this.setActive(nextIndex >= items.length || nextIndex < -1 ? -1 : nextIndex);
     } else if (e.key === 'Enter' && this.activeIndex !== -1) {
       e.preventDefault(); // opening the highlighted subject instead of submitting the search
       items[this.activeIndex].click();
