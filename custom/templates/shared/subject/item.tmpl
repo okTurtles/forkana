@@ -2,10 +2,11 @@
 	Subject item partial template
 	Expects a Subject object with: Name, RootRepoCount, RepoCount, CreatedUnix, UpdatedUnix
 
-	The leading icon is "octicon-goal" so a row matches the Subjects tab in explore/navbar.tmpl,
-	and the repository counts that Gitea's stock flex-list puts in "flex-item-trailing" are left
-	out: a subject row is name-first by design (#248). Row spacing and the removal of the
-	flex-list separators live in explore-subjects.custom.css.
+	A subject row is name-only by design (#248): the leading icon is "octicon-goal" so a row
+	matches the Subjects tab in explore/navbar.tmpl, and neither the repository counts that
+	Gitea's stock flex-list puts in "flex-item-trailing" nor the created/updated line it puts in
+	"flex-item-body" are rendered. Row spacing, the icon colour, the capitalised first letter and
+	the removal of the flex-list separators live in explore-subjects.custom.css.
 */}}
 <div class="flex-item">
 	<div class="flex-item-leading">
@@ -16,14 +17,6 @@
 			<div class="flex-item-title">
 				<a class="text primary name" href="/subject/{{PathEscapeSegments .Name}}">{{.Name}}</a>
 			</div>
-		</div>
-		<div class="flex-item-body">
-			<span class="text small muted">
-				{{ctx.Locale.Tr "explore.subject.created"}} {{DateUtils.TimeSince .CreatedUnix}}
-				{{if ne .CreatedUnix .UpdatedUnix}}
-					· {{ctx.Locale.Tr "explore.subject.updated"}} {{DateUtils.TimeSince .UpdatedUnix}}
-				{{end}}
-			</span>
 		</div>
 	</div>
 </div>

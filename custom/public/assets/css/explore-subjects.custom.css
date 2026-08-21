@@ -16,14 +16,16 @@
 
 .page-content.explore.subjects .flex-list > .flex-item {
   padding: 6px 0;
-  gap: 6px;
+  gap: 12px;
+  align-items: center;
 }
 
-/* Target glyph, aligned to the name's line rather than centred on the whole two-line block. */
+/* Target glyph in the body text colour rather than the link colour, so the name is the only
+   accented thing in the row. The token is near-black on light themes and near-white on dark
+   ones, which keeps the glyph legible either way. */
 .page-content.explore.subjects .flex-item .flex-item-leading {
-  align-self: flex-start;
-  padding-top: 2px;
-  color: var(--color-primary);
+  align-self: center;
+  color: var(--color-text);
 }
 
 .page-content.explore.subjects .flex-item .flex-item-leading .svg {
@@ -31,19 +33,17 @@
   height: 16px;
 }
 
-.page-content.explore.subjects .flex-item .flex-item-main {
-  gap: 0;
-}
-
 .page-content.explore.subjects .flex-item .flex-item-title a {
   color: var(--color-primary);
   font-size: 14px;
   font-weight: 500;
+  /* ::first-letter only applies to a block container, and the anchor is inline by default. */
+  display: inline-block;
 }
 
-.page-content.explore.subjects .flex-item .flex-item-body {
-  font-size: 12px;
-  color: var(--color-text-light-2);
+/* Display-only capitalisation: the stored subject name and the URL it links to are untouched. */
+.page-content.explore.subjects .flex-item .flex-item-title a::first-letter {
+  text-transform: uppercase;
 }
 
 /* Section headings: "Search results for …" and "Similar". */
