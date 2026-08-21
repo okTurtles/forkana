@@ -45,10 +45,9 @@ func sanitizeSearchKeywords(keyword string) []string {
 		return nil
 	}
 
-	// Limit total keyword length
-	if len(keyword) > maxSearchKeywordLength {
-		keyword = keyword[:maxSearchKeywordLength]
-	}
+	// Limit total keyword length. Truncating by runes rather than bytes keeps the keywords valid
+	// UTF-8, which database drivers reject once they are bound as query arguments.
+	keyword = util.TruncateRunes(keyword, maxSearchKeywordLength)
 
 	// Split and limit number of keywords
 	keywords := strings.Split(keyword, ",")
@@ -63,10 +62,7 @@ func sanitizeSearchKeywords(keyword string) []string {
 			continue
 		}
 		// Limit individual keyword length
-		if len(kw) > maxIndividualKeywordLength {
-			kw = kw[:maxIndividualKeywordLength]
-		}
-		validKeywords = append(validKeywords, kw)
+		validKeywords = append(validKeywords, util.TruncateRunes(kw, maxIndividualKeywordLength))
 	}
 	return validKeywords
 }
@@ -557,11 +553,7 @@ func SearchRepositoryCondition(opts SearchRepoOptions) builder.Cond {
 
 	if opts.Keyword != "" {
 		// Validate and sanitize keyword input to prevent DoS attacks
-		keyword := strings.TrimSpace(opts.Keyword)
-		if len(keyword) > maxSearchKeywordLength {
-			keyword = keyword[:maxSearchKeywordLength]
-		}
-		validKeywords := sanitizeSearchKeywords(keyword)
+		validKeywords := sanitizeSearchKeywords(opts.Keyword)
 
 		// Only proceed if we have valid keywords after sanitization
 		if len(validKeywords) > 0 {
@@ -592,8 +584,8 @@ func SearchRepositoryCondition(opts SearchRepoOptions) builder.Cond {
 					likes = likes.Or(builder.Exists(subjectExistsQuery))
 
 					// If the string looks like "org/repo", match against that pattern too
-					if opts.TeamID == 0 && strings.Count(keyword, "/") == 1 {
-						pieces := strings.Split(keyword, "/")
+					if opts.TeamID == 0 && strings.Count(opts.Keyword, "/") == 1 {
+						pieces := strings.Split(opts.Keyword, "/")
 						ownerName := strings.TrimSpace(pieces[0])
 						repoName := strings.TrimSpace(pieces[1])
 						if ownerName != "" {
@@ -770,14 +762,16 @@ func searchRepositoryByCondition(ctx context.Context, opts SearchRepoOptions, co
 		}
 	}
 
+	// These clauses are prepended to the order, so their argument goes in front of the relevance
+	// scoring ones to stay aligned with the placeholders of the combined clause
 	if opts.PriorityOwnerID > 0 {
 		orderBy = db.SearchOrderBy(fmt.Sprintf("CASE WHEN owner_id = ? THEN 0 ELSE owner_id END, %s", orderBy))
-		args = append(args, opts.PriorityOwnerID)
+		args = append([]any{opts.PriorityOwnerID}, args...)
 	} else if strings.Count(opts.Keyword, "/") == 1 {
-		// With "owner/repo" search times, prioritise results which match the owner field
+		// With "owner/repo" search terms, prioritise results which match the owner field
 		orgName := strings.Split(opts.Keyword, "/")[0]
 		orderBy = db.SearchOrderBy(fmt.Sprintf("CASE WHEN owner_name LIKE ? THEN 0 ELSE 1 END, %s", orderBy))
-		args = append(args, orgName)
+		args = append([]any{orgName}, args...)
 	}
 
 	sess := db.GetEngine(ctx).Table("repository")

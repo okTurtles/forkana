@@ -32,11 +32,13 @@ func TestExploreReposBlankKeyword(t *testing.T) {
 	// instead of failing the search query (#257).
 	for _, keyword := range []string{"", "%20", "+", ",", "%20,%20,%20"} {
 		for _, sortOrder := range []string{"score", "reversescore", ""} {
-			req := NewRequest(t, "GET", "/explore/articles?only_show_relevant=false&fork=0&sort="+sortOrder+"&q="+keyword)
-			MakeRequest(t, req, http.StatusOK)
+			t.Run("q="+keyword+"&sort="+sortOrder, func(t *testing.T) {
+				req := NewRequest(t, "GET", "/explore/articles?only_show_relevant=false&fork=0&sort="+sortOrder+"&q="+keyword)
+				MakeRequest(t, req, http.StatusOK)
 
-			req = NewRequest(t, "GET", "/explore/subjects?only_show_relevant=false&fork=0&sort="+sortOrder+"&q="+keyword)
-			MakeRequest(t, req, http.StatusOK)
+				req = NewRequest(t, "GET", "/explore/subjects?only_show_relevant=false&fork=0&sort="+sortOrder+"&q="+keyword)
+				MakeRequest(t, req, http.StatusOK)
+			})
 		}
 	}
 }

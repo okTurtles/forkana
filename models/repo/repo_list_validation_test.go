@@ -6,6 +6,7 @@ package repo
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -292,5 +293,18 @@ func TestSanitizeSearchKeywords(t *testing.T) {
 		// each keyword is well below the individual limit, so only the total limit can cut this down
 		keywords := sanitizeSearchKeywords(strings.Repeat("ab,", 400))
 		assert.Less(t, len(strings.Join(keywords, ",")), maxSearchKeywordLength)
+	})
+
+	t.Run("Truncates on rune boundaries", func(t *testing.T) {
+		// both limits land in the middle of a multi-byte rune here, cutting by bytes would leave
+		// invalid UTF-8 behind and the database drivers reject that as a query argument
+		for _, keyword := range []string{
+			strings.Repeat("a", maxIndividualKeywordLength-1) + "é",
+			strings.Repeat("a", maxSearchKeywordLength-1) + "é",
+		} {
+			for _, kw := range sanitizeSearchKeywords(keyword) {
+				assert.True(t, utf8.ValidString(kw), "keyword should stay valid UTF-8: %q", kw)
+			}
+		}
 	})
 }

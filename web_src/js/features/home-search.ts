@@ -16,6 +16,9 @@ export function initHomeSearch() {
   const clearError = () => {
     searchInput.classList.remove(invalidClass);
     searchInput.removeAttribute('aria-invalid');
+    // a hidden element still counts towards the accessible description when it is referenced
+    // directly, so the field is only described by the message while the message is shown
+    searchInput.removeAttribute('aria-describedby');
     hideElem(errorMsg);
   };
 
@@ -27,6 +30,7 @@ export function initHomeSearch() {
     e.preventDefault();
     searchInput.classList.add(invalidClass);
     searchInput.setAttribute('aria-invalid', 'true');
+    searchInput.setAttribute('aria-describedby', errorMsg.id);
     showElem(errorMsg);
     searchInput.focus();
   });

@@ -278,3 +278,23 @@ func TestScoreSortingWithoutKeyword(t *testing.T) {
 		}
 	}
 }
+
+func TestScoreSortingWithPriorityOwner(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	// The owner prioritization clauses are prepended to an ORDER BY that already carries the bound
+	// arguments of the relevance scoring, so their own argument has to go in front of those. When
+	// it does not, the keyword is bound to the owner comparison and the prioritization silently
+	// does nothing (or fails the query outright on a strictly typed database).
+	repos, _, err := repo_model.SearchRepository(context.Background(), repo_model.SearchRepoOptions{
+		ListOptions:     db.ListOptions{PageSize: 10},
+		Keyword:         "repo",
+		OrderBy:         repo_model.OrderByFlatMap["score"],
+		PriorityOwnerID: 10,
+		Private:         true,
+		AllPublic:       true,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, repos)
+	assert.EqualValues(t, 10, repos[0].OwnerID, "repositories of the priority owner should come first")
+}

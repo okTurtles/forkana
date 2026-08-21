@@ -33,6 +33,7 @@ test('blocks a blank search and shows the error message', () => {
     expect(error.classList.contains('tw-hidden')).toBe(false);
     expect(input.classList.contains('home-search-input-invalid')).toBe(true);
     expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toBe('home-search-error');
   }
 });
 
@@ -47,6 +48,7 @@ test('typing clears the error message again', () => {
   expect(error.classList.contains('tw-hidden')).toBe(true);
   expect(input.classList.contains('home-search-input-invalid')).toBe(false);
   expect(input.getAttribute('aria-invalid')).toBe(null);
+  expect(input.getAttribute('aria-describedby')).toBe(null);
 });
 
 test('submits a search with a keyword', () => {

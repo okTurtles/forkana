@@ -11,7 +11,9 @@
   color: var(--color-red);
 }
 
-/* Overrides the tailwind border utilities of the search field, including the focused state */
+/* Overrides the tailwind border utilities of the search field, including the focused state.
+   "!important" is required no matter the specificity: tailwind runs with `important: true`
+   (tailwind.config.ts), so every tw- utility on the input is itself !important. */
 #home-search-form input[name="q"].home-search-input-invalid,
 #home-search-form input[name="q"].home-search-input-invalid:focus {
   border-color: var(--color-red) !important;
