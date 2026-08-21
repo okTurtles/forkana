@@ -36,6 +36,37 @@ const (
 	maxIndividualKeywordLength = 100 // Maximum length of each individual keyword
 )
 
+// sanitizeSearchKeywords splits a raw search string into its comma-separated
+// keywords and applies the validation limits above. It returns an empty slice
+// when the string holds nothing searchable (empty, blank or only separators).
+func sanitizeSearchKeywords(keyword string) []string {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return nil
+	}
+
+	// Limit total keyword length. Truncating by runes rather than bytes keeps the keywords valid
+	// UTF-8, which database drivers reject once they are bound as query arguments.
+	keyword = util.TruncateRunes(keyword, maxSearchKeywordLength)
+
+	// Split and limit number of keywords
+	keywords := strings.Split(keyword, ",")
+	if len(keywords) > maxSearchKeywords {
+		keywords = keywords[:maxSearchKeywords]
+	}
+
+	validKeywords := make([]string, 0, len(keywords))
+	for _, kw := range keywords {
+		kw = strings.TrimSpace(kw)
+		if kw == "" {
+			continue
+		}
+		// Limit individual keyword length
+		validKeywords = append(validKeywords, util.TruncateRunes(kw, maxIndividualKeywordLength))
+	}
+	return validKeywords
+}
+
 // RepositoryList contains a list of repositories
 type RepositoryList []*Repository
 
@@ -522,32 +553,7 @@ func SearchRepositoryCondition(opts SearchRepoOptions) builder.Cond {
 
 	if opts.Keyword != "" {
 		// Validate and sanitize keyword input to prevent DoS attacks
-		keyword := strings.TrimSpace(opts.Keyword)
-
-		// Limit total keyword length
-		if len(keyword) > maxSearchKeywordLength {
-			keyword = keyword[:maxSearchKeywordLength]
-		}
-
-		// Split and limit number of keywords
-		keywords := strings.Split(keyword, ",")
-		if len(keywords) > maxSearchKeywords {
-			keywords = keywords[:maxSearchKeywords]
-		}
-
-		// Validate and sanitize each keyword
-		validKeywords := make([]string, 0, len(keywords))
-		for _, kw := range keywords {
-			kw = strings.TrimSpace(kw)
-			if kw == "" {
-				continue
-			}
-			// Limit individual keyword length
-			if len(kw) > maxIndividualKeywordLength {
-				kw = kw[:maxIndividualKeywordLength]
-			}
-			validKeywords = append(validKeywords, kw)
-		}
+		validKeywords := sanitizeSearchKeywords(opts.Keyword)
 
 		// Only proceed if we have valid keywords after sanitization
 		if len(validKeywords) > 0 {
@@ -578,8 +584,8 @@ func SearchRepositoryCondition(opts SearchRepoOptions) builder.Cond {
 					likes = likes.Or(builder.Exists(subjectExistsQuery))
 
 					// If the string looks like "org/repo", match against that pattern too
-					if opts.TeamID == 0 && strings.Count(keyword, "/") == 1 {
-						pieces := strings.Split(keyword, "/")
+					if opts.TeamID == 0 && strings.Count(opts.Keyword, "/") == 1 {
+						pieces := strings.Split(opts.Keyword, "/")
 						ownerName := strings.TrimSpace(pieces[0])
 						repoName := strings.TrimSpace(pieces[1])
 						if ownerName != "" {
@@ -733,47 +739,39 @@ func searchRepositoryByCondition(ctx context.Context, opts SearchRepoOptions, co
 
 	args := make([]any, 0)
 
-	// Add relevance scoring when keyword search is used and relevance ordering is requested
-	if opts.Keyword != "" && strings.Contains(string(orderBy), "relevance_score") {
-		// Create relevance scoring SQL for both subject and name fields
-		relevanceSQL := buildRelevanceScoreSQL(opts.Keyword)
-		orderBy = db.SearchOrderBy(strings.ReplaceAll(string(orderBy), "relevance_score", relevanceSQL))
+	// Resolve the relevance scoring placeholder when relevance ordering is requested
+	if strings.Contains(string(orderBy), "relevance_score") {
+		keywords := sanitizeSearchKeywords(opts.Keyword)
+		if len(keywords) == 0 {
+			// Nothing to score against (e.g. the search field was submitted empty), so
+			// fall back to the tie-breaker of the relevance orders. Leaving the
+			// placeholder in place would produce SQL referencing a non-existent column.
+			orderBy = db.SearchOrderBySubjectAlphabetically
+		} else {
+			// Create relevance scoring SQL for both subject and name fields
+			orderBy = db.SearchOrderBy(strings.ReplaceAll(string(orderBy), "relevance_score", buildRelevanceScoreSQL(keywords)))
 
-		// Add keyword arguments for relevance scoring
-		// Apply the same validation as buildRelevanceScoreSQL to ensure consistency
-		keyword := strings.TrimSpace(opts.Keyword)
-		if len(keyword) > maxSearchKeywordLength {
-			keyword = keyword[:maxSearchKeywordLength]
-		}
-
-		keywords := strings.Split(keyword, ",")
-		if len(keywords) > maxSearchKeywords {
-			keywords = keywords[:maxSearchKeywords]
-		}
-
-		for _, kw := range keywords {
-			kw = strings.TrimSpace(strings.ToLower(kw))
-			if kw == "" {
-				continue
+			// Add keyword arguments for relevance scoring, in the same order as the
+			// placeholders emitted by buildRelevanceScoreSQL
+			for _, kw := range keywords {
+				kw = strings.ToLower(kw)
+				// Add arguments for exact match, prefix match, and substring match
+				// Only one set needed since we use COALESCE(subject.name, repository.name)
+				args = append(args, kw, kw+"%", "%"+kw+"%")
 			}
-			// Limit individual keyword length
-			if len(kw) > maxIndividualKeywordLength {
-				kw = kw[:maxIndividualKeywordLength]
-			}
-			// Add arguments for exact match, prefix match, and substring match
-			// Only one set needed since we use COALESCE(subject.name, repository.name)
-			args = append(args, kw, kw+"%", "%"+kw+"%")
 		}
 	}
 
+	// These clauses are prepended to the order, so their argument goes in front of the relevance
+	// scoring ones to stay aligned with the placeholders of the combined clause
 	if opts.PriorityOwnerID > 0 {
 		orderBy = db.SearchOrderBy(fmt.Sprintf("CASE WHEN owner_id = ? THEN 0 ELSE owner_id END, %s", orderBy))
-		args = append(args, opts.PriorityOwnerID)
+		args = append([]any{opts.PriorityOwnerID}, args...)
 	} else if strings.Count(opts.Keyword, "/") == 1 {
-		// With "owner/repo" search times, prioritise results which match the owner field
+		// With "owner/repo" search terms, prioritise results which match the owner field
 		orgName := strings.Split(opts.Keyword, "/")[0]
 		orderBy = db.SearchOrderBy(fmt.Sprintf("CASE WHEN owner_name LIKE ? THEN 0 ELSE 1 END, %s", orderBy))
-		args = append(args, orgName)
+		args = append([]any{orgName}, args...)
 	}
 
 	sess := db.GetEngine(ctx).Table("repository")
@@ -892,41 +890,13 @@ func SearchRepositoryIDs(ctx context.Context, opts SearchRepoOptions) ([]int64, 
 	return ids, count, err
 }
 
-// buildRelevanceScoreSQL creates a SQL expression for relevance scoring
-// It prioritizes exact matches, then prefix matches, then substring matches
-func buildRelevanceScoreSQL(keyword string) string {
-	// Validate and sanitize input to prevent DoS attacks
-	keyword = strings.TrimSpace(keyword)
-	if keyword == "" {
-		return "0"
-	}
-
-	// Limit total keyword length to prevent DoS
-	if len(keyword) > maxSearchKeywordLength {
-		keyword = keyword[:maxSearchKeywordLength]
-	}
-
-	keywords := strings.Split(keyword, ",")
-
-	// Limit number of keywords to prevent DoS
-	if len(keywords) > maxSearchKeywords {
-		keywords = keywords[:maxSearchKeywords]
-	}
-
-	// Validate and sanitize each keyword
-	validKeywords := make([]string, 0, len(keywords))
-	for _, kw := range keywords {
-		kw = strings.TrimSpace(kw)
-		if kw == "" {
-			continue
-		}
-		// Limit individual keyword length
-		if len(kw) > maxIndividualKeywordLength {
-			kw = kw[:maxIndividualKeywordLength]
-		}
-		validKeywords = append(validKeywords, kw)
-	}
-
+// buildRelevanceScoreSQL creates a SQL expression for relevance scoring from the
+// keywords returned by sanitizeSearchKeywords. It prioritizes exact matches, then
+// prefix matches, then substring matches. Each keyword contributes three bound
+// arguments, which the caller has to append in the same order.
+// With no keywords it returns the constant "0", which callers must not place in an
+// ORDER BY clause, where a bare integer means a column ordinal.
+func buildRelevanceScoreSQL(validKeywords []string) string {
 	if len(validKeywords) == 0 {
 		return "0"
 	}
