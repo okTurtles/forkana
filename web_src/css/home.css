@@ -482,6 +482,7 @@
 
 .page-footer {
   display: flex;
+  flex-shrink: 0; /* body is a flex column: never squeeze the footer to fit the viewport */
   justify-content: space-between;
   background-color: var(--color-footer);
   border-top: 1px solid var(--color-secondary);

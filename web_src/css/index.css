@@ -42,6 +42,7 @@
 @import "./features/expander.css";
 @import "./features/cropper.css";
 @import "./features/console.css";
+@import "./features/bubble-graph.css";
 
 @import "./markup/content.css";
 @import "./markup/codecopy.css";
