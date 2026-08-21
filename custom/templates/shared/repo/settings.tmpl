@@ -57,7 +57,7 @@
                     <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</h4>
                     <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
                         {{if .ArticleTransferRecipient}}
-                            <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_pending" .ArticleTransferRecipient.DisplayName}}</p>
+                            <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_pending" (HTMLFormat "%s" .ArticleTransferRecipient.DisplayName)}}</p>
                             <form class="tw-m-0" action="{{.RepoOperationsLink}}/settings" method="post">
                                 {{.CsrfTokenHtml}}
                                 <input type="hidden" name="action" value="cancel_transfer">
@@ -215,7 +215,7 @@
             {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
             <ul class="tw-m-0 tw-pl-4">
                 <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_1"}}</li>
-                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_2" (printf "%s/%s" .Repository.OwnerName $subjectName)}}</li>
+                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_2" (printf "%s/%s" .Repository.OwnerName (HTMLFormat "%s" $subjectName))}}</li>
             </ul>
         </div>
         <p class="tw-mt-8 tw-mb-5">
