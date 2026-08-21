@@ -17,11 +17,13 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/gitrepo"
+	"code.gitea.io/gitea/modules/htmlutil"
 	"code.gitea.io/gitea/modules/indexer/code"
 	issue_indexer "code.gitea.io/gitea/modules/indexer/issues"
 	"code.gitea.io/gitea/modules/indexer/stats"
 	"code.gitea.io/gitea/modules/lfs"
 	"code.gitea.io/gitea/modules/log"
+	"code.gitea.io/gitea/modules/optional"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/templates"
@@ -31,6 +33,7 @@ import (
 	actions_service "code.gitea.io/gitea/services/actions"
 	asymkey_service "code.gitea.io/gitea/services/asymkey"
 	"code.gitea.io/gitea/services/context"
+	convert_service "code.gitea.io/gitea/services/convert"
 	"code.gitea.io/gitea/services/forms"
 	"code.gitea.io/gitea/services/migrations"
 	mirror_service "code.gitea.io/gitea/services/mirror"
@@ -808,6 +811,143 @@ func handleSettingsPostConvertFork(ctx *context.Context) {
 	ctx.Redirect(repo.Link())
 }
 
+// articleSettingsURL is where the article settings modals return to, the repository
+// settings page is not reachable from the article UI.
+func articleSettingsURL(ctx *context.Context) string {
+	return ctx.Repo.RepoLink + "?view=article&mode=settings"
+}
+
+// ArticleTransferCandidates searches the users the current article can be transferred
+// to, excluding its owner and everyone who already owns an article on the same subject.
+func ArticleTransferCandidates(ctx *context.Context) {
+	repo := ctx.Repo.Repository
+	users, _, err := user_model.SearchUsers(ctx, user_model.SearchUserOptions{
+		Actor:                    ctx.Doer,
+		Keyword:                  ctx.FormTrim("q"),
+		Type:                     user_model.UserTypeIndividual,
+		IsActive:                 optional.Some(true),
+		ExcludeUserIDs:           []int64{repo.OwnerID},
+		ExcludeOwnersOfSubjectID: repo.SubjectID,
+		ListOptions:              db.ListOptions{PageSize: setting.UI.MembersPagingNum},
+	})
+	if err != nil {
+		ctx.ServerError("SearchUsers", err)
+		return
+	}
+	ctx.JSON(http.StatusOK, map[string]any{"data": convert_service.ToUsers(ctx, ctx.Doer, users)})
+}
+
+// resolveArticleTransferRecipient finds the transfer recipient by their username, which
+// the article transfer modal submits while showing the full name as the display value.
+// The username is unique and indexed, so the lookup neither scans the table nor has to
+// deal with two users sharing a name. Only the active users the candidate search lists
+// for the doer are accepted, so that a crafted request cannot reach a hidden account or
+// confirm that it exists. It reports the failure through a flash message and returns nil
+// when the name is unusable.
+func resolveArticleTransferRecipient(ctx *context.Context, name string) *user_model.User {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
+		return nil
+	}
+
+	recipient, err := user_model.GetUserByName(ctx, name)
+	if err != nil {
+		if !user_model.IsErrUserNotExist(err) {
+			ctx.ServerError("GetUserByName", err)
+			return nil
+		}
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
+		return nil
+	}
+
+	if !recipient.IsIndividual() || !recipient.IsActive || recipient.ProhibitLogin ||
+		!user_model.IsUserVisibleToViewer(ctx, recipient, ctx.Doer) {
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
+		return nil
+	}
+
+	if recipient.ID == ctx.Repo.Owner.ID {
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_is_current"))
+		return nil
+	}
+	return recipient
+}
+
+// handleArticleSettingsPostTransfer serves the article transfer modal, which confirms
+// with "<owner>/<subject>", identifies the recipient by username and always reports
+// back on the article settings page.
+func handleArticleSettingsPostTransfer(ctx *context.Context) {
+	form := web.GetForm(ctx).(*forms.RepoSettingForm)
+	repo := ctx.Repo.Repository
+	redirectURL := articleSettingsURL(ctx)
+
+	if form.ArticleName != ctx.Repo.Owner.Name+"/"+repo.GetSubject(ctx) {
+		ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
+		ctx.Redirect(redirectURL)
+		return
+	}
+
+	newOwner := resolveArticleTransferRecipient(ctx, ctx.FormString("new_owner_name"))
+	if newOwner == nil {
+		if !ctx.Written() {
+			ctx.Redirect(redirectURL)
+		}
+		return
+	}
+
+	// The candidate search already hides these users, but the rule has to hold for a
+	// crafted request and for a recipient who acquired an article on this subject in
+	// the meantime. The transfer itself only guards against a repository name clash.
+	if repo.SubjectID > 0 {
+		existing, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, newOwner.ID, repo.SubjectID)
+		if err != nil {
+			ctx.ServerError("GetRepositoryByOwnerIDAndSubjectID", err)
+			return
+		}
+		if existing != nil {
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_has_article"))
+			ctx.Redirect(redirectURL)
+			return
+		}
+	}
+
+	// Close the GitRepo if open
+	if ctx.Repo.GitRepo != nil {
+		ctx.Repo.GitRepo.Close()
+		ctx.Repo.GitRepo = nil
+	}
+
+	if err := repo_service.StartRepositoryTransfer(ctx, ctx.Doer, newOwner, repo, nil); err != nil {
+		switch {
+		case repo_model.IsErrRepoAlreadyExist(err):
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_has_article"))
+		case repo_model.IsErrRepoTransferInProgress(err):
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_in_progress"))
+		case repo_service.IsRepositoryLimitReached(err):
+			limit := err.(repo_service.LimitReachedError).Limit
+			ctx.Flash.Error(ctx.TrN(limit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", limit))
+		case errors.Is(err, user_model.ErrBlockedUser):
+			ctx.Flash.Error(ctx.Tr("repo.settings.transfer.blocked_user"))
+		default:
+			ctx.ServerError("TransferOwnership", err)
+			return
+		}
+		ctx.Redirect(redirectURL)
+		return
+	}
+
+	recipientLink := htmlutil.HTMLFormat(`<a href="%s">%s</a>`, newOwner.HomeLink(), newOwner.DisplayName())
+	if repo.Status == repo_model.RepositoryPendingTransfer {
+		log.Trace("Article transfer process was started: %s/%s -> %s", ctx.Repo.Owner.Name, repo.Name, newOwner.Name)
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_transfer_started", recipientLink))
+	} else {
+		log.Trace("Article transferred: %s/%s -> %s", ctx.Repo.Owner.Name, repo.Name, newOwner.Name)
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_transfer_succeed", recipientLink))
+	}
+	ctx.Redirect(redirectURL)
+}
+
 func handleSettingsPostTransfer(ctx *context.Context) {
 	form := web.GetForm(ctx).(*forms.RepoSettingForm)
 	repo := ctx.Repo.Repository
@@ -815,6 +955,12 @@ func handleSettingsPostTransfer(ctx *context.Context) {
 		ctx.HTTPError(http.StatusNotFound)
 		return
 	}
+
+	if ctx.FormBool("redirect_to_article") {
+		handleArticleSettingsPostTransfer(ctx)
+		return
+	}
+
 	if repo.Name != form.RepoName {
 		ctx.RenderWithErr(ctx.Tr("form.enterred_invalid_repo_name"), tplSettingsOptions, nil)
 		return
@@ -879,11 +1025,19 @@ func handleSettingsPostCancelTransfer(ctx *context.Context) {
 		return
 	}
 
+	// The article settings UI posts to this same dispatcher, but it must return to
+	// the article view instead of the repository settings page.
+	fromArticle := ctx.FormBool("redirect_to_article")
+	redirectURL := repo.Link() + "/settings"
+	if fromArticle {
+		redirectURL = articleSettingsURL(ctx)
+	}
+
 	repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
 	if err != nil {
 		if repo_model.IsErrNoPendingTransfer(err) {
-			ctx.Flash.Error("repo.settings.transfer_abort_invalid")
-			ctx.Redirect(repo.Link() + "/settings")
+			ctx.Flash.Error(ctx.Tr("repo.settings.transfer_abort_invalid"))
+			ctx.Redirect(redirectURL)
 		} else {
 			ctx.ServerError("GetPendingRepositoryTransfer", err)
 		}
@@ -896,8 +1050,16 @@ func handleSettingsPostCancelTransfer(ctx *context.Context) {
 	}
 
 	log.Trace("Repository transfer process was cancelled: %s/%s ", ctx.Repo.Owner.Name, repo.Name)
-	ctx.Flash.Success(ctx.Tr("repo.settings.transfer_abort_success", repoTransfer.Recipient.Name))
-	ctx.Redirect(repo.Link() + "/settings")
+	if fromArticle {
+		if err := repoTransfer.LoadRecipient(ctx); err != nil {
+			ctx.ServerError("LoadRecipient", err)
+			return
+		}
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_transfer_abort_success", repoTransfer.Recipient.DisplayName()))
+	} else {
+		ctx.Flash.Success(ctx.Tr("repo.settings.transfer_abort_success", repoTransfer.Recipient.Name))
+	}
+	ctx.Redirect(redirectURL)
 }
 
 func handleSettingsPostDelete(ctx *context.Context) {
@@ -907,7 +1069,17 @@ func handleSettingsPostDelete(ctx *context.Context) {
 		ctx.HTTPError(http.StatusNotFound)
 		return
 	}
-	if repo.Name != form.RepoName {
+
+	// The article settings UI confirms the deletion with "<owner>/<subject>" and
+	// returns to the article settings view instead of the repository settings page.
+	fromArticle := ctx.FormBool("redirect_to_article")
+	if fromArticle {
+		if form.ArticleName != ctx.Repo.Owner.Name+"/"+repo.GetSubject(ctx) {
+			ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
+			ctx.Redirect(articleSettingsURL(ctx))
+			return
+		}
+	} else if repo.Name != form.RepoName {
 		ctx.RenderWithErr(ctx.Tr("form.enterred_invalid_repo_name"), tplSettingsOptions, nil)
 		return
 	}
@@ -923,7 +1095,13 @@ func handleSettingsPostDelete(ctx *context.Context) {
 	}
 	log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
 
-	ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
+	if fromArticle {
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_delete_success"))
+	} else {
+		ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
+	}
+	// The dashboard renders base/alert, so the flash above stays visible; the owner
+	// profile template does not.
 	ctx.Redirect(ctx.Repo.Owner.DashboardLink())
 }
 
@@ -956,16 +1134,24 @@ func handleSettingsPostArchive(ctx *context.Context) {
 		return
 	}
 
+	// The article settings UI posts to this same dispatcher, but it must return to
+	// the article view instead of the repository settings page.
+	fromArticle := ctx.FormBool("redirect_to_article")
+	redirectURL := ctx.Repo.RepoLink + "/settings"
+	if fromArticle {
+		redirectURL = articleSettingsURL(ctx)
+	}
+
 	if repo.IsMirror {
 		ctx.Flash.Error(ctx.Tr("repo.settings.archive.error_ismirror"))
-		ctx.Redirect(ctx.Repo.RepoLink + "/settings")
+		ctx.Redirect(redirectURL)
 		return
 	}
 
 	if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {
 		log.Error("Tried to archive a repo: %s", err)
 		ctx.Flash.Error(ctx.Tr("repo.settings.archive.error"))
-		ctx.Redirect(ctx.Repo.RepoLink + "/settings")
+		ctx.Redirect(redirectURL)
 		return
 	}
 
@@ -976,10 +1162,14 @@ func handleSettingsPostArchive(ctx *context.Context) {
 	// update issue indexer
 	issue_indexer.UpdateRepoIndexer(ctx, repo.ID)
 
-	ctx.Flash.Success(ctx.Tr("repo.settings.archive.success"))
+	if fromArticle {
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_archive_success"))
+	} else {
+		ctx.Flash.Success(ctx.Tr("repo.settings.archive.success"))
+	}
 
 	log.Trace("Repository was archived: %s/%s", ctx.Repo.Owner.Name, repo.Name)
-	ctx.Redirect(ctx.Repo.RepoLink + "/settings")
+	ctx.Redirect(redirectURL)
 }
 
 func handleSettingsPostUnarchive(ctx *context.Context) {

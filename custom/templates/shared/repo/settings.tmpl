@@ -1,0 +1,245 @@
+{{define "shared/repo/settings"}}
+{{if and .IsArticleModeSettings .IsRepoOwner}}
+{{$subjectName := .Repository.GetSubject ctx}}
+<div class="ui bottom attached">
+    {{if .Flash.SuccessMsg}}
+        <div class="ui positive message flash-message tw-sticky tw-top-0 tw-z-10 tw-mb-4">
+            <p>{{.Flash.SuccessMsg | SanitizeHTML}}</p>
+        </div>
+    {{end}}
+    {{if .Flash.ErrorMsg}}
+        <div class="ui negative message flash-message tw-sticky tw-top-0 tw-z-10 tw-mb-4">
+            <p>{{.Flash.ErrorMsg | SanitizeHTML}}</p>
+        </div>
+    {{end}}
+    <div class="tw-flex tw-flex-col md:tw-flex-row tw-gap-[10%]">
+        <div class="md:tw-w-[20%]">
+            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden">
+                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.sidebar_header"}}</h4>
+                <div class="ui vertical fluid secondary menu tw-mt-0 tw-pt-0">
+                    <a class="active item" href="#article-settings-general">{{svg "octicon-gear" 16}}{{ctx.Locale.Tr "repo.settings.article_general"}}</a>
+                </div>
+            </div>
+        </div>
+        <div class="md:tw-w-[70%] tw-flex tw-flex-col tw-gap-4">
+            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-general">
+                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_general"}}</h4>
+                <div class="ui form tw-flex tw-flex-col tw-gap-4 tw-p-4">
+                    <div class="field">
+                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.settings.collaboration.owner"}}</label>
+                        <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
+                            <div class="tw-flex tw-items-center tw-gap-2">
+                                {{ctx.AvatarUtils.Avatar .Repository.Owner 20}}
+                                <span class="tw-font-bold">{{.Repository.Owner.Name}}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.fork"}}</label>
+                        <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
+                            {{if and .Repository.IsFork .Repository.BaseRepo}}
+                                <span>{{.Repository.BaseRepo.OwnerName}} / {{$subjectName}}</span>
+                            {{else}}
+                                <span class="tw-text-gray-600">-</span>
+                            {{end}}
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.settings.article_subject_name"}}</label>
+                        <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
+                            <span>{{$subjectName}}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {{if not .Repository.IsArchived}}
+                <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-transfer">
+                    <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</h4>
+                    <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
+                        {{if .ArticleTransferRecipient}}
+                            <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_pending" .ArticleTransferRecipient.DisplayName}}</p>
+                            <form class="tw-m-0" action="{{.RepoOperationsLink}}/settings" method="post">
+                                {{.CsrfTokenHtml}}
+                                <input type="hidden" name="action" value="cancel_transfer">
+                                <input type="hidden" name="redirect_to_article" value="true">
+                                <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
+                                <button type="submit" id="article-transfer-cancel" class="ui button tw-m-0 tw-text-red tw-font-bold tw-whitespace-nowrap">{{ctx.Locale.Tr "repo.settings.article_transfer_cancel"}}</button>
+                            </form>
+                        {{else}}
+                            <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_desc"}}</p>
+                            <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold tw-whitespace-nowrap" data-article-settings-modal="#article-transfer-modal">{{ctx.Locale.Tr "repo.settings.article_transfer_button"}}</button>
+                        {{end}}
+                    </div>
+                </div>
+                <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-archive">
+                    <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_archive"}}</h4>
+                    <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
+                        <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_archive_desc"}}</p>
+                        <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold" data-article-settings-modal="#article-archive-modal">{{ctx.Locale.Tr "repo.settings.article_archive_button"}}</button>
+                    </div>
+                </div>
+            {{end}}
+            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-delete">
+                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_delete"}}</h4>
+                <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
+                    <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_delete_desc"}}</p>
+                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold" data-article-settings-modal="#article-delete-modal">{{ctx.Locale.Tr "repo.settings.article_delete_button"}}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{if not .Repository.IsArchived}}
+<style>
+/* give the owner search results room to breathe, without the fomantic separators */
+#article-transfer-owner-search > .results .result {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: none !important;
+}
+#article-transfer-owner-search > .results .result .image,
+#article-transfer-owner-search > .results .result .image img,
+#article-transfer-owner-search > .results .result > img {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+#article-transfer-owner-search > .results .result .content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+    margin: 0;
+}
+#article-transfer-owner-search > .results .result .title {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+</style>
+<div class="ui small modal" id="article-transfer-modal">
+    <div class="header">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_header"}}</div>
+    <div class="content">
+        <div class="ui warning message tw-flex tw-items-start tw-gap-2">
+            {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
+            <span>{{ctx.Locale.Tr "repo.settings.article_transfer_notice"}}</span>
+        </div>
+        <p class="tw-mt-8">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_desc"}}</p>
+        <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
+            {{.CsrfTokenHtml}}
+            <input type="hidden" name="action" value="transfer">
+            <input type="hidden" name="redirect_to_article" value="true">
+            <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
+            <div class="required field">
+                <label for="article-transfer-new-owner" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner"}}</label>
+                <div id="article-transfer-owner-search" class="ui fluid search"
+                    data-search-url="{{.RepoLink}}/settings/transfer_candidates"
+                    data-confirm-target="#article-transfer-submit">
+                    <div class="ui fluid input">
+                        <input id="article-transfer-new-owner" class="prompt" name="new_owner_name" required maxlength="255"
+                            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                            placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_placeholder"}}">
+                    </div>
+                    <div id="article-transfer-owner-selection" class="tw-hidden tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded">
+                        <div class="tw-flex tw-items-center tw-gap-2">
+                            <img id="article-transfer-owner-avatar" class="ui avatar image" width="20" height="20" src="" alt aria-hidden="true">
+                            <span id="article-transfer-owner-name" class="tw-font-bold"></span>
+                        </div>
+                        <button type="button" id="article-transfer-owner-clear" class="btn interact-fg"
+                            data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_clear"}}"
+                            aria-label="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_clear"}}">{{svg "octicon-x" 16}}</button>
+                    </div>
+                </div>
+            </div>
+            <p class="tw-mt-5 tw-mb-5">
+                {{ctx.Locale.Tr "repo.settings.article_transfer_modal_confirm_desc"}}
+                <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
+            </p>
+            <div class="required field">
+                <label for="article-transfer-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm_label"}}</label>
+                <input id="article-transfer-confirm-name" name="article_name" required maxlength="255"
+                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                    data-article-confirm-value="{{.Repository.OwnerName}}/{{$subjectName}}"
+                    data-article-confirm-target="#article-transfer-submit">
+            </div>
+            <div class="actions">
+                <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+                <button type="submit" id="article-transfer-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_transfer_confirm"}}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="ui small modal" id="article-archive-modal">
+    <div class="header">{{ctx.Locale.Tr "repo.settings.article_archive_modal_header"}}</div>
+    <div class="content">
+        <div class="ui warning message tw-flex tw-items-start tw-gap-2">
+            {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
+            <span>{{ctx.Locale.Tr "repo.settings.article_archive_notice"}}</span>
+        </div>
+        <p class="tw-mt-8 tw-mb-5">
+        	{{ctx.Locale.Tr "repo.settings.article_archive_modal_desc"}}
+        	<span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
+        </p>
+        <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
+            {{.CsrfTokenHtml}}
+            <input type="hidden" name="action" value="archive">
+            <input type="hidden" name="redirect_to_article" value="true">
+            <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
+            <div class="required field">
+                <label for="article-archive-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_archive_confirm_label"}}</label>
+                <input id="article-archive-confirm-name" name="article_name" required maxlength="255"
+                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                    data-article-confirm-value="{{.Repository.OwnerName}}/{{$subjectName}}"
+                    data-article-confirm-target="#article-archive-submit">
+            </div>
+            <div class="actions">
+                <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+                <button type="submit" id="article-archive-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_archive_confirm"}}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}
+
+<div class="ui small modal" id="article-delete-modal">
+    <div class="header">{{ctx.Locale.Tr "repo.settings.article_delete_modal_header"}}</div>
+    <div class="content">
+        <div class="ui warning message tw-flex tw-items-start tw-gap-2">
+            {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
+            <ul class="tw-m-0 tw-pl-4">
+                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_1"}}</li>
+                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_2" (printf "%s/%s" .Repository.OwnerName $subjectName)}}</li>
+            </ul>
+        </div>
+        <p class="tw-mt-8 tw-mb-5">
+            {{ctx.Locale.Tr "repo.settings.article_delete_modal_desc"}}
+            <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
+        </p>
+        <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
+            {{.CsrfTokenHtml}}
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="redirect_to_article" value="true">
+            <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
+            <div class="required field">
+                <label for="article-delete-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_delete_confirm_label"}}</label>
+                <input id="article-delete-confirm-name" name="article_name" required maxlength="255"
+                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                    data-article-confirm-value="{{.Repository.OwnerName}}/{{$subjectName}}"
+                    data-article-confirm-target="#article-delete-submit">
+            </div>
+            <div class="actions">
+                <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+                <button type="submit" id="article-delete-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_delete_confirm"}}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}
+{{end}}

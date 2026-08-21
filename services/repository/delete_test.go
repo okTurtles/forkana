@@ -13,6 +13,7 @@ import (
 	repo_service "code.gitea.io/gitea/services/repository"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTeam_HasRepository(t *testing.T) {
@@ -51,4 +52,36 @@ func TestDeleteOwnerRepositoriesDirectly(t *testing.T) {
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
 	assert.NoError(t, repo_service.DeleteOwnerRepositoriesDirectly(t.Context(), user))
+}
+
+func TestDeleteRepositoryDirectlyCleansUpSubject(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	t.Run("LastArticleDropsSubject", func(t *testing.T) {
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), "Delete Subject Sole Article")
+		require.NoError(t, err)
+		repo.SubjectID = subject.ID
+		require.NoError(t, repo_model.UpdateRepositoryColsWithAutoTime(t.Context(), repo, "subject_id"))
+
+		require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), repo.ID))
+
+		_, err = repo_model.GetSubjectByID(t.Context(), subject.ID)
+		assert.True(t, repo_model.IsErrSubjectNotExist(err))
+	})
+
+	t.Run("RemainingArticleKeepsSubject", func(t *testing.T) {
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), "Delete Subject Shared")
+		require.NoError(t, err)
+		for _, id := range []int64{3, 4} {
+			repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: id})
+			repo.SubjectID = subject.ID
+			require.NoError(t, repo_model.UpdateRepositoryColsWithAutoTime(t.Context(), repo, "subject_id"))
+		}
+
+		require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), 3))
+
+		_, err = repo_model.GetSubjectByID(t.Context(), subject.ID)
+		assert.NoError(t, err)
+	})
 }

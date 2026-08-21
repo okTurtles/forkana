@@ -144,6 +144,42 @@
 }
 </style>
 <div role="main" aria-label="{{.Title}}" class="page-content repository file list">
+    {{/* Rendered outside the article section so it stays visible on every article
+    mode (read, edit, history, settings); repo-history.ts keeps it in sync when the
+    article section is swapped or another view is selected. */}}
+    {{/* tw-hidden, not the hidden attribute: tw-flex would otherwise win over the UA [hidden] rule */}}
+    <div class="ui warning message tw-mt-0 tw-flex tw-items-start tw-gap-2{{if not (and .Repository.IsArchived .IsArticleView)}} tw-hidden{{end}}" id="article-archived-notice">
+        {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
+        <span data-role="article-archived-text">
+            {{- if .Repository.IsArchived -}}
+                {{ctx.Locale.Tr "repo.settings.article_archived_notice" (DateUtils.AbsoluteLong (Iif .Repository.ArchivedUnix.IsZero .Repository.UpdatedUnix .Repository.ArchivedUnix))}}
+            {{- end -}}
+        </span>
+    </div>
+
+    {{/* Shown to the pending transfer's recipient so the article can be accepted or
+    rejected without visiting the settings of an article they do not own yet. */}}
+    {{if and .RepoTransfer .CanUserAcceptOrRejectTransfer}}
+    <div class="ui info message tw-mt-0 tw-flex tw-items-center tw-justify-between tw-gap-4" id="article-transfer-notice">
+        <div class="tw-flex tw-items-center tw-gap-2">
+            {{svg "octicon-info" 16 "tw-flex-shrink-0"}}
+            <span>{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_notice"
+                (HTMLFormat `<a href="%s">%s</a>` .RepoTransfer.Doer.HomeLink .RepoTransfer.Doer.DisplayName)
+                (HTMLFormat `<a href="%s">%s</a>` .RepoLink (.Repository.GetSubject ctx))}}</span>
+        </div>
+        <div class="tw-flex tw-items-center tw-gap-2">
+            <form class="tw-m-0" method="post" action="{{.RepoOperationsLink}}/action/accept_transfer">
+                {{.CsrfTokenHtml}}
+                <button type="submit" class="ui primary button tw-m-0 tw-whitespace-nowrap">{{ctx.Locale.Tr "repo.settings.article_transfer_accept"}}</button>
+            </form>
+            <form class="tw-m-0" method="post" action="{{.RepoOperationsLink}}/action/reject_transfer">
+                {{.CsrfTokenHtml}}
+                <button type="submit" class="ui button tw-m-0 tw-text-red tw-font-bold tw-whitespace-nowrap">{{ctx.Locale.Tr "repo.settings.article_transfer_reject"}}</button>
+            </form>
+        </div>
+    </div>
+    {{end}}
+
     {{/* Login banner for non-authenticated users */}}
     {{if and .IsArticleModeEdit (not .IsSigned)}}
     <div class="ui warning message tw-mt-0">
@@ -154,7 +190,6 @@
     </div>
     {{end}}
     {{template "repo/header" .}}
-
 
     <div class="ui container">
         {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscapeSegments (.Repository.GetSubject ctx)) }}
