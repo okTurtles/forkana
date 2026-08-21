@@ -18,6 +18,8 @@
   margin-top: 16px;
 }
 
+/* The 8px gap matches the stock .flex-item, but it is a value the design asks for by name, so
+   it is restated here rather than inherited from a rule that is free to change. */
 .page-content.explore.subjects .flex-list > .flex-item {
   padding: 0;
   gap: 8px;
@@ -28,17 +30,10 @@
    accented thing in the row. The token is near-black on light themes and near-white on dark
    ones, which keeps the glyph legible either way. */
 .page-content.explore.subjects .flex-item .flex-item-leading {
-  align-self: center;
   color: var(--color-text);
 }
 
-.page-content.explore.subjects .flex-item .flex-item-leading .svg {
-  width: 16px;
-  height: 16px;
-}
-
 .page-content.explore.subjects .flex-item .flex-item-title a {
-  color: var(--color-primary);
   font-size: 14px;
   font-weight: 500;
   /* ::first-letter only applies to a block container, and the anchor is inline by default. */
@@ -48,10 +43,4 @@
 /* Display-only capitalisation: the stored subject name and the URL it links to are untouched. */
 .page-content.explore.subjects .flex-item .flex-item-title a::first-letter {
   text-transform: uppercase;
-}
-
-/* Section headings: "Search results for …" and "Similar". */
-.page-content.explore.subjects .flex-list > .tw-font-bold,
-.page-content.explore.subjects .flex-list > .tw-font-semibold {
-  font-size: 14px;
 }
