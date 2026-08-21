@@ -67,3 +67,33 @@ func TestExploreSubjectsSorting(t *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.Code, "Sort type %s should work", sortType)
 	}
 }
+
+func TestExploreSubjectSuggestions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	for _, name := range []string{"Moon", "Moons of Saturn", "Full Moon Party", "Sun"} {
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), name)
+		assert.NoError(t, err)
+		assert.NotNil(t, subject)
+	}
+
+	suggest := func(t *testing.T, query string) []string {
+		t.Helper()
+		req := NewRequest(t, "GET", "/explore/subjects/suggestions"+query)
+		resp := MakeRequest(t, req, http.StatusOK)
+		var parsed struct {
+			Subjects []string `json:"subjects"`
+		}
+		DecodeJSON(t, resp, &parsed)
+		return parsed.Subjects
+	}
+
+	// The exact match comes first, then the subjects starting with the keyword, then the rest.
+	assert.Equal(t, []string{"Moon", "Moons of Saturn", "Full Moon Party"}, suggest(t, "?q=moon"))
+
+	// Only matching subjects are suggested, and an empty keyword suggests nothing.
+	assert.Equal(t, []string{"Sun"}, suggest(t, "?q=sun"))
+	assert.Empty(t, suggest(t, "?q=nothing+matches+this"))
+	assert.Empty(t, suggest(t, "?q="))
+	assert.Empty(t, suggest(t, ""))
+}
