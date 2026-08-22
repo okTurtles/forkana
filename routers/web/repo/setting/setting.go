@@ -882,6 +882,14 @@ func handleArticleSettingsPostTransfer(ctx *context.Context) {
 	repo := ctx.Repo.Repository
 	redirectURL := articleSettingsURL(ctx)
 
+	// An archived article is read-only, deletion is the only action left on it.
+	if repo.IsArchived {
+		archivedAt := util.Iif(repo.ArchivedUnix.IsZero(), repo.UpdatedUnix, repo.ArchivedUnix)
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_archived_notice", archivedAt.FormatDate()))
+		ctx.Redirect(redirectURL)
+		return
+	}
+
 	if form.ArticleName != ctx.Repo.Owner.Name+"/"+repo.GetSubject(ctx) {
 		ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
 		ctx.Redirect(redirectURL)
@@ -1146,6 +1154,23 @@ func handleSettingsPostArchive(ctx *context.Context) {
 		ctx.Flash.Error(ctx.Tr("repo.settings.archive.error_ismirror"))
 		ctx.Redirect(redirectURL)
 		return
+	}
+
+	// An archived article only keeps the delete action, so a transfer that is still
+	// pending must not survive archiving and be accepted by the recipient afterwards.
+	if repo.SubjectID > 0 {
+		repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, repo)
+		if err != nil && !repo_model.IsErrNoPendingTransfer(err) {
+			ctx.ServerError("GetPendingRepositoryTransfer", err)
+			return
+		}
+		if repoTransfer != nil {
+			if err := repo_service.CancelRepositoryTransfer(ctx, repoTransfer, ctx.Doer); err != nil {
+				ctx.ServerError("CancelRepositoryTransfer", err)
+				return
+			}
+			log.Trace("Pending article transfer cancelled on archive: %s/%s", ctx.Repo.Owner.Name, repo.Name)
+		}
 	}
 
 	if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {

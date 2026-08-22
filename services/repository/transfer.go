@@ -49,6 +49,12 @@ func AcceptTransferOwnership(ctx context.Context, repo *repo_model.Repository, d
 	}
 	defer releaser()
 
+	// An archived article is read-only, only its deletion stays available, so a pending
+	// transfer must not be accepted once the owner archived it.
+	if repo.SubjectID > 0 && repo.IsArchived {
+		return fmt.Errorf("archived article cannot be transferred: %w", util.ErrPermissionDenied)
+	}
+
 	repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, repo)
 	if err != nil {
 		return err
