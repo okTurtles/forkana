@@ -261,6 +261,21 @@ export function initRepoHistory() {
     updateArchivedNoticeVisibility();
   }
 
+  // The transfer notice sits next to the archived notice, outside the swapped article
+  // section, and is only rendered for the recipient of a pending transfer. It therefore
+  // has to be inserted, replaced or removed whenever another article is loaded.
+  function syncTransferNotice(doc: Document) {
+    const current = document.querySelector('#article-transfer-notice');
+    const incoming = doc.querySelector('#article-transfer-notice');
+    if (!incoming) {
+      current?.remove();
+      return;
+    }
+    const incomingNode = document.importNode(incoming, true);
+    if (current) current.replaceWith(incomingNode);
+    else archivedNoticeEl?.after(incomingNode);
+  }
+
   function updateArchivedNoticeVisibility() {
     if (!archivedNoticeEl) return;
     // the notice is a flex container, so it has to be hidden by class rather than by attribute
@@ -499,6 +514,7 @@ export function initRepoHistory() {
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
       syncArchivedNotice(doc);
+      syncTransferNotice(doc);
       const newSection = doc.querySelector('.history-view-section--article');
       if (newSection && articleSection) {
         articleSection.innerHTML = newSection.innerHTML;
