@@ -66,8 +66,8 @@ function initArticleTransferOwnerSearch(): void {
   const elName = elSelection.querySelector<HTMLElement>('#article-transfer-owner-name');
 
   fomanticQuery(elSearch).search({
-    minCharacters: 3,
-    maxResults: 3,
+    minCharacters: 2,
+    maxResults: 5,
     cache: true,
     throttle: 300,
     showNoResults: false,
