@@ -16,7 +16,7 @@ function syncConfirmInput(input: HTMLInputElement): void {
   const target = document.querySelector<HTMLButtonElement>(input.getAttribute('data-article-confirm-target'));
   if (!target) return;
   let enabled = input.value === input.getAttribute('data-article-confirm-value');
-  if (enabled && target.id === 'article-transfer-submit') enabled = transferOwnerSelected;
+  if (enabled && target.getAttribute('data-requires-owner-selection') === 'true') enabled = transferOwnerSelected;
   target.classList.toggle('disabled', !enabled);
   target.disabled = !enabled;
 }

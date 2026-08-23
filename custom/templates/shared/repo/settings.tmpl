@@ -159,7 +159,8 @@
             </div>
             <div class="actions">
                 <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
-                <button type="submit" id="article-transfer-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_transfer_confirm"}}</button>
+                <button type="submit" id="article-transfer-submit" class="ui red button disabled" disabled
+                    data-requires-owner-selection="true">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm"}}</button>
             </div>
         </form>
     </div>
