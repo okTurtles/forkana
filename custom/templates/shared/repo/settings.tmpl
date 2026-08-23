@@ -62,7 +62,6 @@
                                 {{.CsrfTokenHtml}}
                                 <input type="hidden" name="action" value="cancel_transfer">
                                 <input type="hidden" name="redirect_to_article" value="true">
-                                <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
                                 <button type="submit" id="article-transfer-cancel" class="ui button tw-m-0 tw-text-red tw-font-bold tw-whitespace-nowrap">{{ctx.Locale.Tr "repo.settings.article_transfer_cancel"}}</button>
                             </form>
                         {{else}}
@@ -135,7 +134,6 @@
             {{.CsrfTokenHtml}}
             <input type="hidden" name="action" value="transfer">
             <input type="hidden" name="redirect_to_article" value="true">
-            <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
             <div class="required field">
                 <label for="article-transfer-new-owner" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner"}}</label>
                 <div id="article-transfer-owner-search" class="ui fluid search"
@@ -191,7 +189,6 @@
             {{.CsrfTokenHtml}}
             <input type="hidden" name="action" value="archive">
             <input type="hidden" name="redirect_to_article" value="true">
-            <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
             <div class="required field">
                 <label for="article-archive-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_archive_confirm_label"}}</label>
                 <input id="article-archive-confirm-name" name="article_name" required maxlength="255"
@@ -226,7 +223,6 @@
             {{.CsrfTokenHtml}}
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="redirect_to_article" value="true">
-            <input type="hidden" name="repo_id" value="{{.Repository.ID}}">
             <div class="required field">
                 <label for="article-delete-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_delete_confirm_label"}}</label>
                 <input id="article-delete-confirm-name" name="article_name" required maxlength="255"
