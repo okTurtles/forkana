@@ -236,16 +236,9 @@ func Subjects(ctx *context.Context) {
 	hasForks := ctx.FormOptionalBool("fork")
 	ctx.Data["HasForks"] = hasForks
 
-	// Helper type for subjects with counts
-	type SubjectWithCount struct {
-		*repo_model.Subject
-		RepoCount     int64
-		RootRepoCount int64
-	}
-
-	var exactMatch *SubjectWithCount
-	var similarSubjects []*SubjectWithCount
-	var allSubjects []*SubjectWithCount
+	var exactMatch *repo_model.Subject
+	var similarSubjects []*repo_model.Subject
+	var allSubjects []*repo_model.Subject
 	var count int64
 
 	// If there's a search keyword, separate exact matches from similar matches
@@ -287,43 +280,10 @@ func Subjects(ctx *context.Context) {
 			return
 		}
 
-		// Collect all subject IDs for batch count loading
-		allSubjectIDs := make([]int64, 0, len(similarResults)+1)
 		if len(exactSubjects) > 0 {
-			allSubjectIDs = append(allSubjectIDs, exactSubjects[0].ID)
+			exactMatch = exactSubjects[0]
 		}
-		for _, s := range similarResults {
-			allSubjectIDs = append(allSubjectIDs, s.ID)
-		}
-
-		// Batch load counts for all subjects
-		countsMap, err := repo_model.BatchCountRepositoriesBySubjects(ctx, allSubjectIDs)
-		if err != nil {
-			ctx.ServerError("BatchCountRepositoriesBySubjects", err)
-			return
-		}
-
-		// Build exact match with counts
-		if len(exactSubjects) > 0 {
-			subject := exactSubjects[0]
-			counts := countsMap[subject.ID]
-			exactMatch = &SubjectWithCount{
-				Subject:       subject,
-				RepoCount:     counts.RepoCount,
-				RootRepoCount: counts.RootRepoCount,
-			}
-		}
-
-		// Build similar subjects with counts
-		similarSubjects = make([]*SubjectWithCount, 0, len(similarResults))
-		for _, subject := range similarResults {
-			counts := countsMap[subject.ID]
-			similarSubjects = append(similarSubjects, &SubjectWithCount{
-				Subject:       subject,
-				RepoCount:     counts.RepoCount,
-				RootRepoCount: counts.RootRepoCount,
-			})
-		}
+		similarSubjects = similarResults
 
 		// For pagination total, we count exact + similar
 		count = int64(len(similarSubjects))
@@ -347,28 +307,7 @@ func Subjects(ctx *context.Context) {
 			return
 		}
 
-		// Collect subject IDs for batch count loading
-		subjectIDs := make([]int64, 0, len(subjects))
-		for _, s := range subjects {
-			subjectIDs = append(subjectIDs, s.ID)
-		}
-
-		// Batch load counts for all subjects
-		countsMap, err := repo_model.BatchCountRepositoriesBySubjects(ctx, subjectIDs)
-		if err != nil {
-			ctx.ServerError("BatchCountRepositoriesBySubjects", err)
-			return
-		}
-
-		allSubjects = make([]*SubjectWithCount, 0, len(subjects))
-		for _, subject := range subjects {
-			counts := countsMap[subject.ID]
-			allSubjects = append(allSubjects, &SubjectWithCount{
-				Subject:       subject,
-				RepoCount:     counts.RepoCount,
-				RootRepoCount: counts.RootRepoCount,
-			})
-		}
+		allSubjects = subjects
 		count = totalCount
 	}
 
