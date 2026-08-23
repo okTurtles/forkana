@@ -70,6 +70,16 @@ func TestDeleteRepositoryDirectlyCleansUpSubject(t *testing.T) {
 		assert.True(t, repo_model.IsErrSubjectNotExist(err))
 	})
 
+	// repo 21 has a pending transfer in the fixtures and is not deleted by the
+	// sibling subtests, which share this test's database state.
+	t.Run("PendingTransferIsRemoved", func(t *testing.T) {
+		transfer := unittest.AssertExistsAndLoadBean(t, &repo_model.RepoTransfer{RepoID: 21})
+
+		require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), 21))
+
+		unittest.AssertNotExistsBean(t, &repo_model.RepoTransfer{ID: transfer.ID})
+	})
+
 	t.Run("RemainingArticleKeepsSubject", func(t *testing.T) {
 		subject, err := repo_model.GetOrCreateSubject(t.Context(), "Delete Subject Shared")
 		require.NoError(t, err)
