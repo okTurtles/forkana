@@ -174,8 +174,8 @@
             <span>{{ctx.Locale.Tr "repo.settings.article_archive_notice"}}</span>
         </div>
         <p class="tw-mt-8 tw-mb-5">
-        	{{ctx.Locale.Tr "repo.settings.article_archive_modal_desc"}}
-        	<span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
+            {{ctx.Locale.Tr "repo.settings.article_archive_modal_desc"}}
+            <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
         </p>
         <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
             {{.CsrfTokenHtml}}
