@@ -126,14 +126,14 @@
             <input type="hidden" name="action" value="transfer">
             <input type="hidden" name="redirect_to_article" value="true">
             <div class="required field">
-                <label for="article-transfer-new-owner" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner"}}</label>
+                <label for="article-transfer-new-owner" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_recipient"}}</label>
                 <div id="article-transfer-owner-search" class="ui fluid search"
                     data-search-url="{{.RepoLink}}/settings/transfer_candidates"
                     data-confirm-target="#article-transfer-submit">
                     <div class="ui fluid input">
                         <input id="article-transfer-new-owner" class="prompt" name="new_owner_name" required maxlength="255"
                             autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                            placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_placeholder"}}">
+                            placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_placeholder"}}">
                     </div>
                     <div id="article-transfer-owner-selection" class="tw-hidden tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded">
                         <div class="tw-flex tw-items-center tw-gap-2">
@@ -141,8 +141,8 @@
                             <span id="article-transfer-owner-name" class="tw-font-bold"></span>
                         </div>
                         <button type="button" id="article-transfer-owner-clear" class="btn interact-fg"
-                            data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_clear"}}"
-                            aria-label="{{ctx.Locale.Tr "repo.settings.article_transfer_new_owner_clear"}}">{{svg "octicon-x" 16}}</button>
+                            data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_clear"}}"
+                            aria-label="{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_clear"}}">{{svg "octicon-x" 16}}</button>
                     </div>
                 </div>
             </div>

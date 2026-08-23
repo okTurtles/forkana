@@ -847,7 +847,7 @@ func ArticleTransferCandidates(ctx *context.Context) {
 func resolveArticleTransferRecipient(ctx *context.Context, name string) *user_model.User {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_recipient_not_found"))
 		return nil
 	}
 
@@ -857,18 +857,18 @@ func resolveArticleTransferRecipient(ctx *context.Context, name string) *user_mo
 			ctx.ServerError("GetUserByName", err)
 			return nil
 		}
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_recipient_not_found"))
 		return nil
 	}
 
 	if !recipient.IsIndividual() || !recipient.IsActive || recipient.ProhibitLogin ||
 		!user_model.IsUserVisibleToViewer(ctx, recipient, ctx.Doer) {
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_not_found"))
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_recipient_not_found"))
 		return nil
 	}
 
 	if recipient.ID == ctx.Repo.Owner.ID {
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_is_current"))
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_recipient_is_current"))
 		return nil
 	}
 	return recipient
@@ -914,7 +914,7 @@ func handleArticleSettingsPostTransfer(ctx *context.Context) {
 			return
 		}
 		if existing != nil {
-			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_has_article"))
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_recipient_has_article"))
 			ctx.Redirect(redirectURL)
 			return
 		}
@@ -929,7 +929,7 @@ func handleArticleSettingsPostTransfer(ctx *context.Context) {
 	if err := repo_service.StartRepositoryTransfer(ctx, ctx.Doer, newOwner, repo, nil); err != nil {
 		switch {
 		case repo_model.IsErrRepoAlreadyExist(err):
-			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_owner_has_article"))
+			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_recipient_has_article"))
 		case repo_model.IsErrRepoTransferInProgress(err):
 			ctx.Flash.Error(ctx.Tr("repo.settings.article_transfer_in_progress"))
 		case repo_service.IsRepositoryLimitReached(err):
