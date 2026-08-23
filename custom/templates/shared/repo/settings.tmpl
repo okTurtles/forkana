@@ -35,7 +35,7 @@
                         </div>
                     </div>
                     <div class="field">
-                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.fork"}}</label>
+                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.settings.article_source"}}</label>
                         <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
                             {{if and .Repository.IsFork .Repository.BaseRepo}}
                                 <span>{{.Repository.BaseRepo.OwnerName}} / {{$subjectName}}</span>
