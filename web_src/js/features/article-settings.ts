@@ -37,11 +37,16 @@ function resetTransferOwnerSearch(): void {
 
   const elInput = elSearch.querySelector<HTMLInputElement>('input[name="new_owner_name"]');
   const elSelection = elSearch.querySelector<HTMLElement>('#article-transfer-owner-selection');
+  if (!elInput || !elSelection) return;
+
+  const elAvatar = elSelection.querySelector<HTMLImageElement>('#article-transfer-owner-avatar');
+  const elName = elSelection.querySelector<HTMLElement>('#article-transfer-owner-name');
   elInput.value = '';
-  elSelection.querySelector<HTMLImageElement>('#article-transfer-owner-avatar').src = '';
-  elSelection.querySelector<HTMLElement>('#article-transfer-owner-name').textContent = '';
+  if (elAvatar) elAvatar.src = '';
+  if (elName) elName.textContent = '';
   hideElem(elSelection);
-  showElem(elInput.closest<HTMLElement>('.ui.input'));
+  const elPrompt = elInput.closest<HTMLElement>('.ui.input');
+  if (elPrompt) showElem(elPrompt);
   syncTransferConfirmInput();
 }
 
