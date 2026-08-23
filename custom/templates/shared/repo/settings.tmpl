@@ -2,16 +2,7 @@
 {{if and .IsArticleModeSettings .IsRepoOwner}}
 {{$subjectName := .Repository.GetSubject ctx}}
 <div class="ui bottom attached">
-    {{if .Flash.SuccessMsg}}
-        <div class="ui positive message flash-message tw-sticky tw-top-0 tw-z-10 tw-mb-4">
-            <p>{{.Flash.SuccessMsg | SanitizeHTML}}</p>
-        </div>
-    {{end}}
-    {{if .Flash.ErrorMsg}}
-        <div class="ui negative message flash-message tw-sticky tw-top-0 tw-z-10 tw-mb-4">
-            <p>{{.Flash.ErrorMsg | SanitizeHTML}}</p>
-        </div>
-    {{end}}
+    {{template "base/alert" .}}
     <div class="tw-flex tw-flex-col md:tw-flex-row tw-gap-[10%]">
         <div class="md:tw-w-[20%]">
             <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden">
