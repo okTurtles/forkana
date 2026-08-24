@@ -247,7 +247,7 @@ JWT_SECRET = <generate-a-secret>
 
 1. **Build before watch**: Run `make build` once before `make watch`
 2. **IPv6 issues**: If Go proxy fails, use: `GODEBUG="netdns=go+4" GOPROXY="direct" make build`
-3. **Go version**: May need to specify: `GO=go1.25.2 make build`
+3. **Go version**: May need to specify: `GO=go1.25.12 make build`
 4. **No database setup dialog**: Using sqlite tags prevents the Gitea setup wizard
 5. **Module path**: Go module is `code.gitea.io/gitea` (not github.com/okTurtles/forkana)
 
