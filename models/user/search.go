@@ -31,6 +31,14 @@ type SearchUserOptions struct {
 	Actor         *User // The user doing the search
 	SearchByEmail bool  // Search by email as well as username/full name
 
+	// ExactMatchOnly makes Keyword match the whole username or full name instead of
+	// any substring of it, so the explore page can single out the one user a search
+	// term names and list the rest as "Similar". Mirrors
+	// repo.FindSubjectsOptions.ExactMatchOnly. Ignored when Keyword is empty, and
+	// deliberately not applied to the email condition: an email is never the thing a
+	// visitor typed the name of.
+	ExactMatchOnly bool
+
 	SupportedSortOrders container.Set[string] // if not nil, only allow to use the sort orders in this set
 
 	IsActive           optional.Option[bool]
@@ -79,10 +87,18 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 
 	if len(opts.Keyword) > 0 {
 		lowerKeyword := strings.ToLower(opts.Keyword)
-		keywordCond := builder.Or(
-			builder.Like{"lower_name", lowerKeyword},
-			builder.Like{"LOWER(full_name)", lowerKeyword},
-		)
+		var keywordCond builder.Cond
+		if opts.ExactMatchOnly {
+			keywordCond = builder.Or(
+				builder.Eq{"lower_name": lowerKeyword},
+				builder.Eq{"LOWER(full_name)": lowerKeyword},
+			)
+		} else {
+			keywordCond = builder.Or(
+				builder.Like{"lower_name", lowerKeyword},
+				builder.Like{"LOWER(full_name)", lowerKeyword},
+			)
+		}
 		if opts.SearchByEmail {
 			var emailCond builder.Cond
 			emailCond = builder.Like{"LOWER(email)", lowerKeyword}

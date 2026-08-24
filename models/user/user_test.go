@@ -170,6 +170,22 @@ func TestSearchUsers(t *testing.T) {
 	testUserSuccess(user_model.SearchUserOptions{Keyword: "user1", ListOptions: db.ListOptions{Page: 1}, IsActive: optional.Some(true)},
 		[]int64{1, 10, 11, 12, 13, 14, 15, 16, 18})
 
+	// ExactMatchOnly narrows the same keyword from "contains" to "is": "user1" no
+	// longer drags in user10..user18, only the user actually named "user1".
+	testUserSuccess(user_model.SearchUserOptions{Keyword: "user1", ExactMatchOnly: true, OrderBy: "id ASC", ListOptions: db.ListOptions{Page: 1}, IsActive: optional.Some(true)},
+		[]int64{1})
+
+	// it matches the full name too, and is case insensitive on both columns
+	testUserSuccess(user_model.SearchUserOptions{Keyword: "User One", ExactMatchOnly: true, OrderBy: "id ASC", ListOptions: db.ListOptions{Page: 1}, IsActive: optional.Some(true)},
+		[]int64{1})
+
+	testUserSuccess(user_model.SearchUserOptions{Keyword: "USER1", ExactMatchOnly: true, OrderBy: "id ASC", ListOptions: db.ListOptions{Page: 1}, IsActive: optional.Some(true)},
+		[]int64{1})
+
+	// a keyword that is only ever a substring now matches nobody
+	testUserSuccess(user_model.SearchUserOptions{Keyword: "ser1", ExactMatchOnly: true, OrderBy: "id ASC", ListOptions: db.ListOptions{Page: 1}, IsActive: optional.Some(true)},
+		[]int64{})
+
 	testUserSuccess(user_model.SearchUserOptions{ListOptions: db.ListOptions{Page: 1}, IsAdmin: optional.Some(true)},
 		[]int64{1})
 
