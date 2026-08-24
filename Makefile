@@ -602,8 +602,14 @@ test-mssql\#%: integrations.mssql.test generate-ini-mssql
 test-mssql-migration: migrations.mssql.test migrations.individual.mssql.test
 
 .PHONY: playwright
+# Set SKIP_PLAYWRIGHT_INSTALL to skip the browser installation, for environments
+# where the browsers are already provisioned out of band.
 playwright: deps-frontend
+ifdef SKIP_PLAYWRIGHT_INSTALL
+	@echo "Skipping 'playwright install' (SKIP_PLAYWRIGHT_INSTALL is set)"
+else
 	$(NODE_VARS) pnpm exec playwright install $(PLAYWRIGHT_FLAGS)
+endif
 
 .PHONY: test-e2e%
 test-e2e%: TEST_TYPE ?= e2e

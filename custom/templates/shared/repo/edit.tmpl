@@ -1,5 +1,5 @@
 {{define "shared/repo/edit"}}
-{{if .IsArticleModeEdit}}
+{{if and .IsArticleModeEdit (not .Repository.IsArchived)}}
 <div class="ui bottom attached">
     <div class="tw-mb-4 tw-flex tw-items-center tw-justify-between">
         <div>
