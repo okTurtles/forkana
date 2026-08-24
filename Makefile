@@ -892,7 +892,7 @@ update-js: node-check | node_modules ## update js dependencies
 	@# nolyfill writes package.json#pnpm.overrides, which REPLACES (not merges with)
 	@# the overrides in pnpm-workspace.yaml, silently dropping any entry nolyfill
 	@# does not manage, such as the cosmiconfig pin.
-	@if grep -qE '^  "pnpm"[[:space:]]*:' package.json; then \
+	@if node -e 'process.exit(JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).pnpm === undefined ? 1 : 0)'; then \
 		echo "nolyfill re-created package.json#pnpm.overrides."; \
 		echo "That field REPLACES the overrides in pnpm-workspace.yaml rather than merging with"; \
 		echo "them, so every override pnpm-workspace.yaml holds that nolyfill does not manage"; \
