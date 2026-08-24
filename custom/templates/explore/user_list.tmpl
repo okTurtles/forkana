@@ -5,44 +5,56 @@
 	section holding everything else, mirroring the subjects tab (#276). The split
 	itself is done in routers/web/explore/user.go.
 
+	Each run of user rows gets its own ".flex-list.explore-users-rows" box, which is
+	what carries the border. The headings and the no-exact-match note are siblings of
+	those boxes, not children, so the border wraps only the rows. "flex-list" has to
+	stay on the same element as the rows because the row separator rule is
+	".flex-list > .flex-item + .flex-item" -- a direct-child selector.
+
 	Without a keyword -- and on templates/admin/user/view.tmpl, which shares this
 	template but sets no search data -- ".HasSearchKeyword" is false and the plain
 	unfiltered list below is rendered exactly as before. */}}
-<div class="flex-list">
-	{{if .HasSearchKeyword}}
-		{{if .Keyword}}
-			<div class="tw-font-bold tw-text-14 tw-mb-4">
-				{{ctx.Locale.Tr "explore.search_results_for" .Keyword}}
+{{if .HasSearchKeyword}}
+	{{if .Keyword}}
+		<div class="tw-font-bold tw-text-14 tw-mb-4">
+			{{ctx.Locale.Tr "explore.search_results_for" .Keyword}}
+		</div>
+	{{end}}
+
+	{{if or .ExactMatch .SimilarUsers}}
+		{{/* Exact match, or a note that nobody goes by that name exactly -- the
+			"Similar" list below is then the whole answer */}}
+		{{if .ExactMatch}}
+			<div class="flex-list explore-users-rows">
+				{{template "shared/user/explore_item" (dict "User" .ExactMatch "Root" .)}}
 			</div>
+		{{else}}
+			<p class="tw-flex tw-items-center tw-gap-2 tw-italic tw-text-sm text muted tw-mb-3">
+				{{svg "octicon-skip" 16}} {{ctx.Locale.Tr "explore.user.no_exact_match" .Keyword}}
+			</p>
 		{{end}}
 
-		{{if or .ExactMatch .SimilarUsers}}
-			{{/* Exact match, or a note that nobody goes by that name exactly -- the
-				"Similar" list below is then the whole answer */}}
-			{{if .ExactMatch}}
-				{{template "shared/user/explore_item" (dict "User" .ExactMatch "Root" .)}}
-			{{else}}
-				<p class="tw-flex tw-items-center tw-gap-2 tw-italic tw-text-sm text muted tw-mb-3">
-					{{svg "octicon-skip" 16}} {{ctx.Locale.Tr "explore.user.no_exact_match" .Keyword}}
-				</p>
-			{{end}}
-
-			{{/* Similar Section */}}
-			{{if .SimilarUsers}}
-				<div class="tw-font-semibold tw-text-14 tw-mt-6 tw-mb-3 text muted">
-					{{ctx.Locale.Tr "explore.user.similar"}}
-				</div>
+		{{/* Similar Section */}}
+		{{if .SimilarUsers}}
+			<div class="tw-font-semibold tw-text-14 tw-mt-6 tw-mb-3 text muted">
+				{{ctx.Locale.Tr "explore.user.similar"}}
+			</div>
+			<div class="flex-list explore-users-rows">
 				{{range .SimilarUsers}}
 					{{template "shared/user/explore_item" (dict "User" . "Root" $)}}
 				{{end}}
-			{{end}}
-		{{else}}
+			</div>
+		{{end}}
+	{{else}}
+		<div class="flex-list explore-users-rows">
 			<div class="flex-item">
 				{{ctx.Locale.Tr "search.no_results"}}
 			</div>
-		{{end}}
+		</div>
+	{{end}}
 
-	{{else}}
+{{else}}
+	<div class="flex-list explore-users-rows">
 		{{range .Users}}
 			{{template "shared/user/explore_item" (dict "User" . "Root" $)}}
 		{{else}}
@@ -50,5 +62,5 @@
 				{{ctx.Locale.Tr "search.no_results"}}
 			</div>
 		{{end}}
-	{{end}}
-</div>
+	</div>
+{{end}}
