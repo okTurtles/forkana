@@ -8,6 +8,10 @@ FROM docker.io/library/golang:1.25-alpine3.23 AS build-env
 ARG GOPROXY
 ENV GOPROXY=${GOPROXY:-direct}
 
+# The golang images set GOTOOLCHAIN=local, which ignores the toolchain
+# directive in go.mod. Override it so the build uses the pinned toolchain.
+ENV GOTOOLCHAIN=go1.25.12+auto
+
 ARG GITEA_VERSION
 ARG TAGS="sqlite sqlite_unlock_notify"
 ENV TAGS="bindata timetzdata $TAGS"
