@@ -11,22 +11,27 @@
 	stay on the same element as the rows because the row separator rule is
 	".flex-list > .flex-item + .flex-item" -- a direct-child selector.
 
-	Without a keyword -- and on templates/admin/user/view.tmpl, which shares this
-	template but sets no search data -- ".HasSearchKeyword" is false and the plain
-	unfiltered list below is rendered exactly as before. */}}
+	Without a keyword ".HasSearchKeyword" is false and the plain unfiltered list below is
+	rendered exactly as before. So it is on the pages that share this template without
+	being the users tab, which set no search data at all: /explore/organizations (same
+	handler AND same template, see routers/web/explore/user.go) and
+	templates/admin/user/view.tmpl. An org listing must not answer a search with "No user
+	named exactly ...". */}}
 {{if .HasSearchKeyword}}
-	{{if .Keyword}}
-		<div class="tw-font-bold tw-text-14 tw-mb-4">
-			{{ctx.Locale.Tr "explore.search_results_for" .Keyword}}
-		</div>
-	{{end}}
+	{{/* ".HasSearchKeyword" is set to "Keyword != \"\"", so the keyword is known non-empty here */}}
+	<div class="tw-font-bold tw-text-14 tw-mb-4">
+		{{ctx.Locale.Tr "explore.search_results_for" .Keyword}}
+	</div>
 
-	{{if or .ExactMatch .SimilarUsers}}
-		{{/* Exact match, or a note that nobody goes by that name exactly -- the
-			"Similar" list below is then the whole answer */}}
-		{{if .ExactMatch}}
+	{{if or .ExactMatches .SimilarUsers}}
+		{{/* The exact matches, or a note that nobody goes by that name exactly -- the
+			"Similar" list below is then the whole answer. There can be more than one
+			exact match: usernames are unique but full names are not. */}}
+		{{if .ExactMatches}}
 			<div class="flex-list explore-users-rows">
-				{{template "shared/user/explore_item" (dict "User" .ExactMatch "Root" .)}}
+				{{range .ExactMatches}}
+					{{template "shared/user/explore_item" (dict "User" . "Root" $)}}
+				{{end}}
 			</div>
 		{{else}}
 			<p class="tw-flex tw-items-center tw-gap-2 tw-italic tw-text-sm text muted tw-mb-3">

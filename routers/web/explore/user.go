@@ -31,22 +31,30 @@ func isKeywordValid(keyword string) bool {
 	return !bytes.Contains([]byte(keyword), nullByte)
 }
 
-// splitExactUserMatch separates the user the search keyword actually names -- the one
-// whose username or full name is exactly the keyword -- from the rest of the current
-// result page.
+// maxExactUserMatches bounds the exact-match lookup. Usernames are unique, so this only
+// ever matters for a full name several accounts share; a page listing more than this many
+// identically named accounts is not a page the split can usefully organise anyway.
+const maxExactUserMatches = 50
+
+// splitExactUserMatch separates the users the search keyword actually names -- those whose
+// username or full name is exactly the keyword -- from the rest of the current result page.
 //
-// The exact match gets its own query instead of being picked out of "users" because
-// the list is paginated and ordered by name or sign-up date, not by relevance: the
-// user named exactly like the keyword can sit on any page, and someone searching for
-// "anastasia" should find her on the first one. Reusing "opts" makes the lookup
-// inherit every filter the page applies (user type, active, visibility to the viewer,
-// repo role), so it can never surface a user the paginated list would have hidden.
+// The exact matches get their own query instead of being picked out of "users" because the
+// list is paginated and ordered by name or sign-up date, not relevance: the user named
+// exactly like the keyword can sit on any page, and someone searching for "anastasia"
+// should find her on the first one. Reusing "opts" makes the lookup inherit every filter
+// the page applies (user type, active, visibility to the viewer, repo role), so it can
+// never surface a user the paginated list would have hidden.
 //
-// When the exact match also falls on the current page it is dropped from the returned
-// "similar" list so it is not rendered twice. That leaves the page one row shorter;
-// the pagination total is deliberately left untouched so page boundaries stay stable
-// while browsing.
-func splitExactUserMatch(ctx *context.Context, opts user_model.SearchUserOptions, users []*user_model.User) (*user_model.User, []*user_model.User, error) {
+// All exact matches are returned, not just the first: "lower_name" is unique but
+// "full_name" is not, so a name two accounts share would otherwise promote one of them
+// arbitrarily and file its twin under "Similar", as though it were a near miss.
+//
+// Any exact match that also falls on the current page is dropped from the returned
+// "similar" list so it is not rendered twice. That leaves the page a row shorter; the
+// pagination total is deliberately left untouched so page boundaries stay stable while
+// browsing.
+func splitExactUserMatch(ctx *context.Context, opts user_model.SearchUserOptions, users []*user_model.User) ([]*user_model.User, []*user_model.User, error) {
 	// Same guard as the paginated search above: a keyword it refused to run is not
 	// worth a second query either.
 	if opts.Keyword == "" || !isKeywordValid(opts.Keyword) {
@@ -55,23 +63,26 @@ func splitExactUserMatch(ctx *context.Context, opts user_model.SearchUserOptions
 
 	exactOpts := opts
 	exactOpts.ExactMatchOnly = true
-	exactOpts.ListOptions = db.ListOptions{Page: 1, PageSize: 1}
-	exactUsers, _, err := user_model.SearchUsers(ctx, exactOpts)
+	exactOpts.ListOptions = db.ListOptions{Page: 1, PageSize: maxExactUserMatches}
+	exactMatches, _, err := user_model.SearchUsers(ctx, exactOpts)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(exactUsers) == 0 {
+	if len(exactMatches) == 0 {
 		return nil, users, nil
 	}
 
-	exactMatch := exactUsers[0]
+	exactIDs := make(container.Set[int64], len(exactMatches))
+	for _, u := range exactMatches {
+		exactIDs.Add(u.ID)
+	}
 	similar := make([]*user_model.User, 0, len(users))
 	for _, u := range users {
-		if u.ID != exactMatch.ID {
+		if !exactIDs.Contains(u.ID) {
 			similar = append(similar, u)
 		}
 	}
-	return exactMatch, similar, nil
+	return exactMatches, similar, nil
 }
 
 // RenderUserSearch render user search page
@@ -155,18 +166,25 @@ func RenderUserSearch(ctx *context.Context, opts user_model.SearchUserOptions, t
 		return
 	}
 
-	// Split the results the way the subjects tab does: the user the keyword actually
-	// names goes into its own "Search results for ..." section, everything else is
-	// listed under "Similar" (#276). Only the explore user list renders these; the
-	// admin pages share this handler but their templates ignore them.
-	exactMatch, similarUsers, err := splitExactUserMatch(ctx, opts, users)
-	if err != nil {
-		ctx.ServerError("SearchUsers (exact)", err)
-		return
+	// Split the results the way the subjects tab does: the users the keyword actually
+	// names go into their own "Search results for ..." section, everything else is
+	// listed under "Similar" (#276).
+	//
+	// Only the users tab gets this. The organizations page renders the very same
+	// template (explore.Organizations calls this function with tplExploreUsers), so
+	// without the guard an org listing would answer a search with "No user named
+	// exactly ...". The admin pages share the handler too, but their own templates
+	// ignore these values either way.
+	if ctx.Data["PageIsExploreUsers"] == true {
+		exactMatches, similarUsers, err := splitExactUserMatch(ctx, opts, users)
+		if err != nil {
+			ctx.ServerError("SearchUsers (exact)", err)
+			return
+		}
+		ctx.Data["HasSearchKeyword"] = opts.Keyword != ""
+		ctx.Data["ExactMatches"] = exactMatches
+		ctx.Data["SimilarUsers"] = similarUsers
 	}
-	ctx.Data["HasSearchKeyword"] = opts.Keyword != ""
-	ctx.Data["ExactMatch"] = exactMatch
-	ctx.Data["SimilarUsers"] = similarUsers
 
 	ctx.Data["Keyword"] = opts.Keyword
 	ctx.Data["Total"] = count

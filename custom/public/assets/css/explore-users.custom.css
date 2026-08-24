@@ -30,9 +30,8 @@
   border-radius: 8px;
   overflow: hidden;
   background: var(--color-body);
-}
-
-.page-content.explore.users .explore-users-list-container .flex-list {
+  /* the rows box also carries "flex-list" (the divider rule needs the rows to be its
+     direct children), so this resets that class's own margin in the same place */
   margin: 0;
 }
 

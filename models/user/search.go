@@ -87,18 +87,18 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 
 	if len(opts.Keyword) > 0 {
 		lowerKeyword := strings.ToLower(opts.Keyword)
-		var keywordCond builder.Cond
-		if opts.ExactMatchOnly {
-			keywordCond = builder.Or(
-				builder.Eq{"lower_name": lowerKeyword},
-				builder.Eq{"LOWER(full_name)": lowerKeyword},
-			)
-		} else {
-			keywordCond = builder.Or(
-				builder.Like{"lower_name", lowerKeyword},
-				builder.Like{"LOWER(full_name)", lowerKeyword},
-			)
+		// Both name columns are matched the same way, so derive them from one helper: it keeps
+		// the exact and fuzzy variants from drifting apart as columns are added or renamed.
+		matchName := func(col string) builder.Cond {
+			if opts.ExactMatchOnly {
+				return builder.Eq{col: lowerKeyword}
+			}
+			return builder.Like{col, lowerKeyword}
 		}
+		keywordCond := builder.Or(
+			matchName("lower_name"),
+			matchName("LOWER(full_name)"),
+		)
 		if opts.SearchByEmail {
 			var emailCond builder.Cond
 			emailCond = builder.Like{"LOWER(email)", lowerKeyword}
