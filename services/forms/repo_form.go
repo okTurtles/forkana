@@ -96,7 +96,11 @@ func (f *MigrateRepoForm) Validate(req *http.Request, errs binding.Errors) bindi
 
 // RepoSettingForm form for changing repository settings
 type RepoSettingForm struct {
-	RepoName               string `binding:"Required;AlphaDashDot;MaxSize(100)"`
+	RepoName string `binding:"Required;AlphaDashDot;MaxSize(100)"`
+	// ArticleName is the "<owner>/<subject>" confirmation typed in the article settings modals.
+	// Optional here because RepoSettingForm is shared with non-article actions; the handlers that
+	// need it compare it against the repository's own owner and subject before proceeding.
+	ArticleName            string `binding:"MaxSize(255)"`
 	Subject                string `binding:"MaxSize(255)"`
 	Description            string `binding:"MaxSize(2048)"`
 	Website                string `binding:"ValidUrl;MaxSize(1024)"`

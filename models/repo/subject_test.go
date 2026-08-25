@@ -174,6 +174,45 @@ func TestDeleteSubjectInUse(t *testing.T) {
 	assert.True(t, repo_model.IsErrSubjectInUse(err))
 }
 
+func TestDeleteSubjectIfOrphaned(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	t.Run("Orphaned", func(t *testing.T) {
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), "Test Orphaned Subject")
+		assert.NoError(t, err)
+
+		deleted, err := repo_model.DeleteSubjectIfOrphaned(t.Context(), subject.ID)
+		assert.NoError(t, err)
+		assert.True(t, deleted)
+
+		_, err = repo_model.GetSubjectByID(t.Context(), subject.ID)
+		assert.True(t, repo_model.IsErrSubjectNotExist(err))
+	})
+
+	t.Run("StillReferenced", func(t *testing.T) {
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), "Test Referenced Subject")
+		assert.NoError(t, err)
+
+		repo, err := repo_model.GetRepositoryByID(t.Context(), 2)
+		assert.NoError(t, err)
+		repo.SubjectID = subject.ID
+		assert.NoError(t, repo_model.UpdateRepositoryColsWithAutoTime(t.Context(), repo, "subject_id"))
+
+		deleted, err := repo_model.DeleteSubjectIfOrphaned(t.Context(), subject.ID)
+		assert.NoError(t, err)
+		assert.False(t, deleted)
+
+		_, err = repo_model.GetSubjectByID(t.Context(), subject.ID)
+		assert.NoError(t, err)
+	})
+
+	t.Run("NoSubject", func(t *testing.T) {
+		deleted, err := repo_model.DeleteSubjectIfOrphaned(t.Context(), 0)
+		assert.NoError(t, err)
+		assert.False(t, deleted)
+	})
+}
+
 // TestGenerateSlugFromName tests the slug generation function with various inputs
 func TestGenerateSlugFromName(t *testing.T) {
 	tests := []struct {

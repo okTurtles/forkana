@@ -127,6 +127,13 @@ func TestServeSetHeadersContentDisposition(t *testing.T) {
 	ServeSetHeaders(w, &ServeHeaderOptions{Filename: "café résumé.pdf"})
 	assert.Equal(t, `attachment; filename="café résumé.pdf"; filename*=UTF-8''caf%C3%A9%20r%C3%A9sum%C3%A9.pdf`, w.Header().Get("Content-Disposition"))
 
+	// quotes and backslashes must be escaped in the quoted-string form and
+	// percent-encoded in the RFC 5987 parameter, so the filename cannot break
+	// out of the quoted-string and inject disposition parameters
+	w = httptest.NewRecorder()
+	ServeSetHeaders(w, &ServeHeaderOptions{Filename: `a"b\c.zip`})
+	assert.Equal(t, `attachment; filename="a\"b\\c.zip"; filename*=UTF-8''a%22b%5Cc.zip`, w.Header().Get("Content-Disposition"))
+
 	w = httptest.NewRecorder()
 	ServeSetHeaders(w, &ServeHeaderOptions{})
 	assert.Empty(t, w.Header().Get("Content-Disposition"))
