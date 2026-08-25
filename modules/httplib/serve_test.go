@@ -121,6 +121,12 @@ func TestServeSetHeadersContentDisposition(t *testing.T) {
 	ServeSetHeaders(w, &ServeHeaderOptions{Filename: "foo.zip", Disposition: "inline"})
 	assert.Equal(t, `inline; filename="foo.zip"; filename*=UTF-8''foo.zip`, w.Header().Get("Content-Disposition"))
 
+	// the "filename*" parameter is percent-encoded, while the legacy "filename" parameter
+	// keeps the raw UTF-8 bytes (only backslashes and quotes are escaped)
+	w = httptest.NewRecorder()
+	ServeSetHeaders(w, &ServeHeaderOptions{Filename: "café résumé.pdf"})
+	assert.Equal(t, `attachment; filename="café résumé.pdf"; filename*=UTF-8''caf%C3%A9%20r%C3%A9sum%C3%A9.pdf`, w.Header().Get("Content-Disposition"))
+
 	// quotes and backslashes must be escaped in the quoted-string form and
 	// percent-encoded in the RFC 5987 parameter, so the filename cannot break
 	// out of the quoted-string and inject disposition parameters
