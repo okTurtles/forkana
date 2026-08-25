@@ -1242,6 +1242,9 @@ func registerWebRoutes(m *web.Router) {
 	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
 	// end "/article/{username}/{subjectname}": article-based file operations
 
+	// Article settings helpers, the article settings UI lives on the article view itself
+	m.Get("/article/{username}/{subjectname}/settings/transfer_candidates", reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqRepoAdmin, repo_setting.ArticleTransferCandidates)
+
 	// Article-based pull request routes - mirror the repository-based routes but use subject name
 	m.Group("/article/{username}/{subjectname}", func() {
 		m.Get("/{type:pulls}", repo.Issues)

@@ -44,6 +44,12 @@ type SearchUserOptions struct {
 	// they own at least one root (non-fork, non-empty) repository, own only forks, or
 	// own neither. Empty means no filtering.
 	RepoRole RepoRole
+
+	// ExcludeUserIDs filters out the given users. Empty means no filtering.
+	ExcludeUserIDs []int64
+	// ExcludeOwnersOfSubjectID filters out the users who already own a repository for
+	// the given subject. Zero means no filtering.
+	ExcludeOwnersOfSubjectID int64
 }
 
 // RepoRole classifies a user by the repositories they own
@@ -151,6 +157,16 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 			cond = cond.And(builder.NotIn("`user`.id", ownedRootRepoUserIDs)).
 				And(builder.NotIn("`user`.id", ownedForkRepoUserIDs))
 		}
+	}
+
+	if len(opts.ExcludeUserIDs) > 0 {
+		cond = cond.And(builder.NotIn("`user`.id", opts.ExcludeUserIDs))
+	}
+
+	if opts.ExcludeOwnersOfSubjectID > 0 {
+		cond = cond.And(builder.NotIn("`user`.id",
+			builder.Select("owner_id").From("repository").
+				Where(builder.Eq{"subject_id": opts.ExcludeOwnersOfSubjectID})))
 	}
 
 	e := db.GetEngine(ctx)
