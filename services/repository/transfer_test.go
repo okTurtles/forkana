@@ -53,9 +53,11 @@ func TestTransferOwnership(t *testing.T) {
 	exist, err = util.IsExist(repo_model.RepoPath("user1", "repo3"))
 	assert.NoError(t, err)
 	assert.True(t, exist)
+	// the actor is the user who initiated the transfer (repo_transfer.yml id=1 doer_id=3),
+	// not the recipient who accepted it
 	unittest.AssertExistsAndLoadBean(t, &activities_model.Action{
 		OpType:    activities_model.ActionTransferRepo,
-		ActUserID: 1,
+		ActUserID: 3,
 		RepoID:    3,
 		Content:   "org3/repo3",
 	})

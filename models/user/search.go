@@ -31,6 +31,14 @@ type SearchUserOptions struct {
 	Actor         *User // The user doing the search
 	SearchByEmail bool  // Search by email as well as username/full name
 
+	// ExactMatchOnly makes Keyword match the whole username or full name instead of
+	// any substring of it, so the explore page can single out the one user a search
+	// term names and list the rest as "Similar". Mirrors
+	// repo.FindSubjectsOptions.ExactMatchOnly. Ignored when Keyword is empty, and
+	// deliberately not applied to the email condition: an email is never the thing a
+	// visitor typed the name of.
+	ExactMatchOnly bool
+
 	SupportedSortOrders container.Set[string] // if not nil, only allow to use the sort orders in this set
 
 	IsActive           optional.Option[bool]
@@ -44,6 +52,12 @@ type SearchUserOptions struct {
 	// they own at least one root (non-fork, non-empty) repository, own only forks, or
 	// own neither. Empty means no filtering.
 	RepoRole RepoRole
+
+	// ExcludeUserIDs filters out the given users. Empty means no filtering.
+	ExcludeUserIDs []int64
+	// ExcludeOwnersOfSubjectID filters out the users who already own a repository for
+	// the given subject. Zero means no filtering.
+	ExcludeOwnersOfSubjectID int64
 }
 
 // RepoRole classifies a user by the repositories they own
@@ -79,9 +93,17 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 
 	if len(opts.Keyword) > 0 {
 		lowerKeyword := strings.ToLower(opts.Keyword)
+		// Both name columns are matched the same way, so derive them from one helper: it keeps
+		// the exact and fuzzy variants from drifting apart as columns are added or renamed.
+		matchName := func(col string) builder.Cond {
+			if opts.ExactMatchOnly {
+				return builder.Eq{col: lowerKeyword}
+			}
+			return builder.Like{col, lowerKeyword}
+		}
 		keywordCond := builder.Or(
-			builder.Like{"lower_name", lowerKeyword},
-			builder.Like{"LOWER(full_name)", lowerKeyword},
+			matchName("lower_name"),
+			matchName("LOWER(full_name)"),
 		)
 		if opts.SearchByEmail {
 			var emailCond builder.Cond
@@ -151,6 +173,16 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 			cond = cond.And(builder.NotIn("`user`.id", ownedRootRepoUserIDs)).
 				And(builder.NotIn("`user`.id", ownedForkRepoUserIDs))
 		}
+	}
+
+	if len(opts.ExcludeUserIDs) > 0 {
+		cond = cond.And(builder.NotIn("`user`.id", opts.ExcludeUserIDs))
+	}
+
+	if opts.ExcludeOwnersOfSubjectID > 0 {
+		cond = cond.And(builder.NotIn("`user`.id",
+			builder.Select("owner_id").From("repository").
+				Where(builder.Eq{"subject_id": opts.ExcludeOwnersOfSubjectID})))
 	}
 
 	e := db.GetEngine(ctx)
