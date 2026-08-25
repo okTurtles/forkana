@@ -2,7 +2,8 @@
 # Based on Dockerfile.rootless with Forkana-specific modifications
 
 # Build stage
-FROM docker.io/library/golang:1.25-alpine3.22 AS build-env
+# Alpine 3.23 ships npm >= 11.10.0, required for the min-release-age age gate below.
+FROM docker.io/library/golang:1.25-alpine3.23 AS build-env
 
 ARG GOPROXY
 ENV GOPROXY=${GOPROXY:-direct}
@@ -13,12 +14,15 @@ ENV TAGS="bindata timetzdata $TAGS"
 ARG CGO_EXTRA_CFLAGS
 
 # Build deps
+# pnpm bootstrap is age-gated with --min-release-age to match the 14-day
+# minimumReleaseAge policy in pnpm-workspace.yaml (repo .npmrc is not yet
+# copied at this point). pnpm >= 10.26.0 is required.
 RUN apk --no-cache add \
     build-base \
     git \
     nodejs \
     npm \
-    && npm install -g pnpm@10 \
+    && npm install -g --min-release-age=14 "pnpm@^10.26.0" \
     && rm -rf /var/cache/apk/*
 
 # Setup repo

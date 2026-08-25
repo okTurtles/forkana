@@ -109,6 +109,30 @@ func TestServeContentByReadSeeker(t *testing.T) {
 	})
 }
 
+func TestServeSetHeadersContentDisposition(t *testing.T) {
+	// a filename without an explicit disposition must default to "attachment", so that
+	// user-controlled content is never rendered inline by the browser
+	w := httptest.NewRecorder()
+	ServeSetHeaders(w, &ServeHeaderOptions{Filename: "foo.zip"})
+	assert.Equal(t, `attachment; filename="foo.zip"; filename*=UTF-8''foo.zip`, w.Header().Get("Content-Disposition"))
+	assert.Equal(t, "Content-Disposition", w.Header().Get("Access-Control-Expose-Headers"))
+
+	w = httptest.NewRecorder()
+	ServeSetHeaders(w, &ServeHeaderOptions{Filename: "foo.zip", Disposition: "inline"})
+	assert.Equal(t, `inline; filename="foo.zip"; filename*=UTF-8''foo.zip`, w.Header().Get("Content-Disposition"))
+
+	// quotes and backslashes must be escaped in the quoted-string form and
+	// percent-encoded in the RFC 5987 parameter, so the filename cannot break
+	// out of the quoted-string and inject disposition parameters
+	w = httptest.NewRecorder()
+	ServeSetHeaders(w, &ServeHeaderOptions{Filename: `a"b\c.zip`})
+	assert.Equal(t, `attachment; filename="a\"b\\c.zip"; filename*=UTF-8''a%22b%5Cc.zip`, w.Header().Get("Content-Disposition"))
+
+	w = httptest.NewRecorder()
+	ServeSetHeaders(w, &ServeHeaderOptions{})
+	assert.Empty(t, w.Header().Get("Content-Disposition"))
+}
+
 func TestServeSetHeaderContentRelated(t *testing.T) {
 	cases := []struct {
 		contentType string

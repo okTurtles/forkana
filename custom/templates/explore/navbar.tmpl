@@ -1,19 +1,23 @@
 <overflow-menu class="ui secondary pointing menu tw-px-4 tw-pt-2">
-	<a class="{{if .PageIsExploreSubjects}}active {{end}}item" href="{{AppSubUrl}}/explore/subjects">
+	{{/* Carry the current search keyword over to the other explore tabs so the search field keeps
+	its content when switching tabs (see issue #273). Only "q" is carried: sort/filter values are
+	tab specific and an unsupported "sort" makes the users tab return 404. QueryBuild omits an
+	empty keyword and query-escapes the value. */}}
+	<a class="{{if .PageIsExploreSubjects}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/subjects?" AppSubUrl) "q" .Keyword}}">
 		{{svg "octicon-goal"}} {{ctx.Locale.Tr "explore.repos"}}
 	</a>
 	{{if not .UsersPageIsDisabled}}
-		<a class="{{if .PageIsExploreUsers}}active {{end}}item" href="{{AppSubUrl}}/explore/users">
+		<a class="{{if .PageIsExploreUsers}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/users?" AppSubUrl) "q" .Keyword}}">
 			{{svg "octicon-person"}} {{ctx.Locale.Tr "explore.users"}}
 		</a>
 	{{end}}
 	<!-- {{if not .OrganizationsPageIsDisabled}}
-	<a class="{{if .PageIsExploreOrganizations}}active {{end}}item" href="{{AppSubUrl}}/explore/organizations">
+	<a class="{{if .PageIsExploreOrganizations}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/organizations?" AppSubUrl) "q" .Keyword}}">
 		{{svg "octicon-organization"}} {{ctx.Locale.Tr "explore.organizations"}}
 	</a>
 	{{end}} -->
 	{{if and (not ctx.Consts.RepoUnitTypeCode.UnitGlobalDisabled) .IsRepoIndexerEnabled (not .CodePageIsDisabled)}}
-	<a class="{{if .PageIsExploreCode}}active {{end}}item" href="{{AppSubUrl}}/explore/code">
+	<a class="{{if .PageIsExploreCode}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/code?" AppSubUrl) "q" .Keyword}}">
 		{{svg "octicon-code"}} {{ctx.Locale.Tr "explore.code"}}
 	</a>
 	{{end}}

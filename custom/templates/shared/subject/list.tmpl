@@ -2,7 +2,7 @@
 	{{if .HasSearchKeyword}}
 		{{/* When searching, show exact match and similar results separately */}}
 		{{if .Keyword}}
-			<div class="tw-font-bold tw-text-base tw-mb-4">
+			<div class="tw-font-bold tw-text-14 tw-mb-4">
 				{{ctx.Locale.Tr "explore.search_results_for" .Keyword}}
 			</div>
 		{{end}}
@@ -26,7 +26,7 @@
 
 		{{/* Similar Section */}}
 		{{if .SimilarSubjects}}
-			<div class="tw-font-semibold tw-text-base tw-mt-6 tw-mb-3 text muted">
+			<div class="tw-font-semibold tw-text-14 tw-mt-6 tw-mb-3 text muted">
 				{{ctx.Locale.Tr "explore.subject.similar"}}
 			</div>
 			{{range .SimilarSubjects}}

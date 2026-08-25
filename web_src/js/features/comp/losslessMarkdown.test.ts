@@ -126,16 +126,39 @@ test('edits made in Source mode are kept verbatim', async () => {
   expect(fake.mdText).toBe(edited);
 });
 
-test('a genuine Visual edit adopts the serialized form', async () => {
+test('a Visual edit that replaces everything adopts the serialized form', async () => {
   const {fake, textarea, editor} = setup();
   fake.typeWysiwyg('Hello [world]');
   const serialized = fake.serialize('Hello [world]');
+  // Nothing of the original survives, so there is nothing for the merge to preserve.
   expect(editor.getMarkdown()).toBe(serialized);
   expect(textarea.value).toBe(serialized);
   fake.changeMode('markdown');
   await flush();
   expect(editor.getMarkdown()).toBe(serialized);
   expect(fake.mdText).toBe(serialized);
+});
+
+// The tracker feeds (pristine source, entry baseline, current serialization) to the
+// three-way merge; markdownThreeWayMerge.test.ts covers the merge itself, this covers the
+// wiring — including that the merged text is written back into the markdown document, so
+// the Source editor displays what will actually be committed.
+test('a Visual edit to one line leaves the other lines byte-identical', async () => {
+  const {fake, textarea, editor} = setup();
+  const lines = GNARLY.split('\n');
+  const editedLast = `${lines.at(-1)} edited`;
+  fake.typeWysiwyg([...lines.slice(0, -1), editedLast].join('\n'));
+
+  const expected = [...lines.slice(0, -1), fake.serialize(editedLast)].join('\n');
+  expect(editor.getMarkdown()).toBe(expected);
+  expect(textarea.value).toBe(expected);
+  // the untouched hyperlink keeps its original, unescaped spelling
+  expect(editor.getMarkdown()).toContain('[Research program](./Research_program "Research program")');
+
+  fake.changeMode('markdown');
+  await flush();
+  expect(editor.getMarkdown()).toBe(expected);
+  expect(fake.mdText).toBe(expected);
 });
 
 test('a Visual edit that is fully undone still restores the pristine source', async () => {
@@ -174,17 +197,30 @@ test('empty initial content stays empty', () => {
   expect(textarea.value).toBe('');
 });
 
-test('comparisons run through the patched getMarkdown (widget stripping applied)', async () => {
+test('a Visual edit yields widget-stripped markdown, never $$widget placeholders', () => {
+  const IMG = '![a](data:image/png;base64,AAA)';
+  const doc = `Intro\n\n${IMG}\n\nOutro`;
   const fake = new FakeEditor('wysiwyg');
+  // Mirror the real base64 widget rule: in WYSIWYG the image is a widget node, so the
+  // serialization wraps it in a `$$widgetN <markdown>$$` placeholder.
+  const escape = (s: string) => s.replaceAll('[', '\\[').replaceAll('_', '\\_');
+  fake.serialize = (s: string) => s.split(IMG).map(escape).join(`$$widget0 ${IMG}$$`);
   // simulate installBase64WidgetPatch being installed first
   const original = fake.getMarkdown.bind(fake);
   fake.getMarkdown = () => stripWidgetPlaceholders(original());
   const textarea = document.createElement('textarea');
-  textarea.value = GNARLY;
+  textarea.value = doc;
   installLosslessMarkdownTracker(fake, textarea);
-  // WYSIWYG serialization containing a widget placeholder must not read as a user edit
-  fake.wwSource = GNARLY; // untouched
-  fake.changeMode('markdown');
-  await flush();
-  expect(fake.getMarkdown()).toBe(GNARLY);
+
+  // Untouched: the pristine source wins and the placeholder never surfaces.
+  expect(fake.getMarkdown()).toBe(doc);
+  expect(textarea.value).toBe(doc);
+
+  // After a genuine Visual edit the serialization becomes authoritative — and it is the
+  // stripped one, otherwise `$$widget0 …$$` would be committed into the article file.
+  fake.typeWysiwyg(`${doc}\n\nnew [line]`);
+  const edited = fake.getMarkdown();
+  expect(edited).not.toContain('$$widget');
+  expect(edited).toContain(IMG);
+  expect(textarea.value).toBe(edited);
 });

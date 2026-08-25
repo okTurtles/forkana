@@ -602,8 +602,14 @@ test-mssql\#%: integrations.mssql.test generate-ini-mssql
 test-mssql-migration: migrations.mssql.test migrations.individual.mssql.test
 
 .PHONY: playwright
+# Set SKIP_PLAYWRIGHT_INSTALL to skip the browser installation, for environments
+# where the browsers are already provisioned out of band.
 playwright: deps-frontend
+ifdef SKIP_PLAYWRIGHT_INSTALL
+	@echo "Skipping 'playwright install' (SKIP_PLAYWRIGHT_INSTALL is set)"
+else
 	$(NODE_VARS) pnpm exec playwright install $(PLAYWRIGHT_FLAGS)
+endif
 
 .PHONY: test-e2e%
 test-e2e%: TEST_TYPE ?= e2e
@@ -883,6 +889,18 @@ update-js: node-check | node_modules ## update js dependencies
 	rm -rf node_modules pnpm-lock.yaml
 	$(NODE_VARS) pnpm install
 	$(NODE_VARS) pnpm exec nolyfill install
+	@# nolyfill writes package.json#pnpm.overrides, which REPLACES (not merges with)
+	@# the overrides in pnpm-workspace.yaml, silently dropping any entry nolyfill
+	@# does not manage, such as the cosmiconfig pin.
+	@if node -e 'process.exit(JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).pnpm === undefined ? 1 : 0)'; then \
+		echo "nolyfill re-created package.json#pnpm.overrides."; \
+		echo "That field REPLACES the overrides in pnpm-workspace.yaml rather than merging with"; \
+		echo "them, so every override pnpm-workspace.yaml holds that nolyfill does not manage"; \
+		echo "(e.g. the cosmiconfig pin) is silently dropped. pnpm 11 ignores the field entirely."; \
+		echo "Move the entries into pnpm-workspace.yaml#overrides, delete package.json#pnpm,"; \
+		echo "then re-run 'pnpm install'."; \
+		exit 1; \
+	fi
 	$(NODE_VARS) pnpm install
 	@touch node_modules
 

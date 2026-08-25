@@ -36,6 +36,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv python install 3.12
       - uses: pnpm/action-setup@v4
+        with:
+          version: "^10.26.0"
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -61,6 +63,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: "^10.26.0"
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -131,6 +135,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: "^10.26.0"
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -179,6 +185,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: "^10.26.0"
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -186,7 +194,7 @@ jobs:
       - run: make lint-md
 
   actions:
-    if: needs.files-changed.outputs.actions == 'true' || needs.files-changed.outputs.actions == 'true'
+    if: needs.files-changed.outputs.actions == 'true'
     needs: files-changed
     runs-on: ubuntu-latest
     steps:

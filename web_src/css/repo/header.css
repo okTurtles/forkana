@@ -38,3 +38,36 @@
   justify-content: center;
   margin-top: 6px;
 }
+
+/* ── Mobile ───────────────────────────────────────────────────────────────
+   767.98px is this app's mobile breakpoint — 41 of the 43 max-width queries in
+   web_src/css use it, so this follows the house convention rather than the
+   bubble view's own `width <= 767px` switch (the same boundary, spelled the
+   way the CSS here spells it).
+
+   On a phone the subject header eats the top of the screen: the template gives
+   it `tw-pt-14` (56px) and `tw-pb-10` (40px), or 38px from
+   .repo-header-with-follow, under a 40px title. 1rem each way and a 20px title
+   leave room for the article itself.
+
+   THE SELECTORS ARE DELIBERATELY TWO DEEP. Tailwind's utilities are generated
+   with !important in this repo (`.tw-pt-14{padding-top:3.5rem!important}`) and
+   land ~35KB LATER in index.css than this file, so a single-class rule — even
+   an important one — loses to them on source order. `.secondary-nav` is the
+   real parent in both templates/repo/header.tmpl and its custom override, so
+   this is honest specificity, not a hack.
+
+   Only the h1 is retargeted: that is the subject title (custom/templates/repo/
+   header.tmpl). The plain repository header's `.flex-item-title` is an
+   owner/name breadcrumb and is left alone. */
+@media (max-width: 767.98px) {
+  .secondary-nav .repo-header {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+
+  .secondary-nav .repo-header h1 {
+    font-size: 20px !important;
+    text-align: center !important;
+  }
+}

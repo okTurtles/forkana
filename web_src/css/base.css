@@ -77,12 +77,23 @@
   border-color: currentcolor;
 }
 
-html, body {
+html {
   height: 100%;
   font-size: 14px;
 }
 
 body {
+  /* Use "min-height" instead of "height": with a fixed "height: 100%" the body box
+     is locked to the viewport, so any page taller than the viewport overflows that
+     box and pushes ".page-footer" (the last flex item) out of the visible area.
+     With "min-height" the body grows with its content, the footer always stays the
+     last element in flow, and short pages still get the footer pinned to the bottom
+     of the viewport via ".full.height { flex: 1 0 auto }".
+     "100%" (resolved against "html { height: 100% }") is used rather than
+     "100vh"/"100dvh" on purpose: percentage heights exclude a horizontal
+     scrollbar, so a horizontally scrolling page (wide diffs, tables) does not
+     gain a spurious vertical scrollbar. */
+  min-height: 100%;
   line-height: 20px;
   font-family: var(--fonts-regular);
   color: var(--color-text);
@@ -497,7 +508,9 @@ img.ui.avatar,
 }
 
 .full.height {
-  flex-grow: 1;
+  /* grow to fill the viewport, but never shrink below the content height, so the
+     footer is pushed below the content instead of overlapping/clipping it */
+  flex: 1 0 auto;
   padding-bottom: var(--page-space-bottom);
 }
 
