@@ -5,7 +5,7 @@ const invalidClass = 'home-search-input-invalid';
 // The landing page search field (custom/templates/home.tmpl) submits to the explore page, where an
 // empty keyword just lists everything. Coming from the landing page that is never what was meant,
 // so a blank search is rejected here with an inline message instead of being sent off.
-export function initHomeSearch() {
+export function initHomeSearchValidation() {
   const searchForm = document.querySelector<HTMLFormElement>('#home-search-form');
   if (!searchForm) return;
 

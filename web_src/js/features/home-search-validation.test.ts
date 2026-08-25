@@ -1,4 +1,4 @@
-import {initHomeSearch} from './home-search.ts';
+import {initHomeSearchValidation} from './home-search-validation.ts';
 
 function setupHomeSearch(): {form: HTMLFormElement, input: HTMLInputElement, error: HTMLElement} {
   document.body.innerHTML = `
@@ -8,7 +8,7 @@ function setupHomeSearch(): {form: HTMLFormElement, input: HTMLInputElement, err
     </form>
     <div id="home-search-error" class="home-search-error tw-hidden" role="alert">Type correct subject</div>
   `;
-  initHomeSearch();
+  initHomeSearchValidation();
   return {
     form: document.querySelector('#home-search-form'),
     input: document.querySelector('#search'),
