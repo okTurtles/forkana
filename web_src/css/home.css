@@ -37,6 +37,54 @@
   justify-content: center;
 }
 
+/* ===== Homepage search suggestions ===== */
+
+.home-search {
+  position: relative;
+}
+
+/* Sits on top of the page instead of pushing the rest of it down, and stays inside the width of
+   the search field it belongs to. */
+.home-search-suggestions {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  text-align: left;
+  overflow: hidden;
+  background: var(--color-body);
+  border: 1px solid var(--color-secondary);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px var(--color-shadow);
+}
+
+/* Both states are spelled out so that this beats the "a:hover" rule of base.css, which would
+   otherwise colour and underline a hovered suggestion. */
+.home-search-suggestion,
+.home-search-suggestion:hover {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.home-search-suggestion {
+  display: block;
+  padding: 10px 16px;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-search-suggestion b {
+  font-weight: var(--font-weight-semibold);
+}
+
+.home-search-suggestion:hover,
+.home-search-suggestion.active {
+  background: var(--color-hover);
+}
+
 /* ===== Homepage feeds card ===== */
 
 .home-feeds-card {
