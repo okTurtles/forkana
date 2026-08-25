@@ -1,0 +1,38 @@
+{{/* One row of the explore user list.
+
+	Takes a dict, not a bare user: Go binds "$" to whatever each "{{template}}" call
+	passes, so a sub-template cannot reach the page data the way this markup did while
+	it was inlined in templates/explore/user_list.tmpl. Callers pass both explicitly.
+
+	.User - the user to render
+	.Root - the page context, for ShowUserEmail / IsSigned / PageIsAdminUsers
+
+	Extracted from templates/explore/user_list.tmpl so the exact-match, similar and
+	unfiltered sections all render a user the same way (#276). */}}
+{{$user := .User}}
+{{$root := .Root}}
+<div class="flex-item tw-items-center">
+	<div class="flex-item-leading">
+		{{ctx.AvatarUtils.Avatar $user 48}}
+	</div>
+	<div class="flex-item-main">
+		<div class="flex-item-title">
+			{{template "shared/user/name" $user}}
+			{{if $user.Visibility.IsPrivate}}
+				<span class="ui basic tiny label">{{ctx.Locale.Tr "repo.desc.private"}}</span>
+			{{end}}
+		</div>
+		<div class="flex-item-body">
+			{{if $user.Location}}
+				<span class="flex-text-inline">{{svg "octicon-location"}}{{$user.Location}}</span>
+			{{end}}
+			{{if and $user.Email (or (and $root.ShowUserEmail $root.IsSigned (not $user.KeepEmailPrivate)) $root.PageIsAdminUsers)}}
+				<span class="flex-text-inline">
+					{{svg "octicon-mail"}}
+					<a href="mailto:{{$user.Email}}">{{$user.Email}}</a>
+				</span>
+			{{end}}
+			<span class="flex-text-inline">{{svg "octicon-calendar"}}{{ctx.Locale.Tr "user.joined_on" (DateUtils.AbsoluteShort $user.CreatedUnix)}}</span>
+		</div>
+	</div>
+</div>

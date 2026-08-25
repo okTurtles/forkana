@@ -29,6 +29,27 @@ function updateTabLinks(keyword: string): void {
   });
 }
 
+// Current content of the form's keyword field, or "" when it has none.
+function getKeyword(searchForm: HTMLFormElement): string {
+  const field = searchForm.elements.namedItem('q');
+  return field instanceof HTMLInputElement ? field.value.trim() : '';
+}
+
+// Query string the form should navigate to.
+//
+// An empty keyword is dropped instead of being submitted as "q=": the server treats both the same
+// way, but only the shorter URL is the address of the plain, unsearched page, so clearing the field
+// leaves a link worth bookmarking and sharing rather than one that searches for nothing.
+function buildSearchParams(searchForm: HTMLFormElement): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [key, value] of new FormData(searchForm).entries()) {
+    params.set(key, value.toString());
+  }
+  params.delete('clear-filter');
+  if (!getKeyword(searchForm)) params.delete('q');
+  return params;
+}
+
 export function initExploreSearch() {
   // The explore navbar carries the keyword over in its tab links (see updateTabLinks), which also
   // changes how the keyword field itself is submitted, see below. The same search bar is rendered
@@ -47,10 +68,7 @@ export function initExploreSearch() {
       // links carry whatever has been typed over themselves.
       if (tabsCarryKeyword && e.target.name === 'q') return;
 
-      const params = new URLSearchParams();
-      for (const [key, value] of new FormData(searchForm).entries()) {
-        params.set(key, value.toString());
-      }
+      const params = buildSearchParams(searchForm);
       if (e.target.name === 'clear-filter') {
         params.delete('archived');
         params.delete('fork');
@@ -60,8 +78,30 @@ export function initExploreSearch() {
         params.delete('repo_role');
       }
 
-      params.delete('clear-filter');
       window.location.search = params.toString();
+    });
+
+    // Emptying the keyword field returns the page to its unsearched state. Two gestures get there:
+    //
+    //  - the "search" event, which Blink and WebKit fire when the field's own clear button (the "x"
+    //    that <input type="search"> renders) or the Escape key empties it. Nothing else notices
+    //    that gesture: it produces an "input" event indistinguishable from typing, and no "change"
+    //    until the field is left, so the results used to sit on screen beside an empty search box.
+    //  - submitting an empty field, via Enter or the search button. Firefox reaches the reset only
+    //    this way: it renders no clear button and does not implement the "search" event.
+    //
+    // Both only intervene while the field is empty -- a real keyword still submits natively -- and
+    // both drop only "q". Sort and the filters are separate controls, so they survive: clearing the
+    // search clears the search, not the way the results are arranged.
+    searchForm.addEventListener('search', () => {
+      if (getKeyword(searchForm)) return;
+      window.location.search = buildSearchParams(searchForm).toString();
+    });
+
+    searchForm.addEventListener('submit', (e: Event) => {
+      if (getKeyword(searchForm)) return;
+      e.preventDefault();
+      window.location.search = buildSearchParams(searchForm).toString();
     });
   }
 
