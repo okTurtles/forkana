@@ -23,6 +23,20 @@ async function setTextareaValue(page: Page, selector: string, value: string): Pr
   }, value);
 }
 
+// Issue and comment forms use the Toast editor, which hides the underlying textarea, so the
+// content has to go through the editor instance instead of being typed into the textarea.
+async function setToastEditorValue(page: Page, selector: string, value: string): Promise<void> {
+  const container = page.locator(selector);
+  await expect(container.locator('.toastui-editor-defaultUI')).toBeVisible({timeout: 20000});
+  await container.evaluate((el, text) => {
+    type ToastEditorContainer = HTMLElement & {_giteaToastCommentEditor?: {value: (v?: string) => string}};
+    const editor = (el as ToastEditorContainer)._giteaToastCommentEditor;
+    if (!editor) throw new Error('Toast editor is not initialized');
+    editor.value(text);
+    el.dispatchEvent(new CustomEvent('ce-editor-content-changed'));
+  }, value);
+}
+
 async function expectMermaidFrame(page: Page, index: number, text: RegExp): Promise<void> {
   const iframe = page.locator('iframe.markup-content-iframe').nth(index);
   await expect(iframe).toBeVisible({timeout: 20000});
@@ -127,14 +141,23 @@ test.describe('Mermaid rendering', () => {
       await page.goto(`/user2/${subject}/issues/new`);
       await expect(page.locator('#new-issue')).toBeVisible({timeout: 10000});
       await page.locator('input[name="title"]').fill('Mermaid issue');
-      await page.locator('#new-issue textarea[name="content"]').fill(fencedMermaid(issueDiagram));
+      await setToastEditorValue(page, '#new-issue .toast-comment-editor', fencedMermaid(issueDiagram));
       await page.locator('#new-issue button.ui.primary.button').click();
-      await page.waitForURL(/\/user2\/.*\/issues\/[0-9]+/, {timeout: 20000});
+      await page.waitForURL(/\/issues\/[0-9]+$/, {timeout: 20000});
+      // creating an issue redirects to the article-scoped URL, which has no view route, so
+      // continue on the repository issue URL where the issue is rendered
+      const issueIndex = new URL(page.url()).pathname.split('/').pop();
+      const issueUrl = `/user2/${repoName}/issues/${issueIndex}`;
+      await page.goto(issueUrl);
 
       await expectMermaidFrame(page, 0, /IssueAlpha[\s\S]*IssueBeta/);
 
-      await page.locator('#comment-form textarea[name="content"]').fill(fencedMermaid(commentDiagram));
+      await setToastEditorValue(page, '#comment-form .toast-comment-editor', fencedMermaid(commentDiagram));
       await page.locator('#comment-button').click();
+      // posting a comment also redirects to the article-scoped URL
+      await page.waitForURL(/#issuecomment-[0-9]+$/, {timeout: 20000});
+      await page.waitForLoadState('load');
+      await page.goto(issueUrl);
       await expect(page.locator('iframe.markup-content-iframe')).toHaveCount(2, {timeout: 20000});
       await expectMermaidFrame(page, 1, /CommentAlpha[\s\S]*CommentBeta/);
     } finally {
