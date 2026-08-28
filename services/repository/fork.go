@@ -43,10 +43,12 @@ type ForkOnEditPermissions struct {
 	HasExistingFork bool
 	// ExistingFork is the user's existing fork (nil if none)
 	ExistingFork *repo_model.Repository
-	// BlockedBySubject is true if the user already owns a different repo for the same subject
-	// that is NOT a fork of the current repository (i.e., they have their own independent article)
+	// BlockedBySubject is true if the user already owns a different active (non-archived)
+	// repo for the same subject that is NOT a fork of the current repository
+	// (i.e., they have their own independent article)
 	BlockedBySubject bool
-	// OwnRepoForSubject is the user's existing repo for the subject (nil if none)
+	// OwnRepoForSubject is the user's existing active repo for the subject (nil if none,
+	// or if their repo for the subject is archived)
 	OwnRepoForSubject *repo_model.Repository
 	// CanSubmitChangeRequest is true if the user can submit a change request to this repository.
 	// This is true when the user has an existing fork of this repo (or any repo in the same subject's
@@ -100,6 +102,13 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 		return nil, err
 	}
 
+	// An archived repository is not an active article, so it does not consume the
+	// user's "one article per subject" slot: treat it as if the user had no repo
+	// for the subject.
+	if ownRepo != nil && ownRepo.IsArchived {
+		ownRepo = nil
+	}
+
 	// Process the results to determine permissions.
 	// Different scenarios:
 	//
@@ -107,7 +116,7 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 	//    - If they have a fork of this repo: HasExistingFork=true, CanSubmitChangeRequest=true
 	//    - If they don't have a fork: NeedsFork=true, CanSubmitChangeRequest=true
 	//
-	// 2. User has a repo for this subject (ownRepo != nil):
+	// 2. User has an active (non-archived) repo for this subject (ownRepo != nil):
 	//    a. Their repo IS a fork of this repo (ownRepo.ID == existingFork.ID):
 	//       - HasExistingFork=true, CanSubmitChangeRequest=true
 	//       - They can submit change requests to propose changes to this article
@@ -293,7 +302,9 @@ func ForkRepository(ctx context.Context, doer, owner *user_model.User, opts Fork
 		if err != nil {
 			return nil, err
 		}
-		if ownRepo != nil && ownRepo.ID != opts.BaseRepo.ID {
+		// An archived repository doesn't count: the owner can contribute to another
+		// article for the same subject once their own article is archived.
+		if ownRepo != nil && !ownRepo.IsArchived && ownRepo.ID != opts.BaseRepo.ID {
 			return nil, ErrUserOwnsSubjectRepo{
 				UserID:         owner.ID,
 				SubjectID:      opts.BaseRepo.SubjectID,

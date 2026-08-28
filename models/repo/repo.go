@@ -1039,11 +1039,14 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 
 // GetRepositoryByOwnerIDAndSubjectID returns a repository by owner ID and subject ID.
 // Returns nil if no such repository exists (without error).
+// An owner can end up with several repositories for the same subject once older
+// ones are archived, so active repositories are preferred over archived ones.
 func GetRepositoryByOwnerIDAndSubjectID(ctx context.Context, ownerID, subjectID int64) (*Repository, error) {
 	var repo Repository
 	has, err := db.GetEngine(ctx).
 		Where("owner_id = ?", ownerID).
 		And("subject_id = ?", subjectID).
+		OrderBy("is_archived ASC, id ASC").
 		Get(&repo)
 	if err != nil {
 		return nil, err
