@@ -9,8 +9,10 @@ ARG GOPROXY
 ENV GOPROXY=${GOPROXY:-direct}
 
 # The golang images set GOTOOLCHAIN=local, which ignores the toolchain
-# directive in go.mod. Override it so the build uses the pinned toolchain.
-ENV GOTOOLCHAIN=go1.25.12+auto
+# directive in go.mod. auto honours the directive as a minimum, and keeps the
+# image's own Go whenever that is already at or above the pin, which also avoids
+# a toolchain download under GOPROXY=direct.
+ENV GOTOOLCHAIN=auto
 
 ARG GITEA_VERSION
 ARG TAGS="sqlite sqlite_unlock_notify"
