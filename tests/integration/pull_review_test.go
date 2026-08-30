@@ -23,6 +23,7 @@ import (
 	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -249,6 +250,74 @@ func TestPullView_GivenApproveOrRejectReviewOnClosedPR(t *testing.T) {
 			testSubmitReview(t, user2Session, htmlDoc.GetCSRF(), "user2", "repo1", elem[4], "", "reject", http.StatusUnprocessableEntity)
 		})
 	})
+}
+
+// TestPullView_SubmitReviewPermissions checks that a user without write access
+// to the change request, and who isn't its author, can only submit a plain
+// comment review: "approve", "reject" and "close" must be rejected server-side
+// (issue #205) instead of silently doing nothing or returning a 500.
+func TestPullView_SubmitReviewPermissions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// user2 owns repo1, user1 is the author of pull request #3, user5 is a
+	// random user with neither write access nor authorship.
+	const owner, repo, pullNumber = "user2", "repo1", "3"
+
+	getCSRF := func(session *TestSession) string {
+		req := NewRequest(t, "GET", path.Join("/", owner, repo, "pulls", pullNumber))
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		return NewHTMLParser(t, resp.Body).GetCSRF()
+	}
+
+	t.Run("RandomUser", func(t *testing.T) {
+		session := loginUser(t, "user5")
+		csrf := getCSRF(session)
+
+		testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "approve", http.StatusForbidden)
+		testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "reject", http.StatusForbidden)
+		testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "close", http.StatusForbidden)
+		// commenting stays available
+		testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "comment", http.StatusOK)
+	})
+
+	t.Run("Author", func(t *testing.T) {
+		// the change request author may not approve/reject (handled elsewhere),
+		// but must not be blocked by the write-access check
+		session := loginUser(t, "user1")
+		csrf := getCSRF(session)
+
+		// "close" is not turned into a permission error for the author
+		resp := testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "close", NoExpectedStatus)
+		assert.NotEqual(t, http.StatusForbidden, resp.Code)
+	})
+}
+
+// TestPullView_SubmitReviewModalOptions checks that the disallowed options are
+// not even rendered in the "Submit Review" modal for a user without permission.
+func TestPullView_SubmitReviewModalOptions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	filesLink := "/user2/repo1/pulls/3/files"
+	reviewOptions := func(session *TestSession) []string {
+		req := NewRequest(t, "GET", filesLink)
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+		var values []string
+		htmlDoc.doc.Find(`.review-radio-options input[name="type"]`).Each(func(_ int, s *goquery.Selection) {
+			value, _ := s.Attr("value")
+			values = append(values, value)
+		})
+		return values
+	}
+
+	// a random user only gets the "comment" option
+	assert.Equal(t, []string{"comment"}, reviewOptions(loginUser(t, "user5")))
+
+	// the repository owner keeps every option
+	assert.ElementsMatch(t, []string{"comment", "approve", "reject", "close"}, reviewOptions(loginUser(t, "user2")))
+
+	// the change request author keeps the (disabled) approve/reject options and close
+	assert.ElementsMatch(t, []string{"comment", "approve", "reject", "close"}, reviewOptions(loginUser(t, "user1")))
 }
 
 func testSubmitReview(t *testing.T, session *TestSession, csrf, owner, repo, pullNumber, commitID, reviewType string, expectedSubmitStatus int) *httptest.ResponseRecorder {

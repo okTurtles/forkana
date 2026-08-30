@@ -220,6 +220,39 @@ func renderConversation(ctx *context.Context, comment *issues_model.Comment, ori
 	}
 }
 
+// jsonForbidden responds with a 403 carrying an "errorMessage" the frontend's
+// fetch-action handler renders as an error toast.
+func jsonForbidden(ctx *context.Context, msg string) {
+	ctx.JSON(http.StatusForbidden, map[string]any{"errorMessage": msg, "renderFormat": "text"})
+}
+
+// checkReviewDecisionPermission verifies that the doer is allowed to submit the
+// requested review type. "approve" and "reject" require write access to the
+// change request, "close" additionally allows the change request author.
+// It returns false (and writes the response) when the submission is rejected.
+func checkReviewDecisionPermission(ctx *context.Context, issue *issues_model.Issue, formType string) bool {
+	canWrite := ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
+	if canWrite {
+		return true
+	}
+	isPoster := ctx.IsSigned && ctx.Doer != nil && issue.IsPoster(ctx.Doer.ID)
+
+	switch formType {
+	case "approve":
+		jsonForbidden(ctx, ctx.Locale.TrString("repo.issues.review.no_permission.approval"))
+		return false
+	case "reject":
+		jsonForbidden(ctx, ctx.Locale.TrString("repo.issues.review.no_permission.rejection"))
+		return false
+	case "close":
+		if !isPoster {
+			jsonForbidden(ctx, ctx.Locale.TrString("repo.issues.review.no_permission.close"))
+			return false
+		}
+	}
+	return true
+}
+
 // SubmitReview creates a review out of the existing pending review or creates a new one if no pending review exist
 func SubmitReview(ctx *context.Context) {
 	form := web.GetForm(ctx).(*forms.SubmitReviewForm)
@@ -233,6 +266,14 @@ func SubmitReview(ctx *context.Context) {
 	if ctx.HasError() {
 		ctx.Flash.Error(ctx.Data["ErrorMsg"].(string))
 		ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d/files", ctx.Repo.RepoLink, issue.Index))
+		return
+	}
+
+	// Forkana: only the article owner (or anyone with write access to the change
+	// request) may approve or request changes, and only they or the change
+	// request author may close it. Everybody else is limited to plain comments,
+	// so reject anything else instead of failing silently or with a 500.
+	if !checkReviewDecisionPermission(ctx, issue, form.Type) {
 		return
 	}
 

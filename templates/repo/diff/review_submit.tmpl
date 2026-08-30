@@ -37,6 +37,10 @@
 				{{end}}
 				<div class="review-radio-options">
 					{{$showSelfTooltip := (and $.IsSigned ($.Issue.IsPoster $.SignedUser.ID))}}
+					{{/* Only the article owner (or anyone with write access) may approve or request
+					changes; the change request author may additionally close their own change
+					request. Everybody else only gets the "Comment" option. */}}
+					{{$canReviewDecision := (or $.HasIssuesOrPullsWritePermission $showSelfTooltip)}}
 					<label class="review-radio-option">
 						<input type="radio" name="type" value="comment" checked>
 						<div class="review-radio-content">
@@ -44,7 +48,7 @@
 							<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.comment_desc"}}</span>
 						</div>
 					</label>
-					{{if not $.Issue.IsClosed}}
+					{{if and $canReviewDecision (not $.Issue.IsClosed)}}
 						<label class="review-radio-option{{if $showSelfTooltip}} disabled{{end}}" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_approve"}}"{{end}}>
 							<input type="radio" name="type" value="approve" {{if $showSelfTooltip}}disabled{{end}}>
 							<div class="review-radio-content">
@@ -53,7 +57,7 @@
 							</div>
 						</label>
 					{{end}}
-					{{if not $.Issue.IsClosed}}
+					{{if and $canReviewDecision (not $.Issue.IsClosed)}}
 						<label class="review-radio-option{{if $showSelfTooltip}} disabled{{end}}" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_reject"}}"{{end}}>
 							<input type="radio" name="type" value="reject" {{if $showSelfTooltip}}disabled{{end}}>
 							<div class="review-radio-content">
@@ -62,13 +66,15 @@
 							</div>
 						</label>
 					{{end}}
-					<label class="review-radio-option">
-						<input type="radio" name="type" value="close">
-						<div class="review-radio-content">
-							<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.close"}}</span>
-							<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.close_desc"}}</span>
-						</div>
-					</label>
+					{{if $canReviewDecision}}
+						<label class="review-radio-option">
+							<input type="radio" name="type" value="close">
+							<div class="review-radio-content">
+								<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.close"}}</span>
+								<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.close_desc"}}</span>
+							</div>
+						</label>
+					{{end}}
 				</div>
 			</div>
 			<div class="review-modal-footer">
