@@ -211,9 +211,12 @@
 							</div>
 							<div class="tw-font-semibold">
 								{{ctx.Locale.Tr "repo.pulls.can_auto_merge_desc"}}
-								<div class="tw-text-xs text light-2">
-									{{ctx.Locale.Tr "repo.pulls.merge_permission_desc" .Repository.Link}}
-								</div>
+								{{/* Forkana: the "who can merge" hint only helps viewers who cannot merge themselves */}}
+								{{if not (and .AllowMerge .IsBaseRepoOwner)}}
+									<div class="tw-text-xs text light-2">
+										{{ctx.Locale.Tr "repo.pulls.merge_permission_desc" .Repository.Link}}
+									</div>
+								{{end}}
 							</div>
 						</div>
 					{{end}}

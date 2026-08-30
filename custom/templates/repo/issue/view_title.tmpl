@@ -103,12 +103,20 @@
 						<span class="pull-desc">{{ctx.Locale.Tr "repo.pulls.merged_title_desc" .NumCommits $baseHref $mergedStr}}</span>
 					{{end}}
 				{{else}}
-					{{if .Issue.OriginalAuthor}}
-						<span id="pull-desc-display" class="pull-desc">{{.Issue.OriginalAuthor}} {{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits (print .Repository.OwnerName "/" .Repository.Name)}}</span>
+					{{$articleRef := print .Repository.OwnerName "/" .Repository.Name}}
+					{{/* Forkana: the description is viewer-aware - the change author reads it in the first person,
+					the article owner keeps the possessive form, and anyone else gets the neutral form. */}}
+					{{$titleDescKey := Iif .IsBaseRepoOwner "repo.pulls.title_desc" "repo.pulls.title_desc_other"}}
+					{{if and .IsIssuePoster (not .Issue.OriginalAuthor)}}
+						<span id="pull-desc-display" class="pull-desc">
+							{{ctx.Locale.Tr "repo.pulls.title_desc_self" .NumCommits $articleRef}}
+						</span>
+					{{else if .Issue.OriginalAuthor}}
+						<span id="pull-desc-display" class="pull-desc">{{.Issue.OriginalAuthor}} {{ctx.Locale.Tr $titleDescKey .NumCommits $articleRef}}</span>
 					{{else}}
 						<span id="pull-desc-display" class="pull-desc">
 							<a {{if gt .Issue.Poster.ID 0}}href="{{.Issue.Poster.HomeLink}}"{{end}}>{{.Issue.Poster.GetDisplayName}}</a>
-							{{ctx.Locale.Tr "repo.pulls.title_desc" .NumCommits (print .Repository.OwnerName "/" .Repository.Name)}}
+							{{ctx.Locale.Tr $titleDescKey .NumCommits $articleRef}}
 						</span>
 					{{end}}
 				{{end}}
