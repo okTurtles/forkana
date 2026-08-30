@@ -373,10 +373,15 @@ func UpdateIssueContent(ctx *context.Context) {
 		return
 	}
 
+	attachments := attachmentsHTML(ctx, issue.Attachments, content)
+	if ctx.Written() {
+		return
+	}
+
 	ctx.JSON(http.StatusOK, map[string]any{
 		"content":        content,
 		"contentVersion": issue.ContentVersion,
-		"attachments":    attachmentsHTML(ctx, issue.Attachments, content),
+		"attachments":    attachments,
 	})
 }
 

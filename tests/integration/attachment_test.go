@@ -93,8 +93,8 @@ func TestEditorAttachmentServedToRepoReaders(t *testing.T) {
 
 // TestInlineEditHidesEmbeddedAttachments covers the attachment list returned by the issue and
 // comment inline-edit endpoints. The attachments template hides attachments whose UUID already
-// appears in the *rendered* content (they are displayed inline by the content itself), which only works if the
-// handler passes the rendered content under the "RenderedContent" key — it used to pass the raw
+// appears in the *rendered* content (they are displayed inline by the content itself), which only
+// works if the handler passes the rendered content under the "RenderedContent" key — it used to pass the raw
 // markdown under "Content", so the filter never applied and every embedded image was listed again
 // until the page was reloaded.
 func TestInlineEditHidesEmbeddedAttachments(t *testing.T) {
