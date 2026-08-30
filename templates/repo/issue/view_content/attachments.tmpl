@@ -1,14 +1,23 @@
 <div class="dropzone-attachments">
-	{{if .Attachments}}
-		<div class="divider"></div>
-	{{end}}
+	{{/* Attachments whose UUID already appears in the rendered content are displayed inline by the
+	content itself (image/video embeds inserted by the editor), so listing them here again would
+	duplicate them. Only attachments that are not embedded get a file row and a thumbnail. */}}
+	{{$renderedContent := StringUtils.ToString .RenderedContent}}
+	{{$hasUnembedded := false}}
 	{{$hasThumbnails := false}}
 	{{- range .Attachments -}}
-		{{if and (FilenameIsImage .Name) (not (StringUtils.Contains (StringUtils.ToString $.RenderedContent) .UUID))}}
-			{{$hasThumbnails = true}}
+		{{if not (StringUtils.Contains $renderedContent .UUID)}}
+			{{$hasUnembedded = true}}
+			{{if FilenameIsImage .Name}}
+				{{$hasThumbnails = true}}
+			{{end}}
 		{{end}}
 	{{- end -}}
+	{{if $hasUnembedded}}
+		<div class="divider"></div>
+	{{end}}
 	{{- range .Attachments -}}
+		{{if not (StringUtils.Contains $renderedContent .UUID)}}
 		<div class="tw-flex">
 			<div class="tw-flex-1 tw-p-2">
 				<a target="_blank" rel="noopener noreferrer" href="{{.DownloadURL}}" title="{{ctx.Locale.Tr "repo.issues.attachment.open_tab" .Name}}">
@@ -24,13 +33,14 @@
 				<span class="ui text grey">{{.Size | FileSize}}</span>
 			</div>
 		</div>
+		{{end}}
 	{{end -}}
 
 	{{if $hasThumbnails}}
 		<div class="divider"></div>
 		<div class="ui small thumbnails">
 			{{- range .Attachments -}}
-				{{if and (FilenameIsImage .Name) (not (StringUtils.Contains (StringUtils.ToString $.RenderedContent) .UUID))}}
+				{{if and (FilenameIsImage .Name) (not (StringUtils.Contains $renderedContent .UUID))}}
 				<a target="_blank" rel="noopener noreferrer" href="{{.DownloadURL}}">
 					<img loading="lazy" alt="{{.Name}}" src="{{.DownloadURL}}" title="{{ctx.Locale.Tr "repo.issues.attachment.open_tab" .Name}}">
 				</a>

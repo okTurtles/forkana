@@ -5,6 +5,7 @@ package integration
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/png"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"testing"
 
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/tests"
@@ -88,6 +90,33 @@ func TestEditorAttachmentServedToRepoReaders(t *testing.T) {
 	owner.MakeRequest(t, attachReq(privUUID), http.StatusOK)
 	user8.MakeRequest(t, attachReq(privUUID), http.StatusNotFound)
 	MakeRequest(t, attachReq(privUUID), http.StatusNotFound) // anonymous
+}
+
+// TestArticleAttachmentRouteServesEmbeddedAttachment covers the URL that images embedded in a
+// comment actually resolve to. The editor writes "![name](/attachments/{uuid})" and the markup
+// renderer resolves that against Repository.Link(), which in Forkana is
+// "/article/{owner}/{subject}" — so the attachment must be served from
+// "/article/{owner}/{subject}/attachments/{uuid}", otherwise every embedded image 404s.
+func TestArticleAttachmentRouteServesEmbeddedAttachment(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1}) // public repo owned by user2
+	subjectName := repo1.GetSubject(t.Context())
+
+	// attachment fixture linked to a comment on user2/repo1
+	const uuid = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17"
+	_, err := storage.Attachments.Save(repo_model.AttachmentRelativePath(uuid), strings.NewReader("hello world"), -1)
+	assert.NoError(t, err)
+
+	articleURL := fmt.Sprintf("/article/%s/%s/attachments/%s", repo1.OwnerName, subjectName, uuid)
+
+	// A fresh request per call: MakeRequest stamps session cookies onto the request.
+	session := loginUser(t, "user2")
+	session.MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK)
+	MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK) // anonymous, repo is public
+
+	// unknown attachments still 404 instead of leaking anything
+	MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/attachments/%s", repo1.OwnerName, subjectName, "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18")), http.StatusNotFound)
 }
 
 func TestCreateAnonymousAttachment(t *testing.T) {

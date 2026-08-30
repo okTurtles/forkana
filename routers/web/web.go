@@ -1514,6 +1514,16 @@ func registerWebRoutes(m *web.Router) {
 	}, optSignIn, context.RepoAssignment)
 	// end "/{username}/{reponame}": compatibility with old attachments
 
+	// Markdown written by the comment/issue editor embeds attachments as "/attachments/{uuid}"
+	// (or the relative "attachments/{uuid}"). The markup renderer resolves both against
+	// Repository.Link(), which in Forkana is "/article/{owner}/{subject}" rather than
+	// "/{owner}/{repo}", so rendered images point at "/article/{owner}/{subject}/attachments/{uuid}".
+	// Serve that path too, otherwise every embedded image in a comment 404s.
+	m.Group("/article/{username}/{subjectname}", func() {
+		m.Get("/attachments/{uuid}", repo.GetAttachment)
+	}, optSignIn, context.RepoAssignmentByOwnerAndSubject)
+	// end "/article/{username}/{subjectname}": attachments embedded in rendered markdown
+
 	m.Group("/{username}/{reponame}", func() {
 		m.Post("/topics", repo.TopicsPost)
 	}, context.RepoAssignment, reqRepoAdmin, context.RepoMustNotBeArchived())
