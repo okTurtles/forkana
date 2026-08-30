@@ -1,6 +1,13 @@
 /* Footer overrides */
+
+/* The separator line above the footer content is aligned with the top navbar:
+   it starts where the logo starts and ends where the last navbar item (sign up)
+   ends. --navbar-content-inset-x is defined in web_src/css/modules/navbar.css.
+   Its width and colour come from the tw-border-t / tw-border-secondary classes
+   on the element itself, which match the navbar's own bottom border. */
 .footer-divider {
-  border-color: var(--color-border);
+  margin-left: var(--navbar-content-inset-x);
+  margin-right: var(--navbar-content-inset-x);
 }
 
 .page-footer {

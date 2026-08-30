@@ -1,10 +1,21 @@
+:root {
+  /* horizontal padding of the navbar itself */
+  --navbar-padding-x: 10px;
+  /* horizontal padding of a single navbar item */
+  --navbar-item-padding-x: 13px;
+  /* distance from the viewport edge to the outermost visible navbar content,
+     i.e. the logo on the left and the last item on the right. Elements outside
+     the navbar (such as the footer divider) use it to align with the navbar. */
+  --navbar-content-inset-x: calc(var(--navbar-padding-x) + var(--navbar-item-padding-x));
+}
+
 #navbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   background: var(--color-nav-bg);
   border-bottom: 1px solid var(--color-secondary);
-  padding: 0 10px;
+  padding: 0 var(--navbar-padding-x);
 }
 
 #navbar .navbar-left,
@@ -26,7 +37,7 @@
   text-decoration: none;
   min-height: 36px;
   min-width: 36px;
-  padding: 3px 13px;
+  padding: 3px var(--navbar-item-padding-x);
   border-radius: 4px;
 }
 
