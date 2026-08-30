@@ -388,10 +388,21 @@ export function initRepoHistory() {
   }
 
   async function ensureBubbleView() {
-    if (viewLoaded.bubble) return;
+    if (!viewLoaded.bubble) {
+      await nextTick();
+      initRepoBubbleView();
+      viewLoaded.bubble = true;
+    }
+    /* #348: tell the graph to measure the box it is actually drawn in. The
+       component mounts as part of the switch, when its section may still be
+       the hidden (0-height) placeholder, and the window can be resized while
+       the table view is the one on screen — either way the size it holds is
+       not the size it now has. The listener is registered inside the
+       component's own mount, which awaits nextTick before this call does, so
+       it is in place by the time the event goes out. FishboneGraph re-measures
+       and drops the event when nothing moved. */
     await nextTick();
-    initRepoBubbleView();
-    viewLoaded.bubble = true;
+    window.dispatchEvent(new CustomEvent('repo:bubble-visible'));
   }
 
   function bindTableInteractions() {

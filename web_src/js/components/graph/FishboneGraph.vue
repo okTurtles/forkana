@@ -39,6 +39,11 @@ import {
   BUBBLE_HOVER_RADIUS, BUBBLE_UNKNOWN_RUNG, bubbleRungFor, countTextForRung,
   maxContributors, type BubbleRung,
 } from "./bubble-size.ts";
+import {
+  DEFAULT_CONTAINER_HEIGHT, DEFAULT_CONTAINER_WIDTH,
+  canvasHeightFor, isMeasurable, layoutWidthFor, sizeChanged,
+  type ContainerSize,
+} from "./graph-viewport.ts";
 
 // Inline types replacing former seeds module
 type Side = -1 | 1;
@@ -178,15 +183,12 @@ const LANE_PAD_COMPLEXITY_WEIGHT = 0.3;  // Weight of complexity factor in lane 
    scale may touch them. The zoom-to-fit scale is still COMPUTED (fitScale) —
    it is the floor for zooming out — but never applied to the resting view. */
 
-/* === SVG LAYOUT === */
-const MIN_SVG_HEIGHT = 320;          // Never collapse the canvas below this
+/* === SVG LAYOUT ===
+   The container-measurement constants and the pure functions that turn a
+   measurement into canvas numbers live in ./graph-viewport.ts (imported above)
+   so they can be unit-tested: MIN_SVG_HEIGHT, DEFAULT_CONTAINER_WIDTH,
+   DEFAULT_CONTAINER_HEIGHT, MAX_LAYOUT_WIDTH. */
 const CONTENT_BOUNDS_EXTRA = 16;     // Extra horizontal padding for elbow overhang
-const DEFAULT_CONTAINER_WIDTH = 1100;   // Default container width when not measured
-/* ONE default for "container height we have not measured yet". There used to be
-   two (DEFAULT_SVG_HEIGHT 1000 and DEFAULT_CONTAINER_HEIGHT 800) that meant the
-   same thing and disagreed, so the first layout was fitted against one value
-   and drawn at the other. */
-const DEFAULT_CONTAINER_HEIGHT = 800;   // Default container height when not measured
 
 /* === API PARAMETERS === */
 const API_CONTRIBUTOR_DAYS = 90;     // Number of days to look back for contributor counts
@@ -332,12 +334,17 @@ const hasData = computed(() => {
   return false;
 });
 
-/* Container width affects responsive dials; observe it. */
+/* Container size drives the canvas height AND the responsive dials; observe it
+   and re-measure on every change (#348). `measured` is the RAW box; the width
+   the layout runs at is that value clamped, and the two must not be conflated
+   or the bail-out below cannot tell a real resize from a redelivery. */
 const containerRef = ref<HTMLDivElement | null>(null);
 let ro: ResizeObserver | null = null;
+let measured: ContainerSize = {width: 0, height: 0};
 let containerWidth = DEFAULT_CONTAINER_WIDTH;
 let containerHeight = DEFAULT_CONTAINER_HEIGHT;
 let pendingRaf: number | null = null;
+let remeasureCleanup: (() => void) | null = null;
 let pointerCleanup: (() => void) | null = null;
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -834,7 +841,7 @@ function subtreeStackGap() {
    out to remove, reintroduced from the other end. */
 function graphViewportHeight() {
   const legendH = legendRef.value?.offsetHeight ?? 0;
-  return Math.max(MIN_SVG_HEIGHT, (containerHeight || DEFAULT_CONTAINER_HEIGHT) - legendH);
+  return canvasHeightFor(containerHeight, legendH);
 }
 
 /** Give the canvas box the height it actually has, in EVERY state.
@@ -850,6 +857,46 @@ function graphViewportHeight() {
    to nudge. Called from mount, resize, and every branch of the fetch. */
 function syncCanvasHeight() {
   svgHeight.value = graphViewportHeight();
+}
+
+/** Read the container box and adopt it. Returns true when the numbers the
+   layout depends on actually moved, false for "nothing to do" — including a
+   container that is not rendered (0×0, the other view is showing): adopting
+   THAT would size the canvas from a box that is not on screen. */
+function measureContainer(): boolean {
+  const el = containerRef.value;
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  const next: ContainerSize = {width: rect.width, height: rect.height};
+  if (!isMeasurable(next)) return false;
+  if (!sizeChanged(measured, next)) return false;
+  measured = next;
+  containerWidth = layoutWidthFor(next.width);
+  containerHeight = next.height;
+  return true;
+}
+
+/** The single re-measure path: the ResizeObserver, a window resize, the tab
+   coming back to the foreground and the view switch all end up here.
+
+   Two guarantees keep it from feeding itself. It observes the CONTAINER, never
+   the <svg> it draws into, so a taller canvas cannot enlarge what is being
+   observed; and measureContainer() bails when the box has not moved, so a
+   redelivery costs one getBoundingClientRect and stops. */
+function scheduleRemeasure() {
+  if (!measureContainer()) return;
+  /* Synchronously, before the re-layout: a resize with no data (the empty
+     state) never reaches layoutAndRender below, and even with data the box
+     should not be a frame stale. */
+  syncCanvasHeight();
+  /* The opened circle is sized from the container, so it has to follow it. */
+  if (openArticle.value) { detailSize.value = computeDetailSize(); updateHistoryAnchor(); }
+  if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
+  pendingRaf = requestAnimationFrame(() => {
+    pendingRaf = null;
+    layoutAndRender();
+    resetView();
+  });
 }
 
 /** Y of the first child lane under a parent, derived from the PARENT'S OWN
@@ -1400,35 +1447,39 @@ onMounted(async () => {
     console.warn('FishboneGraph: container element not available');
     return;
   }
-  const rect0 = el.getBoundingClientRect();
-  containerWidth = rect0.width;
-  containerHeight = rect0.height;
-  /* ...so the loading and empty states get a correctly sized box too, not the
-     DEFAULT_CONTAINER_HEIGHT placeholder. */
+  /* Measure once up front so the loading and empty states get a correctly
+     sized box too, not the DEFAULT_CONTAINER_HEIGHT placeholder. If the
+     component is mounted while its section is still hidden (the table→bubble
+     switch), this measures 0×0, is refused, and the first real measurement
+     comes from one of the triggers below. */
+  measureContainer();
   syncCanvasHeight();
-  ro = new ResizeObserver((entries) => {
-    const rect = entries[0].contentRect;
-    const w = rect.width;
-    const h = rect.height;
-    let changed = false;
-    if (Math.abs(w - containerWidth) > 2) { containerWidth = Math.min(w, 1100); changed = true; }
-    if (Math.abs(h - containerHeight) > 2) { containerHeight = h; changed = true; }
-    if (changed) {
-      /* Synchronously, before the re-layout: a resize with no data (the empty
-         state) never reaches layoutAndRender's queue below, and even with data
-         the box should not be a frame stale. */
-      syncCanvasHeight();
-      /* The opened circle is sized from the container, so it has to follow it. */
-      if (openArticle.value) { detailSize.value = computeDetailSize(); updateHistoryAnchor(); }
-      if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
-      pendingRaf = requestAnimationFrame(() => {
-        layoutAndRender();
-        resetView();
-        pendingRaf = null;
-      });
-    }
-  });
+
+  /* #348: the canvas must follow the container, not the mount. The observer is
+     on the CONTAINER — putting it on the <svg> whose height we set would be a
+     feedback loop. */
+  ro = new ResizeObserver(() => scheduleRemeasure());
   ro.observe(el);
+
+  /* Belt and braces for the deliveries the observer cannot make. A hidden or
+     background tab has its rendering throttled, so a resize (or a mount) that
+     happens there is delivered late or coalesced away; the graph then paints
+     at the size it had when it was last rendered. Both extra triggers run the
+     same bail-out, so when the box really is unchanged they cost one rect
+     read. `repo:bubble-visible` is dispatched by repo-history.ts once the
+     bubble section is on screen — the mount-against-the-placeholder case. */
+  const onRemeasure = () => scheduleRemeasure();
+  const onVisibility = () => { if (!document.hidden) scheduleRemeasure(); };
+  window.addEventListener('resize', onRemeasure, {passive: true});
+  window.addEventListener('orientationchange', onRemeasure, {passive: true});
+  window.addEventListener('repo:bubble-visible', onRemeasure);
+  document.addEventListener('visibilitychange', onVisibility);
+  remeasureCleanup = () => {
+    window.removeEventListener('resize', onRemeasure);
+    window.removeEventListener('orientationchange', onRemeasure);
+    window.removeEventListener('repo:bubble-visible', onRemeasure);
+    document.removeEventListener('visibilitychange', onVisibility);
+  };
 
   /* Where the pointer is. Read only when an article view finishes closing, to
      ask whether the bubble it landed on is genuinely under the cursor. */
@@ -1452,6 +1503,9 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (ro) ro.disconnect();
+  ro = null;
+  remeasureCleanup?.();
+  if (pendingRaf !== null) { cancelAnimationFrame(pendingRaf); pendingRaf = null; }
   pointerCleanup?.();
   cancelReflow();
   cancelStatsRetry();
