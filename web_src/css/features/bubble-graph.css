@@ -50,15 +50,11 @@
 .history-view-section--bubble:not([hidden]) {
   display: flex;
   flex-direction: column;
-}
-
-/* Grow into the free space, never shrink below the content: the wrappers stay
-   at least as tall as the header plus the graph's min-height, so a short
-   viewport scrolls instead of clipping. ".full.height" already has this. */
-.full.height:has(.history-view-section--bubble:not([hidden])) > .page-content,
-.ui.container:has(> .history-view-app > .history-view-section--bubble:not([hidden])),
-.history-view-app:has(> .history-view-section--bubble:not([hidden])),
-.history-view-section--bubble:not([hidden]) {
+  /* Grow into the free space, never shrink below the content: every wrapper
+     stays at least as tall as the header plus the graph's min-height, so a
+     short viewport scrolls instead of clipping. ".full.height" already carries
+     this value from base.css; repeating it here costs nothing and lets one
+     rule describe the whole chain. */
   flex: 1 0 auto;
 }
 
