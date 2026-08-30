@@ -376,7 +376,7 @@ func UpdateIssueContent(ctx *context.Context) {
 	ctx.JSON(http.StatusOK, map[string]any{
 		"content":        content,
 		"contentVersion": issue.ContentVersion,
-		"attachments":    attachmentsHTML(ctx, issue.Attachments, issue.Content),
+		"attachments":    attachmentsHTML(ctx, issue.Attachments, content),
 	})
 }
 
@@ -634,11 +634,15 @@ func updateAttachments(ctx *context.Context, item any, files []string) error {
 	return err
 }
 
-func attachmentsHTML(ctx *context.Context, attachments []*repo_model.Attachment, content string) template.HTML {
+// attachmentsHTML renders the attachment list of an issue or comment. renderedContent must be the
+// *rendered* (HTML) content of that issue/comment, not the raw markdown: the template hides
+// attachments whose UUID already appears in it, because those are displayed inline by the content
+// itself. Passing raw markdown (or nothing) would silently disable that de-duplication.
+func attachmentsHTML(ctx *context.Context, attachments []*repo_model.Attachment, renderedContent template.HTML) template.HTML {
 	attachHTML, err := ctx.RenderToHTML(tplAttachment, map[string]any{
-		"ctxData":     ctx.Data,
-		"Attachments": attachments,
-		"Content":     content,
+		"ctxData":         ctx.Data,
+		"Attachments":     attachments,
+		"RenderedContent": renderedContent,
 	})
 	if err != nil {
 		ctx.ServerError("attachmentsHTML.HTMLString", err)

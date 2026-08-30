@@ -10,6 +10,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -88,6 +89,85 @@ func TestEditorAttachmentServedToRepoReaders(t *testing.T) {
 	owner.MakeRequest(t, attachReq(privUUID), http.StatusOK)
 	user8.MakeRequest(t, attachReq(privUUID), http.StatusNotFound)
 	MakeRequest(t, attachReq(privUUID), http.StatusNotFound) // anonymous
+}
+
+// TestInlineEditHidesEmbeddedAttachments covers the attachment list returned by the issue and
+// comment inline-edit endpoints. The attachments template hides attachments whose UUID already
+// appears in the *rendered* content (they are displayed inline by the content itself), which only works if the
+// handler passes the rendered content under the "RenderedContent" key — it used to pass the raw
+// markdown under "Content", so the filter never applied and every embedded image was listed again
+// until the page was reloaded.
+func TestInlineEditHidesEmbeddedAttachments(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	const repoURL = "user2/repo1"
+	session := loginUser(t, "user2")
+	csrf := GetUserCSRFToken(t, session)
+
+	embedded := createAttachment(t, session, csrf, repoURL, "embedded.png", generateImg(), http.StatusOK)
+	standalone := createAttachment(t, session, csrf, repoURL, "standalone.png", generateImg(), http.StatusOK)
+
+	// create an issue owning both attachments
+	req := NewRequest(t, "GET", repoURL+"/issues/new")
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	htmlDoc := NewHTMLParser(t, resp.Body)
+	link, exists := htmlDoc.doc.Find("form#new-issue").Attr("action")
+	assert.True(t, exists, "The template has changed")
+
+	values := url.Values{}
+	values.Set("_csrf", htmlDoc.GetCSRF())
+	values.Set("title", "issue with an embedded attachment")
+	values.Set("content", "initial")
+	values.Add("files", embedded)
+	values.Add("files", standalone)
+	resp = session.MakeRequest(t, NewRequestWithURLValues(t, "POST", link, values), http.StatusOK)
+	issueURL := test.RedirectURL(resp)
+
+	// inline-edit the body so that one of the two attachments is embedded in it
+	values = url.Values{}
+	values.Set("_csrf", csrf)
+	values.Set("content", "![embedded.png](/attachments/"+embedded+")")
+	values.Set("content_version", "0")
+	values.Add("files[]", embedded)
+	values.Add("files[]", standalone)
+	resp = session.MakeRequest(t, NewRequestWithURLValues(t, "POST", issueURL+"/content", values), http.StatusOK)
+
+	var obj struct {
+		Content     string `json:"content"`
+		Attachments string `json:"attachments"`
+	}
+	DecodeJSON(t, resp, &obj)
+
+	assert.Contains(t, obj.Content, embedded, "the rendered content should embed the attachment")
+	// only the thumbnail block renders <img>, and its alt attribute is the file name
+	assert.NotContains(t, obj.Attachments, `alt="embedded.png"`, "the embedded attachment must not be listed again")
+	assert.Contains(t, obj.Attachments, `alt="standalone.png"`, "the non-embedded attachment must still be listed")
+
+	// same story for a comment: create one owning both attachments, then inline-edit it
+	commentEmbedded := createAttachment(t, session, csrf, repoURL, "comment-embedded.png", generateImg(), http.StatusOK)
+	commentStandalone := createAttachment(t, session, csrf, repoURL, "comment-standalone.png", generateImg(), http.StatusOK)
+
+	values = url.Values{}
+	values.Set("_csrf", csrf)
+	values.Set("content", "initial comment")
+	values.Add("files", commentEmbedded)
+	values.Add("files", commentStandalone)
+	resp = session.MakeRequest(t, NewRequestWithURLValues(t, "POST", issueURL+"/comments", values), http.StatusOK)
+	_, commentAnchor, ok := strings.Cut(test.RedirectURL(resp), "#issuecomment-")
+	assert.True(t, ok, "the comment redirect should point at the new comment")
+
+	values = url.Values{}
+	values.Set("_csrf", csrf)
+	values.Set("content", "![comment-embedded.png](/attachments/"+commentEmbedded+")")
+	values.Set("content_version", "0")
+	values.Add("files[]", commentEmbedded)
+	values.Add("files[]", commentStandalone)
+	resp = session.MakeRequest(t, NewRequestWithURLValues(t, "POST", repoURL+"/comments/"+commentAnchor, values), http.StatusOK)
+	DecodeJSON(t, resp, &obj)
+
+	assert.Contains(t, obj.Content, commentEmbedded, "the rendered comment should embed the attachment")
+	assert.NotContains(t, obj.Attachments, `alt="comment-embedded.png"`, "the embedded attachment must not be listed again")
+	assert.Contains(t, obj.Attachments, `alt="comment-standalone.png"`, "the non-embedded attachment must still be listed")
 }
 
 func TestCreateAnonymousAttachment(t *testing.T) {
