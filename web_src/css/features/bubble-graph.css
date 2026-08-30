@@ -21,3 +21,63 @@
 .btn-neutral:hover {
   background: var(--color-hover, #f9fafb);
 }
+
+/* ===== Bubble view page layout (issue #149) =====
+
+   The bubble view is a canvas that should fill whatever vertical space is left
+   between the repo header and the footer. It used to claim that space with a
+   magic number -- "#bubble-view-root { height: calc(100vh - 25rem) }" plus a
+   negative bottom margin that cancelled ".full.height"'s "--page-space-bottom".
+   Neither number knows the real height of the navbar, the article header or the
+   notices above the graph, so on a typical viewport the page came out ~20px
+   taller than the viewport: the footer was pushed below the fold and only
+   reachable by scrolling, while the same subject in table view had its footer
+   pinned to the bottom of the viewport. That is the inconsistency of #149.
+
+   The fix is the one web_src/css/home.css documents at length for the landing
+   page: stop measuring the viewport and participate in the flex layout instead.
+   ".full.height" already grows to fill the viewport via "flex: 1 0 auto", so
+   making it -- and the wrappers between it and the graph -- flex columns gives
+   the graph box real free space to grow into. The page is then exactly as tall
+   as the viewport (footer pinned at the bottom, no scrollbar) and, when the
+   viewport is too short for the graph's "min-height", exactly as tall as its
+   content (footer directly below it). No percentage-height chain, no 100vh
+   arithmetic to keep in sync with the header. */
+.full.height:has(.history-view-section--bubble:not([hidden])),
+.full.height:has(.history-view-section--bubble:not([hidden])) > .page-content,
+.ui.container:has(> .history-view-app > .history-view-section--bubble:not([hidden])),
+.history-view-app:has(> .history-view-section--bubble:not([hidden])),
+.history-view-section--bubble:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Grow into the free space, never shrink below the content: the wrappers stay
+   at least as tall as the header plus the graph's min-height, so a short
+   viewport scrolls instead of clipping. ".full.height" already has this. */
+.full.height:has(.history-view-section--bubble:not([hidden])) > .page-content,
+.ui.container:has(> .history-view-app > .history-view-section--bubble:not([hidden])),
+.history-view-app:has(> .history-view-section--bubble:not([hidden])),
+.history-view-section--bubble:not([hidden]) {
+  flex: 1 0 auto;
+}
+
+#bubble-view-root {
+  /* "flex-basis: 0" on purpose: the graph sizes its canvas from the box it is
+     given (FishboneGraph measures its container), so a content-based basis
+     would be circular. The box takes the free space, floored by min-height. */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  /* 320px is MIN_SVG_HEIGHT in FishboneGraph.vue: the canvas never draws
+     itself smaller than that, so a floor any higher than it would make a
+     viewport of ordinary height overflow -- exactly the 20-odd pixels that
+     pushed the footer below the fold before. */
+  min-height: 320px;
+  overflow: auto;
+  /* bleed over the container's horizontal padding, as before */
+  margin-top: -1rem;
+  margin-left: -1rem;
+  margin-right: -1rem;
+  width: calc(100% + 2rem);
+}

@@ -133,15 +133,10 @@
 /* Articles table spacing */
 #articles-table col.checkbox { width: 10px; }
 #articles-table col.actions { width: 80px; }
-#bubble-view-root {
-    height: calc(100vh - 25rem);
-    overflow: auto;
-    margin-bottom: calc(0px - var(--page-space-bottom));
-    margin-top: -1rem;
-    margin-left: -1rem;
-    margin-right: -1rem;
-    width: calc(100% + 2rem);
-}
+/* #bubble-view-root is laid out in web_src/css/features/bubble-graph.css: it
+   fills the space between the header and the footer through the page's flex
+   layout instead of the "calc(100vh - 25rem)" magic number that used to live
+   here and pushed the footer below the fold (#149). */
 </style>
 <div role="main" aria-label="{{.Title}}" class="page-content repository file list">
     {{/* Rendered outside the article section so it stays visible on every article
