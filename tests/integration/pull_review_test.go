@@ -251,6 +251,58 @@ func TestPullView_GivenApproveOrRejectReviewOnClosedPR(t *testing.T) {
 	})
 }
 
+// TestPullView_SubmitCloseReview covers the "Close" option of the review modal (issue
+// #347): it used to hit ctx.ServerError because "close" had no server-side counterpart.
+func TestPullView_SubmitCloseReview(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	getCSRF := func(t *testing.T, session *TestSession, pullNumber string) string {
+		req := NewRequest(t, "GET", path.Join("user2", "repo1", "pulls", pullNumber))
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		return NewHTMLParser(t, resp.Body).GetCSRF()
+	}
+
+	// user2 owns user2/repo1, user8 only has read access to it.
+	ownerSession := loginUser(t, "user2")
+	otherSession := loginUser(t, "user8")
+
+	t.Run("Without permission to close", func(t *testing.T) {
+		testSubmitReview(t, otherSession, getCSRF(t, otherSession, "3"), "user2", "repo1", "3", "", "close", http.StatusForbidden)
+
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 3})
+		assert.False(t, issue.IsClosed)
+	})
+
+	t.Run("With feedback", func(t *testing.T) {
+		testSubmitReview(t, ownerSession, getCSRF(t, ownerSession, "3"), "user2", "repo1", "3", "", "close", http.StatusOK)
+
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 3})
+		assert.True(t, issue.IsClosed)
+		// the review body is recorded as a plain comment review, no approval involved
+		unittest.AssertExistsAndLoadBean(t, &issues_model.Review{
+			IssueID:    issue.ID,
+			ReviewerID: 2,
+			Type:       issues_model.ReviewTypeComment,
+			Content:    "test",
+		})
+	})
+
+	t.Run("Without feedback", func(t *testing.T) {
+		options := map[string]string{
+			"_csrf":   getCSRF(t, ownerSession, "5"),
+			"content": "",
+			"type":    "close",
+		}
+		req := NewRequestWithValues(t, "POST", path.Join("user2", "repo1", "pulls", "5", "files", "reviews", "submit"), options)
+		ownerSession.MakeRequest(t, req, http.StatusOK)
+
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 11})
+		assert.True(t, issue.IsClosed)
+		// an empty review body must not be recorded as an empty comment review
+		unittest.AssertNotExistsBean(t, &issues_model.Review{IssueID: issue.ID, ReviewerID: 2})
+	})
+}
+
 func testSubmitReview(t *testing.T, session *TestSession, csrf, owner, repo, pullNumber, commitID, reviewType string, expectedSubmitStatus int) *httptest.ResponseRecorder {
 	options := map[string]string{
 		"_csrf":     csrf,

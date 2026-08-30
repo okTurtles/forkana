@@ -220,6 +220,74 @@ func renderConversation(ctx *context.Context, comment *issues_model.Comment, ori
 	}
 }
 
+// canCloseChangeRequest returns whether the doer may close the change request:
+// anyone with write access to it, plus its author.
+// NOTE: PR #342 adds an equivalent check (checkReviewDecisionPermission) at the top of
+// SubmitReview; this one is kept so submitCloseReview is safe on its own, and can be
+// dropped once both changes are in.
+func canCloseChangeRequest(ctx *context.Context, issue *issues_model.Issue) bool {
+	return ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) ||
+		(ctx.IsSigned && ctx.Doer != nil && issue.IsPoster(ctx.Doer.ID))
+}
+
+// submitCloseReview handles the "Close" option of the review modal: the review body is
+// posted as a normal comment review and the change request is then closed through the
+// very same path as the "Close" button on the change request itself, so timeline
+// comments, notifications and the change request state stay consistent.
+func submitCloseReview(ctx *context.Context, issue *issues_model.Issue, form *forms.SubmitReviewForm) {
+	if err := issue.LoadPullRequest(ctx); err != nil {
+		ctx.ServerError("LoadPullRequest", err)
+		return
+	}
+
+	if !canCloseChangeRequest(ctx, issue) {
+		ctx.HTTPError(http.StatusForbidden)
+		return
+	}
+
+	if issue.PullRequest.HasMerged {
+		ctx.JSONError(ctx.Tr("repo.pulls.has_merged"))
+		return
+	}
+
+	var attachments []string
+	if setting.Attachment.Enabled {
+		attachments = form.Files
+	}
+
+	// Post the feedback, if any. Closing without writing anything is legitimate, so an
+	// empty review is simply skipped instead of being reported as an error.
+	_, comm, err := pull_service.SubmitReview(ctx, ctx.Doer, ctx.Repo.GitRepo, issue, issues_model.ReviewTypeComment, form.Content, form.CommitID, attachments)
+	if err != nil {
+		if !issues_model.IsContentEmptyErr(err) {
+			ctx.ServerError("SubmitReview", err)
+			return
+		}
+		comm = nil
+	}
+
+	if !issue.IsClosed {
+		if err := issue_service.CloseIssue(ctx, issue, ctx.Doer, ""); err != nil {
+			if issues_model.IsErrDependenciesLeft(err) {
+				ctx.JSONError(ctx.Tr("repo.issues.dependency.pr_close_blocked"))
+				return
+			}
+			ctx.ServerError("CloseIssue", err)
+			return
+		}
+		if err := stopTimerIfAvailable(ctx, ctx.Doer, issue); err != nil {
+			ctx.ServerError("stopTimerIfAvailable", err)
+			return
+		}
+	}
+
+	if comm != nil {
+		ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d#%s", ctx.Repo.RepoLink, issue.Index, comm.HashTag()))
+		return
+	}
+	ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d", ctx.Repo.RepoLink, issue.Index))
+}
+
 // SubmitReview creates a review out of the existing pending review or creates a new one if no pending review exist
 func SubmitReview(ctx *context.Context) {
 	form := web.GetForm(ctx).(*forms.SubmitReviewForm)
@@ -233,6 +301,12 @@ func SubmitReview(ctx *context.Context) {
 	if ctx.HasError() {
 		ctx.Flash.Error(ctx.Data["ErrorMsg"].(string))
 		ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d/files", ctx.Repo.RepoLink, issue.Index))
+		return
+	}
+
+	// Forkana: the modal's "Close" option submits feedback and closes the change request.
+	if form.IsCloseRequest() {
+		submitCloseReview(ctx, issue, form)
 		return
 	}
 
