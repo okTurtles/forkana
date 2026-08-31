@@ -553,6 +553,7 @@ func registerWebRoutes(m *web.Router) {
 		})
 		m.Get("/articles", explore.Repos)
 		m.Get("/subjects", explore.Subjects)
+		m.Get("/subjects/suggestions", explore.SubjectSuggestions)
 		m.Get("/articles/history/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByDefaultBranch(), repo.SetEditorconfigIfExists, explore.RepoHistory)
 		m.Get("/articles/sitemap-{idx}.xml", sitemapEnabled, explore.Repos)
 		m.Get("/subjects/sitemap-{idx}.xml", sitemapEnabled, explore.Subjects)
@@ -1240,6 +1241,9 @@ func registerWebRoutes(m *web.Router) {
 		registerRepoFileEditorRoutes(m, reqRepoCodeWriter)
 	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
 	// end "/article/{username}/{subjectname}": article-based file operations
+
+	// Article settings helpers, the article settings UI lives on the article view itself
+	m.Get("/article/{username}/{subjectname}/settings/transfer_candidates", reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqRepoAdmin, repo_setting.ArticleTransferCandidates)
 
 	// Article-based pull request routes - mirror the repository-based routes but use subject name
 	m.Group("/article/{username}/{subjectname}", func() {

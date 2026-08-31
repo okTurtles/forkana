@@ -194,7 +194,7 @@ jobs:
       - run: make lint-md
 
   actions:
-    if: needs.files-changed.outputs.actions == 'true' || needs.files-changed.outputs.actions == 'true'
+    if: needs.files-changed.outputs.actions == 'true'
     needs: files-changed
     runs-on: ubuntu-latest
     steps:

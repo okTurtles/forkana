@@ -551,7 +551,7 @@ func handleRepoHistoryFeed(ctx *context.Context) bool {
 	return false
 }
 
-// prepareArticleView prepares data for the article view (README display with read/edit/history modes)
+// prepareArticleView prepares data for the article view (README display with read/edit/history/settings modes)
 // refPath is the reference path for rendering (e.g., "branch/main" or "commit/abc123")
 func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries []*git.TreeEntry, refPath string) {
 	// Determine mode (read/edit/history)
@@ -563,7 +563,22 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	ctx.Data["IsArticleModeRead"] = mode == "read"
 	ctx.Data["IsArticleModeEdit"] = mode == "edit"
 	ctx.Data["IsArticleModeHistory"] = mode == "history"
+	ctx.Data["IsArticleModeSettings"] = mode == "settings"
 	ctx.Data["ReadmeRequested"] = true
+
+	// The Settings tab is only rendered for the article owner, so ownership must be
+	// known in every mode (edit mode refines this via prepareArticleForkOnEditData).
+	isRepoOwner := ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
+	ctx.Data["IsRepoOwner"] = isRepoOwner
+
+	// The settings tab swaps the Transfer section for a "Cancel transfer" one while a
+	// transfer awaits the recipient's confirmation. The repo assignment middleware already
+	// loaded the pending transfer with its recipient, so reuse it instead of querying again.
+	if isRepoOwner {
+		if transfer, ok := ctx.Data["RepoTransfer"].(*repo_model.RepoTransfer); ok {
+			ctx.Data["ArticleTransferRecipient"] = transfer.Recipient
+		}
+	}
 
 	// Find README.md file
 	readmeFile := findReadmeInEntries(entries)

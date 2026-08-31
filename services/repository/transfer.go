@@ -49,6 +49,12 @@ func AcceptTransferOwnership(ctx context.Context, repo *repo_model.Repository, d
 	}
 	defer releaser()
 
+	// An archived article is read-only, only its deletion stays available, so a pending
+	// transfer must not be accepted once the owner archived it.
+	if repo.SubjectID > 0 && repo.IsArchived {
+		return fmt.Errorf("archived article cannot be transferred: %w", util.ErrPermissionDenied)
+	}
+
 	repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, repo)
 	if err != nil {
 		return err
@@ -56,10 +62,14 @@ func AcceptTransferOwnership(ctx context.Context, repo *repo_model.Repository, d
 
 	oldOwnerName := repo.OwnerName
 
+	// The actor of the transfer event is the user who initiated it, not the recipient accepting it.
+	var initiator *user_model.User
+
 	if err := db.WithTx(ctx, func(ctx context.Context) error {
 		if err := repoTransfer.LoadAttributes(ctx); err != nil {
 			return err
 		}
+		initiator = repoTransfer.Doer
 
 		if !doer.CanCreateRepoIn(repoTransfer.Recipient) {
 			limit := util.Iif(repoTransfer.Recipient.MaxRepoCreation >= 0, repoTransfer.Recipient.MaxRepoCreation, setting.Repository.MaxCreationLimit)
@@ -85,7 +95,7 @@ func AcceptTransferOwnership(ctx context.Context, repo *repo_model.Repository, d
 	}
 	releaser()
 
-	notify_service.TransferRepository(ctx, doer, repo, oldOwnerName)
+	notify_service.TransferRepository(ctx, initiator, repo, oldOwnerName)
 
 	return nil
 }
