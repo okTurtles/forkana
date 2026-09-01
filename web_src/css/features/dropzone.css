@@ -122,15 +122,9 @@
   overflow: visible;
 }
 
-/* The toolbar is right-aligned with `padding-right: 0`, so the last button sits flush
-   against the wrapper. Its tooltip is placed at `button.offsetLeft + 6px` and is wider
-   than the button, so without the clip above it used to stick out ~11px past the
-   wrapper. `--page-margin-x` is only 8px below 768px, and `body` sets
-   `overflow-x: visible`, so that overhang added a horizontal page scrollbar. Reserving
-   12px keeps the widest tooltip inside the editor without re-introducing a clip. */
-.toast-comment-editor .toastui-editor-toolbar .toastui-editor-defaultUI-toolbar {
-  padding-right: 12px;
-}
+/* The room reserved for the last toolbar button's tooltip lives with the toolbar's other
+   padding in `custom/public/assets/css/toast-editor.css` (`padding-right: 12px`), so both
+   editors get it from one declaration. */
 
 /* Editable content area fills container height and is resizable */
 .toast-comment-editor .ProseMirror.toastui-editor-contents {
