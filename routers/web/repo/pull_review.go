@@ -220,6 +220,37 @@ func renderConversation(ctx *context.Context, comment *issues_model.Comment, ori
 	}
 }
 
+// checkReviewDecisionPermission verifies that the doer is allowed to submit the
+// requested review type. Approving and requesting changes require write access
+// to the repository (the article), closing additionally allows the change
+// request author. Everybody else is limited to plain comments.
+// It returns false (and writes the response) when the submission is rejected.
+func checkReviewDecisionPermission(ctx *context.Context, issue *issues_model.Issue, form *forms.SubmitReviewForm) bool {
+	if ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) {
+		return true
+	}
+
+	switch form.ReviewType() {
+	case issues_model.ReviewTypeApprove:
+		ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.approval"))
+		return false
+	case issues_model.ReviewTypeReject:
+		ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.rejection"))
+		return false
+	}
+
+	// "close" has no ReviewType of its own, so it can only be matched on the raw
+	// form value; the change request author may close their own change request.
+	if form.Type == "close" {
+		isPoster := ctx.IsSigned && ctx.Doer != nil && issue.IsPoster(ctx.Doer.ID)
+		if !isPoster {
+			ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.close"))
+			return false
+		}
+	}
+	return true
+}
+
 // SubmitReview creates a review out of the existing pending review or creates a new one if no pending review exist
 func SubmitReview(ctx *context.Context) {
 	form := web.GetForm(ctx).(*forms.SubmitReviewForm)
@@ -236,10 +267,15 @@ func SubmitReview(ctx *context.Context) {
 		return
 	}
 
+	if !checkReviewDecisionPermission(ctx, issue, form) {
+		return
+	}
+
 	reviewType := form.ReviewType()
 	switch reviewType {
 	case issues_model.ReviewTypeUnknown:
-		ctx.ServerError("ReviewType", fmt.Errorf("unknown ReviewType: %s", form.Type))
+		// an unknown type is a client error, not a server one
+		ctx.JSONError("unknown review type: " + form.Type)
 		return
 
 	// can not approve/reject your own PR
