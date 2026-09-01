@@ -513,6 +513,11 @@ func TestCheckForkOnEditPermissions(t *testing.T) {
 		rootRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
 		forkRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
 
+		// Verify ownership matches our expectations: the user owns the archived article
+		// but not the one they contribute to, otherwise IsRepoOwner would short-circuit
+		assert.Equal(t, userWithRoot.ID, rootRepo.OwnerID)
+		assert.NotEqual(t, userWithRoot.ID, forkRepo.OwnerID)
+
 		originalRoot := *rootRepo
 		originalFork := *forkRepo
 
@@ -540,6 +545,7 @@ func TestCheckForkOnEditPermissions(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, perms.BlockedBySubject, "An archived own article must not block the user")
 		assert.Nil(t, perms.OwnRepoForSubject, "OwnRepoForSubject should not be set for an archived repo")
+		assert.False(t, perms.HasExistingFork, "User should have no fork of this repo, so Case 1 is the branch under test")
 		assert.True(t, perms.NeedsFork, "User should be able to fork the other article")
 		assert.True(t, perms.CanSubmitChangeRequest, "User should be able to submit change requests")
 	})
