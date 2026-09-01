@@ -298,8 +298,8 @@ func UpdateCommentContent(ctx *context.Context) {
 		}
 	}
 
-	// The attachment list hides attachments already embedded in the rendered content, so it has to
-	// be rendered from the real content, before the empty-content placeholder replaces it below.
+	// Render the attachment list from the real content (before the empty-content placeholder
+	// replaces it below), so attachments already embedded in it are correctly hidden.
 	attachments := attachmentsHTML(ctx, comment.Attachments, renderedContent)
 	if ctx.Written() {
 		return
