@@ -286,7 +286,10 @@ func TestPullView_SubmitReviewPermissions(t *testing.T) {
 		session := loginUser(t, "user1")
 		csrf := getCSRF(session)
 
-		// "close" is not turned into a permission error for the author
+		// "close" is not turned into a permission error for the author. It does
+		// not succeed either — there is no "close" review type server-side, which
+		// is tracked separately as issue #347 — so only the absence of the 403
+		// this PR introduces can be asserted here.
 		resp := testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "close", NoExpectedStatus)
 		assert.NotEqual(t, http.StatusForbidden, resp.Code)
 	})
@@ -298,12 +301,14 @@ func TestPullView_SubmitReviewModalOptions(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	filesLink := "/user2/repo1/pulls/3/files"
-	reviewOptions := func(session *TestSession) []string {
+	reviewModal := func(session *TestSession) *HTMLDoc {
 		req := NewRequest(t, "GET", filesLink)
 		resp := session.MakeRequest(t, req, http.StatusOK)
-		htmlDoc := NewHTMLParser(t, resp.Body)
+		return NewHTMLParser(t, resp.Body)
+	}
+	reviewOptions := func(htmlDoc *HTMLDoc) []string {
 		var values []string
-		htmlDoc.doc.Find(`.review-radio-options input[name="type"]`).Each(func(_ int, s *goquery.Selection) {
+		htmlDoc.Find(`.review-radio-options input[name="type"]`).Each(func(_ int, s *goquery.Selection) {
 			value, _ := s.Attr("value")
 			values = append(values, value)
 		})
@@ -311,13 +316,23 @@ func TestPullView_SubmitReviewModalOptions(t *testing.T) {
 	}
 
 	// a random user only gets the "comment" option
-	assert.Equal(t, []string{"comment"}, reviewOptions(loginUser(t, "user5")))
+	assert.Equal(t, []string{"comment"}, reviewOptions(reviewModal(loginUser(t, "user5"))))
 
-	// the repository owner keeps every option
-	assert.ElementsMatch(t, []string{"comment", "approve", "reject", "close"}, reviewOptions(loginUser(t, "user2")))
+	// the repository owner keeps every option, all of them selectable
+	ownerDoc := reviewModal(loginUser(t, "user2"))
+	assert.ElementsMatch(t, []string{"comment", "approve", "reject", "close"}, reviewOptions(ownerDoc))
+	for _, value := range []string{"approve", "reject"} {
+		_, disabled := ownerDoc.Find(`.review-radio-options input[name="type"][value="` + value + `"]`).Attr("disabled")
+		assert.False(t, disabled, "the owner's %q option should be selectable", value)
+	}
 
-	// the change request author keeps the (disabled) approve/reject options and close
-	assert.ElementsMatch(t, []string{"comment", "approve", "reject", "close"}, reviewOptions(loginUser(t, "user1")))
+	// the change request author keeps the approve/reject options, but disabled (#192)
+	authorDoc := reviewModal(loginUser(t, "user1"))
+	assert.ElementsMatch(t, []string{"comment", "approve", "reject", "close"}, reviewOptions(authorDoc))
+	for _, value := range []string{"approve", "reject"} {
+		_, disabled := authorDoc.Find(`.review-radio-options input[name="type"][value="` + value + `"]`).Attr("disabled")
+		assert.True(t, disabled, "the author's %q option should be disabled", value)
+	}
 }
 
 func testSubmitReview(t *testing.T, session *TestSession, csrf, owner, repo, pullNumber, commitID, reviewType string, expectedSubmitStatus int) *httptest.ResponseRecorder {

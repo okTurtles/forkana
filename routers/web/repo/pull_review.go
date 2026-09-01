@@ -220,33 +220,31 @@ func renderConversation(ctx *context.Context, comment *issues_model.Comment, ori
 	}
 }
 
-// jsonForbidden responds with a 403 carrying an "errorMessage" the frontend's
-// fetch-action handler renders as an error toast.
-func jsonForbidden(ctx *context.Context, msg string) {
-	ctx.JSON(http.StatusForbidden, map[string]any{"errorMessage": msg, "renderFormat": "text"})
-}
-
 // checkReviewDecisionPermission verifies that the doer is allowed to submit the
-// requested review type. "approve" and "reject" require write access to the
-// change request, "close" additionally allows the change request author.
+// requested review type. Approving and requesting changes require write access
+// to the repository (the article), closing additionally allows the change
+// request author. Everybody else is limited to plain comments.
 // It returns false (and writes the response) when the submission is rejected.
-func checkReviewDecisionPermission(ctx *context.Context, issue *issues_model.Issue, formType string) bool {
-	canWrite := ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull)
-	if canWrite {
+func checkReviewDecisionPermission(ctx *context.Context, issue *issues_model.Issue, form *forms.SubmitReviewForm) bool {
+	if ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) {
 		return true
 	}
-	isPoster := ctx.IsSigned && ctx.Doer != nil && issue.IsPoster(ctx.Doer.ID)
 
-	switch formType {
-	case "approve":
-		jsonForbidden(ctx, ctx.Locale.TrString("repo.issues.review.no_permission.approval"))
+	switch form.ReviewType() {
+	case issues_model.ReviewTypeApprove:
+		ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.approval"))
 		return false
-	case "reject":
-		jsonForbidden(ctx, ctx.Locale.TrString("repo.issues.review.no_permission.rejection"))
+	case issues_model.ReviewTypeReject:
+		ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.rejection"))
 		return false
-	case "close":
+	}
+
+	// "close" has no ReviewType of its own, so it can only be matched on the raw
+	// form value; the change request author may close their own change request.
+	if form.Type == "close" {
+		isPoster := ctx.IsSigned && ctx.Doer != nil && issue.IsPoster(ctx.Doer.ID)
 		if !isPoster {
-			jsonForbidden(ctx, ctx.Locale.TrString("repo.issues.review.no_permission.close"))
+			ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.close"))
 			return false
 		}
 	}
@@ -269,18 +267,15 @@ func SubmitReview(ctx *context.Context) {
 		return
 	}
 
-	// Forkana: only the article owner (or anyone with write access to the change
-	// request) may approve or request changes, and only they or the change
-	// request author may close it. Everybody else is limited to plain comments,
-	// so reject anything else instead of failing silently or with a 500.
-	if !checkReviewDecisionPermission(ctx, issue, form.Type) {
+	if !checkReviewDecisionPermission(ctx, issue, form) {
 		return
 	}
 
 	reviewType := form.ReviewType()
 	switch reviewType {
 	case issues_model.ReviewTypeUnknown:
-		ctx.ServerError("ReviewType", fmt.Errorf("unknown ReviewType: %s", form.Type))
+		// an unknown type is a client error, not a server one
+		ctx.JSONError(fmt.Sprintf("unknown review type: %s", form.Type))
 		return
 
 	// can not approve/reject your own PR
