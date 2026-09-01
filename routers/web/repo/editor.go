@@ -153,13 +153,19 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 	// Skip branch protection check for submit-change-request workflow since it creates a new branch internally
 	isSubmitChangeRequest := allowSubmitChangeRequest && ctx.FormBool("submit_change_request")
 
-	if targetBranchName == ctx.Repo.BranchName && !commitFormOptions.CanCommitToBranch && !commitFormOptions.NeedFork && !isSubmitChangeRequest {
+	// The fork-and-edit workflow never commits to the current repository, it commits to the
+	// doer's own fork, so the checks against the current repository do not apply to it.
+	// Only "_edit" and "_new" handle that workflow, matching context.CanWriteToBranch.
+	editorAction := ctx.PathParam("editor_action")
+	isForkAndEdit := ctx.FormBool("fork_and_edit") && (editorAction == "_edit" || editorAction == "_new")
+
+	if targetBranchName == ctx.Repo.BranchName && !commitFormOptions.CanCommitToBranch && !commitFormOptions.NeedFork && !isSubmitChangeRequest && !isForkAndEdit {
 		ctx.JSONError(ctx.Tr("repo.editor.cannot_commit_to_protected_branch", targetBranchName))
 		return nil
 	}
 
 	// Skip maintainer write check for submit-change-request workflow since it creates a PR instead of direct commit
-	if !commitFormOptions.NeedFork && !isSubmitChangeRequest && !issues_model.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
+	if !commitFormOptions.NeedFork && !isSubmitChangeRequest && !isForkAndEdit && !issues_model.CanMaintainerWriteToBranch(ctx, ctx.Repo.Permission, targetBranchName, ctx.Doer) {
 		ctx.NotFound(nil)
 		return nil
 	}
@@ -579,8 +585,14 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 		return nil
 	}
 
-	// Return existing fork if user already has one
+	// Return existing fork if user already has one. An archived fork is read-only, so
+	// it must not be committed to: the user has to unarchive it first. Treating it as
+	// absent is not an option, as forking again fails with ErrForkAlreadyExist.
 	if perms.HasExistingFork && perms.ExistingFork != nil {
+		if perms.ExistingFork.IsArchived {
+			ctx.JSONError(ctx.Tr("repo.editor.existing_fork_archived"))
+			return nil
+		}
 		return perms.ExistingFork
 	}
 

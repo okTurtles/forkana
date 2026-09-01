@@ -232,6 +232,54 @@ func TestForkAndEditBlockedBySubject(t *testing.T) {
 	})
 }
 
+// TestForkAndEditArchivedFork tests that fork-and-edit refuses to commit into an
+// existing fork that has been archived, since archived articles are read-only.
+func TestForkAndEditArchivedFork(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	contributor := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+	// The contributor's fork of the article is the target fork-and-edit would commit to
+	fork, err := repo_service.ForkRepository(t.Context(), contributor, contributor, repo_service.ForkRepoOptions{
+		BaseRepo:     repo,
+		Name:         "repo1-archived-fork",
+		SingleBranch: repo.DefaultBranch,
+	})
+	require.NoError(t, err)
+	defer func() {
+		_ = repo_service.DeleteRepositoryDirectly(t.Context(), fork.ID)
+	}()
+
+	// The editor page is loaded while the fork is still active: once it is archived the
+	// page itself is refused, so only a stale or crafted POST can reach the commit path
+	session := loginUser(t, contributor.Name)
+	editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+	req := NewRequest(t, "GET", editURL)
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	htmlDoc := NewHTMLParser(t, resp.Body)
+
+	require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), fork, true))
+
+	form := map[string]string{
+		"_csrf":         htmlDoc.GetCSRF(),
+		"last_commit":   htmlDoc.GetInputValueByName("last_commit"),
+		"tree_path":     "README.md",
+		"content":       "Content that must not reach the archived fork",
+		"commit_choice": "direct",
+		"fork_and_edit": "true",
+	}
+
+	req = NewRequestWithValues(t, "POST", editURL, form)
+	resp = session.MakeRequest(t, req, http.StatusBadRequest)
+	assert.Contains(t, resp.Body.String(), "archived")
+
+	// The archived fork must be left untouched
+	unchanged := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: fork.ID})
+	assert.True(t, unchanged.IsArchived)
+}
+
 // TestForkAndEditFormActionURL tests that the form action URL is correct
 func TestForkAndEditFormActionURL(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
