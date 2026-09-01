@@ -1057,6 +1057,27 @@ func GetRepositoryByOwnerIDAndSubjectID(ctx context.Context, ownerID, subjectID 
 	return &repo, nil
 }
 
+// GetActiveRepositoryByOwnerIDAndSubjectID returns the owner's active (non-archived)
+// repository for the given subject ID. Returns nil if the owner has none, including
+// when all of their repositories for the subject are archived: an archived article is
+// read-only and does not occupy the owner's slot for the subject.
+func GetActiveRepositoryByOwnerIDAndSubjectID(ctx context.Context, ownerID, subjectID int64) (*Repository, error) {
+	var repo Repository
+	has, err := db.GetEngine(ctx).
+		Where("owner_id = ?", ownerID).
+		And("subject_id = ?", subjectID).
+		And("is_archived = ?", false).
+		OrderBy("id ASC").
+		Get(&repo)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, nil
+	}
+	return &repo, nil
+}
+
 // GetRepositoriesBySubjectIDAndOwners returns repositories for the given subject ID and owner names.
 // This is an optimized batch query that fetches multiple repositories in a single database call.
 // The returned slice may have fewer elements than ownerNames if some owners don't have repos for this subject.

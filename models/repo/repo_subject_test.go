@@ -228,6 +228,43 @@ func TestGetRepositoryByOwnerIDAndSubjectID_PrefersActiveOverArchived(t *testing
 	assert.True(t, foundRepo.IsArchived)
 }
 
+func TestGetActiveRepositoryByOwnerIDAndSubjectID(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Active Getter Test")
+	assert.NoError(t, err)
+
+	// Two repositories of the same owner on the subject, the lower ID one archived
+	archivedRepo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	archivedRepo.SubjectID = subject.ID
+	archivedRepo.IsArchived = true
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, archivedRepo, "subject_id", "is_archived")
+	assert.NoError(t, err)
+
+	activeRepo, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, archivedRepo.OwnerID, activeRepo.OwnerID, "both repositories must share an owner")
+	activeRepo.SubjectID = subject.ID
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, activeRepo, "subject_id")
+	assert.NoError(t, err)
+
+	foundRepo, err := repo_model.GetActiveRepositoryByOwnerIDAndSubjectID(ctx, activeRepo.OwnerID, subject.ID)
+	assert.NoError(t, err)
+	assert.NotNil(t, foundRepo)
+	assert.Equal(t, activeRepo.ID, foundRepo.ID)
+
+	// With only the archived repository left, the owner counts as having none
+	activeRepo.SubjectID = 0
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, activeRepo, "subject_id")
+	assert.NoError(t, err)
+
+	foundRepo, err = repo_model.GetActiveRepositoryByOwnerIDAndSubjectID(ctx, archivedRepo.OwnerID, subject.ID)
+	assert.NoError(t, err)
+	assert.Nil(t, foundRepo)
+}
+
 func TestGetRepositoryByOwnerIDAndSubjectID_NoRepository(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
