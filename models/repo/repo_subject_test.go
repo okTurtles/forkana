@@ -183,6 +183,64 @@ func TestGetRepositoryByOwnerAndSubject_ReturnsCorrectRepo(t *testing.T) {
 	assert.Equal(t, repo1.Owner.Name, foundRepo.OwnerName)
 }
 
+func TestGetRepositoryByOwnerIDAndSubjectID_PrefersActiveOverArchived(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	// Create a test subject
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Archived Preference Test")
+	assert.NoError(t, err)
+
+	// Assign the subject to two repositories owned by the same user, archiving the
+	// one with the lower ID so that a plain "id ASC" ordering would return it first
+	archivedRepo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	archivedRepo.SubjectID = subject.ID
+	archivedRepo.IsArchived = true
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, archivedRepo, "subject_id", "is_archived")
+	assert.NoError(t, err)
+
+	activeRepo, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, archivedRepo.OwnerID, activeRepo.OwnerID, "both repositories must share an owner")
+	assert.Less(t, archivedRepo.ID, activeRepo.ID, "the archived repository must have the lower ID")
+	activeRepo.SubjectID = subject.ID
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, activeRepo, "subject_id")
+	assert.NoError(t, err)
+
+	// The active repository wins even though the archived one has the lower ID
+	foundRepo, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, activeRepo.OwnerID, subject.ID)
+	assert.NoError(t, err)
+	assert.NotNil(t, foundRepo)
+	assert.Equal(t, activeRepo.ID, foundRepo.ID)
+	assert.False(t, foundRepo.IsArchived)
+
+	// With no active repository left, the archived one is still reported: callers that
+	// exempt archived articles filter them out themselves
+	activeRepo.SubjectID = 0
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, activeRepo, "subject_id")
+	assert.NoError(t, err)
+
+	foundRepo, err = repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, archivedRepo.OwnerID, subject.ID)
+	assert.NoError(t, err)
+	assert.NotNil(t, foundRepo)
+	assert.Equal(t, archivedRepo.ID, foundRepo.ID)
+	assert.True(t, foundRepo.IsArchived)
+}
+
+func TestGetRepositoryByOwnerIDAndSubjectID_NoRepository(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Unused Subject Test")
+	assert.NoError(t, err)
+
+	// No repository for this subject: nil is returned without an error
+	foundRepo, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, 2, subject.ID)
+	assert.NoError(t, err)
+	assert.Nil(t, foundRepo)
+}
+
 func TestGetRepositoriesBySubjectIDAndOwners(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
