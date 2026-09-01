@@ -52,10 +52,12 @@ export function generateMarkdownLinkForAttachment(file: Partial<CustomDropzoneFi
     if (width > 0 && dppx > 1) {
       // Scale down images from HiDPI monitors. This uses the <img> tag because it's the only
       // method to change image size in Markdown that is supported by all implementations.
-      // Make the image link relative to the repo path, then the final URL is "/sub-path/owner/repo/attachments/{uuid}"
+      // Make the image link relative to the repo path. The markup renderer resolves it against
+      // Repository.Link(), so in Forkana the final URL is "/sub-path/article/{owner}/{subject}/attachments/{uuid}"
       fileMarkdown = html`<img width="${Math.round(width / dppx)}" alt="${file.name}" src="attachments/${file.uuid}">`;
     } else {
-      // Markdown always renders the image with a relative path, so the final URL is "/sub-path/owner/repo/attachments/{uuid}"
+      // Markdown always renders the image with a relative path, so in Forkana the final URL is
+      // "/sub-path/article/{owner}/{subject}/attachments/{uuid}"
       // TODO: it should also use relative path for consistency, because absolute is ambiguous for "/sub-path/attachments" or "/attachments"
       fileMarkdown = `![${file.name}](/attachments/${file.uuid})`;
     }

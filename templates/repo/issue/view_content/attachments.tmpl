@@ -1,23 +1,27 @@
 <div class="dropzone-attachments">
-	{{/* Attachments whose UUID already appears in the rendered content are displayed inline by the
-	content itself (image/video embeds inserted by the editor), so listing them here again would
-	duplicate them. Only attachments that are not embedded get a file row and a thumbnail. */}}
+	{{/* An image whose UUID already appears in the rendered content is displayed inline by the
+	content itself (the editor inserts "![name](/attachments/{uuid})"), so listing it here again
+	would show it twice. Only images that are not embedded get a file row and a thumbnail.
+
+	The filter is deliberately limited to images: a non-image attachment is inserted as a plain
+	link, and its file row is the only place that shows the file size and the download icon, so
+	it stays listed even when the content links to it. */}}
 	{{$renderedContent := StringUtils.ToString .RenderedContent}}
-	{{$hasUnembedded := false}}
+	{{$hasListed := false}}
 	{{$hasThumbnails := false}}
 	{{- range .Attachments -}}
-		{{if not (StringUtils.Contains $renderedContent .UUID)}}
-			{{$hasUnembedded = true}}
+		{{if not (and (FilenameIsImage .Name) (StringUtils.Contains $renderedContent .UUID))}}
+			{{$hasListed = true}}
 			{{if FilenameIsImage .Name}}
 				{{$hasThumbnails = true}}
 			{{end}}
 		{{end}}
 	{{- end -}}
-	{{if $hasUnembedded}}
+	{{if $hasListed}}
 		<div class="divider"></div>
 	{{end}}
 	{{- range .Attachments -}}
-		{{if not (StringUtils.Contains $renderedContent .UUID)}}
+		{{if not (and (FilenameIsImage .Name) (StringUtils.Contains $renderedContent .UUID))}}
 		<div class="tw-flex">
 			<div class="tw-flex-1 tw-p-2">
 				<a target="_blank" rel="noopener noreferrer" href="{{.DownloadURL}}" title="{{ctx.Locale.Tr "repo.issues.attachment.open_tab" .Name}}">

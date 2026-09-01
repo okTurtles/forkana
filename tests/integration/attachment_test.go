@@ -23,6 +23,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// notExistingAttachmentUUID is a well-formed UUID that no attachment fixture uses.
+const notExistingAttachmentUUID = "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18"
+
 func generateImg() bytes.Buffer {
 	// Generate image
 	myImage := image.NewRGBA(image.Rect(0, 0, 32, 32))
@@ -116,7 +119,39 @@ func TestArticleAttachmentRouteServesEmbeddedAttachment(t *testing.T) {
 	MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK) // anonymous, repo is public
 
 	// unknown attachments still 404 instead of leaking anything
-	MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/attachments/%s", repo1.OwnerName, subjectName, "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18")), http.StatusNotFound)
+	MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/attachments/%s", repo1.OwnerName, subjectName, notExistingAttachmentUUID)), http.StatusNotFound)
+
+	// The route carries no repository middleware, so permission is entirely ServeAttachment's
+	// job: it resolves the attachment's own repository. An attachment on a private repository
+	// must stay hidden from anonymous visitors through this URL too.
+	// repo2 has no subject, so Link() falls back to the repo name — the URL still has to work,
+	// which is another reason the route resolves no repository of its own.
+	repo2 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2}) // private repo owned by user2
+	const privUUID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12"
+	_, err = storage.Attachments.Save(repo_model.AttachmentRelativePath(privUUID), strings.NewReader("hello world"), -1)
+	assert.NoError(t, err)
+
+	privURL := fmt.Sprintf("/article/%s/%s/attachments/%s", repo2.OwnerName, repo2.GetSubject(t.Context()), privUUID)
+	session.MakeRequest(t, NewRequest(t, "GET", privURL), http.StatusOK)
+	MakeRequest(t, NewRequest(t, "GET", privURL), http.StatusNotFound)                       // anonymous
+	loginUser(t, "user8").MakeRequest(t, NewRequest(t, "GET", privURL), http.StatusNotFound) // no read access
+}
+
+// TestArticleAttachmentListingRoutes covers the attachment listing URLs the edit-in-place
+// dropzone requests. It builds them from $.RepoLink, which is the article link, so the listing
+// has to be served under "/article/{owner}/{subject}" as well — a 404 there leaves the dropzone
+// empty and the following save submits an empty "files[]", deleting every attachment.
+func TestArticleAttachmentListingRoutes(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1}) // public repo owned by user2
+	articleBase := fmt.Sprintf("/article/%s/%s", repo1.OwnerName, repo1.GetSubject(t.Context()))
+
+	session := loginUser(t, "user2")
+	// issue 1 on repo1, and comment 2 which carries attachment ...a17
+	session.MakeRequest(t, NewRequest(t, "GET", articleBase+"/issues/1/attachments"), http.StatusOK)
+	resp := session.MakeRequest(t, NewRequest(t, "GET", articleBase+"/comments/2/attachments"), http.StatusOK)
+	assert.Contains(t, resp.Body.String(), "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17")
 }
 
 func TestCreateAnonymousAttachment(t *testing.T) {
@@ -173,7 +208,7 @@ func TestGetAttachment(t *testing.T) {
 		{"LinkedIssueUUID", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", true, user2Session, http.StatusOK},
 		{"LinkedCommentUUID", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17", true, user2Session, http.StatusOK},
 		{"linked_release_uuid", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19", true, user2Session, http.StatusOK},
-		{"NotExistingUUID", "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18", false, user2Session, http.StatusNotFound},
+		{"NotExistingUUID", notExistingAttachmentUUID, false, user2Session, http.StatusNotFound},
 		{"FileMissing", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18", false, user2Session, http.StatusInternalServerError},
 		{"NotLinked", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a20", true, user2Session, http.StatusNotFound},
 		{"NotLinkedAccessibleByUploader", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a20", true, user8Session, http.StatusOK},
