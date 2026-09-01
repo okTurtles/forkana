@@ -3,6 +3,7 @@ import {initRepoBubbleView} from './repo-bubble-view.ts';
 import {initArticleEditor} from './article-editor.ts';
 import {initArticleSettings} from './article-settings.ts';
 import {GET} from '../modules/fetch.ts';
+import {BUBBLE_VISIBLE_EVENT} from '../components/graph/graph-viewport.ts';
 
 type ViewKey = 'bubble' | 'table' | 'article';
 
@@ -389,20 +390,26 @@ export function initRepoHistory() {
 
   async function ensureBubbleView() {
     if (!viewLoaded.bubble) {
+      /* Claim the mount BEFORE the await. Two callers race on the first switch
+         to bubble — switchView() and the activeView watcher — and with the
+         flag set after the await both got through the guard. It was benign
+         (initRepoBubbleView is idempotent via data-mounted), but the flag is
+         read nowhere else, so there is no reason to leave the race in place. */
+      viewLoaded.bubble = true;
       await nextTick();
       initRepoBubbleView();
-      viewLoaded.bubble = true;
     }
     /* #348: tell the graph to measure the box it is actually drawn in. The
        component mounts as part of the switch, when its section may still be
        the hidden (0-height) placeholder, and the window can be resized while
        the table view is the one on screen — either way the size it holds is
-       not the size it now has. The listener is registered inside the
-       component's own mount, which awaits nextTick before this call does, so
-       it is in place by the time the event goes out. FishboneGraph re-measures
-       and drops the event when nothing moved. */
+       not the size it now has. Dispatched on EVERY call, not just the first:
+       it is the backstop for resizes that happened while the table view was
+       showing. FishboneGraph registers its listener before the first await of
+       its own mount, so the event cannot arrive early, and it re-measures and
+       drops the event when nothing moved. */
     await nextTick();
-    window.dispatchEvent(new CustomEvent('repo:bubble-visible'));
+    window.dispatchEvent(new CustomEvent(BUBBLE_VISIBLE_EVENT));
   }
 
   function bindTableInteractions() {

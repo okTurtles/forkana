@@ -40,8 +40,9 @@ import {
   maxContributors, type BubbleRung,
 } from "./bubble-size.ts";
 import {
-  DEFAULT_CONTAINER_HEIGHT, DEFAULT_CONTAINER_WIDTH,
-  canvasHeightFor, isMeasurable, layoutWidthFor, sizeChanged,
+  DEFAULT_CONTAINER_HEIGHT, DEFAULT_CONTAINER_WIDTH, MAX_LAYOUT_WIDTH,
+  canvasHeightFor, isMeasurable, layoutWidthFor, observeContainerResize,
+  registerRemeasureTriggers, sizeChanged,
   type ContainerSize,
 } from "./graph-viewport.ts";
 
@@ -149,7 +150,12 @@ const RESET_TOP_MARGIN = 40;    // Minimum top margin when resetting the view
 
 /* === RESPONSIVE BREAKPOINTS & FACTORS === */
 const WIDTH_BREAKPOINT_MIN = 480;    // Minimum container width for responsive calculations
-const WIDTH_BREAKPOINT_MAX = 1200;   // Maximum container width for responsive calculations
+/* Top of the responsive ramp. It is MAX_LAYOUT_WIDTH, not a free 1200: every
+   path now lays out at the clamped width, so a breakpoint above the clamp is
+   unreachable by construction — at 1200 the widest screen saturated at
+   (1100-480)/(1200-480) ≈ 0.86 and the wide end of every dial (lane padding,
+   branch spacing, rib length) could never fully engage. */
+const WIDTH_BREAKPOINT_MAX = MAX_LAYOUT_WIDTH;
 const COMPLEXITY_THRESHOLD = 10;     // Number of forks to reach full complexity factor
 const FANOUT_THRESHOLD = 6;          // Number of children to reach full fanout factor
 
@@ -339,12 +345,19 @@ const hasData = computed(() => {
    the layout runs at is that value clamped, and the two must not be conflated
    or the bail-out below cannot tell a real resize from a redelivery. */
 const containerRef = ref<HTMLDivElement | null>(null);
-let ro: ResizeObserver | null = null;
+let unobserveContainer: (() => void) | null = null;
 let measured: ContainerSize = {width: 0, height: 0};
 let containerWidth = DEFAULT_CONTAINER_WIDTH;
 let containerHeight = DEFAULT_CONTAINER_HEIGHT;
 let pendingRaf: number | null = null;
 let remeasureCleanup: (() => void) | null = null;
+/* Has the user moved the view by hand since the last framing? A re-measure
+   re-runs the layout, and re-framing what it produced is right for a view that
+   is still where the graph put it — but a panned or zoomed view is the user's,
+   and dragging a window edge (or coming back to a throttled tab) must not
+   throw it away. Set only from a d3 zoom event with a sourceEvent, i.e. a real
+   gesture; cleared whenever the component frames the view itself. */
+let viewMovedByUser = false;
 let pointerCleanup: (() => void) | null = null;
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -885,9 +898,10 @@ function measureContainer(): boolean {
    redelivery costs one getBoundingClientRect and stops. */
 function scheduleRemeasure() {
   if (!measureContainer()) return;
-  /* Synchronously, before the re-layout: a resize with no data (the empty
-     state) never reaches layoutAndRender below, and even with data the box
-     should not be a frame stale. */
+  /* Synchronously, so the new box lands in THIS frame's flush rather than the
+     next: layoutAndRender() re-syncs it too (before its own early returns), so
+     this is about being a frame earlier, not about reaching a state the rAF
+     below would miss. */
   syncCanvasHeight();
   /* The opened circle is sized from the container, so it has to follow it. */
   if (openArticle.value) { detailSize.value = computeDetailSize(); updateHistoryAnchor(); }
@@ -895,7 +909,18 @@ function scheduleRemeasure() {
   pendingRaf = requestAnimationFrame(() => {
     pendingRaf = null;
     layoutAndRender();
-    resetView();
+    /* Re-frame only a view the user has not taken over. The bail-out above
+       already means an unchanged box costs nothing; this covers the genuine
+       resize, where re-centring at 1:1 would silently discard a pan or zoom
+       the user set deliberately. A kept view still needs the pan bound and the
+       zoom floor to follow the layout it is now looking at — resetView() does
+       that on its way past, so the other branch has to do it explicitly. */
+    if (viewMovedByUser) {
+      contentBox = bubbleBounds();
+      applyScaleExtent();
+    } else {
+      resetView();
+    }
   });
 }
 
@@ -1270,10 +1295,17 @@ function applyScaleExtent() {
 function resetView(animated = false) {
   /* Centering fix: apply transform to worldSel (the same <g> Vue renders). */
   if (!nodesList.value.length) return; // Guard against empty graph
-  const svg = svgRef.value!;
+  const svg = svgRef.value;
+  /* The ref is nulled on unmount, and the retry below can outlive the
+     component if it is torn down inside the frame it scheduled. */
+  if (!svg) return;
   const box = svg.getBoundingClientRect();
   if (!box.width || !box.height) {
-    requestAnimationFrame(() => resetView(animated));
+    /* Through the same slot the re-measure path uses, so onBeforeUnmount
+       cancels this retry too — an untracked rAF here would come back after
+       unmount and dereference a null ref. */
+    if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
+    pendingRaf = requestAnimationFrame(() => { pendingRaf = null; resetView(animated); });
     return;
   }
 
@@ -1342,6 +1374,9 @@ function resetView(animated = false) {
   (animated ? svgSel.transition().duration(VIEW_TRANSITION_DURATION) : svgSel).call(zoomBehavior.transform as any, t);
 
   currentK.value = targetScale;
+  /* The component owns the view again: the next re-measure may re-frame it.
+     Set AFTER the transform, because applying it runs the zoom handler. */
+  viewMovedByUser = false;
 }
 
 /* NOTE: focusNode() lived here — it zoomed the canvas onto the clicked bubble.
@@ -1394,6 +1429,14 @@ function layoutAndRender() {
    MOUNT (zoom wiring, resize observer, seeds)
    ─────────────────────────────────────────────────────────────────────────── */
 onMounted(async () => {
+  /* #348, FIRST and before any await: none of these triggers need the
+     container, and `repo:bubble-visible` is dispatched by repo-history.ts a
+     tick or two after app.mount(). Registering them down with the observer
+     would make the handoff depend on this mount's awaits resolving ahead of
+     the dispatcher's — true today, and quietly false the moment an await is
+     added above. See registerRemeasureTriggers(). */
+  remeasureCleanup = registerRemeasureTriggers(scheduleRemeasure);
+
   svgSel = select(svgRef.value!);
   worldSel = select(worldRef.value!);  // CRITICAL: the very group Vue renders into
 
@@ -1409,6 +1452,10 @@ onMounted(async () => {
     .filter((event: any) => event.type === "wheel" ? event.ctrlKey : true)
     .on("zoom", (e: any) => {
       const z: ZoomTransform = e.transform; currentK.value = z.k;
+      /* A sourceEvent means a real gesture (wheel, drag, pinch) rather than a
+         programmatic framing, so the view is now the user's — a re-measure
+         must keep it. */
+      if (e.sourceEvent) viewMovedByUser = true;
       /* Apply pan/zoom to the SAME world group that holds all nodes/edges. */
       worldSel.attr("transform", z.toString());
       /* The History card hangs off a bubble, so it travels with it. */
@@ -1457,29 +1504,9 @@ onMounted(async () => {
 
   /* #348: the canvas must follow the container, not the mount. The observer is
      on the CONTAINER — putting it on the <svg> whose height we set would be a
-     feedback loop. */
-  ro = new ResizeObserver(() => scheduleRemeasure());
-  ro.observe(el);
-
-  /* Belt and braces for the deliveries the observer cannot make. A hidden or
-     background tab has its rendering throttled, so a resize (or a mount) that
-     happens there is delivered late or coalesced away; the graph then paints
-     at the size it had when it was last rendered. Both extra triggers run the
-     same bail-out, so when the box really is unchanged they cost one rect
-     read. `repo:bubble-visible` is dispatched by repo-history.ts once the
-     bubble section is on screen — the mount-against-the-placeholder case. */
-  const onRemeasure = () => scheduleRemeasure();
-  const onVisibility = () => { if (!document.hidden) scheduleRemeasure(); };
-  window.addEventListener('resize', onRemeasure, {passive: true});
-  window.addEventListener('orientationchange', onRemeasure, {passive: true});
-  window.addEventListener('repo:bubble-visible', onRemeasure);
-  document.addEventListener('visibilitychange', onVisibility);
-  remeasureCleanup = () => {
-    window.removeEventListener('resize', onRemeasure);
-    window.removeEventListener('orientationchange', onRemeasure);
-    window.removeEventListener('repo:bubble-visible', onRemeasure);
-    document.removeEventListener('visibilitychange', onVisibility);
-  };
+     feedback loop. The window/document triggers that back it up (a throttled
+     tab, the table→bubble switch) went in at the top of this function. */
+  unobserveContainer = observeContainerResize(el, scheduleRemeasure);
 
   /* Where the pointer is. Read only when an article view finishes closing, to
      ask whether the bubble it landed on is genuinely under the cursor. */
@@ -1502,9 +1529,10 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  if (ro) ro.disconnect();
-  ro = null;
+  unobserveContainer?.();
+  unobserveContainer = null;
   remeasureCleanup?.();
+  remeasureCleanup = null;
   if (pendingRaf !== null) { cancelAnimationFrame(pendingRaf); pendingRaf = null; }
   pointerCleanup?.();
   cancelReflow();
