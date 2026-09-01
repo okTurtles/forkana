@@ -9,6 +9,11 @@ FROM docker.io/library/golang:1.25-alpine3.23 AS build-env
 ARG GOPROXY
 ENV GOPROXY=${GOPROXY:-https://proxy.golang.org,direct}
 
+# The golang images set GOTOOLCHAIN=local, which ignores the toolchain
+# directive in go.mod. auto honours the directive as a minimum, and keeps the
+# image's own Go whenever that is already at or above the pin.
+ENV GOTOOLCHAIN=auto
+
 ARG GITEA_VERSION
 ARG TAGS="sqlite sqlite_unlock_notify"
 ENV TAGS="bindata timetzdata $TAGS"
