@@ -256,25 +256,22 @@ func TestPullView_GivenApproveOrRejectReviewOnClosedPR(t *testing.T) {
 func TestPullView_SubmitCloseReview(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	getCSRF := func(t *testing.T, session *TestSession, pullNumber string) string {
-		req := NewRequest(t, "GET", path.Join("user2", "repo1", "pulls", pullNumber))
-		resp := session.MakeRequest(t, req, http.StatusOK)
-		return NewHTMLParser(t, resp.Body).GetCSRF()
-	}
-
 	// user2 owns user2/repo1, user8 only has read access to it.
 	ownerSession := loginUser(t, "user2")
 	otherSession := loginUser(t, "user8")
 
 	t.Run("Without permission to close", func(t *testing.T) {
-		testSubmitReview(t, otherSession, getCSRF(t, otherSession, "3"), "user2", "repo1", "3", "", "close", http.StatusForbidden)
+		resp := testSubmitReview(t, otherSession, GetUserCSRFToken(t, otherSession), "user2", "repo1", "3", "", "close", http.StatusForbidden)
+		// the modal renders "errorMessage" out of the JSON body, an HTML error page would
+		// show up as an unexplained failure
+		assert.Contains(t, resp.Body.String(), "errorMessage")
 
 		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 3})
 		assert.False(t, issue.IsClosed)
 	})
 
 	t.Run("With feedback", func(t *testing.T) {
-		testSubmitReview(t, ownerSession, getCSRF(t, ownerSession, "3"), "user2", "repo1", "3", "", "close", http.StatusOK)
+		testSubmitReview(t, ownerSession, GetUserCSRFToken(t, ownerSession), "user2", "repo1", "3", "", "close", http.StatusOK)
 
 		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 3})
 		assert.True(t, issue.IsClosed)
@@ -289,7 +286,7 @@ func TestPullView_SubmitCloseReview(t *testing.T) {
 
 	t.Run("Without feedback", func(t *testing.T) {
 		options := map[string]string{
-			"_csrf":   getCSRF(t, ownerSession, "5"),
+			"_csrf":   GetUserCSRFToken(t, ownerSession),
 			"content": "",
 			"type":    "close",
 		}

@@ -227,43 +227,39 @@ func renderConversation(ctx *context.Context, comment *issues_model.Comment, ori
 // dropped once both changes are in.
 func canCloseChangeRequest(ctx *context.Context, issue *issues_model.Issue) bool {
 	return ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) ||
-		(ctx.IsSigned && ctx.Doer != nil && issue.IsPoster(ctx.Doer.ID))
+		(ctx.IsSigned && issue.IsPoster(ctx.Doer.ID))
 }
 
 // submitCloseReview handles the "Close" option of the review modal: the review body is
 // posted as a normal comment review and the change request is then closed through the
 // very same path as the "Close" button on the change request itself, so timeline
 // comments, notifications and the change request state stay consistent.
-func submitCloseReview(ctx *context.Context, issue *issues_model.Issue, form *forms.SubmitReviewForm) {
-	if err := issue.LoadPullRequest(ctx); err != nil {
-		ctx.ServerError("LoadPullRequest", err)
-		return
-	}
-
+func submitCloseReview(ctx *context.Context, issue *issues_model.Issue, form *forms.SubmitReviewForm, attachments []string) {
+	// The permission check comes first so an unauthorized caller cannot trigger any work.
+	// The modal submits through form-fetch-action, which renders "errorMessage" from a
+	// 4xx JSON body, so a bare HTML error page would show up as an unexplained failure.
 	if !canCloseChangeRequest(ctx, issue) {
-		ctx.HTTPError(http.StatusForbidden)
+		ctx.JSON(http.StatusForbidden, map[string]any{
+			"errorMessage": ctx.Locale.TrString("repo.issues.review.no_permission.close"),
+			"renderFormat": "text",
+		})
 		return
 	}
 
+	// issue.PullRequest is already loaded by GetActionIssue -> LoadAttributes, the same way
+	// NewComment relies on it.
 	if issue.PullRequest.HasMerged {
-		ctx.JSONError(ctx.Tr("repo.pulls.has_merged"))
+		ctx.JSONError(ctx.Tr("repo.pulls.close_blocked_merged"))
 		return
-	}
-
-	var attachments []string
-	if setting.Attachment.Enabled {
-		attachments = form.Files
 	}
 
 	// Post the feedback, if any. Closing without writing anything is legitimate, so an
-	// empty review is simply skipped instead of being reported as an error.
+	// empty review is simply skipped instead of being reported as an error. Since
+	// ContentEmptyErr now also accounts for attachments, this cannot discard an upload.
 	_, comm, err := pull_service.SubmitReview(ctx, ctx.Doer, ctx.Repo.GitRepo, issue, issues_model.ReviewTypeComment, form.Content, form.CommitID, attachments)
-	if err != nil {
-		if !issues_model.IsContentEmptyErr(err) {
-			ctx.ServerError("SubmitReview", err)
-			return
-		}
-		comm = nil
+	if err != nil && !issues_model.IsContentEmptyErr(err) {
+		ctx.ServerError("SubmitReview", err)
+		return
 	}
 
 	if !issue.IsClosed {
@@ -304,9 +300,14 @@ func SubmitReview(ctx *context.Context) {
 		return
 	}
 
+	var attachments []string
+	if setting.Attachment.Enabled {
+		attachments = form.Files
+	}
+
 	// Forkana: the modal's "Close" option submits feedback and closes the change request.
 	if form.IsCloseRequest() {
-		submitCloseReview(ctx, issue, form)
+		submitCloseReview(ctx, issue, form, attachments)
 		return
 	}
 
@@ -330,11 +331,6 @@ func SubmitReview(ctx *context.Context) {
 			ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d/files", ctx.Repo.RepoLink, issue.Index))
 			return
 		}
-	}
-
-	var attachments []string
-	if setting.Attachment.Enabled {
-		attachments = form.Files
 	}
 
 	_, comm, err := pull_service.SubmitReview(ctx, ctx.Doer, ctx.Repo.GitRepo, issue, reviewType, form.Content, form.CommitID, attachments)

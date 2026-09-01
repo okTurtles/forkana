@@ -62,13 +62,15 @@
 							</div>
 						</label>
 					{{end}}
-					<label class="review-radio-option">
-						<input type="radio" name="type" value="close">
-						<div class="review-radio-content">
-							<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.close"}}</span>
-							<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.close_desc"}}</span>
-						</div>
-					</label>
+					{{if not $.Issue.IsClosed}}
+						<label class="review-radio-option">
+							<input type="radio" name="type" value="close">
+							<div class="review-radio-content">
+								<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.close"}}</span>
+								<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.close_desc"}}</span>
+							</div>
+						</label>
+					{{end}}
 				</div>
 			</div>
 			<div class="review-modal-footer">
