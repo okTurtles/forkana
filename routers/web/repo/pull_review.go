@@ -275,7 +275,7 @@ func SubmitReview(ctx *context.Context) {
 	switch reviewType {
 	case issues_model.ReviewTypeUnknown:
 		// an unknown type is a client error, not a server one
-		ctx.JSONError(fmt.Sprintf("unknown review type: %s", form.Type))
+		ctx.JSONError("unknown review type: " + form.Type)
 		return
 
 	// can not approve/reject your own PR
