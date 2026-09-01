@@ -1,8 +1,13 @@
-/* Bubble view (issue #284) — styles shared between the graph's overlay
-   components. Vue scoped styles cannot be shared between SFCs, so a rule needed
-   by more than one of them lives here instead of being copied into each: the
-   copies had already drifted (8px 16px vs 8px 14px padding) before this file
-   existed. Component-specific tweaks stay scoped in the component. */
+/* Bubble view — two kinds of rule that cannot live in a Vue SFC:
+
+   1. styles shared between the graph's overlay components (issue #284). Vue
+      scoped styles cannot be shared between SFCs, so a rule needed by more than
+      one of them lives here instead of being copied into each: the copies had
+      already drifted (8px 16px vs 8px 14px padding) before this file existed.
+   2. the page layout the bubble view needs from its ancestors (issue #149, see
+      the block below): a scoped style can only reach the component's own root.
+
+   Component-specific tweaks stay scoped in the component. */
 
 /* The neutral button of the design: light surface, subtle border. Used by
    ArticleDetailView ("Read full article") and ArticleHistoryPopup
@@ -26,9 +31,9 @@
 
    The bubble view is a canvas that should fill whatever vertical space is left
    between the repo header and the footer. It used to claim that space with a
-   magic number -- "#bubble-view-root { height: calc(100vh - 25rem) }" plus a
+   magic number -- ".history-bubble-root { height: calc(100vh - 25rem) }" plus a
    negative bottom margin that cancelled ".full.height"'s "--page-space-bottom".
-   Neither number knows the real height of the navbar, the article header or the
+   Neither number knows the real height of the navbar, the repo header or the
    notices above the graph, so on a typical viewport the page came out ~20px
    taller than the viewport: the footer was pushed below the fold and only
    reachable by scrolling, while the same subject in table view had its footer
@@ -58,7 +63,10 @@
   flex: 1 0 auto;
 }
 
-#bubble-view-root {
+/* The mount point carries both an id (repo-bubble-view.ts mounts on it) and this
+   class; styled by class so the rule keeps the same (0,1,0) specificity as the
+   rest of this file and can be overridden by a utility class. */
+.history-bubble-root {
   /* "flex-basis: 0" on purpose: the graph sizes its canvas from the box it is
      given (FishboneGraph measures its container), so a content-based basis
      would be circular. The box takes the free space, floored by min-height. */
@@ -70,7 +78,10 @@
      viewport of ordinary height overflow -- exactly the 20-odd pixels that
      pushed the footer below the fold before. */
   min-height: 320px;
-  overflow: auto;
+  /* No "overflow" here on purpose: the only child is "flex: 1 1 0;
+     min-height: 0", so it can never be taller than this box, and what it cannot
+     fit (the legend under a min-height canvas) scrolls inside
+     ".f-fishbone-graph". A scroll container here would only clip overlays. */
   /* bleed over the container's horizontal padding, as before */
   margin-top: -1rem;
   margin-left: -1rem;
