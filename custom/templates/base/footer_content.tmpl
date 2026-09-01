@@ -1,6 +1,8 @@
 <footer class="tw-w-full">
-  <!-- the divider spans the same width as the top navbar content, see footer.custom.css -->
-  <div class="tw-border-t tw-border-secondary footer-divider">
+  <!-- the divider lines up with the top navbar: it is inset by the same amount as
+       the navbar logo, and its colour matches the navbar's own bottom border.
+       --navbar-content-inset-x is defined in web_src/css/modules/navbar.css -->
+  <div class="tw-border-t tw-border-secondary tw-mx-[var(--navbar-content-inset-x)]">
     <div class="tw-mx-auto tw-max-w-6xl tw-px-4 sm:tw-px-6 tw-flex tw-flex-wrap tw-items-center tw-justify-center tw-gap-3 tw-py-10">
       
       <!-- Left: logo + copyright -->

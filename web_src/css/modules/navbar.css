@@ -3,9 +3,15 @@
   --navbar-padding-x: 10px;
   /* horizontal padding of a single navbar item */
   --navbar-item-padding-x: 13px;
-  /* distance from the viewport edge to the outermost visible navbar content,
-     i.e. the logo on the left and the last item on the right. Elements outside
-     the navbar (such as the footer divider) use it to align with the navbar. */
+  /* distance from the viewport edge to the content of a navbar item that carries
+     the default item padding — the logo on the left, and on the right the last
+     item whenever it is a plain one (as on the signed-out landing page).
+     Elements outside the navbar (such as the footer divider) use it to line up
+     with the navbar.
+     Note: some navbar items are inset by a different amount and are therefore
+     not covered by this variable — the avatar dropdown overrides padding-right
+     (see "#navbar .item.ui.dropdown" below) and the mobile menu toggle is a
+     Fomantic ".ui.icon.button" carrying that component's own padding. */
   --navbar-content-inset-x: calc(var(--navbar-padding-x) + var(--navbar-item-padding-x));
 }
 
