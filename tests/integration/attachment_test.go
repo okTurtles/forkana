@@ -11,6 +11,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ import (
 	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -93,6 +95,120 @@ func TestEditorAttachmentServedToRepoReaders(t *testing.T) {
 	owner.MakeRequest(t, attachReq(privUUID), http.StatusOK)
 	user8.MakeRequest(t, attachReq(privUUID), http.StatusNotFound)
 	MakeRequest(t, attachReq(privUUID), http.StatusNotFound) // anonymous
+}
+
+// thumbnailAlts returns the alt attributes of the images rendered by the attachment list, i.e. the
+// names of the attachments the template decided are not already embedded in the content.
+func thumbnailAlts(t *testing.T, attachmentsHTML string) []string {
+	t.Helper()
+	alts := []string{}
+	NewHTMLParser(t, bytes.NewBufferString(attachmentsHTML)).Find(".thumbnails img").Each(func(_ int, s *goquery.Selection) {
+		alt, ok := s.Attr("alt")
+		assert.True(t, ok, "every thumbnail should carry an alt attribute")
+		alts = append(alts, alt)
+	})
+	return alts
+}
+
+// contentVersion reads the current content version of an editable zone (an issue body or a comment)
+// off the issue page, so the tests do not have to assume the initial version. updateURLSuffix is
+// matched against the zone's data-update-url, which is built from the repository link and may
+// therefore carry a different prefix than the URL the test posts to.
+func contentVersion(t *testing.T, session *TestSession, pageURL, updateURLSuffix string) string {
+	t.Helper()
+	resp := session.MakeRequest(t, NewRequest(t, "GET", pageURL), http.StatusOK)
+	zone := NewHTMLParser(t, resp.Body).Find(`.edit-content-zone[data-update-url$="` + updateURLSuffix + `"]`)
+	version, ok := zone.Attr("data-content-version")
+	assert.True(t, ok, "the edit zone of %s should carry a content version", updateURLSuffix)
+	return version
+}
+
+// TestInlineEditHidesEmbeddedAttachments covers the attachment list returned by the issue and
+// comment inline-edit endpoints. The attachments template hides attachments whose UUID already
+// appears in the *rendered* content (they are displayed inline by the content itself), which only
+// works if the handler passes the rendered content under the "RenderedContent" key. It used to pass
+// the raw markdown under "Content", so the filter never applied and every embedded image was listed
+// again until the page was reloaded.
+func TestInlineEditHidesEmbeddedAttachments(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	const repoURL = "/user2/repo1"
+	session := loginUser(t, "user2")
+	csrf := GetUserCSRFToken(t, session)
+
+	embedded := createAttachment(t, session, csrf, repoURL, "embedded.png", generateImg(), http.StatusOK)
+	standalone := createAttachment(t, session, csrf, repoURL, "standalone.png", generateImg(), http.StatusOK)
+
+	// create an issue owning both attachments
+	resp := session.MakeRequest(t, NewRequest(t, "GET", repoURL+"/issues/new"), http.StatusOK)
+	htmlDoc := NewHTMLParser(t, resp.Body)
+	link, exists := htmlDoc.doc.Find("form#new-issue").Attr("action")
+	assert.True(t, exists, "The template has changed")
+
+	values := url.Values{}
+	values.Set("_csrf", htmlDoc.GetCSRF())
+	values.Set("title", "issue with an embedded attachment")
+	values.Set("content", "initial")
+	values.Add("files", embedded)
+	values.Add("files", standalone)
+	resp = session.MakeRequest(t, NewRequestWithURLValues(t, "POST", link, values), http.StatusOK)
+	issueURL := test.RedirectURL(resp)
+	_, issueIndex, found := strings.Cut(issueURL, "/issues/")
+	assert.True(t, found, "the issue redirect should point at the new issue")
+	// the redirect target is the subject-scoped URL, which has no page route of its own; the edit
+	// zones (and with them the current content versions) come from the repository-scoped page
+	issuePageURL := repoURL + "/issues/" + issueIndex
+
+	var obj struct {
+		Content     string `json:"content"`
+		Attachments string `json:"attachments"`
+	}
+
+	t.Run("issue", func(t *testing.T) {
+		// inline-edit the body so that one of the two attachments is embedded in it
+		updateURL := issueURL + "/content"
+		values := url.Values{}
+		values.Set("_csrf", csrf)
+		values.Set("content", "![embedded.png](/attachments/"+embedded+")")
+		values.Set("content_version", contentVersion(t, session, issuePageURL, "/issues/"+issueIndex+"/content"))
+		values.Add("files[]", embedded)
+		values.Add("files[]", standalone)
+		resp := session.MakeRequest(t, NewRequestWithURLValues(t, "POST", updateURL, values), http.StatusOK)
+		DecodeJSON(t, resp, &obj)
+
+		assert.Contains(t, obj.Content, embedded, "the rendered content should embed the attachment")
+		assert.Equal(t, []string{"standalone.png"}, thumbnailAlts(t, obj.Attachments),
+			"only the attachment that is not embedded in the content should be listed")
+	})
+
+	t.Run("comment", func(t *testing.T) {
+		// same story for a comment: create one owning both attachments, then inline-edit it
+		commentEmbedded := createAttachment(t, session, csrf, repoURL, "comment-embedded.png", generateImg(), http.StatusOK)
+		commentStandalone := createAttachment(t, session, csrf, repoURL, "comment-standalone.png", generateImg(), http.StatusOK)
+
+		values := url.Values{}
+		values.Set("_csrf", csrf)
+		values.Set("content", "initial comment")
+		values.Add("files", commentEmbedded)
+		values.Add("files", commentStandalone)
+		resp := session.MakeRequest(t, NewRequestWithURLValues(t, "POST", issueURL+"/comments", values), http.StatusOK)
+		_, commentAnchor, ok := strings.Cut(test.RedirectURL(resp), "#issuecomment-")
+		assert.True(t, ok, "the comment redirect should point at the new comment")
+
+		updateURL := repoURL + "/comments/" + commentAnchor
+		values = url.Values{}
+		values.Set("_csrf", csrf)
+		values.Set("content", "![comment-embedded.png](/attachments/"+commentEmbedded+")")
+		values.Set("content_version", contentVersion(t, session, issuePageURL, "/comments/"+commentAnchor))
+		values.Add("files[]", commentEmbedded)
+		values.Add("files[]", commentStandalone)
+		resp = session.MakeRequest(t, NewRequestWithURLValues(t, "POST", updateURL, values), http.StatusOK)
+		DecodeJSON(t, resp, &obj)
+
+		assert.Contains(t, obj.Content, commentEmbedded, "the rendered comment should embed the attachment")
+		assert.Equal(t, []string{"comment-standalone.png"}, thumbnailAlts(t, obj.Attachments),
+			"only the attachment that is not embedded in the comment should be listed")
+	})
 }
 
 // TestArticleAttachmentRouteServesEmbeddedAttachment covers the URL that images embedded in a
@@ -208,7 +324,7 @@ func TestGetAttachment(t *testing.T) {
 		{"LinkedIssueUUID", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", true, user2Session, http.StatusOK},
 		{"LinkedCommentUUID", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17", true, user2Session, http.StatusOK},
 		{"linked_release_uuid", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19", true, user2Session, http.StatusOK},
-		{"NotExistingUUID", notExistingAttachmentUUID, false, user2Session, http.StatusNotFound},
+		{"NotExistingUUID", "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18", false, user2Session, http.StatusNotFound},
 		{"FileMissing", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18", false, user2Session, http.StatusInternalServerError},
 		{"NotLinked", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a20", true, user2Session, http.StatusNotFound},
 		{"NotLinkedAccessibleByUploader", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a20", true, user8Session, http.StatusOK},
