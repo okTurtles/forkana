@@ -3,10 +3,13 @@
   max-width: 220px;
 }
 
-/* ===== Landing page (signed-out home) =====
+/* ===== Home page =====
 
-   The landing page is one short block -- logo, heading, search bar -- that sits
-   in the vertical middle of the space between the navbar and the footer.
+   The home page is one block -- logo, heading, search bar, and the feeds card when
+   signed in -- that sits in the vertical middle of the space between the navbar and
+   the footer. Both the signed-out and the signed-in view are centred (#358); the
+   signed-in one is simply taller, and "flex: 1 0 auto" below keeps it scrolling from
+   the top rather than clipping once it outgrows the free space.
 
    It used to get there with "height: 100%" on the <main> element, which relied
    on every ancestor having a definite height. That chain was broken by #316,
