@@ -298,6 +298,13 @@ func UpdateCommentContent(ctx *context.Context) {
 		}
 	}
 
+	// Render the attachment list from the real content (before the empty-content placeholder
+	// replaces it below), so attachments already embedded in it are correctly hidden.
+	attachments := attachmentsHTML(ctx, comment.Attachments, renderedContent)
+	if ctx.Written() {
+		return
+	}
+
 	if strings.TrimSpace(string(renderedContent)) == "" {
 		renderedContent = htmlutil.HTMLFormat(`<span class="no-content">%s</span>`, ctx.Tr("repo.issues.no_content"))
 	}
@@ -305,7 +312,7 @@ func UpdateCommentContent(ctx *context.Context) {
 	ctx.JSON(http.StatusOK, map[string]any{
 		"content":        renderedContent,
 		"contentVersion": comment.ContentVersion,
-		"attachments":    attachmentsHTML(ctx, comment.Attachments, comment.Content),
+		"attachments":    attachments,
 	})
 }
 
