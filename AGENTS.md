@@ -8,7 +8,7 @@ Forkana is a fork of Gitea (self-hosted git service) that's been repurposed to a
 
 ## Prerequisites
 
-- **Go**: 1.25.1+ (see https://go.dev/doc/manage-install)
+- **Go**: 1.25+ (see https://go.dev/doc/manage-install)
 - **Node.js**: 22.6.0+
 - **pnpm**: ^10.26.0 (any 10.x ≥ 10.26.0; pnpm 11 is blocked pending a dedicated migration, required for `minimumReleaseAge` dependency age gating and the `allowBuilds` build-script policy)
 - **git-lfs**: Required for binary assets
@@ -247,7 +247,7 @@ JWT_SECRET = <generate-a-secret>
 
 1. **Build before watch**: Run `make build` once before `make watch`
 2. **IPv6 issues**: If Go proxy fails, use: `GODEBUG="netdns=go+4" GOPROXY="direct" make build`
-3. **Go version**: May need to specify: `GO=go1.25.2 make build`
+3. **Go version**: May need to specify: `GO=go1.25.12 make build`
 4. **No database setup dialog**: Using sqlite tags prevents the Gitea setup wizard
 5. **Module path**: Go module is `code.gitea.io/gitea` (not github.com/okTurtles/forkana)
 

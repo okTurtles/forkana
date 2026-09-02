@@ -36,7 +36,11 @@
 					</div>
 				{{end}}
 				<div class="review-radio-options">
-					{{$showSelfTooltip := (and $.IsSigned ($.Issue.IsPoster $.SignedUser.ID))}}
+					{{/* Only the article owner (or anyone with write access) may approve or request
+					changes; the change request author may additionally close their own change
+					request. Everybody else only gets the "Comment" option. */}}
+					{{$isChangeRequestAuthor := (and $.IsSigned ($.Issue.IsPoster $.SignedUser.ID))}}
+					{{$canReviewDecision := (or $.HasIssuesOrPullsWritePermission $isChangeRequestAuthor)}}
 					<label class="review-radio-option">
 						<input type="radio" name="type" value="comment" checked>
 						<div class="review-radio-content">
@@ -44,31 +48,34 @@
 							<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.comment_desc"}}</span>
 						</div>
 					</label>
-					{{if not $.Issue.IsClosed}}
-						<label class="review-radio-option{{if $showSelfTooltip}} disabled{{end}}" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_approve"}}"{{end}}>
-							<input type="radio" name="type" value="approve" {{if $showSelfTooltip}}disabled{{end}}>
+					{{if and $canReviewDecision (not $.Issue.IsClosed)}}
+						<label class="review-radio-option{{if $isChangeRequestAuthor}} disabled{{end}}" {{if $isChangeRequestAuthor}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_approve"}}"{{end}}>
+							<input type="radio" name="type" value="approve" {{if $isChangeRequestAuthor}}disabled{{end}}>
 							<div class="review-radio-content">
 								<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.approve"}}</span>
 								<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.approve_desc"}}</span>
 							</div>
 						</label>
-					{{end}}
-					{{if not $.Issue.IsClosed}}
-						<label class="review-radio-option{{if $showSelfTooltip}} disabled{{end}}" {{if $showSelfTooltip}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_reject"}}"{{end}}>
-							<input type="radio" name="type" value="reject" {{if $showSelfTooltip}}disabled{{end}}>
+						<label class="review-radio-option{{if $isChangeRequestAuthor}} disabled{{end}}" {{if $isChangeRequestAuthor}}data-tooltip-content="{{ctx.Locale.Tr "repo.diff.review.self_reject"}}"{{end}}>
+							<input type="radio" name="type" value="reject" {{if $isChangeRequestAuthor}}disabled{{end}}>
 							<div class="review-radio-content">
 								<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.reject"}}</span>
 								<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.reject_desc"}}</span>
 							</div>
 						</label>
 					{{end}}
-					<label class="review-radio-option">
-						<input type="radio" name="type" value="close">
-						<div class="review-radio-content">
-							<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.close"}}</span>
-							<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.close_desc"}}</span>
-						</div>
-					</label>
+					{{/* "Close" is only offered to users who may actually close the change
+						request (#342), and only while it is still open -- on a closed one it
+						would silently degrade into a plain comment (#347). */}}
+					{{if and $canReviewDecision (not $.Issue.IsClosed)}}
+						<label class="review-radio-option">
+							<input type="radio" name="type" value="close">
+							<div class="review-radio-content">
+								<span class="review-radio-label">{{ctx.Locale.Tr "repo.diff.review.close"}}</span>
+								<span class="review-radio-desc">{{ctx.Locale.Tr "repo.diff.review.close_desc"}}</span>
+							</div>
+						</label>
+					{{end}}
 				</div>
 			</div>
 			<div class="review-modal-footer">
