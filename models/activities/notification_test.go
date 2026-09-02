@@ -10,6 +10,7 @@ import (
 	activities_model "code.gitea.io/gitea/models/activities"
 	"code.gitea.io/gitea/models/db"
 	issues_model "code.gitea.io/gitea/models/issues"
+	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 
@@ -137,4 +138,57 @@ func TestSetIssueReadBy(t *testing.T) {
 	nt, err := activities_model.GetIssueNotification(t.Context(), user.ID, issue.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, activities_model.NotificationStatusRead, nt.Status)
+}
+
+// TestCreateRepoTransferNotificationOrg pins that every org member who can accept the
+// transfer is notified. GetUsersWhoCanCreateOrgRepo returns a map keyed by user ID, so
+// ranging over it must yield real user IDs and not positional indexes.
+func TestCreateRepoTransferNotificationOrg(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	org := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 3})
+	assert.True(t, org.IsOrganization())
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+
+	assert.NoError(t, activities_model.CreateRepoTransferNotification(t.Context(), doer, org, repo))
+
+	// org 3 is administered by users 2 and 28 (see TestGetUsersWhoCanCreateOrgRepo)
+	for _, userID := range []int64{2, 28} {
+		unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{
+			UserID: userID,
+			RepoID: repo.ID,
+			Source: activities_model.NotificationSourceRepository,
+			Status: activities_model.NotificationStatusUnread,
+		})
+	}
+	assert.Equal(t, 2, unittest.GetCount(t, &activities_model.Notification{
+		RepoID: repo.ID,
+		Source: activities_model.NotificationSourceRepository,
+	}))
+}
+
+// TestCreateRepoTransferRejectedNotification pins that the initiator of a rejected transfer
+// gets an unread notification carrying its own source, so the UI can name what happened.
+func TestCreateRepoTransferRejectedNotification(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	rejecter := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+	initiator := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+
+	assert.NoError(t, activities_model.CreateRepoTransferRejectedNotification(t.Context(), rejecter, initiator, repo))
+
+	notification := unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{
+		UserID: initiator.ID,
+		RepoID: repo.ID,
+		Source: activities_model.NotificationSourceRepoTransferRejected,
+	})
+	assert.Equal(t, activities_model.NotificationStatusUnread, notification.Status)
+	assert.Equal(t, rejecter.ID, notification.UpdatedBy)
+
+	// visiting the repository clears it, like the pending-transfer notification
+	assert.NoError(t, activities_model.SetRepoReadBy(t.Context(), initiator.ID, repo.ID))
+	assert.Equal(t, activities_model.NotificationStatusRead,
+		unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{ID: notification.ID}).Status)
 }

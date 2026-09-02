@@ -485,7 +485,11 @@ func StartRepositoryTransfer(ctx context.Context, doer, newOwner *user_model.Use
 // thus cancel the transfer process.
 // The accepter can reject the transfer.
 func RejectRepositoryTransfer(ctx context.Context, repo *repo_model.Repository, doer *user_model.User) error {
-	return db.WithTx(ctx, func(ctx context.Context) error {
+	// The user who started the transfer is the one who needs to be told it was rejected,
+	// so capture them before the transaction deletes the pending transfer row.
+	var initiator *user_model.User
+
+	if err := db.WithTx(ctx, func(ctx context.Context) error {
 		repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, repo)
 		if err != nil {
 			return err
@@ -494,6 +498,7 @@ func RejectRepositoryTransfer(ctx context.Context, repo *repo_model.Repository, 
 		if err := repoTransfer.LoadAttributes(ctx); err != nil {
 			return err
 		}
+		initiator = repoTransfer.Doer
 
 		if !repoTransfer.CanUserAcceptOrRejectTransfer(ctx, doer) {
 			return util.ErrPermissionDenied
@@ -505,7 +510,16 @@ func RejectRepositoryTransfer(ctx context.Context, repo *repo_model.Repository, 
 		}
 
 		return repo_model.DeleteRepositoryTransfer(ctx, repo.ID)
-	})
+	}); err != nil {
+		return err
+	}
+
+	// No point telling someone about their own action.
+	if initiator != nil && initiator.ID != doer.ID {
+		notify_service.RepoTransferRejected(ctx, doer, initiator, repo)
+	}
+
+	return nil
 }
 
 func canUserCancelTransfer(ctx context.Context, r *repo_model.RepoTransfer, u *user_model.User) bool {

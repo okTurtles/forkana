@@ -46,6 +46,12 @@ const (
 	NotificationSourceCommit
 	// NotificationSourceRepository is a notification for a repository
 	NotificationSourceRepository
+	// NotificationSourceRepoTransferRejected is a notification telling the user who
+	// started a repository transfer that the recipient rejected it. It is a distinct
+	// source (rather than a flag on NotificationSourceRepository) so the notification
+	// list can render text that says what happened: the "source" column is a SMALLINT
+	// that already exists, so a new value needs no migration.
+	NotificationSourceRepoTransferRejected
 )
 
 // Notification represents a notification
@@ -125,9 +131,11 @@ func CreateRepoTransferNotification(ctx context.Context, doer, newOwner *user_mo
 			if err != nil || len(users) == 0 {
 				return err
 			}
-			for i := range users {
+			// GetUsersWhoCanCreateOrgRepo returns a map keyed by user ID, so ranging over
+			// the values (rather than the keys) makes the recipient unmistakable.
+			for _, user := range users {
 				notify = append(notify, &Notification{
-					UserID:    i,
+					UserID:    user.ID,
 					RepoID:    repo.ID,
 					Status:    NotificationStatusUnread,
 					UpdatedBy: doer.ID,
@@ -145,6 +153,18 @@ func CreateRepoTransferNotification(ctx context.Context, doer, newOwner *user_mo
 		}
 
 		return db.Insert(ctx, notify)
+	})
+}
+
+// CreateRepoTransferRejectedNotification creates a notification for the user who started a
+// repository transfer, telling them the recipient rejected it.
+func CreateRepoTransferRejectedNotification(ctx context.Context, doer, initiator *user_model.User, repo *repo_model.Repository) error {
+	return db.Insert(ctx, &Notification{
+		UserID:    initiator.ID,
+		RepoID:    repo.ID,
+		Status:    NotificationStatusUnread,
+		UpdatedBy: doer.ID,
+		Source:    NotificationSourceRepoTransferRejected,
 	})
 }
 
@@ -283,7 +303,7 @@ func (n *Notification) HTMLURL(ctx context.Context) string {
 		return n.Issue.HTMLURL(ctx)
 	case NotificationSourceCommit:
 		return n.Repository.HTMLURL(ctx) + "/commit/" + url.PathEscape(n.CommitID)
-	case NotificationSourceRepository:
+	case NotificationSourceRepository, NotificationSourceRepoTransferRejected:
 		return n.Repository.HTMLURL(ctx)
 	}
 	return ""
@@ -299,7 +319,7 @@ func (n *Notification) Link(ctx context.Context) string {
 		return n.Issue.Link()
 	case NotificationSourceCommit:
 		return n.Repository.Link() + "/commit/" + url.PathEscape(n.CommitID)
-	case NotificationSourceRepository:
+	case NotificationSourceRepository, NotificationSourceRepoTransferRejected:
 		return n.Repository.Link()
 	}
 	return ""
@@ -367,9 +387,9 @@ func SetRepoReadBy(ctx context.Context, userID, repoID int64) error {
 	_, err := db.GetEngine(ctx).Where(builder.Eq{
 		"user_id": userID,
 		"status":  NotificationStatusUnread,
-		"source":  NotificationSourceRepository,
 		"repo_id": repoID,
-	}).Cols("status").Update(&Notification{Status: NotificationStatusRead})
+	}.And(builder.In("source", NotificationSourceRepository, NotificationSourceRepoTransferRejected))).
+		Cols("status").Update(&Notification{Status: NotificationStatusRead})
 	return err
 }
 
