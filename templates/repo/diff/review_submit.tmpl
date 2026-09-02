@@ -64,7 +64,10 @@
 							</div>
 						</label>
 					{{end}}
-					{{if $canReviewDecision}}
+					{{/* "Close" is only offered to users who may actually close the change
+						request (#342), and only while it is still open -- on a closed one it
+						would silently degrade into a plain comment (#347). */}}
+					{{if and $canReviewDecision (not $.Issue.IsClosed)}}
 						<label class="review-radio-option">
 							<input type="radio" name="type" value="close">
 							<div class="review-radio-content">
