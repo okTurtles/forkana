@@ -220,32 +220,44 @@ func renderConversation(ctx *context.Context, comment *issues_model.Comment, ori
 	}
 }
 
-// canCloseChangeRequest returns whether the doer may close the change request:
-// anyone with write access to it, plus its author.
-// NOTE: PR #342 adds an equivalent check (checkReviewDecisionPermission) at the top of
-// SubmitReview; this one is kept so submitCloseReview is safe on its own, and can be
-// dropped once both changes are in.
-func canCloseChangeRequest(ctx *context.Context, issue *issues_model.Issue) bool {
-	return ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) ||
-		(ctx.IsSigned && issue.IsPoster(ctx.Doer.ID))
+// checkReviewDecisionPermission verifies that the doer is allowed to submit the
+// requested review type. Approving and requesting changes require write access
+// to the repository (the article), closing additionally allows the change
+// request author. Everybody else is limited to plain comments.
+// It returns false (and writes the response) when the submission is rejected.
+func checkReviewDecisionPermission(ctx *context.Context, issue *issues_model.Issue, form *forms.SubmitReviewForm) bool {
+	if ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) {
+		return true
+	}
+
+	switch form.ReviewType() {
+	case issues_model.ReviewTypeApprove:
+		ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.approval"))
+		return false
+	case issues_model.ReviewTypeReject:
+		ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.rejection"))
+		return false
+	}
+
+	// "close" has no ReviewType of its own, so it can only be matched on the raw
+	// form value; the change request author may close their own change request.
+	if form.Type == "close" {
+		isPoster := ctx.IsSigned && ctx.Doer != nil && issue.IsPoster(ctx.Doer.ID)
+		if !isPoster {
+			ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.close"))
+			return false
+		}
+	}
+	return true
 }
 
 // submitCloseReview handles the "Close" option of the review modal: the review body is
 // posted as a normal comment review and the change request is then closed through the
 // very same path as the "Close" button on the change request itself, so timeline
 // comments, notifications and the change request state stay consistent.
+// The caller (SubmitReview) has already run checkReviewDecisionPermission, which
+// restricts "close" to users with write access and the change request author.
 func submitCloseReview(ctx *context.Context, issue *issues_model.Issue, form *forms.SubmitReviewForm, attachments []string) {
-	// The permission check comes first so an unauthorized caller cannot trigger any work.
-	// The modal submits through form-fetch-action, which renders "errorMessage" from a
-	// 4xx JSON body, so a bare HTML error page would show up as an unexplained failure.
-	if !canCloseChangeRequest(ctx, issue) {
-		ctx.JSON(http.StatusForbidden, map[string]any{
-			"errorMessage": ctx.Locale.TrString("repo.issues.review.no_permission.close"),
-			"renderFormat": "text",
-		})
-		return
-	}
-
 	// issue.PullRequest is already loaded by GetActionIssue -> LoadAttributes, the same way
 	// NewComment relies on it.
 	if issue.PullRequest.HasMerged {
@@ -300,6 +312,10 @@ func SubmitReview(ctx *context.Context) {
 		return
 	}
 
+	if !checkReviewDecisionPermission(ctx, issue, form) {
+		return
+	}
+
 	var attachments []string
 	if setting.Attachment.Enabled {
 		attachments = form.Files
@@ -314,7 +330,8 @@ func SubmitReview(ctx *context.Context) {
 	reviewType := form.ReviewType()
 	switch reviewType {
 	case issues_model.ReviewTypeUnknown:
-		ctx.ServerError("ReviewType", fmt.Errorf("unknown ReviewType: %s", form.Type))
+		// an unknown type is a client error, not a server one
+		ctx.JSONError("unknown review type: " + form.Type)
 		return
 
 	// can not approve/reject your own PR
