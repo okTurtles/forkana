@@ -2484,6 +2484,27 @@ func UpdatePullRequest(ctx *context.Context) {
 	ctx.Redirect(issue.Link())
 }
 
+// composeMergeCommitMessage builds the merge commit message from what the client sent and
+// the server-generated defaults.
+//
+// When the client sends no merge title (the single-click merge UI never does), the generated
+// title is used and, if the client also sent no body, the generated body is kept: it carries
+// the "Reviewed-on:"/"Reviewed-by:" trailers. A client which explicitly supplies a title but
+// no body still gets a bare merge commit message.
+func composeMergeCommitMessage(formTitle, formBody, defaultTitle, defaultBody string) string {
+	title, body := strings.TrimSpace(formTitle), strings.TrimSpace(formBody)
+	if title == "" {
+		title = defaultTitle
+		if body == "" {
+			body = strings.TrimSpace(defaultBody)
+		}
+	}
+	if body == "" {
+		return title
+	}
+	return title + "\n\n" + body
+}
+
 // MergePullRequest response for merging pull request
 func MergePullRequest(ctx *context.Context) {
 	form := web.GetForm(ctx).(*forms.MergePullRequestForm)
@@ -2562,20 +2583,21 @@ func MergePullRequest(ctx *context.Context) {
 		return
 	}
 
-	message := strings.TrimSpace(form.MergeTitleField)
-	if len(message) == 0 {
+	// Forkana: the web UI merges in a single click, so it sends neither a merge title nor a
+	// merge message body and the whole merge commit message is generated here.
+	var defaultTitle, defaultBody string
+	if len(strings.TrimSpace(form.MergeTitleField)) == 0 {
 		var err error
-		message, _, err = pull_service.GetDefaultMergeMessage(ctx, ctx.Repo.GitRepo, pr, repo_model.MergeStyle(form.Do))
+		defaultTitle, defaultBody, err = pull_service.GetDefaultMergeMessage(ctx, ctx.Repo.GitRepo, pr, repo_model.MergeStyle(form.Do))
 		if err != nil {
 			ctx.ServerError("GetDefaultMergeMessage", err)
 			return
 		}
+		if repo_model.MergeStyle(form.Do) == repo_model.MergeStyleSquash && len(strings.TrimSpace(form.MergeMessageField)) == 0 {
+			defaultBody = pull_service.GetSquashMergeCommitMessages(ctx, pr) + defaultBody
+		}
 	}
-
-	form.MergeMessageField = strings.TrimSpace(form.MergeMessageField)
-	if len(form.MergeMessageField) > 0 {
-		message += "\n\n" + form.MergeMessageField
-	}
+	message := composeMergeCommitMessage(form.MergeTitleField, form.MergeMessageField, defaultTitle, defaultBody)
 
 	if form.MergeWhenChecksSucceed {
 		// delete all scheduled auto merges
