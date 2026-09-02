@@ -603,11 +603,20 @@ func (f SubmitReviewForm) ReviewType() issues_model.ReviewType {
 		return issues_model.ReviewTypeComment
 	case "reject":
 		return issues_model.ReviewTypeReject
+	case "close":
+		// Forkana: "close" is not a review type of its own, the feedback is recorded as a
+		// normal comment review and the change request is closed afterwards by the handler.
+		return issues_model.ReviewTypeComment
 	case "":
 		return issues_model.ReviewTypeComment // default to comment when doing quick-submit (Ctrl+Enter) on the review form
 	default:
 		return issues_model.ReviewTypeUnknown
 	}
+}
+
+// IsCloseRequest returns whether the submitted review also asks to close the change request.
+func (f SubmitReviewForm) IsCloseRequest() bool {
+	return f.Type == "close"
 }
 
 // HasEmptyContent checks if the content of the review form is empty.
