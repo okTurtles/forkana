@@ -29,10 +29,34 @@ function updateTabLinks(keyword: string): void {
   });
 }
 
+// The filters offered beside the search field. The "clear filters" button drops exactly these.
+const filterParamNames = ['archived', 'fork', 'mirror', 'template', 'private', 'repo_role'];
+
+// Everything that arranges the results rather than selects them: the filters, the sort order, and
+// the page reached within that arrangement. All of it is rendered inside the same form as the
+// keyword field, so a native submit carries it along with whatever has just been typed.
+const arrangementParamNames = [...filterParamNames, 'sort', 'page'];
+
+// Return the results to the way the plain, unfiltered page arranges them.
+function resetArrangement(params: URLSearchParams): void {
+  for (const name of arrangementParamNames) params.delete(name);
+}
+
+// The form's keyword field, when it has one.
+function getKeywordField(searchForm: HTMLFormElement): HTMLInputElement | null {
+  const field = searchForm.elements.namedItem('q');
+  return field instanceof HTMLInputElement ? field : null;
+}
+
 // Current content of the form's keyword field, or "" when it has none.
 function getKeyword(searchForm: HTMLFormElement): string {
-  const field = searchForm.elements.namedItem('q');
-  return field instanceof HTMLInputElement ? field.value.trim() : '';
+  return getKeywordField(searchForm)?.value.trim() ?? '';
+}
+
+// The keyword the page on screen was rendered for: the field's "value" attribute, which the server
+// filled in and which the browser keeps as "defaultValue" however the field is edited afterwards.
+function getRenderedKeyword(searchForm: HTMLFormElement): string {
+  return getKeywordField(searchForm)?.defaultValue.trim() ?? '';
 }
 
 // Query string the form should navigate to.
@@ -40,7 +64,7 @@ function getKeyword(searchForm: HTMLFormElement): string {
 // An empty keyword is dropped instead of being submitted as "q=": the server treats both the same
 // way, but only the shorter URL is the address of the plain, unsearched page, so clearing the field
 // leaves a link worth bookmarking and sharing rather than one that searches for nothing.
-function buildSearchParams(searchForm: HTMLFormElement): URLSearchParams {
+export function buildSearchParams(searchForm: HTMLFormElement): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of new FormData(searchForm).entries()) {
     params.set(key, value.toString());
@@ -70,12 +94,7 @@ export function initExploreSearch() {
 
       const params = buildSearchParams(searchForm);
       if (e.target.name === 'clear-filter') {
-        params.delete('archived');
-        params.delete('fork');
-        params.delete('mirror');
-        params.delete('template');
-        params.delete('private');
-        params.delete('repo_role');
+        for (const name of filterParamNames) params.delete(name);
       }
 
       window.location.search = params.toString();
@@ -90,18 +109,28 @@ export function initExploreSearch() {
     //  - submitting an empty field, via Enter or the search button. Firefox reaches the reset only
     //    this way: it renders no clear button and does not implement the "search" event.
     //
-    // Both only intervene while the field is empty -- a real keyword still submits natively -- and
-    // both drop only "q". Sort and the filters are separate controls, so they survive: clearing the
-    // search clears the search, not the way the results are arranged.
+    // Both only intervene while the field is empty, and both drop only "q". Sort and the filters are
+    // separate controls, so they survive: clearing the search clears the search, not the way the
+    // results are arranged.
     searchForm.addEventListener('search', () => {
       if (getKeyword(searchForm)) return;
       window.location.search = buildSearchParams(searchForm).toString();
     });
 
+    // Submitting a search that differs from the one on screen starts a fresh one, so it takes the
+    // results back to their default arrangement. The sort radios and the filter radios sit inside
+    // this same form with the current page's choices checked, so a native submit would otherwise
+    // carry them over and arrange a brand new set of results the way the previous one was left.
+    //
+    // Re-submitting the keyword already on screen keeps them: there the form is the only record of
+    // a sort or a filter the user has just picked, and dropping it would undo that choice.
     searchForm.addEventListener('submit', (e: Event) => {
-      if (getKeyword(searchForm)) return;
+      const keyword = getKeyword(searchForm);
+      if (keyword && keyword === getRenderedKeyword(searchForm)) return; // submit it natively
       e.preventDefault();
-      window.location.search = buildSearchParams(searchForm).toString();
+      const params = buildSearchParams(searchForm); // an empty keyword drops "q" and nothing else
+      if (keyword) resetArrangement(params);
+      window.location.search = params.toString();
     });
   }
 
