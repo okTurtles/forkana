@@ -6,6 +6,7 @@ package integration
 import (
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -131,4 +132,45 @@ func TestExploreSubjectsListMarkup(t *testing.T) {
 	// Neither the stock repository counts nor the created/updated line belong in the row.
 	assert.NotContains(t, html, "flex-item-trailing")
 	assert.NotContains(t, html, "octicon-repo-forked")
+}
+
+// TestExploreNavbarSubjectsTabActive locks the explore navbar markup from #294. The tab the page
+// belongs to must carry the "active" class, and the tabs must live inside the
+// ".overflow-menu-items" wrapper: the <overflow-menu> web component waits for that element before
+// it initialises, and the CSS that aligns the active tab's underline with the menu rail is keyed
+// on it too. Without the wrapper the tab still renders, but unstyled and never collapsing.
+func TestExploreNavbarSubjectsTabActive(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	activeTab := func(path string) string {
+		req := NewRequest(t, "GET", path)
+		resp := MakeRequest(t, req, http.StatusOK)
+		h := NewHTMLParser(t, resp.Body)
+
+		// exactly one tab is active, and it is inside the overflow-menu wrapper
+		active := h.Find(`overflow-menu .overflow-menu-items a.item.active`)
+		assert.Equal(t, 1, active.Length(), "exactly one explore tab should be active on %s", path)
+		href, exists := active.Attr("href")
+		assert.True(t, exists, "the active explore tab should be a link on %s", path)
+		return href
+	}
+
+	subjectsHref := setting.AppSubURL + "/explore/subjects"
+	usersHref := setting.AppSubURL + "/explore/users"
+
+	// the tab the page belongs to is the active one, and the others are not
+	assert.True(t, strings.HasPrefix(activeTab("/explore/subjects?q=mars"), subjectsHref),
+		"the Subjects tab should be the active one on /explore/subjects")
+	assert.True(t, strings.HasPrefix(activeTab("/explore/users?q=mars"), usersHref),
+		"the Users tab should be the active one on /explore/users")
+
+	// the inactive tabs are still rendered, just not marked active
+	req := NewRequest(t, "GET", "/explore/subjects?q=mars")
+	h := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
+	assert.Equal(t, 0, h.Find(`overflow-menu .overflow-menu-items a.item.active[href^="`+usersHref+`"]`).Length(),
+		"the Users tab must not be active on /explore/subjects")
+	assert.Equal(t, 1, h.Find(`overflow-menu .overflow-menu-items a.item[href^="`+usersHref+`"]`).Length(),
+		"the Users tab should still be rendered on /explore/subjects")
+	assert.Equal(t, 0, h.Find(`overflow-menu .overflow-menu-items a.item.active[href^="`+setting.AppSubURL+`/explore/code"]`).Length(),
+		"the Code tab must not be active on /explore/subjects")
 }
