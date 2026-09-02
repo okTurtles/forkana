@@ -179,7 +179,11 @@ const LANE_PAD_COMPLEXITY_WEIGHT = 0.3;  // Weight of complexity factor in lane 
    it is the floor for zooming out — but never applied to the resting view. */
 
 /* === SVG LAYOUT === */
-const MIN_SVG_HEIGHT = 320;          // Never collapse the canvas below this
+/* Never collapse the canvas below this. The page-layout floor in
+   web_src/css/features/bubble-graph.css (".history-bubble-root { min-height }")
+   is the same number so the box the canvas is measured from is never smaller
+   than the canvas itself — change the two together. */
+const MIN_SVG_HEIGHT = 320;
 const CONTENT_BOUNDS_EXTRA = 16;     // Extra horizontal padding for elbow overhang
 const DEFAULT_CONTAINER_WIDTH = 1100;   // Default container width when not measured
 /* ONE default for "container height we have not measured yet". There used to be
@@ -2246,7 +2250,16 @@ function goToComparison() {
 <style scoped>
 .f-fishbone-graph {
   width: 100%;
-  height: calc(100vh - 25rem);
+  /* Fill the box .history-bubble-root is given by the page's flex layout (see
+     web_src/css/features/bubble-graph.css). "flex-basis: 0" plus
+     "min-height: 0" keeps the height coming from the free space rather than
+     from the canvas this component sizes off that very height, and any
+     leftover (the legend under a min-height canvas) scrolls in here rather
+     than growing the page past the footer. Outside a flex parent this falls
+     back to an auto height, which is the pre-#149 behaviour minus the
+     "calc(100vh - 25rem)" guess. */
+  flex: 1 1 0;
+  min-height: 0;
   overflow: auto;
 }
 
