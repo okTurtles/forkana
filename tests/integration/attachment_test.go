@@ -5,6 +5,7 @@ package integration
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/png"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"testing"
 
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/tests"
@@ -22,6 +24,9 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 )
+
+// notExistingAttachmentUUID is a well-formed UUID that no attachment fixture uses.
+const notExistingAttachmentUUID = "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a18"
 
 func generateImg() bytes.Buffer {
 	// Generate image
@@ -204,6 +209,65 @@ func TestInlineEditHidesEmbeddedAttachments(t *testing.T) {
 		assert.Equal(t, []string{"comment-standalone.png"}, thumbnailAlts(t, obj.Attachments),
 			"only the attachment that is not embedded in the comment should be listed")
 	})
+}
+
+// TestArticleAttachmentRouteServesEmbeddedAttachment covers the URL that images embedded in a
+// comment actually resolve to. The editor writes "![name](/attachments/{uuid})" and the markup
+// renderer resolves that against Repository.Link(), which in Forkana is
+// "/article/{owner}/{subject}" — so the attachment must be served from
+// "/article/{owner}/{subject}/attachments/{uuid}", otherwise every embedded image 404s.
+func TestArticleAttachmentRouteServesEmbeddedAttachment(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1}) // public repo owned by user2
+	subjectName := repo1.GetSubject(t.Context())
+
+	// attachment fixture linked to a comment on user2/repo1
+	const uuid = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17"
+	_, err := storage.Attachments.Save(repo_model.AttachmentRelativePath(uuid), strings.NewReader("hello world"), -1)
+	assert.NoError(t, err)
+
+	articleURL := fmt.Sprintf("/article/%s/%s/attachments/%s", repo1.OwnerName, subjectName, uuid)
+
+	// A fresh request per call: MakeRequest stamps session cookies onto the request.
+	session := loginUser(t, "user2")
+	session.MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK)
+	MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK) // anonymous, repo is public
+
+	// unknown attachments still 404 instead of leaking anything
+	MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/attachments/%s", repo1.OwnerName, subjectName, notExistingAttachmentUUID)), http.StatusNotFound)
+
+	// The route carries no repository middleware, so permission is entirely ServeAttachment's
+	// job: it resolves the attachment's own repository. An attachment on a private repository
+	// must stay hidden from anonymous visitors through this URL too.
+	// repo2 has no subject, so Link() falls back to the repo name — the URL still has to work,
+	// which is another reason the route resolves no repository of its own.
+	repo2 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2}) // private repo owned by user2
+	const privUUID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12"
+	_, err = storage.Attachments.Save(repo_model.AttachmentRelativePath(privUUID), strings.NewReader("hello world"), -1)
+	assert.NoError(t, err)
+
+	privURL := fmt.Sprintf("/article/%s/%s/attachments/%s", repo2.OwnerName, repo2.GetSubject(t.Context()), privUUID)
+	session.MakeRequest(t, NewRequest(t, "GET", privURL), http.StatusOK)
+	MakeRequest(t, NewRequest(t, "GET", privURL), http.StatusNotFound)                       // anonymous
+	loginUser(t, "user8").MakeRequest(t, NewRequest(t, "GET", privURL), http.StatusNotFound) // no read access
+}
+
+// TestArticleAttachmentListingRoutes covers the attachment listing URLs the edit-in-place
+// dropzone requests. It builds them from $.RepoLink, which is the article link, so the listing
+// has to be served under "/article/{owner}/{subject}" as well — a 404 there leaves the dropzone
+// empty and the following save submits an empty "files[]", deleting every attachment.
+func TestArticleAttachmentListingRoutes(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1}) // public repo owned by user2
+	articleBase := fmt.Sprintf("/article/%s/%s", repo1.OwnerName, repo1.GetSubject(t.Context()))
+
+	session := loginUser(t, "user2")
+	// issue 1 on repo1, and comment 2 which carries attachment ...a17
+	session.MakeRequest(t, NewRequest(t, "GET", articleBase+"/issues/1/attachments"), http.StatusOK)
+	resp := session.MakeRequest(t, NewRequest(t, "GET", articleBase+"/comments/2/attachments"), http.StatusOK)
+	assert.Contains(t, resp.Body.String(), "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a17")
 }
 
 func TestCreateAnonymousAttachment(t *testing.T) {
