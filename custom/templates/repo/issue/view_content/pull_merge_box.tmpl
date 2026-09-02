@@ -1,3 +1,6 @@
+{{/* Forkana: only the article owner may merge a change request, so the "viewer can merge"
+     predicate is hoisted here instead of being spelled out at every use site. */}}
+{{$viewerCanMerge := and .AllowMerge .IsBaseRepoOwner}}
 {{$mergeColor := "red"}}
 {{- if .Issue.PullRequest.HasMerged}}{{$mergeColor = "purple"}}
 {{- else if .Issue.IsClosed}}{{$mergeColor = "grey"}}
@@ -100,7 +103,7 @@
 						{{end}}
 					</div>
 				</div>
-				{{if and .AllowMerge .IsBaseRepoOwner}}
+				{{if $viewerCanMerge}}
 					{{$prUnit := .Repository.MustGetUnit ctx ctx.Consts.RepoUnitTypePullRequests}}
 					{{if $prUnit.PullRequestsConfig.AllowSquash}}
 						<div class="item tw-mt-4">
@@ -209,11 +212,10 @@
 							<div class="circle small green-light-1 tw-self-start">
 								{{svg "octicon-check"}}
 							</div>
+							{{/* Forkana: the upstream "only those with write access can merge" hint is dropped -
+							     merging is owner-only here, and the messages below already say so accurately. */}}
 							<div class="tw-font-semibold">
 								{{ctx.Locale.Tr "repo.pulls.can_auto_merge_desc"}}
-								<div class="tw-text-xs text light-2">
-									{{ctx.Locale.Tr "repo.pulls.merge_permission_desc" .Repository.Link}}
-								</div>
 							</div>
 						</div>
 					{{end}}
@@ -229,7 +231,7 @@
 					</div>
 				{{end}}
 
-				{{if and .AllowMerge .IsBaseRepoOwner}} {{/* user is allowed to merge and is the repository owner */}}
+				{{if $viewerCanMerge}} {{/* user is allowed to merge and is the repository owner */}}
 					{{$prUnit := .Repository.MustGetUnit ctx ctx.Consts.RepoUnitTypePullRequests}}
 					{{if $prUnit.PullRequestsConfig.AllowSquash}} {{/* Forkana: only squash merge is supported */}}
 						{{$hasPendingPullRequestMergeTip := ""}}
