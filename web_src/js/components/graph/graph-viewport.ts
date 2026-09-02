@@ -8,7 +8,11 @@
    and a re-measure that mis-reports "nothing changed" is exactly how the graph
    kept its mount-time height. */
 
-/** Never collapse the canvas below this, however short the container is. */
+/** Never collapse the canvas below this, however short the container is.
+ *
+ * The page-layout floor in web_src/css/features/bubble-graph.css
+ * (".history-bubble-root { min-height }") is the same number, so the box the canvas is
+ * measured from is never smaller than the canvas itself -- change the two together. */
 export const MIN_SVG_HEIGHT = 320;
 /** Container width the layout is capped at: the graph is centred in wider
    containers rather than spread across them. */
