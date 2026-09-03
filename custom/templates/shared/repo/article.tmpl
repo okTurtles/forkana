@@ -96,9 +96,16 @@
                                             </a>
                                         {{else if .HasExistingFork}}
                                             {{/* User has an existing fork of this repo - show both options */}}
-                                            <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="ui secondary button">
-                                                {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
-                                            </a>
+                                            {{if .ExistingForkArchived}}
+                                                {{/* An archived fork is read-only, so editing it is refused: only a change request is possible */}}
+                                                <span class="ui secondary button disabled" data-tooltip-content="{{ctx.Locale.Tr "repo.editor.existing_fork_archived"}}">
+                                                    {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
+                                                </span>
+                                            {{else}}
+                                                <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="ui secondary button">
+                                                    {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
+                                                </a>
+                                            {{end}}
                                             {{if .CanSubmitChangeRequest}}
                                             <button type="button" id="pre-submit-changes-button" class="ui primary button"
                                                 data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">

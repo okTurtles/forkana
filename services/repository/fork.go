@@ -43,6 +43,9 @@ type ForkOnEditPermissions struct {
 	HasExistingFork bool
 	// ExistingFork is the user's existing fork (nil if none)
 	ExistingFork *repo_model.Repository
+	// ExistingForkArchived is true if the user's existing fork is archived, and therefore
+	// read-only: it cannot be committed to, and forking again is refused as the fork exists
+	ExistingForkArchived bool
 	// BlockedBySubject is true if the user already owns a different active (non-archived)
 	// repo for the same subject that is NOT a fork of the current repository
 	// (i.e., they have their own independent article)
@@ -131,6 +134,7 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 			// They can submit change requests to propose changes
 			perms.HasExistingFork = true
 			perms.ExistingFork = existingFork
+			perms.ExistingForkArchived = existingFork.IsArchived
 			perms.OwnRepoForSubject = ownRepo
 			perms.CanSubmitChangeRequest = true
 		} else if ownRepo.IsFork {
@@ -150,6 +154,7 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 				// They can submit change requests to propose changes
 				perms.HasExistingFork = true
 				perms.ExistingFork = ownRepo
+				perms.ExistingForkArchived = ownRepo.IsArchived
 				perms.OwnRepoForSubject = ownRepo
 				perms.CanSubmitChangeRequest = true
 			} else {
@@ -174,6 +179,7 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 	if existingFork != nil {
 		perms.HasExistingFork = true
 		perms.ExistingFork = existingFork
+		perms.ExistingForkArchived = existingFork.IsArchived
 	} else {
 		perms.NeedsFork = true
 	}

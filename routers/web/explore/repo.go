@@ -833,6 +833,7 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["NeedsFork"] = false
 	ctx.Data["HasExistingFork"] = false
 	ctx.Data["ExistingFork"] = nil
+	ctx.Data["ExistingForkArchived"] = false
 	ctx.Data["IsRepoOwner"] = false
 	ctx.Data["BlockedByOwnArticle"] = false
 	ctx.Data["OwnRepoForSubject"] = nil
@@ -850,6 +851,7 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["OwnRepoForSubject"] = perms.OwnRepoForSubject
 	ctx.Data["HasExistingFork"] = perms.HasExistingFork
 	ctx.Data["ExistingFork"] = perms.ExistingFork
+	ctx.Data["ExistingForkArchived"] = perms.ExistingForkArchived
 	ctx.Data["NeedsFork"] = perms.NeedsFork
 	ctx.Data["CanSubmitChangeRequest"] = perms.CanSubmitChangeRequest
 }

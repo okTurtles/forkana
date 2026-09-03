@@ -286,6 +286,11 @@ func TestForkAndEditArchivedFork(t *testing.T) {
 
 	require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), fork, true))
 
+	// The editor page is refused once the fork is archived, so the edit is never written
+	req = NewRequest(t, "GET", editURL).SetHeader("Accept", "text/html")
+	resp = session.MakeRequest(t, req, http.StatusNotFound)
+	assert.Contains(t, resp.Body.String(), "archived")
+
 	form := map[string]string{
 		"_csrf":         htmlDoc.GetCSRF(),
 		"last_commit":   htmlDoc.GetInputValueByName("last_commit"),

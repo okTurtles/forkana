@@ -72,9 +72,17 @@ func prepareEditorCommitFormOptions(ctx *context.Context, editorAction string) *
 		return nil
 	}
 
+	// The edit would be committed to the user's fork, so refuse it before it is written.
+	// An archived fork gets its own message: it is recoverable by unarchiving the fork,
+	// unlike the other reasons a fork cannot host the editor.
 	if commitFormOptions.WillSubmitToFork && !commitFormOptions.TargetRepo.CanEnableEditor() {
-		ctx.Data["NotFoundPrompt"] = ctx.Locale.Tr("repo.editor.fork_not_editable")
+		if commitFormOptions.TargetRepo.IsArchived {
+			ctx.Data["NotFoundPrompt"] = ctx.Locale.Tr("repo.editor.existing_fork_archived")
+		} else {
+			ctx.Data["NotFoundPrompt"] = ctx.Locale.Tr("repo.editor.fork_not_editable")
+		}
 		ctx.NotFound(nil)
+		return nil
 	}
 
 	ctx.Data["BranchLink"] = ctx.Repo.RepoLink + "/src/" + ctx.Repo.RefTypeNameSubURL()
@@ -589,7 +597,7 @@ func handleForkAndEdit(ctx *context.Context) *repo_model.Repository {
 	// it must not be committed to: the user has to unarchive it first. Treating it as
 	// absent is not an option, as forking again fails with ErrForkAlreadyExist.
 	if perms.HasExistingFork && perms.ExistingFork != nil {
-		if perms.ExistingFork.IsArchived {
+		if perms.ExistingForkArchived {
 			ctx.JSONError(ctx.Tr("repo.editor.existing_fork_archived"))
 			return nil
 		}
