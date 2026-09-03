@@ -41,7 +41,9 @@ async function setToastEditorValue(page: Page, selector: string, value: string):
 async function expectMermaidFrame(page: Page, index: number, text: RegExp): Promise<void> {
   const iframe = page.locator('iframe.markup-content-iframe').nth(index);
   await expect(iframe).toBeVisible({timeout: 20000});
-  await expect(iframe.contentFrame().locator('svg')).toContainText(text, {timeout: 20000});
+  // anchored as a direct child of the body: some diagram types render nested <svg> nodes,
+  // which would make the strict-mode toContainText resolve to more than one element
+  await expect(iframe.contentFrame().locator('body > svg')).toContainText(text, {timeout: 20000});
 }
 
 test.describe('Mermaid rendering', () => {
