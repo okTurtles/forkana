@@ -125,10 +125,14 @@ async function getRepositoryRoot(): Promise<string> {
  * server's internal API. Under the in-process E2E server that callback is unreliable, so the
  * push fails for reasons unrelated to what the test is asserting. Call this after creating a
  * repository and before committing through the web editor.
+ *
+ * Hooks that the server did not generate are skipped, so a change to the generated set shows
+ * up as the push failure it is rather than as an ENOENT from this helper.
  */
 export async function disableGeneratedHooks(owner: string, repoName: string): Promise<void> {
   const repositoryRoot = await getRepositoryRoot();
-  const repoPath = join(repositoryRoot, owner, `${repoName}.git`);
+  // matches models/repo.RepoPath, which lowercases both segments
+  const repoPath = join(repositoryRoot, owner.toLowerCase(), `${repoName.toLowerCase()}.git`);
   const hookScript = '#!/usr/bin/env bash\n# Disabled for this E2E-created repository.\nexit 0\n';
   const hookPaths = [
     join(repoPath, 'hooks/pre-receive.d/gitea'),
@@ -138,7 +142,12 @@ export async function disableGeneratedHooks(owner: string, repoName: string): Pr
   ];
 
   await Promise.all(hookPaths.map(async (hookPath) => {
-    await writeFile(hookPath, hookScript);
+    try {
+      await writeFile(hookPath, hookScript);
+    } catch (err) {
+      if (err.code === 'ENOENT') return;
+      throw err;
+    }
     await chmod(hookPath, 0o755);
   }));
 }
