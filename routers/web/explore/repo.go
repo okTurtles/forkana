@@ -73,18 +73,23 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 		orderBy db.SearchOrderBy
 	)
 
-	sortOrder := ctx.FormString("sort")
-	if sortOrder == "" {
-		sortOrder = setting.UI.ExploreDefaultSort
-	}
-
-	if order, ok := repo_model.OrderByFlatMap[sortOrder]; ok {
+	// The listing always needs an ORDER BY, so an absent or unrecognised "sort" falls back
+	// to the configured default. What the user asked for is a separate question:
+	// "SortType" drives the active entry of the sort dropdown, so it stays empty unless the
+	// request names a sort the page understands, and nothing looks selected before the user
+	// has selected it (#292).
+	requestedSort := ctx.FormString("sort")
+	if order, ok := repo_model.OrderByFlatMap[requestedSort]; ok {
 		orderBy = order
 	} else {
-		sortOrder = "recentupdate"
-		orderBy = db.SearchOrderByRecentUpdated
+		requestedSort = ""
+		if order, ok := repo_model.OrderByFlatMap[setting.UI.ExploreDefaultSort]; ok {
+			orderBy = order
+		} else {
+			orderBy = db.SearchOrderByRecentUpdated
+		}
 	}
-	ctx.Data["SortType"] = sortOrder
+	ctx.Data["SortType"] = requestedSort
 
 	keyword := ctx.FormTrim("q")
 
@@ -229,19 +234,17 @@ func Subjects(ctx *context.Context) {
 		page = 1
 	}
 
-	// Get sort order
-	sortOrder := ctx.FormString("sort")
-	if sortOrder == "" {
-		sortOrder = string(repo_model.SubjectSortRecentUpdate)
-	}
-
-	// Map sort order to database ORDER BY clause
-	orderBy := repo_model.SubjectOrderBy(repo_model.SubjectSortType(sortOrder))
+	// Get sort order. The listing always needs an ORDER BY, so an absent or unrecognised
+	// "sort" falls back to the default; "SortType" only carries a sort the request actually
+	// named, so the sort dropdown shows nothing as selected until the user selects
+	// something (#292).
+	requestedSort := ctx.FormString("sort")
+	orderBy := repo_model.SubjectOrderBy(repo_model.SubjectSortType(requestedSort))
 	if orderBy == "" {
-		sortOrder = string(repo_model.SubjectSortRecentUpdate)
+		requestedSort = ""
 		orderBy = repo_model.SubjectOrderBy(repo_model.SubjectSortRecentUpdate)
 	}
-	ctx.Data["SortType"] = sortOrder
+	ctx.Data["SortType"] = requestedSort
 
 	// Get search keyword
 	keyword := ctx.FormTrim("q")

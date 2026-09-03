@@ -166,3 +166,28 @@ func TestExploreSubjectsSitemap(t *testing.T) {
 	assert.Contains(t, index, setting.AppURL+"explore/subjects/sitemap-1.xml")
 	assert.NotContains(t, index, "explore/articles/sitemap-")
 }
+
+// TestExploreSubjectsNoDefaultSortSelected covers #292: the sort dropdown used to paint its
+// default entry ("Most recently updated") in the static grey active state before the user
+// had chosen anything, because the handler echoed its internal ordering default back to the
+// template. Nothing may look selected until the user selects it.
+func TestExploreSubjectsNoDefaultSortSelected(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	req := NewRequest(t, "GET", "/explore/subjects")
+	resp := MakeRequest(t, req, http.StatusOK)
+	h := NewHTMLParser(t, resp.Body)
+	assert.Equal(t, 0, h.Find(`.menu label.active.item`).Length(), "no sort entry may be active before the user picks one")
+	assert.Equal(t, 0, h.Find(`.menu input[name="sort"][checked]`).Length(), "no sort radio may be checked before the user picks one")
+
+	// Once a sort is explicitly requested, that entry -- and only that entry -- is active.
+	req = NewRequest(t, "GET", "/explore/subjects?sort=alphabetically")
+	resp = MakeRequest(t, req, http.StatusOK)
+	h = NewHTMLParser(t, resp.Body)
+	active := h.Find(`.menu label.active.item`)
+	assert.Equal(t, 1, active.Length())
+	value, exists := active.Find(`input[name="sort"]`).Attr("value")
+	assert.True(t, exists)
+	assert.Equal(t, "alphabetically", value)
+	assert.Equal(t, 1, h.Find(`.menu input[name="sort"][checked]`).Length())
+}

@@ -30,6 +30,19 @@ func Repos(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("admin.repositories")
 	ctx.Data["PageIsAdminRepositories"] = true
 
+	// This table draws a sort arrow on the column it is ordered by, from the same
+	// "SortType" the Explore sort dropdown marks its selected entry with. Explore wants
+	// that value empty until the user picks a sort (#292), so name the default here
+	// instead -- the way the admin user and organization lists already do -- and the arrow
+	// on the default-sorted column survives.
+	if ctx.FormString("sort") == "" {
+		defaultSort := setting.UI.ExploreDefaultSort
+		if _, ok := repo_model.OrderByFlatMap[defaultSort]; !ok {
+			defaultSort = "recentupdate"
+		}
+		ctx.SetFormString("sort", defaultSort)
+	}
+
 	explore.RenderRepoSearch(ctx, &explore.RepoSearchOptions{
 		Private:          true,
 		PageSize:         setting.UI.Admin.RepoPagingNum,
