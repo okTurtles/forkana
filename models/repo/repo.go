@@ -664,7 +664,14 @@ func (repo *Repository) RepoPath() string {
 
 // Link returns the repository relative url for viewing articles
 // Uses subject name if available, falls back to repository name
+// Archived articles are linked by their permanent repository url, because the
+// subject vanity url resolves to the active repository of that subject. No
+// "?view=article" is appended: the permanent url already renders the article
+// view for a subject repository, and callers use Link as a path prefix.
 func (repo *Repository) Link() string {
+	if repo.IsArchived && repo.SubjectID > 0 {
+		return repo.OperationsLink()
+	}
 	subject := repo.GetSubject(context.Background())
 	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(subject)
 }

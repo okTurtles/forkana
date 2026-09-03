@@ -78,7 +78,11 @@ func TestArticlePermanentRoute(t *testing.T) {
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
 
-		require.Equal(t, 1, htmlDoc.Find("#repo-history-app").Length())
+		app := htmlDoc.Find("#repo-history-app")
+		require.Equal(t, 1, app.Length())
+		// the article links of an archived repository must target its permanent URL
+		assert.Equal(t, "true", app.AttrOr("data-initial-archived", ""))
+		assert.Equal(t, repoURL, repo.Link())
 		notice := htmlDoc.Find("#article-archived-notice")
 		require.Equal(t, 1, notice.Length())
 		assert.False(t, notice.HasClass("tw-hidden"))

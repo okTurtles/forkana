@@ -8,6 +8,7 @@ import (
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
+	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
@@ -432,4 +433,24 @@ func TestGetRepositoriesBySubjectIDAndOwners_EmptyOwnerList(t *testing.T) {
 	repos, err := repo_model.GetRepositoriesBySubjectIDAndOwners(ctx, subject.ID, []string{})
 	assert.NoError(t, err)
 	assert.Empty(t, repos)
+}
+
+func TestRepositoryLinkArchivedUsesPermanentURL(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Link Routing Subject")
+	assert.NoError(t, err)
+
+	repo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	repo.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id"))
+
+	// active articles keep the subject vanity url
+	assert.Equal(t, setting.AppSubURL+"/article/"+repo.OwnerName+"/Link%20Routing%20Subject", repo.Link())
+
+	// archived articles are only reachable through their permanent repository url
+	repo.IsArchived = true
+	assert.Equal(t, repo.OperationsLink(), repo.Link())
 }
