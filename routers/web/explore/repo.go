@@ -303,6 +303,12 @@ func Subjects(ctx *context.Context) {
 		}
 		similarSubjects = similarResults
 
+		// The filtered lookup above decides whether the exact-match row is rendered, but it must
+		// not decide whether the "want to create it?" offer is made.
+		if exactMatch == nil && !setExactSubjectExists(ctx, keyword) {
+			return
+		}
+
 		// For pagination total, we count exact + similar
 		count = int64(len(similarSubjects))
 		if exactMatch != nil {
@@ -340,6 +346,34 @@ func Subjects(ctx *context.Context) {
 	ctx.Data["Page"] = pager
 
 	ctx.HTML(http.StatusOK, tplExploreSubjects)
+}
+
+// setExactSubjectExists exposes the subject named exactly like the search keyword as
+// ctx.Data["ExactSubjectExists"], looked up without any of the active filters.
+//
+// The subjects list offers to create a subject when its own, filtered query comes back without
+// an exact match, and taking that offer routes through GetOrCreateSubject, which returns the
+// existing subject and just attaches the new article to it. So a subject that merely happens to
+// be hidden - by "not a fork", by "archived" - invites the user to create a duplicate (#319).
+// shared/subject/list.tmpl uses this key to link to the subject instead.
+//
+// The slug is UNIQUE and is exactly the uniqueness rule CreateSubject enforces, so this is a
+// single indexed lookup. Returns false when it has already sent a server error.
+func setExactSubjectExists(ctx *context.Context, keyword string) bool {
+	// An empty slug is a zero value for xorm and would match an arbitrary row.
+	slug := repo_model.GenerateSlugFromName(keyword)
+	if slug == "" {
+		return true
+	}
+	subject, err := repo_model.GetSubjectBySlug(ctx, slug)
+	switch {
+	case err == nil:
+		ctx.Data["ExactSubjectExists"] = subject
+	case !repo_model.IsErrSubjectNotExist(err):
+		ctx.ServerError("GetSubjectBySlug", err)
+		return false
+	}
+	return true
 }
 
 // RepoHistory renders repository history page - an alternative interface to repo home

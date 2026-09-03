@@ -8,11 +8,14 @@ import (
 	"net/url"
 	"testing"
 
+	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExploreSubjects(t *testing.T) {
@@ -165,4 +168,61 @@ func TestExploreSubjectsSitemap(t *testing.T) {
 	index := MakeRequest(t, NewRequest(t, "GET", "/sitemap.xml"), http.StatusOK).Body.String()
 	assert.Contains(t, index, setting.AppURL+"explore/subjects/sitemap-1.xml")
 	assert.NotContains(t, index, "explore/articles/sitemap-")
+}
+
+// TestExploreSubjectsExactMatchNotHiddenByFilters covers #319: searching for a subject that
+// already exists used to offer "Want to create it?" whenever the active filters hid it from the
+// exact-match lookup. The "not a fork" filter does exactly that for any subject that already has
+// a fork, and accepting the offer routes through GetOrCreateSubject, which returns the existing
+// subject and attaches yet another article to it.
+func TestExploreSubjectsExactMatchNotHiddenByFilters(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	const subjectName = "Fork Filter Probe"
+	subject, err := repo_model.GetOrCreateSubject(t.Context(), subjectName)
+	require.NoError(t, err)
+
+	// A root article plus a fork of it, so that the "fork=0" filter excludes the subject.
+	require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{
+		OwnerID: 2, OwnerName: "user2",
+		Name: "fork-filter-probe-root", LowerName: "fork-filter-probe-root",
+		SubjectID: subject.ID, IsFork: false,
+	}))
+	require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{
+		OwnerID: 3, OwnerName: "user3",
+		Name: "fork-filter-probe-fork", LowerName: "fork-filter-probe-fork",
+		SubjectID: subject.ID, IsFork: true,
+	}))
+
+	path := "/explore/subjects?fork=0&q=" + url.QueryEscape(subjectName)
+	createSelector := `a[href^="` + setting.AppSubURL + `/repo/create?subject="]`
+
+	subjectHrefs := func(h *HTMLDoc) []string {
+		hrefs := make([]string, 0)
+		h.Find(`a[href^="` + setting.AppSubURL + `/subject/"]`).Each(func(_ int, s *goquery.Selection) {
+			href, _ := s.Attr("href")
+			hrefs = append(hrefs, href)
+		})
+		return hrefs
+	}
+
+	// Signed out.
+	resp := MakeRequest(t, NewRequest(t, "GET", path), http.StatusOK)
+	anonDoc := NewHTMLParser(t, resp.Body)
+	AssertHTMLElement(t, anonDoc, createSelector, false)
+
+	// Signed in.
+	session := loginUser(t, "user2")
+	resp = session.MakeRequest(t, NewRequest(t, "GET", path), http.StatusOK)
+	authDoc := NewHTMLParser(t, resp.Body)
+	AssertHTMLElement(t, authDoc, createSelector, false)
+
+	// explore.Subjects never reads ctx.Doer, so the two responses must list the same subjects in
+	// the same order. This pins the "signed-in users see fewer subjects" hypothesis as ruled out.
+	assert.Equal(t, subjectHrefs(anonDoc), subjectHrefs(authDoc))
+
+	// Positive control: the offer is still made for a name that really is free, so the assertions
+	// above cannot pass just because the selector stopped matching anything.
+	resp = MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?fork=0&q="+url.QueryEscape("No Such Subject Here")), http.StatusOK)
+	AssertHTMLElement(t, NewHTMLParser(t, resp.Body), createSelector, true)
 }

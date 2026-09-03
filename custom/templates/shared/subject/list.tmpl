@@ -8,13 +8,24 @@
 		{{end}}
 
 		{{/* No Exact Match - Show Create Button */}}
-		{{if not .ExactMatch}}
+		{{if and (not .ExactMatch) (not .ExactSubjectExists)}}
 			<div class="tw-mb-6">
 				<p class="tw-flex tw-items-center tw-gap-2 tw-italic tw-text-sm text muted tw-mb-3">
 					{{svg "octicon-skip" 16}} {{ctx.Locale.Tr "search.no_exact_page_found" .Keyword}}
 				</p>
 				<a class="ui primary button" href="{{AppSubUrl}}/repo/create?subject={{QueryEscape .Keyword}}">
 					{{ctx.Locale.Tr "search.create_new_subject"}}
+				</a>
+			</div>
+		{{else if and (not .ExactMatch) .ExactSubjectExists}}
+			{{/* The subject exists but the active filters hide it: link to it instead
+			     of inviting the user to create a duplicate. */}}
+			<div class="tw-mb-6">
+				<p class="tw-flex tw-items-center tw-gap-2 tw-italic tw-text-sm text muted tw-mb-3">
+					{{svg "octicon-filter" 16}} {{ctx.Locale.Tr "search.exact_page_hidden_by_filters" .ExactSubjectExists.Name}}
+				</p>
+				<a class="ui basic button" href="{{AppSubUrl}}/subject/{{PathEscapeSegments .ExactSubjectExists.Name}}">
+					{{ctx.Locale.Tr "search.view_existing_subject"}}
 				</a>
 			</div>
 		{{end}}
