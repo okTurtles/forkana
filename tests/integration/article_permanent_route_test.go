@@ -24,6 +24,7 @@ func TestArticlePermanentRoute(t *testing.T) {
 	owner, repo, subjectName := loadArticleRepo(t, 1)
 	session := loginUser(t, owner.Name)
 	repoURL := fmt.Sprintf("/%s/%s", owner.Name, repo.Name)
+	articleRepoURL := fmt.Sprintf("/article/%s/%s", owner.Name, repo.Name)
 
 	t.Run("RendersArticleView", func(t *testing.T) {
 		req := NewRequest(t, "GET", repoURL)
@@ -80,9 +81,9 @@ func TestArticlePermanentRoute(t *testing.T) {
 
 		app := htmlDoc.Find("#repo-history-app")
 		require.Equal(t, 1, app.Length())
-		// the article links of an archived repository must target its permanent URL
+		// the article links of an archived repository are built from its repository name
 		assert.Equal(t, "true", app.AttrOr("data-initial-archived", ""))
-		assert.Equal(t, repoURL, repo.Link())
+		assert.Equal(t, articleRepoURL, repo.Link())
 		notice := htmlDoc.Find("#article-archived-notice")
 		require.Equal(t, 1, notice.Length())
 		assert.False(t, notice.HasClass("tw-hidden"))
@@ -91,5 +92,27 @@ func TestArticlePermanentRoute(t *testing.T) {
 		read := htmlDoc.Find(`#article-tabs a[data-article-tab="read"]`)
 		require.Equal(t, 1, read.Length())
 		assert.Contains(t, read.AttrOr("href", ""), repoURL+"?")
+	})
+
+	t.Run("ArticleURLByRepositoryName", func(t *testing.T) {
+		req := NewRequest(t, "GET", articleRepoURL)
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		app := htmlDoc.Find("#repo-history-app")
+		require.Equal(t, 1, app.Length())
+		assert.Equal(t, "article", app.AttrOr("data-initial-view", ""))
+		assert.Equal(t, repo.Name, app.AttrOr("data-initial-repo", ""))
+		// in-page navigation stays on the reference the article was requested through
+		assert.Equal(t, articleRepoURL, app.AttrOr("data-article-canonical", ""))
+
+		read := htmlDoc.Find(`#article-tabs a[data-article-tab="read"]`)
+		require.Equal(t, 1, read.Length())
+		assert.Contains(t, read.AttrOr("href", ""), articleRepoURL+"?")
+	})
+
+	t.Run("ArticleURLByUnknownRefIsNotFound", func(t *testing.T) {
+		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", owner.Name, "no-such-article"))
+		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 }

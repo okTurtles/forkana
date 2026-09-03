@@ -88,18 +88,12 @@ function buildSubjectUrlWithMode(base: string, view: ViewKey, mode?: string) {
   return url.pathname + url.search;
 }
 
-function buildArticleUrl(appSubUrl: string, articleBase: string, selection: RepoSelection, mode?: string) {
+function buildArticleUrl(articleBase: string, selection: RepoSelection, mode?: string) {
   const owner = encodeURIComponent(selection.owner);
-  let path: string;
-  if (selection.archived) {
-    // The subject vanity url resolves to the active repository of the subject, so an
-    // archived article is only reachable through its permanent repository url.
-    path = `${appSubUrl.replace(/\/+$/, '')}/${owner}/${encodeURIComponent(selection.repo)}`;
-  } else {
-    // Use subject for the URL path (subject is what identifies the article)
-    const subject = encodeURIComponent(selection.subject || selection.repo);
-    path = `${articleBase.replace(/\/+$/, '')}/${owner}/${subject}`;
-  }
+  // The subject vanity url resolves to the active repository of the subject, so an
+  // archived article is addressed by its repository name instead.
+  const ref = selection.archived ? selection.repo : (selection.subject || selection.repo);
+  const path = `${articleBase.replace(/\/+$/, '')}/${owner}/${encodeURIComponent(ref)}`;
   const url = new URL(path, window.location.origin);
   url.searchParams.set('view', 'article');
   if (mode && mode !== 'read') url.searchParams.set('mode', mode);
@@ -199,7 +193,7 @@ export function initRepoHistory() {
   // between modes never falls back to the vanity URL of another repository of the subject.
   function articleUrlFor(selection: RepoSelection, mode?: string) {
     if (!articleCanonical || !matchesSelection(initialSelection, selection)) {
-      return buildArticleUrl(appSubUrl, articleBase, selection, mode);
+      return buildArticleUrl(articleBase, selection, mode);
     }
     const url = new URL(articleCanonical, window.location.origin);
     url.searchParams.set('view', 'article');
@@ -682,8 +676,9 @@ export function initRepoHistory() {
     switchView(view, {pushState: true});
   }
 
-  // The permanent repository URL is not an "/article/" path, so it cannot be parsed back
-  // into an article state: rebuild it from the state the page was rendered with.
+  // The URL the article was rendered from does not always carry the subject or the archived
+  // flag (permanent repository URL, article URL by repository name), so the state of the
+  // entry page is rebuilt from what the server rendered instead of from the location.
   function stateFromLocation(): HistoryState {
     const canonicalPath = articleCanonical ? new URL(articleCanonical, window.location.origin).pathname : '';
     if (!canonicalPath || canonicalPath !== window.location.pathname) {

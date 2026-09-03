@@ -664,16 +664,16 @@ func (repo *Repository) RepoPath() string {
 
 // Link returns the repository relative url for viewing articles
 // Uses subject name if available, falls back to repository name
-// Archived articles are linked by their permanent repository url, because the
-// subject vanity url resolves to the active repository of that subject. No
-// "?view=article" is appended: the permanent url already renders the article
-// view for a subject repository, and callers use Link as a path prefix.
+// Archived articles are addressed by their repository name instead, because the
+// subject vanity url resolves to the active repository of that subject. Both forms
+// live under the "/article/" namespace so that callers can keep using Link as a
+// path prefix.
 func (repo *Repository) Link() string {
+	ref := repo.GetSubject(context.Background())
 	if repo.IsArchived && repo.SubjectID > 0 {
-		return repo.OperationsLink()
+		ref = repo.Name
 	}
-	subject := repo.GetSubject(context.Background())
-	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(subject)
+	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(ref)
 }
 
 // OperationsLink returns the repository relative url for repository operations
@@ -1046,6 +1046,36 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 	repo.SubjectRelation = subject
 
 	return &repo, nil
+}
+
+// GetArticleRepositoryByOwnerAndRef resolves the reference used in the article url
+// "/article/{owner}/{ref}". The subject name takes priority, keeping the vanity url
+// pointing at the current repository of the subject; when no subject matches, the
+// reference is read as a repository name, which is how archived articles are linked.
+func GetArticleRepositoryByOwnerAndRef(ctx context.Context, ownerName, ref string) (*Repository, error) {
+	repo, err := GetRepositoryByOwnerAndSubject(ctx, ownerName, ref)
+	if err == nil {
+		return repo, nil
+	}
+	if !IsErrRepoNotExist(err) && !IsErrSubjectNotExist(err) {
+		return nil, err
+	}
+
+	byName, nameErr := GetRepositoryByOwnerAndName(ctx, ownerName, ref)
+	if nameErr != nil {
+		if IsErrRepoNotExist(nameErr) {
+			return nil, err
+		}
+		return nil, nameErr
+	}
+	// only subject-bound repositories are reachable under the article namespace
+	if byName.SubjectID == 0 {
+		return nil, err
+	}
+	if loadErr := byName.LoadSubject(ctx); loadErr != nil {
+		return nil, loadErr
+	}
+	return byName, nil
 }
 
 // GetRepositoryByOwnerIDAndSubjectID returns a repository by owner ID and subject ID.

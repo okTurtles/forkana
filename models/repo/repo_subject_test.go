@@ -435,7 +435,7 @@ func TestGetRepositoriesBySubjectIDAndOwners_EmptyOwnerList(t *testing.T) {
 	assert.Empty(t, repos)
 }
 
-func TestRepositoryLinkArchivedUsesPermanentURL(t *testing.T) {
+func TestRepositoryLinkArchivedUsesRepoName(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
@@ -450,7 +450,47 @@ func TestRepositoryLinkArchivedUsesPermanentURL(t *testing.T) {
 	// active articles keep the subject vanity url
 	assert.Equal(t, setting.AppSubURL+"/article/"+repo.OwnerName+"/Link%20Routing%20Subject", repo.Link())
 
-	// archived articles are only reachable through their permanent repository url
+	// archived articles are addressed by their repository name, still under "/article/"
 	repo.IsArchived = true
-	assert.Equal(t, repo.OperationsLink(), repo.Link())
+	assert.Equal(t, setting.AppSubURL+"/article/"+repo.OwnerName+"/"+repo.Name, repo.Link())
+}
+
+func TestGetArticleRepositoryByOwnerAndRef(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Article Ref Subject")
+	assert.NoError(t, err)
+
+	repo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	repo.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id"))
+
+	t.Run("BySubjectName", func(t *testing.T) {
+		found, err := repo_model.GetArticleRepositoryByOwnerAndRef(ctx, repo.OwnerName, "Article Ref Subject")
+		assert.NoError(t, err)
+		assert.Equal(t, repo.ID, found.ID)
+	})
+
+	t.Run("ByRepositoryName", func(t *testing.T) {
+		found, err := repo_model.GetArticleRepositoryByOwnerAndRef(ctx, repo.OwnerName, repo.Name)
+		assert.NoError(t, err)
+		assert.Equal(t, repo.ID, found.ID)
+		assert.NotNil(t, found.SubjectRelation)
+	})
+
+	t.Run("RepositoryWithoutSubject", func(t *testing.T) {
+		other, err := repo_model.GetRepositoryByID(ctx, 2)
+		assert.NoError(t, err)
+		assert.EqualValues(t, 0, other.SubjectID)
+
+		_, err = repo_model.GetArticleRepositoryByOwnerAndRef(ctx, other.OwnerName, other.Name)
+		assert.Error(t, err)
+	})
+
+	t.Run("UnknownRef", func(t *testing.T) {
+		_, err := repo_model.GetArticleRepositoryByOwnerAndRef(ctx, repo.OwnerName, "does-not-exist")
+		assert.Error(t, err)
+	})
 }
