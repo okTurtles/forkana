@@ -435,7 +435,7 @@ func TestGetRepositoriesBySubjectIDAndOwners_EmptyOwnerList(t *testing.T) {
 	assert.Empty(t, repos)
 }
 
-func TestRepositoryLinkArchivedUsesRepoName(t *testing.T) {
+func TestRepositoryLinkArchivedUsesPermanentURL(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
@@ -450,47 +450,44 @@ func TestRepositoryLinkArchivedUsesRepoName(t *testing.T) {
 	// active articles keep the subject vanity url
 	assert.Equal(t, setting.AppSubURL+"/article/"+repo.OwnerName+"/Link%20Routing%20Subject", repo.Link())
 
-	// archived articles are addressed by their repository name, still under "/article/"
+	// archived articles use the permanent repository url, which always resolves to
+	// that exact repository
 	repo.IsArchived = true
-	assert.Equal(t, setting.AppSubURL+"/article/"+repo.OwnerName+"/"+repo.Name, repo.Link())
+	assert.Equal(t, repo.OperationsLink(), repo.Link())
 }
 
-func TestGetArticleRepositoryByOwnerAndRef(t *testing.T) {
+// TestSubjectLookupPrefersActiveRepository documents that the vanity url of a subject
+// keeps pointing at the owner's active article, even when an archived repository of the
+// same owner is named exactly like the subject.
+func TestSubjectLookupPrefersActiveRepository(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
-	subject, err := repo_model.GetOrCreateSubject(ctx, "Article Ref Subject")
+	subject, err := repo_model.GetOrCreateSubject(ctx, "physics")
 	assert.NoError(t, err)
 
-	repo, err := repo_model.GetRepositoryByID(ctx, 1)
+	// the archived repository is named exactly like the subject, which is what
+	// GenerateRepoNameFromSubject produces for a single word subject
+	archived, err := repo_model.GetRepositoryByID(ctx, 1)
 	assert.NoError(t, err)
-	repo.SubjectID = subject.ID
-	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id"))
+	archived.SubjectID = subject.ID
+	archived.Name = "physics"
+	archived.LowerName = "physics"
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, archived, "subject_id", "name", "lower_name"))
+	assert.NoError(t, repo_model.SetArchiveRepoState(ctx, archived, true))
 
-	t.Run("BySubjectName", func(t *testing.T) {
-		found, err := repo_model.GetArticleRepositoryByOwnerAndRef(ctx, repo.OwnerName, "Article Ref Subject")
-		assert.NoError(t, err)
-		assert.Equal(t, repo.ID, found.ID)
-	})
+	active, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, archived.OwnerID, active.OwnerID)
+	active.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, active, "subject_id"))
 
-	t.Run("ByRepositoryName", func(t *testing.T) {
-		found, err := repo_model.GetArticleRepositoryByOwnerAndRef(ctx, repo.OwnerName, repo.Name)
-		assert.NoError(t, err)
-		assert.Equal(t, repo.ID, found.ID)
-		assert.NotNil(t, found.SubjectRelation)
-	})
+	found, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, archived.OwnerName, "physics")
+	assert.NoError(t, err)
+	assert.Equal(t, active.ID, found.ID)
 
-	t.Run("RepositoryWithoutSubject", func(t *testing.T) {
-		other, err := repo_model.GetRepositoryByID(ctx, 2)
-		assert.NoError(t, err)
-		assert.EqualValues(t, 0, other.SubjectID)
-
-		_, err = repo_model.GetArticleRepositoryByOwnerAndRef(ctx, other.OwnerName, other.Name)
-		assert.Error(t, err)
-	})
-
-	t.Run("UnknownRef", func(t *testing.T) {
-		_, err := repo_model.GetArticleRepositoryByOwnerAndRef(ctx, repo.OwnerName, "does-not-exist")
-		assert.Error(t, err)
-	})
+	// the archived article is not addressable through the article namespace at all, so
+	// its link cannot be captured by the active repository of the subject
+	assert.Equal(t, archived.OperationsLink(), archived.Link())
+	assert.NotEqual(t, found.Link(), archived.Link())
 }

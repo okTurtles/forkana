@@ -88,12 +88,13 @@ function buildSubjectUrlWithMode(base: string, view: ViewKey, mode?: string) {
   return url.pathname + url.search;
 }
 
-function buildArticleUrl(articleBase: string, selection: RepoSelection, mode?: string) {
+function buildArticleUrl(appSubUrl: string, articleBase: string, selection: RepoSelection, mode?: string) {
   const owner = encodeURIComponent(selection.owner);
   // The subject vanity url resolves to the active repository of the subject, so an
-  // archived article is addressed by its repository name instead.
-  const ref = selection.archived ? selection.repo : (selection.subject || selection.repo);
-  const path = `${articleBase.replace(/\/+$/, '')}/${owner}/${encodeURIComponent(ref)}`;
+  // archived article is addressed by its permanent repository url instead.
+  const path = selection.archived ?
+    `${appSubUrl.replace(/\/+$/, '')}/${owner}/${encodeURIComponent(selection.repo)}` :
+    `${articleBase.replace(/\/+$/, '')}/${owner}/${encodeURIComponent(selection.subject || selection.repo)}`;
   const url = new URL(path, window.location.origin);
   url.searchParams.set('view', 'article');
   if (mode && mode !== 'read') url.searchParams.set('mode', mode);
@@ -193,7 +194,7 @@ export function initRepoHistory() {
   // between modes never falls back to the vanity URL of another repository of the subject.
   function articleUrlFor(selection: RepoSelection, mode?: string) {
     if (!articleCanonical || !matchesSelection(initialSelection, selection)) {
-      return buildArticleUrl(articleBase, selection, mode);
+      return buildArticleUrl(appSubUrl, articleBase, selection, mode);
     }
     const url = new URL(articleCanonical, window.location.origin);
     url.searchParams.set('view', 'article');

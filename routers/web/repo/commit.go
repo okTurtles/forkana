@@ -476,13 +476,12 @@ func processGitCommits(ctx *context.Context, gitCommits []*git.Commit) ([]*git_m
 // If a "version" query parameter is present, it shows the commit view
 // Otherwise, it shows the article view with read/edit/history modes
 func ArticleView(ctx *context.Context) {
-	// Keep in-page links on the reference the article was requested through: the path
-	// element is either the subject name (vanity) or the repository name (archived).
-	ref := ctx.PathParam("subjectname")
-	if ref == "" {
-		ref = ctx.Repo.Repository.GetSubject(ctx)
+	// Keep in-page links on the subject the article was requested through
+	subject := ctx.PathParam("subjectname")
+	if subject == "" {
+		subject = ctx.Repo.Repository.GetSubject(ctx)
 	}
-	ctx.Data["ArticleLink"] = setting.AppSubURL + "/article/" + url.PathEscape(ctx.Repo.Owner.Name) + "/" + url.PathEscape(ref)
+	ctx.Data["ArticleLink"] = setting.AppSubURL + "/article/" + url.PathEscape(ctx.Repo.Owner.Name) + "/" + url.PathEscape(subject)
 
 	renderArticleView(ctx)
 }
