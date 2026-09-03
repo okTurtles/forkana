@@ -8,6 +8,7 @@ import (
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
+	"code.gitea.io/gitea/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -181,6 +182,61 @@ func TestGetRepositoryByOwnerAndSubject_ReturnsCorrectRepo(t *testing.T) {
 	assert.NotNil(t, foundRepo)
 	assert.Equal(t, repo1.ID, foundRepo.ID)
 	assert.Equal(t, repo1.Owner.Name, foundRepo.OwnerName)
+}
+
+func TestGetRepositoryByOwnerAndSubject_PrefersActiveOverArchived(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Vanity URL Archived Test")
+	assert.NoError(t, err)
+
+	// The archived repository is the more recently updated one, so it would win a
+	// plain "updated_unix DESC" ordering
+	archivedRepo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	err = archivedRepo.LoadOwner(ctx)
+	assert.NoError(t, err)
+	archivedRepo.SubjectID = subject.ID
+	archivedRepo.IsArchived = true
+	archivedRepo.UpdatedUnix = timeutil.TimeStamp(2000)
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, archivedRepo, "subject_id", "is_archived", "updated_unix")
+	assert.NoError(t, err)
+
+	activeRepo, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, archivedRepo.OwnerID, activeRepo.OwnerID, "both repositories must share an owner")
+	activeRepo.SubjectID = subject.ID
+	activeRepo.UpdatedUnix = timeutil.TimeStamp(1000)
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, activeRepo, "subject_id", "updated_unix")
+	assert.NoError(t, err)
+
+	// The vanity URL points at the active article
+	foundRepo, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, archivedRepo.Owner.Name, "Vanity URL Archived Test")
+	assert.NoError(t, err)
+	assert.NotNil(t, foundRepo)
+	assert.Equal(t, activeRepo.ID, foundRepo.ID)
+	assert.False(t, foundRepo.IsArchived)
+
+	// Without an active article, the archived one is served as a fallback
+	activeRepo.SubjectID = 0
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, activeRepo, "subject_id")
+	assert.NoError(t, err)
+
+	foundRepo, err = repo_model.GetRepositoryByOwnerAndSubject(ctx, archivedRepo.Owner.Name, "Vanity URL Archived Test")
+	assert.NoError(t, err)
+	assert.NotNil(t, foundRepo)
+	assert.Equal(t, archivedRepo.ID, foundRepo.ID)
+	assert.True(t, foundRepo.IsArchived)
+
+	// With no repository left for the subject, the lookup fails
+	archivedRepo.SubjectID = 0
+	err = repo_model.UpdateRepositoryColsNoAutoTime(ctx, archivedRepo, "subject_id")
+	assert.NoError(t, err)
+
+	_, err = repo_model.GetRepositoryByOwnerAndSubject(ctx, archivedRepo.Owner.Name, "Vanity URL Archived Test")
+	assert.Error(t, err)
+	assert.True(t, repo_model.IsErrRepoNotExist(err))
 }
 
 func TestGetRepositoryByOwnerIDAndSubjectID_PrefersActiveOverArchived(t *testing.T) {

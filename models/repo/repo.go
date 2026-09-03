@@ -1009,6 +1009,9 @@ func GetSubjectRootRepositoryExcluding(ctx context.Context, subjectID, excludeRe
 
 // GetRepositoryByOwnerAndSubject returns a repository by owner name and subject name.
 // This function returns the specific user's repository (whether it's a root or fork).
+// An owner can hold several repositories for the same subject once older ones are
+// archived, so the most recently updated active one wins; archived ones are only
+// returned when the owner has no active repository left for the subject.
 func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName string) (*Repository, error) {
 	// First, get the subject by name
 	subject, err := GetSubjectByName(ctx, subjectName)
@@ -1022,6 +1025,7 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 		Join("INNER", "`user`", "`user`.id = repository.owner_id").
 		Where("repository.subject_id = ?", subject.ID).
 		And("`user`.lower_name = ?", strings.ToLower(ownerName)).
+		OrderBy("repository.is_archived ASC, repository.updated_unix DESC, repository.id DESC").
 		NoAutoCondition().
 		Get(&repo)
 
