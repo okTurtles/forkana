@@ -133,6 +133,7 @@ export function initRepoHistory() {
   const bubbleUrl = root.getAttribute('data-bubble-url') || buildSubjectUrl(subjectUrl, 'bubble');
   const tableUrl = root.getAttribute('data-table-url') || buildSubjectUrl(subjectUrl, 'table');
   const articleBase = root.getAttribute('data-article-base') || `${appSubUrl}/article`;
+  const articleCanonical = root.getAttribute('data-article-canonical') || '';
 
   const bubbleSection = root.querySelector<HTMLElement>('[data-view="bubble"]');
   const tableSection = root.querySelector<HTMLElement>('[data-view="table"]');
@@ -172,6 +173,19 @@ export function initRepoHistory() {
     } else if (storedSelection) {
       writeStoredSelection(null);
     }
+  }
+
+  // The article may have been served from its permanent repository URL, which resolves to
+  // that exact repository. Keep using it for the initially selected article so navigating
+  // between modes never falls back to the vanity URL of another repository of the subject.
+  function articleUrlFor(selection: RepoSelection, mode?: string) {
+    if (!articleCanonical || !matchesSelection(initialSelection, selection)) {
+      return buildArticleUrl(articleBase, selection, mode);
+    }
+    const url = new URL(articleCanonical, window.location.origin);
+    url.searchParams.set('view', 'article');
+    if (mode && mode !== 'read') url.searchParams.set('mode', mode);
+    return url.pathname + url.search;
   }
 
   const activeView = ref<ViewKey>((initialView as ViewKey) || 'bubble');
@@ -305,7 +319,7 @@ export function initRepoHistory() {
 
     let url: string;
     if (view === 'article' && selection) {
-      url = buildArticleUrl(articleBase, selection, mode);
+      url = articleUrlFor(selection, mode);
     } else if (view === 'table') {
       url = tableUrl;
     } else if (view === 'bubble') {
@@ -523,7 +537,7 @@ export function initRepoHistory() {
     loadError.value = '';
     updateArticleStatus();
     showArticleContent();
-    const url = buildArticleUrl(articleBase, selection, mode);
+    const url = articleUrlFor(selection, mode);
     try {
       const response = await GET(url);
       if (!response.ok) throw new Error(`Failed with status ${response.status}`);
@@ -644,8 +658,25 @@ export function initRepoHistory() {
     switchView(view, {pushState: true});
   }
 
+  // The permanent repository URL is not an "/article/" path, so it cannot be parsed back
+  // into an article state: rebuild it from the state the page was rendered with.
+  function stateFromLocation(): HistoryState {
+    const canonicalPath = articleCanonical ? new URL(articleCanonical, window.location.origin).pathname : '';
+    if (!canonicalPath || canonicalPath !== window.location.pathname) {
+      return parseLocation(appSubUrl);
+    }
+    const params = new URL(window.location.href).searchParams;
+    return {
+      view: (params.get('view') as ViewKey) || (initialView as ViewKey) || 'bubble',
+      mode: params.get('mode') || initialMode || 'read',
+      owner: initialSelection?.owner ?? null,
+      subject: initialSelection?.subject ?? null,
+      repo: initialSelection?.repo ?? null,
+    };
+  }
+
   function handlePopState(event: PopStateEvent) {
-    const state = (event.state as HistoryState) || parseLocation(appSubUrl);
+    const state = (event.state as HistoryState) || stateFromLocation();
     const sel = state.owner && (state.repo || state.subject) ?
       {owner: state.owner, repo: state.repo || state.subject, subject: state.subject ?? state.repo ?? null} :
       null;

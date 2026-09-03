@@ -481,6 +481,13 @@ func ArticleView(ctx *context.Context) {
 	articleLink := setting.AppSubURL + "/article/" + url.PathEscape(ctx.Repo.Owner.Name) + "/" + url.PathEscape(subject)
 	ctx.Data["ArticleLink"] = articleLink
 
+	renderArticleView(ctx)
+}
+
+// renderArticleView renders the article view for the repository held by the context.
+// Callers must set "ArticleLink" beforehand so that in-page links stay on the route
+// the article was requested through (vanity subject URL or permanent repository URL).
+func renderArticleView(ctx *context.Context) {
 	// Check if version parameter is present
 	commitHash := ctx.FormString("version")
 	if commitHash != "" {

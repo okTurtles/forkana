@@ -566,6 +566,12 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	ctx.Data["IsArticleModeSettings"] = mode == "settings"
 	ctx.Data["ReadmeRequested"] = true
 
+	// Article routes set "ArticleLink" to the route the article was requested through;
+	// other entry points (subject page) fall back to the vanity article URL.
+	if _, ok := ctx.Data["ArticleLink"]; !ok {
+		ctx.Data["ArticleLink"] = ctx.Repo.Repository.Link()
+	}
+
 	// The Settings tab is only rendered for the article owner, so ownership must be
 	// known in every mode (edit mode refines this via prepareArticleForkOnEditData).
 	isRepoOwner := ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
