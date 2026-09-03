@@ -818,7 +818,8 @@ func articleSettingsURL(ctx *context.Context) string {
 }
 
 // ArticleTransferCandidates searches the users the current article can be transferred
-// to, excluding its owner and everyone who already owns an article on the same subject.
+// to, excluding its owner and everyone who already owns an active article on the same
+// subject: an archived article is read-only and does not occupy the subject slot.
 func ArticleTransferCandidates(ctx *context.Context) {
 	repo := ctx.Repo.Repository
 	users, _, err := user_model.SearchUsers(ctx, user_model.SearchUserOptions{
@@ -906,11 +907,13 @@ func handleArticleSettingsPostTransfer(ctx *context.Context) {
 
 	// The candidate search already hides these users, but the rule has to hold for a
 	// crafted request and for a recipient who acquired an article on this subject in
-	// the meantime. The transfer itself only guards against a repository name clash.
+	// the meantime. Archived articles do not occupy the recipient's slot for the
+	// subject, so only an active one blocks the transfer; a name clash with an
+	// archived article is still caught by the ErrRepoAlreadyExist case below.
 	if repo.SubjectID > 0 {
-		existing, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, newOwner.ID, repo.SubjectID)
+		existing, err := repo_model.GetActiveRepositoryByOwnerIDAndSubjectID(ctx, newOwner.ID, repo.SubjectID)
 		if err != nil {
-			ctx.ServerError("GetRepositoryByOwnerIDAndSubjectID", err)
+			ctx.ServerError("GetActiveRepositoryByOwnerIDAndSubjectID", err)
 			return
 		}
 		if existing != nil {

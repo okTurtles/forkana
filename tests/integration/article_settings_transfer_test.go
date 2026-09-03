@@ -183,6 +183,37 @@ func TestArticleSettingsTransferRecipientHasArticleOnSubject(t *testing.T) {
 	unittest.AssertNotExistsBean(t, &repo_model.RepoTransfer{RepoID: repo.ID})
 }
 
+func TestArticleSettingsTransferRecipientHasArchivedArticleOnSubject(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	recipient := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+	// an archived article is read-only and does not occupy the recipient's slot for
+	// the subject, so it must not block the transfer
+	sameSubject := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: recipient.ID})
+	require.NotEqual(t, repo.Name, sameSubject.Name, "a name clash would be rejected on its own")
+	sameSubject.SubjectID = repo.SubjectID
+	_, err := db.GetEngine(t.Context()).ID(sameSubject.ID).Cols("subject_id").Update(sameSubject)
+	require.NoError(t, err)
+	require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), sameSubject, true))
+
+	session := loginUser(t, owner.Name)
+	articleSettingsURL := fmt.Sprintf("/article/%s/%s?view=article&mode=settings", owner.Name, subjectName)
+	req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name),
+		transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name))
+	resp := session.MakeRequest(t, req, http.StatusSeeOther)
+	assert.Equal(t, articleSettingsURL, test.RedirectURL(resp))
+
+	flash := NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, "GET", articleSettingsURL), http.StatusOK).Body).Find(".flash-message")
+	require.Equal(t, 1, flash.Length())
+	assert.Contains(t, flash.Text(), "awaits confirmation from "+recipient.DisplayName())
+
+	pending := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
+	assert.Equal(t, repo_model.RepositoryPendingTransfer, pending.Status)
+	unittest.AssertExistsAndLoadBean(t, &repo_model.RepoTransfer{RepoID: repo.ID, RecipientID: recipient.ID})
+}
+
 func TestArticleSettingsTransferCandidates(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -238,6 +269,20 @@ func TestArticleSettingsTransferCandidates(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotContains(t, search(t, other.Name), other.Name)
+	})
+
+	t.Run("IncludesOwnersOfArchivedArticleOnSameSubject", func(t *testing.T) {
+		other := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+		sameSubject := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: other.ID})
+		sameSubject.SubjectID = repo.SubjectID
+		_, err := db.GetEngine(t.Context()).ID(sameSubject.ID).Cols("subject_id").Update(sameSubject)
+		require.NoError(t, err)
+		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), sameSubject, true))
+		t.Cleanup(func() {
+			_ = repo_model.SetArchiveRepoState(t.Context(), sameSubject, false)
+		})
+
+		assert.Contains(t, search(t, other.Name), other.Name)
 	})
 
 	t.Run("Unauthorized", func(t *testing.T) {

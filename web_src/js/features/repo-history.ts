@@ -11,6 +11,7 @@ type RepoSelection = {
   owner: string;
   repo: string;
   subject?: string | null;
+  archived?: boolean;
 };
 
 type HistoryState = {
@@ -19,23 +20,26 @@ type HistoryState = {
   owner?: string | null;
   subject?: string | null;
   repo?: string | null;
+  archived?: boolean;
 };
 
 const LS_OWNER_KEY = 'selectedArticleOwner';
 const LS_SUBJECT_KEY = 'selectedArticleSubject';
 const LS_REPO_KEY = 'selectedArticleRepo';
+const LS_ARCHIVED_KEY = 'selectedArticleArchived';
 
 function readStoredSelection(): RepoSelection | null {
   try {
     const owner = window.localStorage.getItem(LS_OWNER_KEY);
     const repo = window.localStorage.getItem(LS_REPO_KEY);
     const subject = window.localStorage.getItem(LS_SUBJECT_KEY);
+    const archived = window.localStorage.getItem(LS_ARCHIVED_KEY) === 'true';
     if (!owner) return null;
     if (repo) {
-      return {owner, repo, subject: subject || null};
+      return {owner, repo, subject: subject || null, archived};
     }
     if (!subject) return null;
-    return {owner, repo: subject, subject};
+    return {owner, repo: subject, subject, archived};
   } catch {
     return null;
   }
@@ -47,6 +51,7 @@ function writeStoredSelection(selection: RepoSelection | null) {
       window.localStorage.removeItem(LS_OWNER_KEY);
       window.localStorage.removeItem(LS_SUBJECT_KEY);
       window.localStorage.removeItem(LS_REPO_KEY);
+      window.localStorage.removeItem(LS_ARCHIVED_KEY);
       return;
     }
     window.localStorage.setItem(LS_OWNER_KEY, selection.owner);
@@ -56,6 +61,11 @@ function writeStoredSelection(selection: RepoSelection | null) {
       window.localStorage.removeItem(LS_SUBJECT_KEY);
     }
     window.localStorage.setItem(LS_REPO_KEY, selection.repo);
+    if (selection.archived) {
+      window.localStorage.setItem(LS_ARCHIVED_KEY, 'true');
+    } else {
+      window.localStorage.removeItem(LS_ARCHIVED_KEY);
+    }
   } catch {
     // ignore storage errors
   }
@@ -78,12 +88,14 @@ function buildSubjectUrlWithMode(base: string, view: ViewKey, mode?: string) {
   return url.pathname + url.search;
 }
 
-function buildArticleUrl(articleBase: string, selection: RepoSelection, mode?: string) {
-  const base = articleBase.replace(/\/+$/, '');
+function buildArticleUrl(appSubUrl: string, articleBase: string, selection: RepoSelection, mode?: string) {
   const owner = encodeURIComponent(selection.owner);
-  // Use subject for the URL path (subject is what identifies the article)
-  const subject = encodeURIComponent(selection.subject || selection.repo);
-  const url = new URL(`${base}/${owner}/${subject}`, window.location.origin);
+  // The subject vanity url resolves to the active repository of the subject, so an
+  // archived article is addressed by its permanent repository url instead.
+  const path = selection.archived ?
+    `${appSubUrl.replace(/\/+$/, '')}/${owner}/${encodeURIComponent(selection.repo)}` :
+    `${articleBase.replace(/\/+$/, '')}/${owner}/${encodeURIComponent(selection.subject || selection.repo)}`;
+  const url = new URL(path, window.location.origin);
   url.searchParams.set('view', 'article');
   if (mode && mode !== 'read') url.searchParams.set('mode', mode);
   return url.pathname + url.search;
@@ -133,6 +145,7 @@ export function initRepoHistory() {
   const bubbleUrl = root.getAttribute('data-bubble-url') || buildSubjectUrl(subjectUrl, 'bubble');
   const tableUrl = root.getAttribute('data-table-url') || buildSubjectUrl(subjectUrl, 'table');
   const articleBase = root.getAttribute('data-article-base') || `${appSubUrl}/article`;
+  const articleCanonical = root.getAttribute('data-article-canonical') || '';
 
   const bubbleSection = root.querySelector<HTMLElement>('[data-view="bubble"]');
   const tableSection = root.querySelector<HTMLElement>('[data-view="table"]');
@@ -147,6 +160,7 @@ export function initRepoHistory() {
   const initialRepo = root.getAttribute('data-initial-repo');
   const initialSubject = root.getAttribute('data-initial-subject');
   const initialMode = root.getAttribute('data-initial-mode');
+  const initialArchived = root.getAttribute('data-initial-archived') === 'true';
 
   // Read stored selection and validate it matches the current page's subject
   const storedSelection = readStoredSelection();
@@ -160,6 +174,7 @@ export function initRepoHistory() {
       owner: initialOwner,
       repo: initialRepo || initialSubject,
       subject: initialSubject,
+      archived: initialArchived,
     };
     if (!matchesSelection(storedSelection, initialSelection)) {
       writeStoredSelection(initialSelection);
@@ -172,6 +187,19 @@ export function initRepoHistory() {
     } else if (storedSelection) {
       writeStoredSelection(null);
     }
+  }
+
+  // The article may have been served from its permanent repository URL, which resolves to
+  // that exact repository. Keep using it for the initially selected article so navigating
+  // between modes never falls back to the vanity URL of another repository of the subject.
+  function articleUrlFor(selection: RepoSelection, mode?: string) {
+    if (!articleCanonical || !matchesSelection(initialSelection, selection)) {
+      return buildArticleUrl(appSubUrl, articleBase, selection, mode);
+    }
+    const url = new URL(articleCanonical, window.location.origin);
+    url.searchParams.set('view', 'article');
+    if (mode && mode !== 'read') url.searchParams.set('mode', mode);
+    return url.pathname + url.search;
   }
 
   const activeView = ref<ViewKey>((initialView as ViewKey) || 'bubble');
@@ -301,11 +329,12 @@ export function initRepoHistory() {
       owner: selection?.owner ?? null,
       subject: selection?.subject ?? null,
       repo: selection?.repo ?? null,
+      archived: selection?.archived === true,
     };
 
     let url: string;
     if (view === 'article' && selection) {
-      url = buildArticleUrl(articleBase, selection, mode);
+      url = articleUrlFor(selection, mode);
     } else if (view === 'table') {
       url = tableUrl;
     } else if (view === 'bubble') {
@@ -358,6 +387,7 @@ export function initRepoHistory() {
       owner: selection.owner,
       repo,
       subject: selection.subject ?? selection.repo ?? null,
+      archived: selection.archived === true,
     };
   }
 
@@ -449,10 +479,11 @@ export function initRepoHistory() {
         const owner = btn.getAttribute('data-owner') || '';
         const subject = btn.getAttribute('data-subject') || '';
         const repo = btn.getAttribute('data-repo') || subject;
+        const archived = btn.getAttribute('data-archived') === 'true';
         if (!owner || !repo) return;
         event.preventDefault();
         switchView('article', {
-          selection: {owner, subject, repo},
+          selection: {owner, subject, repo, archived},
           mode: 'read',
           pushState: true,
         });
@@ -466,9 +497,10 @@ export function initRepoHistory() {
       const owner = row.getAttribute('data-owner') || '';
       const subject = row.getAttribute('data-subject') || '';
       const repo = row.getAttribute('data-repo') || subject;
+      const archived = row.getAttribute('data-archived') === 'true';
       if (!owner || !repo) return;
       switchView('article', {
-        selection: {owner, subject, repo},
+        selection: {owner, subject, repo, archived},
         mode: 'read',
         pushState: true,
       });
@@ -482,13 +514,14 @@ export function initRepoHistory() {
       const owner = row.getAttribute('data-owner') || '';
       const subject = row.getAttribute('data-subject') || '';
       const repo = row.getAttribute('data-repo') || subject;
+      const archived = row.getAttribute('data-archived') === 'true';
       if (!owner || !repo) return;
       if (target.checked) {
         for (const checkbox of table.querySelectorAll<HTMLInputElement>('tbody .row-check')) {
           if (checkbox !== target) checkbox.checked = false;
         }
-        persistSelection({owner, subject, repo});
-      } else if (matchesSelection(selectedRepo.value, {owner, subject, repo})) {
+        persistSelection({owner, subject, repo, archived});
+      } else if (matchesSelection(selectedRepo.value, {owner, subject, repo, archived})) {
         persistSelection(null);
       }
     });
@@ -523,7 +556,7 @@ export function initRepoHistory() {
     loadError.value = '';
     updateArticleStatus();
     showArticleContent();
-    const url = buildArticleUrl(articleBase, selection, mode);
+    const url = articleUrlFor(selection, mode);
     try {
       const response = await GET(url);
       if (!response.ok) throw new Error(`Failed with status ${response.status}`);
@@ -644,10 +677,34 @@ export function initRepoHistory() {
     switchView(view, {pushState: true});
   }
 
+  // The URL the article was rendered from does not always carry the subject or the archived
+  // flag (permanent repository URL, article URL by repository name), so the state of the
+  // entry page is rebuilt from what the server rendered instead of from the location.
+  function stateFromLocation(): HistoryState {
+    const canonicalPath = articleCanonical ? new URL(articleCanonical, window.location.origin).pathname : '';
+    if (!canonicalPath || canonicalPath !== window.location.pathname) {
+      return parseLocation(appSubUrl);
+    }
+    const params = new URL(window.location.href).searchParams;
+    return {
+      view: (params.get('view') as ViewKey) || (initialView as ViewKey) || 'bubble',
+      mode: params.get('mode') || initialMode || 'read',
+      owner: initialSelection?.owner ?? null,
+      subject: initialSelection?.subject ?? null,
+      repo: initialSelection?.repo ?? null,
+      archived: initialSelection?.archived === true,
+    };
+  }
+
   function handlePopState(event: PopStateEvent) {
-    const state = (event.state as HistoryState) || parseLocation(appSubUrl);
+    const state = (event.state as HistoryState) || stateFromLocation();
     const sel = state.owner && (state.repo || state.subject) ?
-      {owner: state.owner, repo: state.repo || state.subject, subject: state.subject ?? state.repo ?? null} :
+      {
+        owner: state.owner,
+        repo: state.repo || state.subject,
+        subject: state.subject ?? state.repo ?? null,
+        archived: state.archived === true,
+      } :
       null;
     if (!matchesSelection(selectedRepo.value, sel)) {
       persistSelection(sel);
@@ -688,6 +745,7 @@ export function initRepoHistory() {
     owner: selectedRepo.value?.owner ?? null,
     subject: selectedRepo.value?.subject ?? null,
     repo: selectedRepo.value?.repo ?? null,
+    archived: selectedRepo.value?.archived === true,
   };
   window.history.replaceState(initialState, '', window.location.pathname + window.location.search);
 

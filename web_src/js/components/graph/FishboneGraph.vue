@@ -67,6 +67,9 @@ type Node = {
      (api.Repository.Description), so no server-side change was needed. */
   description?: string;
   isEmpty?: boolean;
+  /* Archived articles are opened through their permanent repository url, because
+     the subject vanity url resolves to the active repository of that subject. */
+  isArchived?: boolean;
   /* The API answered 0 contributors for a repository that HAS content, which
      means the stats are still being generated server-side, not that nobody
      wrote it (see buildGraphFromApi). `contributors` carries a placeholder 1
@@ -76,11 +79,12 @@ type Node = {
 };
 type Graph = Record<string, Node>;
 
-type RepoSelectionDetail = { owner: string; repo: string; subject?: string | null };
+type RepoSelectionDetail = { owner: string; repo: string; subject?: string | null; archived?: boolean };
 
 const LS_OWNER_KEY = 'selectedArticleOwner';
 const LS_SUBJECT_KEY = 'selectedArticleSubject';
 const LS_REPO_KEY = 'selectedArticleRepo';
+const LS_ARCHIVED_KEY = 'selectedArticleArchived';
 
 /* ──────────────────────────────────────────────────────────────────────────────
    LAYOUT CONSTANTS (all values explained to avoid "magic numbers")
@@ -405,12 +409,13 @@ function readStoredSelection(): RepoSelectionDetail | null {
     const owner = window.localStorage.getItem(LS_OWNER_KEY);
     const repo = window.localStorage.getItem(LS_REPO_KEY);
     const subject = window.localStorage.getItem(LS_SUBJECT_KEY);
+    const archived = window.localStorage.getItem(LS_ARCHIVED_KEY) === 'true';
     if (!owner) return null;
     if (repo) {
-      return { owner, repo, subject: subject || null };
+      return { owner, repo, subject: subject || null, archived };
     }
     if (!subject) return null;
-    return { owner, repo: subject, subject };
+    return { owner, repo: subject, subject, archived };
   } catch {
     return null;
   }
@@ -439,7 +444,7 @@ function getSelectionDetailFromNode(n: Node): RepoSelectionDetail | null {
   const repo = repoCandidates[0] || subjectCandidates[0];
   if (!owner || !repo) return null;
   const subject = subjectCandidates[0] || null;
-  return { owner, repo, subject };
+  return { owner, repo, subject, archived: n.isArchived === true };
 }
 
 function normalizeDetail(detail: RepoSelectionDetail | null): RepoSelectionDetail | null {
@@ -450,6 +455,7 @@ function normalizeDetail(detail: RepoSelectionDetail | null): RepoSelectionDetai
     owner: detail.owner,
     repo,
     subject: detail.subject ?? detail.repo ?? null,
+    archived: detail.archived === true,
   };
 }
 
@@ -661,6 +667,7 @@ function buildGraphFromApi(root: any): Graph {
       repo?.subject ?? repo?.subject_slug ?? repo?.subject_name ?? repoName ?? null;
     const fullName: string | null = repo?.full_name ?? (ownerName && repoName ? `${ownerName}/${repoName}` : null);
     const isEmpty: boolean = repo?.empty === true;
+    const isArchived: boolean = repo?.archived === true;
     const description: string = typeof repo?.description === 'string' ? repo.description : '';
 
     /* A repository with content has at least one commit and therefore at least
@@ -687,6 +694,7 @@ function buildGraphFromApi(root: any): Graph {
       fullName: fullName ?? undefined,
       description: description || undefined,
       isEmpty: isEmpty,
+      isArchived,
       statsPending,
     };
     if (!node.repoSubject && parentId === null && props.subject) {
@@ -1553,6 +1561,7 @@ function persistSelectionDetail(detail: RepoSelectionDetail | null) {
       window.localStorage.removeItem(LS_OWNER_KEY);
       window.localStorage.removeItem(LS_SUBJECT_KEY);
       window.localStorage.removeItem(LS_REPO_KEY);
+      window.localStorage.removeItem(LS_ARCHIVED_KEY);
     } else {
       window.localStorage.setItem(LS_OWNER_KEY, detail.owner);
       if (detail.subject) {
@@ -1561,6 +1570,11 @@ function persistSelectionDetail(detail: RepoSelectionDetail | null) {
         window.localStorage.removeItem(LS_SUBJECT_KEY);
       }
       window.localStorage.setItem(LS_REPO_KEY, detail.repo);
+      if (detail.archived) {
+        window.localStorage.setItem(LS_ARCHIVED_KEY, 'true');
+      } else {
+        window.localStorage.removeItem(LS_ARCHIVED_KEY);
+      }
     }
   } catch {
     // ignore storage quotas

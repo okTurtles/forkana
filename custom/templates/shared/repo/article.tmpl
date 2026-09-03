@@ -39,28 +39,31 @@
                     </span>
                 {{end}}
             </div>
+            {{/* ArticleLink points at the route the article was requested through, so the
+                 tabs keep the reader on the vanity URL or the permanent repository URL. */}}
+            {{$articleLink := or .ArticleLink (printf "%s/article/%s/%s" AppSubUrl (PathEscape .Repository.Owner.Name) (PathEscapeSegments (.Repository.GetSubject ctx)))}}
             <div class="tw-flex tw-items-center tw-gap-4" id="article-tabs">
                 <div class="ui top attached tabular menu tw-my-10 tw-gap-1">
                     <a class="{{if .IsArticleModeRead}}active {{end}}item"
-                        href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (.Repository.GetSubject ctx)) "view" "article" "mode" "read"}}"
+                        href="{{QueryBuild $articleLink "view" "article" "mode" "read"}}"
                         data-article-tab="read">
                         {{svg "octicon-book" 16}} Read
                     </a>
                     {{if not .Repository.IsArchived}}
                         <a class="{{if .IsArticleModeEdit}}active {{end}}item"
-                            href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (.Repository.GetSubject ctx)) "view" "article" "mode" "edit"}}"
+                            href="{{QueryBuild $articleLink "view" "article" "mode" "edit"}}"
                             data-article-tab="edit">
                             {{svg "octicon-pencil" 16}} Edit
                         </a>
                     {{end}}
                     <a class="{{if .IsArticleModeHistory}}active {{end}}item"
-                        href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (.Repository.GetSubject ctx)) "view" "article" "mode" "history"}}"
+                        href="{{QueryBuild $articleLink "view" "article" "mode" "history"}}"
                         data-article-tab="history">
                         {{svg "octicon-history" 16}} History
                     </a>
                     {{if .IsRepoOwner}}
                         <a class="{{if .IsArticleModeSettings}}active {{end}}item"
-                            href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (.Repository.GetSubject ctx)) "view" "article" "mode" "settings"}}"
+                            href="{{QueryBuild $articleLink "view" "article" "mode" "settings"}}"
                             data-article-tab="settings">
                             {{svg "octicon-gear" 16}} {{ctx.Locale.Tr "repo.settings"}}
                         </a>
@@ -93,9 +96,16 @@
                                             </a>
                                         {{else if .HasExistingFork}}
                                             {{/* User has an existing fork of this repo - show both options */}}
-                                            <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="ui secondary button">
-                                                {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
-                                            </a>
+                                            {{if .ExistingForkArchived}}
+                                                {{/* An archived fork is read-only, so editing it is refused: only a change request is possible */}}
+                                                <span class="ui secondary button disabled" data-tooltip-content="{{ctx.Locale.Tr "repo.editor.existing_fork_archived"}}">
+                                                    {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
+                                                </span>
+                                            {{else}}
+                                                <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="ui secondary button">
+                                                    {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
+                                                </a>
+                                            {{end}}
                                             {{if .CanSubmitChangeRequest}}
                                             <button type="button" id="pre-submit-changes-button" class="ui primary button"
                                                 data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">

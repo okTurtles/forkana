@@ -23,8 +23,10 @@ func RequireRepoAdmin() func(ctx *Context) {
 }
 
 // CanWriteToBranch checks if the user is allowed to write to the branch of the repo
-// If the request has fork_and_edit=true or submit_change_request=true in the form data,
+// If the request has a truthy fork_and_edit or submit_change_request in the form data,
 // the check is skipped because the handler will create a fork/branch and commit to that instead.
+// Both flags are read with FormBool so that this gate and the editor handler, which uses
+// ctx.FormBool as well, always agree on whether the workflow is active.
 //
 // Workflow support by action:
 //   - fork_and_edit: supports both _edit and _new (creates a personal fork)
@@ -42,7 +44,7 @@ func CanWriteToBranch() func(ctx *Context) {
 
 		// Allow fork-and-edit workflow to bypass write permission check for _edit and _new
 		// The handler will create a personal fork and commit to that instead
-		if ctx.Req.FormValue("fork_and_edit") == "true" {
+		if ctx.FormBool("fork_and_edit") {
 			if editorAction == "_edit" || editorAction == "_new" {
 				return
 			}
@@ -51,7 +53,7 @@ func CanWriteToBranch() func(ctx *Context) {
 		// Allow submit-change-request workflow to bypass write permission check for _edit only
 		// This workflow creates an in-repo branch and PR to propose changes to existing articles
 		// It does NOT support _new - creating new files should be done in the user's own repository
-		if ctx.Req.FormValue("submit_change_request") == "true" {
+		if ctx.FormBool("submit_change_request") {
 			if editorAction == "_edit" {
 				return
 			}

@@ -60,7 +60,7 @@ func TestForkAndEditPermissions(t *testing.T) {
 }
 
 // TestForkAndEditMiddlewareBypass tests that the CanWriteToBranch middleware
-// correctly bypasses permission checks when fork_and_edit=true is set.
+// correctly bypasses permission checks when fork_and_edit is truthy.
 func TestForkAndEditMiddlewareBypass(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -119,6 +119,30 @@ func TestForkAndEditMiddlewareBypass(t *testing.T) {
 		// It may be 200 (success) or 400 (git operation failed) but not 404
 		assert.NotEqual(t, http.StatusNotFound, resp.Code,
 			"fork_and_edit=true should bypass CanWriteToBranch middleware")
+	})
+
+	// The editor handler reads the flag with ctx.FormBool, so the middleware has to
+	// accept the same set of truthy values, otherwise the two gates disagree.
+	t.Run("NonOwnerWithForkAndEditAlternateTruthyValuePassesMiddleware", func(t *testing.T) {
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL)
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		form := map[string]string{
+			"_csrf":         htmlDoc.GetCSRF(),
+			"last_commit":   htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":     "README.md",
+			"content":       "Test content with fork_and_edit=1",
+			"commit_choice": "direct",
+			"fork_and_edit": "1",
+		}
+
+		req = NewRequestWithValues(t, "POST", editURL, form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		assert.NotEqual(t, http.StatusNotFound, resp.Code,
+			"fork_and_edit=1 should bypass CanWriteToBranch middleware like fork_and_edit=true")
 	})
 }
 
@@ -230,6 +254,59 @@ func TestForkAndEditBlockedBySubject(t *testing.T) {
 		assert.True(t, perms.HasExistingFork || perms.BlockedBySubject,
 			"User should either have existing fork or be blocked by subject ownership")
 	})
+}
+
+// TestForkAndEditArchivedFork tests that fork-and-edit refuses to commit into an
+// existing fork that has been archived, since archived articles are read-only.
+func TestForkAndEditArchivedFork(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	contributor := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+	// The contributor's fork of the article is the target fork-and-edit would commit to
+	fork, err := repo_service.ForkRepository(t.Context(), contributor, contributor, repo_service.ForkRepoOptions{
+		BaseRepo:     repo,
+		Name:         "repo1-archived-fork",
+		SingleBranch: repo.DefaultBranch,
+	})
+	require.NoError(t, err)
+	defer func() {
+		_ = repo_service.DeleteRepositoryDirectly(t.Context(), fork.ID)
+	}()
+
+	// The editor page is loaded while the fork is still active: once it is archived the
+	// page itself is refused, so only a stale or crafted POST can reach the commit path
+	session := loginUser(t, contributor.Name)
+	editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+	req := NewRequest(t, "GET", editURL)
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	htmlDoc := NewHTMLParser(t, resp.Body)
+
+	require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), fork, true))
+
+	// The editor page is refused once the fork is archived, so the edit is never written
+	req = NewRequest(t, "GET", editURL).SetHeader("Accept", "text/html")
+	resp = session.MakeRequest(t, req, http.StatusNotFound)
+	assert.Contains(t, resp.Body.String(), "archived")
+
+	form := map[string]string{
+		"_csrf":         htmlDoc.GetCSRF(),
+		"last_commit":   htmlDoc.GetInputValueByName("last_commit"),
+		"tree_path":     "README.md",
+		"content":       "Content that must not reach the archived fork",
+		"commit_choice": "direct",
+		"fork_and_edit": "true",
+	}
+
+	req = NewRequestWithValues(t, "POST", editURL, form)
+	resp = session.MakeRequest(t, req, http.StatusBadRequest)
+	assert.Contains(t, resp.Body.String(), "archived")
+
+	// The archived fork must be left untouched
+	unchanged := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: fork.ID})
+	assert.True(t, unchanged.IsArchived)
 }
 
 // TestForkAndEditFormActionURL tests that the form action URL is correct

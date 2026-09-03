@@ -664,9 +664,13 @@ func (repo *Repository) RepoPath() string {
 
 // Link returns the repository relative url for viewing articles
 // Uses subject name if available, falls back to repository name
+// Archived articles use the permanent repository url instead, because the subject
+// vanity url resolves to the active repository of that subject.
 func (repo *Repository) Link() string {
-	subject := repo.GetSubject(context.Background())
-	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(subject)
+	if repo.IsArchived && repo.SubjectID > 0 {
+		return repo.OperationsLink()
+	}
+	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(repo.GetSubject(context.Background()))
 }
 
 // OperationsLink returns the repository relative url for repository operations
@@ -1009,6 +1013,9 @@ func GetSubjectRootRepositoryExcluding(ctx context.Context, subjectID, excludeRe
 
 // GetRepositoryByOwnerAndSubject returns a repository by owner name and subject name.
 // This function returns the specific user's repository (whether it's a root or fork).
+// An owner can hold several repositories for the same subject once older ones are
+// archived, so the most recently updated active one wins; archived ones are only
+// returned when the owner has no active repository left for the subject.
 func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName string) (*Repository, error) {
 	// First, get the subject by name
 	subject, err := GetSubjectByName(ctx, subjectName)
@@ -1022,6 +1029,7 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 		Join("INNER", "`user`", "`user`.id = repository.owner_id").
 		Where("repository.subject_id = ?", subject.ID).
 		And("`user`.lower_name = ?", strings.ToLower(ownerName)).
+		OrderBy("repository.is_archived ASC, repository.updated_unix DESC, repository.id DESC").
 		NoAutoCondition().
 		Get(&repo)
 
@@ -1039,11 +1047,35 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 
 // GetRepositoryByOwnerIDAndSubjectID returns a repository by owner ID and subject ID.
 // Returns nil if no such repository exists (without error).
+// An owner can end up with several repositories for the same subject once older
+// ones are archived, so active repositories are preferred over archived ones.
 func GetRepositoryByOwnerIDAndSubjectID(ctx context.Context, ownerID, subjectID int64) (*Repository, error) {
 	var repo Repository
 	has, err := db.GetEngine(ctx).
 		Where("owner_id = ?", ownerID).
 		And("subject_id = ?", subjectID).
+		OrderBy("is_archived ASC, id ASC").
+		Get(&repo)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, nil
+	}
+	return &repo, nil
+}
+
+// GetActiveRepositoryByOwnerIDAndSubjectID returns the owner's active (non-archived)
+// repository for the given subject ID. Returns nil if the owner has none, including
+// when all of their repositories for the subject are archived: an archived article is
+// read-only and does not occupy the owner's slot for the subject.
+func GetActiveRepositoryByOwnerIDAndSubjectID(ctx context.Context, ownerID, subjectID int64) (*Repository, error) {
+	var repo Repository
+	has, err := db.GetEngine(ctx).
+		Where("owner_id = ?", ownerID).
+		And("subject_id = ?", subjectID).
+		And("is_archived = ?", false).
+		OrderBy("id ASC").
 		Get(&repo)
 	if err != nil {
 		return nil, err

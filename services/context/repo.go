@@ -1173,7 +1173,9 @@ func RepoAssignmentBySubject(ctx *Context) {
 }
 
 // RepoAssignmentByOwnerAndSubject assigns repository context by owner name and subject name
-// This is used for routes like /article/{username}/{subjectname} that display a specific user's repository
+// This is used for routes like /article/{username}/{subjectname} that display a specific user's repository.
+// Archived articles are not addressable here, they are served from their permanent
+// repository url "/{username}/{reponame}".
 func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	userName := ctx.PathParam("username")
 	subjectName := ctx.PathParam("subjectname")
