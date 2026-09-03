@@ -14,26 +14,29 @@ function fencedMermaid(source: string): string {
   return `\`\`\`mermaid\n${source}\n\`\`\``;
 }
 
-async function setTextareaValue(page: Page, selector: string, value: string): Promise<void> {
-  await page.locator(selector).evaluate((el, text) => {
-    const textarea = el as HTMLTextAreaElement;
-    textarea.value = text;
-    textarea.dispatchEvent(new Event('input', {bubbles: true}));
-    textarea.dispatchEvent(new Event('change', {bubbles: true}));
-  }, value);
-}
-
-// Issue and comment forms use the Toast editor, which hides the underlying textarea, so the
-// content has to go through the editor instance instead of being typed into the textarea.
+// Every editor in the app (issue, comment, article) hides its textarea and owns the content,
+// so the value has to go through the editor instance: writing to the textarea directly is
+// overwritten by the lossless tracker's syncTextarea() on the next editor event, and the
+// editor is what the submit paths read. Comment forms expose the ToastCommentEditor wrapper
+// (`.value()`), the repo/article editor exposes the Toast editor itself (`setMarkdown()`);
+// both go through the lossless layer and sync the textarea the same way a user edit does.
 async function setToastEditorValue(page: Page, selector: string, value: string): Promise<void> {
   const container = page.locator(selector);
   await expect(container.locator('.toastui-editor-defaultUI')).toBeVisible({timeout: 20000});
   await container.evaluate((el, text) => {
-    type ToastEditorContainer = HTMLElement & {_giteaToastCommentEditor?: {value: (v?: string) => string}};
-    const editor = (el as ToastEditorContainer)._giteaToastCommentEditor;
-    if (!editor) throw new Error('Toast editor is not initialized');
-    editor.value(text);
-    el.dispatchEvent(new CustomEvent('ce-editor-content-changed'));
+    type ToastEditorContainer = HTMLElement & {
+      _giteaToastCommentEditor?: {value: (v?: string) => string};
+      _giteaToastEditor?: {setMarkdown: (markdown: string) => void};
+    };
+    const {_giteaToastCommentEditor: commentEditor, _giteaToastEditor: editor} = el as ToastEditorContainer;
+    if (commentEditor) {
+      commentEditor.value(text);
+      el.dispatchEvent(new CustomEvent('ce-editor-content-changed'));
+    } else if (editor) {
+      editor.setMarkdown(text);
+    } else {
+      throw new Error('Toast editor is not initialized');
+    }
   }, value);
 }
 
@@ -122,7 +125,10 @@ test.describe('Mermaid rendering', () => {
       repoName = getRepoNameFromCurrentURL(page, 'user2');
       await disableGeneratedHooks('user2', repoName);
 
-      await setTextareaValue(page, '#edit_area', `${fencedMermaid(articleDiagram)}\n`);
+      await setToastEditorValue(page, '#toast-editor-container', `${fencedMermaid(articleDiagram)}\n`);
+      // the commit button stays disabled until areYouSure sees the textarea change the
+      // editor's textarea sync dispatches, which is also what enables it for a real user
+      await expect(page.locator('#commit-button')).toBeEnabled({timeout: 10000});
       await page.locator('#commit-button').click();
       await page.waitForURL(`**/article/user2/${subject}**`, {timeout: 30000});
 
