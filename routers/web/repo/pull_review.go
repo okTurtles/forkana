@@ -220,6 +220,82 @@ func renderConversation(ctx *context.Context, comment *issues_model.Comment, ori
 	}
 }
 
+// checkReviewDecisionPermission verifies that the doer is allowed to submit the
+// requested review type. Approving and requesting changes require write access
+// to the repository (the article), closing additionally allows the change
+// request author. Everybody else is limited to plain comments.
+// It returns false (and writes the response) when the submission is rejected.
+func checkReviewDecisionPermission(ctx *context.Context, issue *issues_model.Issue, form *forms.SubmitReviewForm) bool {
+	if ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull) {
+		return true
+	}
+
+	switch form.ReviewType() {
+	case issues_model.ReviewTypeApprove:
+		ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.approval"))
+		return false
+	case issues_model.ReviewTypeReject:
+		ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.rejection"))
+		return false
+	}
+
+	// "close" has no ReviewType of its own, so it can only be matched on the raw
+	// form value; the change request author may close their own change request.
+	if form.Type == "close" {
+		isPoster := ctx.IsSigned && ctx.Doer != nil && issue.IsPoster(ctx.Doer.ID)
+		if !isPoster {
+			ctx.JSONForbidden(ctx.Locale.TrString("repo.issues.review.no_permission.close"))
+			return false
+		}
+	}
+	return true
+}
+
+// submitCloseReview handles the "Close" option of the review modal: the review body is
+// posted as a normal comment review and the change request is then closed through the
+// very same path as the "Close" button on the change request itself, so timeline
+// comments, notifications and the change request state stay consistent.
+// The caller (SubmitReview) has already run checkReviewDecisionPermission, which
+// restricts "close" to users with write access and the change request author.
+func submitCloseReview(ctx *context.Context, issue *issues_model.Issue, form *forms.SubmitReviewForm, attachments []string) {
+	// issue.PullRequest is already loaded by GetActionIssue -> LoadAttributes, the same way
+	// NewComment relies on it.
+	if issue.PullRequest.HasMerged {
+		ctx.JSONError(ctx.Tr("repo.pulls.close_blocked_merged"))
+		return
+	}
+
+	// Post the feedback, if any. Closing without writing anything is legitimate, so an
+	// empty review is simply skipped instead of being reported as an error. Since
+	// ContentEmptyErr now also accounts for attachments, this cannot discard an upload.
+	_, comm, err := pull_service.SubmitReview(ctx, ctx.Doer, ctx.Repo.GitRepo, issue, issues_model.ReviewTypeComment, form.Content, form.CommitID, attachments)
+	if err != nil && !issues_model.IsContentEmptyErr(err) {
+		ctx.ServerError("SubmitReview", err)
+		return
+	}
+
+	if !issue.IsClosed {
+		if err := issue_service.CloseIssue(ctx, issue, ctx.Doer, ""); err != nil {
+			if issues_model.IsErrDependenciesLeft(err) {
+				ctx.JSONError(ctx.Tr("repo.issues.dependency.pr_close_blocked"))
+				return
+			}
+			ctx.ServerError("CloseIssue", err)
+			return
+		}
+		if err := stopTimerIfAvailable(ctx, ctx.Doer, issue); err != nil {
+			ctx.ServerError("stopTimerIfAvailable", err)
+			return
+		}
+	}
+
+	if comm != nil {
+		ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d#%s", ctx.Repo.RepoLink, issue.Index, comm.HashTag()))
+		return
+	}
+	ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d", ctx.Repo.RepoLink, issue.Index))
+}
+
 // SubmitReview creates a review out of the existing pending review or creates a new one if no pending review exist
 func SubmitReview(ctx *context.Context) {
 	form := web.GetForm(ctx).(*forms.SubmitReviewForm)
@@ -236,10 +312,26 @@ func SubmitReview(ctx *context.Context) {
 		return
 	}
 
+	if !checkReviewDecisionPermission(ctx, issue, form) {
+		return
+	}
+
+	var attachments []string
+	if setting.Attachment.Enabled {
+		attachments = form.Files
+	}
+
+	// Forkana: the modal's "Close" option submits feedback and closes the change request.
+	if form.IsCloseRequest() {
+		submitCloseReview(ctx, issue, form, attachments)
+		return
+	}
+
 	reviewType := form.ReviewType()
 	switch reviewType {
 	case issues_model.ReviewTypeUnknown:
-		ctx.ServerError("ReviewType", fmt.Errorf("unknown ReviewType: %s", form.Type))
+		// an unknown type is a client error, not a server one
+		ctx.JSONError("unknown review type: " + form.Type)
 		return
 
 	// can not approve/reject your own PR
@@ -256,11 +348,6 @@ func SubmitReview(ctx *context.Context) {
 			ctx.JSONRedirect(fmt.Sprintf("%s/pulls/%d/files", ctx.Repo.RepoLink, issue.Index))
 			return
 		}
-	}
-
-	var attachments []string
-	if setting.Attachment.Enabled {
-		attachments = form.Files
 	}
 
 	_, comm, err := pull_service.SubmitReview(ctx, ctx.Doer, ctx.Repo.GitRepo, issue, reviewType, form.Content, form.CommitID, attachments)

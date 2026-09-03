@@ -3,7 +3,8 @@
 
 #navbar {
   background: var(--color-body);
-  padding: 9px 10px;
+  /* --navbar-padding-x is defined in web_src/css/modules/navbar.css */
+  padding: 9px var(--navbar-padding-x);
 }
 
 .ui.menu .item.svg-no-margin > svg{

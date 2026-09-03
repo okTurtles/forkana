@@ -1435,6 +1435,18 @@ func registerWebRoutes(m *web.Router) {
 	// Article-based pull request view routes (info, attachments, content-history)
 	m.Group("/article/{username}/{subjectname}/{type:pulls}", addIssuesPullsViewRoutes, optSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitPullsReader)
 
+	// The same view routes under "{type:issues}", plus the comment attachment listing. The
+	// edit-in-place dropzone builds its listing URL from $.RepoLink, which is the article link,
+	// and the templates always spell the issue path as "/issues/{index}/attachments" even on a
+	// pull request page (templates/repo/issue/view_content.tmpl and view_content/comments.tmpl).
+	// Without these routes the listing 404s, the dropzone comes up empty and saving the edit
+	// submits an empty "files[]" — which makes updateAttachments delete every attachment the
+	// issue or comment had.
+	m.Group("/article/{username}/{subjectname}/{type:issues}", addIssuesPullsViewRoutes, optSignIn, context.RepoAssignmentByOwnerAndSubject, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests))
+	m.Group("/article/{username}/{subjectname}", func() {
+		m.Get("/comments/{id}/attachments", repo.GetCommentAttachments)
+	}, optSignIn, context.RepoAssignmentByOwnerAndSubject, reqRepoIssuesOrPullsReader)
+
 	// Article-based pull request update routes (comments, reactions, title, content, etc.)
 	m.Group("/article/{username}/{subjectname}", func() {
 		m.Group("/{type:issues}", addIssuesPullsUpdateRoutes, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests))
@@ -1513,6 +1525,23 @@ func registerWebRoutes(m *web.Router) {
 		m.Get("/attachments/{uuid}", repo.GetAttachment)
 	}, optSignIn, context.RepoAssignment)
 	// end "/{username}/{reponame}": compatibility with old attachments
+
+	// Markdown written by the comment/issue editor embeds attachments as "/attachments/{uuid}"
+	// (or the relative "attachments/{uuid}"). The markup renderer resolves both against
+	// Repository.Link(), which in Forkana is "/article/{owner}/{subject}" rather than
+	// "/{owner}/{repo}", so rendered images point at "/article/{owner}/{subject}/attachments/{uuid}".
+	// Serve that path too, otherwise every embedded image in a comment 404s.
+	//
+	// Registered with "optSignIn" alone, like the top-level "/attachments/{uuid}" route: the
+	// handler never reads ctx.Repo, and ServeAttachment re-resolves the attachment's own
+	// repository and checks read permission against it. Assigning the article repository here
+	// would open the git repository and compute branch/tag/release counts for every embedded
+	// image, and would make images unservable whenever the owner/subject segments cannot be
+	// resolved (a repository without a subject, whose Link() falls back to the repo name).
+	m.Group("/article/{username}/{subjectname}", func() {
+		m.Get("/attachments/{uuid}", repo.GetAttachment)
+	}, optSignIn)
+	// end "/article/{username}/{subjectname}": attachments embedded in rendered markdown
 
 	m.Group("/{username}/{reponame}", func() {
 		m.Post("/topics", repo.TopicsPost)

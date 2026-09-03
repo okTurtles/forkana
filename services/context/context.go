@@ -263,6 +263,12 @@ func (ctx *Context) JSONError(msg any) {
 	}
 }
 
+// JSONForbidden is the 403 sibling of JSONError: the frontend's fetch-action
+// handler renders the "errorMessage" payload as an error toast.
+func (ctx *Context) JSONForbidden(msg string) {
+	ctx.JSON(http.StatusForbidden, map[string]any{"errorMessage": msg, "renderFormat": "text"})
+}
+
 func (ctx *Context) JSONErrorNotFound(optMsg ...string) {
 	msg := util.OptionalArg(optMsg)
 	if msg == "" {
