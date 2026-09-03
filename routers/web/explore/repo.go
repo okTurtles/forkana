@@ -34,11 +34,8 @@ import (
 )
 
 const (
-	// tplExploreRepos explore repositories page template
-	tplExploreRepos templates.TplName = "explore/repos"
 	// tplExploreSubjects explore subjects page template
-	tplExploreSubjects     templates.TplName = "explore/subjects"
-	relevantReposOnlyParam string            = "only_show_relevant"
+	tplExploreSubjects templates.TplName = "explore/subjects"
 )
 
 // RepoSearchOptions when calling search repositories
@@ -164,40 +161,61 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 	ctx.HTML(http.StatusOK, opts.TplName)
 }
 
-// Repos render explore repositories page
-func Repos(ctx *context.Context) {
-	ctx.Data["UsersPageIsDisabled"] = setting.Service.Explore.DisableUsersPage
-	ctx.Data["OrganizationsPageIsDisabled"] = setting.Service.Explore.DisableOrganizationsPage
-	ctx.Data["CodePageIsDisabled"] = setting.Service.Explore.DisableCodePage
-	ctx.Data["Title"] = ctx.Tr("explore")
-	ctx.Data["PageIsExplore"] = true
-	ctx.Data["ShowRepoOwnerOnList"] = true
-	ctx.Data["PageIsExploreRepositories"] = true
-	ctx.Data["IsRepoIndexerEnabled"] = setting.Indexer.RepoIndexerEnabled
+// renderSubjectsSitemap writes one sitemap page for the /explore/subjects/sitemap-{idx}.xml paths.
+//
+// The entries are *article* URLs, not subject URLs: these sitemaps used to live under
+// /explore/articles/sitemap-{idx}.xml and were served by the (now removed) article listing, so
+// emitting one URL per repository here keeps crawlers seeing exactly the same set of pages —
+// only the path of the sitemap itself changed. The page count advertised by the sitemap index in
+// routers/web/home.go is derived from the repository count for the same reason.
+func renderSubjectsSitemap(ctx *context.Context) {
+	page := int(ctx.PathParamInt64("idx"))
+	if page <= 0 {
+		page = 1
+	}
 
+	// Same visibility scoping the removed article listing used: a non-admin only ever sees the
+	// public repositories plus their own.
 	var ownerID int64
 	if ctx.Doer != nil && !ctx.Doer.IsAdmin {
 		ownerID = ctx.Doer.ID
 	}
 
-	onlyShowRelevant := setting.UI.OnlyShowRelevantRepos
-
-	_ = ctx.Req.ParseForm() // parse the form first, to prepare the ctx.Req.Form field
-	if len(ctx.Req.Form[relevantReposOnlyParam]) != 0 {
-		onlyShowRelevant = ctx.FormBool(relevantReposOnlyParam)
+	repos, _, err := repo_model.SearchRepository(ctx, repo_model.SearchRepoOptions{
+		ListOptions: db.ListOptions{
+			Page:     page,
+			PageSize: setting.UI.SitemapPagingNum,
+		},
+		Actor:      ctx.Doer,
+		OrderBy:    db.SearchOrderByRecentUpdated,
+		Private:    ctx.Doer != nil,
+		OwnerID:    ownerID,
+		AllPublic:  true,
+		AllLimited: true,
+	})
+	if err != nil {
+		ctx.ServerError("SearchRepository", err)
+		return
 	}
 
-	RenderRepoSearch(ctx, &RepoSearchOptions{
-		PageSize:         setting.UI.ExplorePagingNum,
-		OwnerID:          ownerID,
-		Private:          ctx.Doer != nil,
-		TplName:          tplExploreRepos,
-		OnlyShowRelevant: onlyShowRelevant,
-	})
+	m := sitemap.NewSitemap()
+	for _, item := range repos {
+		m.Add(sitemap.URL{URL: item.HTMLURL(), LastMod: item.UpdatedUnix.AsTimePtr()})
+	}
+	ctx.Resp.Header().Set("Content-Type", "text/xml")
+	if _, err := m.WriteTo(ctx.Resp); err != nil {
+		log.Error("Failed writing sitemap: %v", err)
+	}
 }
 
 // Subjects render explore subjects page (articles list)
 func Subjects(ctx *context.Context) {
+	// The sitemap paths (/explore/subjects/sitemap-{idx}.xml) are served by this handler too.
+	if ctx.PathParam("idx") != "" {
+		renderSubjectsSitemap(ctx)
+		return
+	}
+
 	ctx.Data["UsersPageIsDisabled"] = setting.Service.Explore.DisableUsersPage
 	ctx.Data["OrganizationsPageIsDisabled"] = setting.Service.Explore.DisableOrganizationsPage
 	ctx.Data["CodePageIsDisabled"] = setting.Service.Explore.DisableCodePage
