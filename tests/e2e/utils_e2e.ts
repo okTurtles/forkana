@@ -1,5 +1,7 @@
 import {expect} from '@playwright/test';
-import {env} from 'node:process';
+import {chmod, readFile, writeFile} from 'node:fs/promises';
+import {isAbsolute, join, resolve} from 'node:path';
+import {cwd, env} from 'node:process';
 import type {Browser, Page, WorkerInfo} from '@playwright/test';
 
 const ARTIFACTS_PATH = `tests/e2e/test-artifacts`;
@@ -62,20 +64,83 @@ export async function save_visual(page: Page) {
 }
 
 /**
- * Create an article (repository with subject) via the UI.
- * This navigates to the repo creation page with the subject prefilled,
- * submits the form, and returns the created repository URL.
+ * Read the repository name out of the current repo-scoped URL. The server derives it from
+ * the subject, so it is not necessarily equal to the subject that was requested.
  */
-export async function create_article(page: Page, _workerInfo: WorkerInfo, subjectName: string): Promise<string> {
-  // Go to the create first article endpoint
+function getRepoNameFromCurrentURL(page: Page, owner: string): string {
+  const segments = new URL(page.url()).pathname.split('/').filter(Boolean);
+  const ownerIndex = segments.indexOf(owner);
+  if (ownerIndex < 0 || !segments[ownerIndex + 1]) {
+    throw new Error(`Could not determine repository name from ${page.url()}`);
+  }
+  return decodeURIComponent(segments[ownerIndex + 1]);
+}
+
+/**
+ * Create an article for a subject via the "create first article" flow, which redirects to
+ * the README editor of the newly created repository. Returns the repository name.
+ */
+export async function create_first_article(page: Page, owner: string, subjectName: string): Promise<string> {
   const response = await page.goto(`/repo/create-first-article?subject=${encodeURIComponent(subjectName)}`);
   expect(response?.status()).toBe(200);
 
-  // Wait for redirect to the editor (for empty repo) or bubble view
-  await page.waitForURL(/\/_new\/|\/subject\//, {timeout: 15000});
+  await page.waitForURL(new RegExp(`/${owner}/.*/_new/.*/README\\.md`), {timeout: 20000});
 
-  // Return the current URL which should be either the editor or subject/bubble view
-  return page.url();
+  return getRepoNameFromCurrentURL(page, owner);
+}
+
+/**
+ * Resolve the configured repository storage root. Relative ROOT values are resolved against
+ * the current working directory, which only matches the server's work path when the tests are
+ * started the way the Makefile does (`make test-e2e-sqlite`, from the repository root).
+ */
+async function getRepositoryRoot(): Promise<string> {
+  const configPath = resolve(cwd(), env.GITEA_CONF ?? 'tests/sqlite.ini');
+  const config = await readFile(configPath, 'utf8');
+  let inRepositorySection = false;
+
+  for (const line of config.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('[')) {
+      inRepositorySection = trimmed === '[repository]';
+      continue;
+    }
+    if (!inRepositorySection) continue;
+
+    const match = /^ROOT\s*=\s*(.+)$/.exec(trimmed);
+    if (match) {
+      const repoRoot = match[1].trim();
+      return isAbsolute(repoRoot) ? repoRoot : resolve(cwd(), repoRoot);
+    }
+  }
+
+  throw new Error(`Repository root not found in ${configPath}`);
+}
+
+/**
+ * Neutralize the generated git hooks of a repository created by an E2E test.
+ *
+ * A web-editor commit is pushed through git-receive-pack, which runs the repository's
+ * generated hooks; each hook spawns a separate `gitea hook` process that calls back into the
+ * server's internal API. Under the in-process E2E server that callback is unreliable, so the
+ * push fails for reasons unrelated to what the test is asserting. Call this after creating a
+ * repository and before committing through the web editor.
+ */
+export async function disableGeneratedHooks(owner: string, repoName: string): Promise<void> {
+  const repositoryRoot = await getRepositoryRoot();
+  const repoPath = join(repositoryRoot, owner, `${repoName}.git`);
+  const hookScript = '#!/usr/bin/env bash\n# Disabled for this E2E-created repository.\nexit 0\n';
+  const hookPaths = [
+    join(repoPath, 'hooks/pre-receive.d/gitea'),
+    join(repoPath, 'hooks/update.d/gitea'),
+    join(repoPath, 'hooks/post-receive.d/gitea'),
+    join(repoPath, 'hooks/proc-receive'),
+  ];
+
+  await Promise.all(hookPaths.map(async (hookPath) => {
+    await writeFile(hookPath, hookScript);
+    await chmod(hookPath, 0o755);
+  }));
 }
 
 /**
@@ -99,65 +164,6 @@ export async function create_repo_with_subject(page: Page, _workerInfo: WorkerIn
   await page.waitForURL(/\/subject\//, {timeout: 30000});
 
   return page.url();
-}
-
-/**
- * Commit a file to the current repository via the web editor.
- * The page should already be on the editor for the repository.
- */
-export async function commit_file_via_editor(page: Page, _workerInfo: WorkerInfo, options: {
-  filename: string;
-  content: string;
-  commitMessage?: string;
-}): Promise<void> {
-  const {filename, content, commitMessage = 'Add file via e2e test'} = options;
-
-  // Wait for the editor to be ready (CodeMirror)
-  await page.locator('.cm-content').waitFor({state: 'visible', timeout: 10000});
-
-  // Set filename if the field exists
-  const filenameInput = page.locator('input[name=tree_path]');
-  if (await filenameInput.isVisible()) {
-    await filenameInput.fill(filename);
-  }
-
-  // Fill in the content via CodeMirror
-  const editor = page.locator('.cm-content');
-  await editor.click();
-  // Select all and replace
-  await page.keyboard.press('Meta+a');
-  await page.keyboard.type(content);
-
-  // Set commit message
-  const commitMsgInput = page.locator('input[name=commit_summary]');
-  if (await commitMsgInput.isVisible()) {
-    await commitMsgInput.fill(commitMessage);
-  }
-
-  // Submit the commit
-  await page.click('button:has-text("Commit Changes")');
-
-  // Wait for redirect after commit
-  await page.waitForURL(/\/src\/|\/article\//, {timeout: 15000});
-}
-
-/**
- * Delete a subject by name via the admin API.
- * Note: This requires the logged-in user to have admin permissions.
- * For non-admin cleanup, use delete_repo instead.
- */
-export async function delete_subject_repos(page: Page, _workerInfo: WorkerInfo, subjectName: string): Promise<void> {
-  // Navigate to the subject page to get repository links
-  const response = await page.goto(`/subject/${encodeURIComponent(subjectName)}?view=bubble`);
-
-  // If subject doesn't exist (404), nothing to clean up
-  if (response?.status() === 404) {
-    // Subject not found, nothing to delete
-  }
-
-  // TODO: Get all repos that belong to this subject and delete them
-  // This is done through the settings page of each repo
-  // For simplicity in tests, we'll navigate to each repo's settings and delete
 }
 
 /**
