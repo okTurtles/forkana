@@ -60,7 +60,7 @@ func TestForkAndEditPermissions(t *testing.T) {
 }
 
 // TestForkAndEditMiddlewareBypass tests that the CanWriteToBranch middleware
-// correctly bypasses permission checks when fork_and_edit=true is set.
+// correctly bypasses permission checks when fork_and_edit is truthy.
 func TestForkAndEditMiddlewareBypass(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -119,6 +119,30 @@ func TestForkAndEditMiddlewareBypass(t *testing.T) {
 		// It may be 200 (success) or 400 (git operation failed) but not 404
 		assert.NotEqual(t, http.StatusNotFound, resp.Code,
 			"fork_and_edit=true should bypass CanWriteToBranch middleware")
+	})
+
+	// The editor handler reads the flag with ctx.FormBool, so the middleware has to
+	// accept the same set of truthy values, otherwise the two gates disagree.
+	t.Run("NonOwnerWithForkAndEditAlternateTruthyValuePassesMiddleware", func(t *testing.T) {
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL)
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		form := map[string]string{
+			"_csrf":         htmlDoc.GetCSRF(),
+			"last_commit":   htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":     "README.md",
+			"content":       "Test content with fork_and_edit=1",
+			"commit_choice": "direct",
+			"fork_and_edit": "1",
+		}
+
+		req = NewRequestWithValues(t, "POST", editURL, form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		assert.NotEqual(t, http.StatusNotFound, resp.Code,
+			"fork_and_edit=1 should bypass CanWriteToBranch middleware like fork_and_edit=true")
 	})
 }
 
