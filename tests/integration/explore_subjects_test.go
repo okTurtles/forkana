@@ -12,6 +12,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -165,4 +166,44 @@ func TestExploreSubjectsSitemap(t *testing.T) {
 	index := MakeRequest(t, NewRequest(t, "GET", "/sitemap.xml"), http.StatusOK).Body.String()
 	assert.Contains(t, index, setting.AppURL+"explore/subjects/sitemap-1.xml")
 	assert.NotContains(t, index, "explore/articles/sitemap-")
+}
+
+// TestExploreSubjectsSortOptions pins the Sort dropdown of the Subjects tab, in document
+// order (#291). The list drifts silently whenever the shared template is touched, so the
+// order is asserted, not just the set.
+func TestExploreSubjectsSortOptions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	req := NewRequest(t, "GET", "/explore/subjects")
+	doc := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
+
+	var sorts []string
+	doc.Find(`input[name="sort"]`).Each(func(_ int, s *goquery.Selection) {
+		value, _ := s.Attr("value")
+		sorts = append(sorts, value)
+	})
+	assert.Equal(t, []string{
+		"alphabetically",
+		"reversealphabetically",
+		"recentupdate",
+		"leastupdate",
+		"mostcontributors",
+		"fewestcontributors",
+		"mostforks",
+		"fewestforks",
+	}, sorts)
+
+	// The archived and fork filters stay; the mirror, template and private ones never
+	// belonged to the Subjects tab.
+	AssertHTMLElement(t, doc, `input[name="archived"]`, 2)
+	AssertHTMLElement(t, doc, `input[name="fork"][type="radio"]`, 2)
+	AssertHTMLElement(t, doc, `input[name="mirror"]`, false)
+	AssertHTMLElement(t, doc, `input[name="template"]`, false)
+	AssertHTMLElement(t, doc, `input[name="private"]`, false)
+
+	// Every offered sort value is one the handler actually resolves.
+	for _, sortType := range sorts {
+		req := NewRequest(t, "GET", "/explore/subjects?sort="+sortType)
+		MakeRequest(t, req, http.StatusOK)
+	}
 }
