@@ -209,7 +209,19 @@ func TestRepositoryTransferRejectionNotifiesInitiator(t *testing.T) {
 	recipient := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 10})
 	initiator := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 16})
 
+	// the bell row telling the recipient a response is awaited must not survive the rejection
+	pending := &activities_model.Notification{
+		UserID: recipient.ID,
+		RepoID: repo.ID,
+		Status: activities_model.NotificationStatusUnread,
+		Source: activities_model.NotificationSourceRepository,
+	}
+	require.NoError(t, db.Insert(t.Context(), pending))
+
 	require.NoError(t, RejectRepositoryTransfer(t.Context(), repo, recipient))
+
+	assert.Equal(t, activities_model.NotificationStatusRead,
+		unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{ID: pending.ID}).Status)
 
 	assert.Equal(t, 1, recorder.calls)
 	require.NotNil(t, recorder.initiator)

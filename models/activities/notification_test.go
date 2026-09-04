@@ -192,3 +192,39 @@ func TestCreateRepoTransferRejectedNotification(t *testing.T) {
 	assert.Equal(t, activities_model.NotificationStatusRead,
 		unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{ID: notification.ID}).Status)
 }
+
+// TestMarkRepoTransferNotificationsRead pins that resolving a transfer stops the pending row
+// claiming a response is still awaited, for every recipient, while leaving the rejection
+// notification the initiator has just been sent alone.
+func TestMarkRepoTransferNotificationsRead(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	org := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 3})
+	initiator := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+
+	assert.NoError(t, activities_model.CreateRepoTransferNotification(t.Context(), doer, org, repo))
+	assert.NoError(t, activities_model.CreateRepoTransferRejectedNotification(t.Context(), doer, initiator, repo))
+
+	assert.NoError(t, activities_model.MarkRepoTransferNotificationsRead(t.Context(), repo.ID))
+
+	assert.Equal(t, 0, unittest.GetCount(t, &activities_model.Notification{
+		RepoID: repo.ID,
+		Source: activities_model.NotificationSourceRepository,
+		Status: activities_model.NotificationStatusUnread,
+	}))
+	assert.Equal(t, 2, unittest.GetCount(t, &activities_model.Notification{
+		RepoID: repo.ID,
+		Source: activities_model.NotificationSourceRepository,
+		Status: activities_model.NotificationStatusRead,
+	}))
+
+	// the initiator still has to see that their transfer was rejected
+	rejected := unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{
+		UserID: initiator.ID,
+		RepoID: repo.ID,
+		Source: activities_model.NotificationSourceRepoTransferRejected,
+	})
+	assert.Equal(t, activities_model.NotificationStatusUnread, rejected.Status)
+}

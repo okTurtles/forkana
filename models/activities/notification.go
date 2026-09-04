@@ -121,15 +121,21 @@ func init() {
 	db.RegisterModel(new(Notification))
 }
 
-// CreateRepoTransferNotification creates  notification for the user a repository was transferred to
+// CreateRepoTransferNotification creates a notification for the user a repository was transferred to
 func CreateRepoTransferNotification(ctx context.Context, doer, newOwner *user_model.User, repo *repo_model.Repository) error {
 	return db.WithTx(ctx, func(ctx context.Context) error {
 		var notify []*Notification
 
 		if newOwner.IsOrganization() {
 			users, err := organization.GetUsersWhoCanCreateOrgRepo(ctx, newOwner.ID)
-			if err != nil || len(users) == 0 {
+			if err != nil {
 				return err
+			}
+			// Nobody able to create repositories in the organization is nobody able to accept
+			// or reject the transfer either, so the pending transfer would be stuck. Say so
+			// rather than returning as if the notifications had been sent.
+			if len(users) == 0 {
+				return fmt.Errorf("no user can accept or reject a repository transfer to %q", newOwner.Name)
 			}
 			// GetUsersWhoCanCreateOrgRepo returns a map keyed by user ID, so ranging over
 			// the values (rather than the keys) makes the recipient unmistakable.
@@ -166,6 +172,32 @@ func CreateRepoTransferRejectedNotification(ctx context.Context, doer, initiator
 		UpdatedBy: doer.ID,
 		Source:    NotificationSourceRepoTransferRejected,
 	})
+}
+
+// IsRepoTransferPending reports whether this notification asks its recipient to respond to
+// a pending repository transfer. Templates use it instead of hard-coding the source value.
+func (n *Notification) IsRepoTransferPending() bool {
+	return n.Source == NotificationSourceRepository
+}
+
+// IsRepoTransferRejected reports whether this notification tells the user who started a
+// repository transfer that the recipient rejected it.
+func (n *Notification) IsRepoTransferRejected() bool {
+	return n.Source == NotificationSourceRepoTransferRejected
+}
+
+// MarkRepoTransferNotificationsRead marks every unread pending-transfer notification of a
+// repository as read. The pending row claims a response is still awaited, so it has to stop
+// saying that once the transfer has been accepted, rejected or cancelled — including for the
+// organization members who did not act themselves. Read rather than deleted, so a user who
+// pinned the row keeps it.
+func MarkRepoTransferNotificationsRead(ctx context.Context, repoID int64) error {
+	_, err := db.GetEngine(ctx).Where(builder.Eq{
+		"repo_id": repoID,
+		"status":  NotificationStatusUnread,
+		"source":  NotificationSourceRepository,
+	}).Cols("status").Update(&Notification{Status: NotificationStatusRead})
+	return err
 }
 
 func createIssueNotification(ctx context.Context, userID int64, issue *issues_model.Issue, commentID, updatedByID int64) error {

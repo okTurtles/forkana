@@ -1,7 +1,6 @@
 <div role="main" aria-label="{{.Title}}" class="page-content user notification" id="notification_div" data-sequence-number="{{.SequenceNumber}}">
 	<div class="ui container">
 		{{$statusUnread := 1}}{{$statusRead := 2}}{{$statusPinned := 3}}
-		{{$sourceRepository := 4}}{{$sourceRepoTransferRejected := 5}}
 		{{$notificationUnreadCount := call .PageGlobalData.GetNotificationUnreadCount}}
 		{{$pageTypeIsRead := eq $.PageType "read"}}
 		<div class="flex-text-block tw-justify-between tw-mb-[--page-spacing]">
@@ -43,10 +42,10 @@
 						<div class="tw-text-16 tw-py-0.5">
 							{{if $one.Issue}}
 								{{$one.Issue.Title | ctx.RenderUtils.RenderIssueSimpleTitle}}
-							{{else if eq $one.Source $sourceRepoTransferRejected}}
-								{{ctx.Locale.Tr "repo.settings.article_transfer_notification_rejected"}}
-							{{else if eq $one.Source $sourceRepository}}
-								{{ctx.Locale.Tr "repo.settings.article_transfer_notification_pending"}}
+							{{else if $one.IsRepoTransferRejected}}
+								{{ctx.Locale.Tr "notification.transfer_rejected"}}
+							{{else if $one.IsRepoTransferPending}}
+								{{ctx.Locale.Tr "notification.transfer_pending"}}
 							{{else}}
 								{{$one.Repository.FullName}}
 							{{end}}
