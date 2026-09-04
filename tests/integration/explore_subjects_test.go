@@ -178,16 +178,13 @@ func TestExploreSubjectsSitemap(t *testing.T) {
 func TestExploreSubjectsExactMatchNotHiddenByFilters(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	const subjectName = "Fork Filter Probe"
-	subject, err := repo_model.GetOrCreateSubject(t.Context(), subjectName)
+	// example-subject is the fixture subject of repo1, a public non-fork repository that really
+	// exists on disk, so the "View existing subject" link can be followed below.
+	const subjectName = "example-subject"
+	subject, err := repo_model.GetSubjectByName(t.Context(), subjectName)
 	require.NoError(t, err)
 
-	// A root article plus a fork of it, so that the "fork=0" filter excludes the subject.
-	require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{
-		OwnerID: 2, OwnerName: "user2",
-		Name: "fork-filter-probe-root", LowerName: "fork-filter-probe-root",
-		SubjectID: subject.ID, IsFork: false,
-	}))
+	// Give it a fork, so that the "fork=0" filter excludes the subject from the exact-match lookup.
 	require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{
 		OwnerID: 3, OwnerName: "user3",
 		Name: "fork-filter-probe-fork", LowerName: "fork-filter-probe-fork",
@@ -196,6 +193,7 @@ func TestExploreSubjectsExactMatchNotHiddenByFilters(t *testing.T) {
 
 	path := "/explore/subjects?fork=0&q=" + url.QueryEscape(subjectName)
 	createSelector := `a[href^="` + setting.AppSubURL + `/repo/create?subject="]`
+	viewSelector := `a[href="` + setting.AppSubURL + `/subject/` + subjectName + `"]`
 
 	subjectHrefs := func(h *HTMLDoc) []string {
 		hrefs := make([]string, 0)
@@ -210,12 +208,18 @@ func TestExploreSubjectsExactMatchNotHiddenByFilters(t *testing.T) {
 	resp := MakeRequest(t, NewRequest(t, "GET", path), http.StatusOK)
 	anonDoc := NewHTMLParser(t, resp.Body)
 	AssertHTMLElement(t, anonDoc, createSelector, false)
+	AssertHTMLElement(t, anonDoc, viewSelector, true)
 
 	// Signed in.
 	session := loginUser(t, "user2")
 	resp = session.MakeRequest(t, NewRequest(t, "GET", path), http.StatusOK)
 	authDoc := NewHTMLParser(t, resp.Body)
 	AssertHTMLElement(t, authDoc, createSelector, false)
+	AssertHTMLElement(t, authDoc, viewSelector, true)
+
+	// The link the affordance offers must not dead-end: /subject/{name} only renders when the
+	// subject has a public repository behind it.
+	MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape(subjectName)), http.StatusOK)
 
 	// explore.Subjects never reads ctx.Doer, so the two responses must list the same subjects in
 	// the same order. This pins the "signed-in users see fewer subjects" hypothesis as ruled out.
@@ -225,4 +229,26 @@ func TestExploreSubjectsExactMatchNotHiddenByFilters(t *testing.T) {
 	// above cannot pass just because the selector stopped matching anything.
 	resp = MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?fork=0&q="+url.QueryEscape("No Such Subject Here")), http.StatusOK)
 	AssertHTMLElement(t, NewHTMLParser(t, resp.Body), createSelector, true)
+
+	// A subject with nothing public behind it cannot be linked to - /subject/{name} would 404 -
+	// so it keeps the create offer, which attaches the new article to that same subject.
+	const privateName = "Private Only Probe"
+	privateSubject, err := repo_model.GetOrCreateSubject(t.Context(), privateName)
+	require.NoError(t, err)
+	require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{
+		OwnerID: 2, OwnerName: "user2",
+		Name: "private-only-probe-root", LowerName: "private-only-probe-root",
+		SubjectID: privateSubject.ID, IsFork: false, IsPrivate: true,
+	}))
+	require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{
+		OwnerID: 3, OwnerName: "user3",
+		Name: "private-only-probe-fork", LowerName: "private-only-probe-fork",
+		SubjectID: privateSubject.ID, IsFork: true, IsPrivate: true,
+	}))
+
+	resp = MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?fork=0&q="+url.QueryEscape(privateName)), http.StatusOK)
+	privateDoc := NewHTMLParser(t, resp.Body)
+	AssertHTMLElement(t, privateDoc, createSelector, true)
+	AssertHTMLElement(t, privateDoc, `a[href="`+setting.AppSubURL+`/subject/Private%20Only%20Probe"]`, false)
+	MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape(privateName)), http.StatusNotFound)
 }

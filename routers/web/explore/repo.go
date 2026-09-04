@@ -305,7 +305,7 @@ func Subjects(ctx *context.Context) {
 
 		// The filtered lookup above decides whether the exact-match row is rendered, but it must
 		// not decide whether the "want to create it?" offer is made.
-		if exactMatch == nil && !setExactSubjectExists(ctx, keyword) {
+		if exactMatch == nil && !loadExactSubject(ctx, keyword) {
 			return
 		}
 
@@ -348,8 +348,8 @@ func Subjects(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplExploreSubjects)
 }
 
-// setExactSubjectExists exposes the subject named exactly like the search keyword as
-// ctx.Data["ExactSubjectExists"], looked up without any of the active filters.
+// loadExactSubject exposes the subject that the search keyword would resolve to as
+// ctx.Data["ExactSubject"], looked up without any of the active filters.
 //
 // The subjects list offers to create a subject when its own, filtered query comes back without
 // an exact match, and taking that offer routes through GetOrCreateSubject, which returns the
@@ -357,22 +357,36 @@ func Subjects(ctx *context.Context) {
 // be hidden - by "not a fork", by "archived" - invites the user to create a duplicate (#319).
 // shared/subject/list.tmpl uses this key to link to the subject instead.
 //
-// The slug is UNIQUE and is exactly the uniqueness rule CreateSubject enforces, so this is a
-// single indexed lookup. Returns false when it has already sent a server error.
-func setExactSubjectExists(ctx *context.Context, keyword string) bool {
-	// An empty slug is a zero value for xorm and would match an arbitrary row.
-	slug := repo_model.GenerateSlugFromName(keyword)
-	if slug == "" {
+// The lookup goes through the slug on purpose: it is UNIQUE and is exactly the collision rule
+// GetOrCreateSubject applies, so any keyword that would be swallowed by an existing subject is
+// caught here, including one that only differs by accents, punctuation or case. That also makes
+// GenerateSlugFromName's "subject" fallback for punctuation-only keywords harmless: creating
+// such a keyword really would land on a subject whose slug is "subject".
+//
+// The key is only set when /subject/{name} can actually render the subject, i.e. when it has at
+// least one public repository - the same lookup RepoAssignmentBySubject performs - so the link
+// the template offers cannot dead-end in a 404. A subject with nothing public behind it keeps
+// the create offer, which attaches the new article to that very subject rather than duplicating
+// it. Returns false when it has already sent a server error.
+func loadExactSubject(ctx *context.Context, keyword string) bool {
+	subject, err := repo_model.GetSubjectBySlug(ctx, repo_model.GenerateSlugFromName(keyword))
+	if err != nil {
+		if !repo_model.IsErrSubjectNotExist(err) {
+			ctx.ServerError("GetSubjectBySlug", err)
+			return false
+		}
 		return true
 	}
-	subject, err := repo_model.GetSubjectBySlug(ctx, slug)
-	switch {
-	case err == nil:
-		ctx.Data["ExactSubjectExists"] = subject
-	case !repo_model.IsErrSubjectNotExist(err):
-		ctx.ServerError("GetSubjectBySlug", err)
-		return false
+
+	if _, err := repo_model.GetPublicRepositoryBySubject(ctx, subject.Name); err != nil {
+		if !repo_model.IsErrRepoWithSubjectNotExist(err) && !repo_model.IsErrSubjectNotExist(err) {
+			ctx.ServerError("GetPublicRepositoryBySubject", err)
+			return false
+		}
+		return true
 	}
+
+	ctx.Data["ExactSubject"] = subject
 	return true
 }
 
