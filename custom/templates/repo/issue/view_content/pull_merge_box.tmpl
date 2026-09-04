@@ -241,18 +241,13 @@
 						{{end}}
 						<div class="tw-p-2"></div>
 						<script type="module">
-							const defaultMergeTitle = {{.DefaultMergeMessage}};
-							const defaultSquashMergeTitle = {{.DefaultSquashMergeMessage}};
-							const defaultMergeMessage = {{.DefaultMergeBody}};
-							const defaultSquashMergeMessage = {{.DefaultSquashMergeBody}};
+							{{/* Forkana: merging is a single step, so no merge title/message is edited in the UI:
+							     the server generates the merge commit message. */}}
 							const mergeForm = {
 								'baseLink': {{.Issue.Link}},
-								'textCancel': {{ctx.Locale.Tr "cancel"}},
 								'textAutoMergeButtonWhenSucceed': {{ctx.Locale.Tr "repo.pulls.auto_merge_button_when_succeed"}},
 								'textAutoMergeWhenSucceed': {{ctx.Locale.Tr "repo.pulls.auto_merge_when_succeed"}},
 								'textAutoMergeCancelSchedule': {{ctx.Locale.Tr "repo.pulls.auto_merge_cancel_schedule"}},
-								'textClearMergeMessage': {{ctx.Locale.Tr "repo.pulls.clear_merge_message"}},
-								'textClearMergeMessageHint': {{ctx.Locale.Tr "repo.pulls.clear_merge_message_hint"}},
 								'textMergeCommitId': {{ctx.Locale.Tr "repo.pulls.merge_commit_id"}},
 
 								'canMergeNow': {{$canMergeNow}},
@@ -260,8 +255,6 @@
 								'emptyCommit': {{.Issue.PullRequest.IsEmpty}},
 								'pullHeadCommitID': {{.PullHeadCommitID}},
 								'defaultMergeStyle': {{.MergeStyle}},
-								'mergeMessageFieldPlaceHolder': {{ctx.Locale.Tr "repo.editor.commit_message_desc"}},
-								'defaultMergeMessage': defaultMergeMessage,
 
 								'hasPendingPullRequestMerge': {{.HasPendingPullRequestMerge}},
 								'hasPendingPullRequestMergeTip': {{$hasPendingPullRequestMergeTip}},
@@ -274,8 +267,6 @@
 									'name': 'squash',
 									'allowed': {{$prUnit.PullRequestsConfig.AllowSquash}},
 									'textDoMerge': {{ctx.Locale.Tr "repo.pulls.squash_merge_pull_request"}},
-									'mergeTitleFieldText': defaultSquashMergeTitle,
-									'mergeMessageFieldText': {{.GetCommitMessages}} + defaultSquashMergeMessage,
 									'hideAutoMerge': generalHideAutoMerge,
 								}
 							];

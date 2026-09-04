@@ -71,7 +71,31 @@ func testPullMerge(t *testing.T, session *TestSession, user, repo, pullnum strin
 
 	assert.Equal(t, fmt.Sprintf("/%s/%s/pulls/%s", user, repo, pullnum), respJSON.Redirect)
 
+	// Forkana: the merge form is submitted in a single click and sends no merge title or
+	// message, so the server has to generate the whole merge commit message.
+	if mergeStyle != repo_model.MergeStyleRebase && mergeStyle != repo_model.MergeStyleManuallyMerged {
+		assertMergeCommitMessageIsGenerated(t, user, repo)
+	}
+
 	return resp
+}
+
+// assertMergeCommitMessageIsGenerated checks that the last commit on the repository's default
+// branch carries the server-generated merge commit message trailers.
+func assertMergeCommitMessageIsGenerated(t *testing.T, ownerName, repoName string) {
+	t.Helper()
+
+	repo, err := repo_model.GetRepositoryByOwnerAndName(t.Context(), ownerName, repoName)
+	require.NoError(t, err)
+
+	gitRepo, err := gitrepo.OpenRepository(t.Context(), repo)
+	require.NoError(t, err)
+	defer gitRepo.Close()
+
+	commit, err := gitRepo.GetBranchCommit(repo.DefaultBranch)
+	require.NoError(t, err)
+
+	assert.Contains(t, commit.CommitMessage, "Reviewed-on: ")
 }
 
 func testPullCleanUp(t *testing.T, session *TestSession, user, repo, pullnum string) *httptest.ResponseRecorder {
@@ -180,6 +204,83 @@ func TestPullSquash(t *testing.T) {
 		hookTasks, err = webhook.HookTasks(t.Context(), 1, 1)
 		assert.NoError(t, err)
 		assert.Len(t, hookTasks, hookTasksLenBefore+1)
+	})
+}
+
+// Forkana: the merge button merges in a single step, posting only "_csrf" and "do".
+// The server must then generate the full merge commit message, trailers included.
+func TestPullMergeSingleStepGeneratesMergeMessage(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+		baseRepo, err := repo_service.CreateRepository(t.Context(), user, user, repo_service.CreateRepoOptions{
+			Name:          "single-step-merge",
+			AutoInit:      true,
+			Readme:        "Default",
+			DefaultBranch: "main",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{
+				{
+					Operation:     "create",
+					TreePath:      "article.md",
+					ContentReader: strings.NewReader("Some content\n"),
+				},
+			},
+			Message:   "Add an article",
+			OldBranch: "main",
+			NewBranch: "edit",
+		})
+		require.NoError(t, err)
+
+		pullIssue := &issues_model.Issue{
+			RepoID:   baseRepo.ID,
+			Title:    "Single step merge",
+			PosterID: user.ID,
+			Poster:   user,
+			IsPull:   true,
+		}
+		pullRequest := &issues_model.PullRequest{
+			HeadRepoID: baseRepo.ID,
+			BaseRepoID: baseRepo.ID,
+			HeadBranch: "edit",
+			BaseBranch: "main",
+			HeadRepo:   baseRepo,
+			BaseRepo:   baseRepo,
+			Type:       issues_model.PullRequestGitea,
+		}
+		require.NoError(t, pull_service.NewPullRequest(t.Context(), &pull_service.NewPullRequestOptions{
+			Repo: baseRepo, Issue: pullIssue, PullRequest: pullRequest,
+		}))
+
+		session := loginUser(t, user.Name)
+		link := path.Join(user.Name, baseRepo.Name, "pulls", strconv.FormatInt(pullIssue.Index, 10), "merge")
+		// exactly what the single-click merge form posts: no merge_title_field, no merge_message_field
+		req := NewRequestWithValues(t, "POST", link, map[string]string{
+			"_csrf": GetUserCSRFToken(t, session),
+			"do":    string(repo_model.MergeStyleSquash),
+		})
+		resp := session.MakeRequest(t, req, http.StatusOK)
+
+		respJSON := struct {
+			Redirect string
+		}{}
+		DecodeJSON(t, resp, &respJSON)
+		// Forkana serves articles under an "/article" prefix
+		assert.Regexp(t, fmt.Sprintf(`/%s/%s/pulls/%d$`, user.Name, baseRepo.Name, pullIssue.Index), respJSON.Redirect)
+
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), baseRepo)
+		require.NoError(t, err)
+		defer gitRepo.Close()
+
+		commit, err := gitRepo.GetBranchCommit("main")
+		require.NoError(t, err)
+
+		message := commit.CommitMessage
+		assert.Contains(t, message, fmt.Sprintf("Single step merge (#%d)", pullIssue.Index))
+		assert.Contains(t, message, "Reviewed-on: ")
 	})
 }
 
