@@ -134,15 +134,17 @@ func TestExploreSubjectsListMarkup(t *testing.T) {
 	assert.NotContains(t, html, "octicon-repo-forked")
 }
 
-// TestExploreNavbarSubjectsTabActive locks the explore navbar markup from #294. The tab the page
-// belongs to must carry the "active" class, and the tabs must live inside the
+// TestExploreNavbarActiveTab locks the explore navbar markup from #294. The tab the page belongs
+// to must carry the "active" class and no other tab may, and the tabs must live inside the
 // ".overflow-menu-items" wrapper: the <overflow-menu> web component waits for that element before
 // it initialises, and the CSS that aligns the active tab's underline with the menu rail is keyed
 // on it too. Without the wrapper the tab still renders, but unstyled and never collapsing.
-func TestExploreNavbarSubjectsTabActive(t *testing.T) {
+func TestExploreNavbarActiveTab(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	activeTab := func(path string) string {
+	// activeTab returns the href of the one active tab together with the parsed page, so the
+	// caller can make further assertions about the same response instead of fetching it again.
+	activeTab := func(path string) (string, *HTMLDoc) {
 		req := NewRequest(t, "GET", path)
 		resp := MakeRequest(t, req, http.StatusOK)
 		h := NewHTMLParser(t, resp.Body)
@@ -152,25 +154,28 @@ func TestExploreNavbarSubjectsTabActive(t *testing.T) {
 		assert.Equal(t, 1, active.Length(), "exactly one explore tab should be active on %s", path)
 		href, exists := active.Attr("href")
 		assert.True(t, exists, "the active explore tab should be a link on %s", path)
-		return href
+		return href, h
 	}
 
 	subjectsHref := setting.AppSubURL + "/explore/subjects"
 	usersHref := setting.AppSubURL + "/explore/users"
 
 	// the tab the page belongs to is the active one, and the others are not
-	assert.True(t, strings.HasPrefix(activeTab("/explore/subjects?q=mars"), subjectsHref),
+	subjectsTab, subjectsPage := activeTab("/explore/subjects?q=mars")
+	assert.True(t, strings.HasPrefix(subjectsTab, subjectsHref),
 		"the Subjects tab should be the active one on /explore/subjects")
-	assert.True(t, strings.HasPrefix(activeTab("/explore/users?q=mars"), usersHref),
+	usersTab, _ := activeTab("/explore/users?q=mars")
+	assert.True(t, strings.HasPrefix(usersTab, usersHref),
 		"the Users tab should be the active one on /explore/users")
 
-	// the inactive tabs are still rendered, just not marked active
-	req := NewRequest(t, "GET", "/explore/subjects?q=mars")
-	h := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
-	assert.Equal(t, 0, h.Find(`overflow-menu .overflow-menu-items a.item.active[href^="`+usersHref+`"]`).Length(),
-		"the Users tab must not be active on /explore/subjects")
-	assert.Equal(t, 1, h.Find(`overflow-menu .overflow-menu-items a.item[href^="`+usersHref+`"]`).Length(),
+	// the inactive tabs are still rendered, just not marked active. The "still rendered" half is
+	// what keeps the pair from passing vacuously against a tab that stopped rendering at all.
+	// Only the Users tab gets this pair: the Code tab is gated on "IsRepoIndexerEnabled", which
+	// explore.Subjects never puts in the template data, so it never renders here and asserting it
+	// is not active would be trivially true. The "exactly one active tab" check above already
+	// covers every other tab anyway.
+	assert.Equal(t, 1, subjectsPage.Find(`overflow-menu .overflow-menu-items a.item[href^="`+usersHref+`"]`).Length(),
 		"the Users tab should still be rendered on /explore/subjects")
-	assert.Equal(t, 0, h.Find(`overflow-menu .overflow-menu-items a.item.active[href^="`+setting.AppSubURL+`/explore/code"]`).Length(),
-		"the Code tab must not be active on /explore/subjects")
+	assert.Equal(t, 0, subjectsPage.Find(`overflow-menu .overflow-menu-items a.item.active[href^="`+usersHref+`"]`).Length(),
+		"the Users tab must not be active on /explore/subjects")
 }

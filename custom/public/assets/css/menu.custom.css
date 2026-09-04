@@ -6,7 +6,7 @@
    button takes over the active underline. web_src/css/base.css draws it with
    `border-bottom: 2px solid currentcolor`, i.e. near-black, which contradicts the branded
    underline the rule above gives the tab it stands in for. Same selector as base.css so the
-   specificities match; this sheet is loaded later, so the longhand wins. */
+   specificities match, and this sheet is loaded later, so the cascade lets this colour win. */
 overflow-menu.ui.secondary.pointing.menu .overflow-menu-button.active {
   border-bottom-color: var(--color-primary);
 }

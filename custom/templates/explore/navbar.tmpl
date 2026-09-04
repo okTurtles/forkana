@@ -13,14 +13,14 @@
 			</a>
 		{{end}}
 		<!-- {{if not .OrganizationsPageIsDisabled}}
-		<a class="{{if .PageIsExploreOrganizations}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/organizations?" AppSubUrl) "q" .Keyword}}">
-			{{svg "octicon-organization"}} {{ctx.Locale.Tr "explore.organizations"}}
-		</a>
+			<a class="{{if .PageIsExploreOrganizations}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/organizations?" AppSubUrl) "q" .Keyword}}">
+				{{svg "octicon-organization"}} {{ctx.Locale.Tr "explore.organizations"}}
+			</a>
 		{{end}} -->
 		{{if and (not ctx.Consts.RepoUnitTypeCode.UnitGlobalDisabled) .IsRepoIndexerEnabled (not .CodePageIsDisabled)}}
-		<a class="{{if .PageIsExploreCode}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/code?" AppSubUrl) "q" .Keyword}}">
-			{{svg "octicon-code"}} {{ctx.Locale.Tr "explore.code"}}
-		</a>
+			<a class="{{if .PageIsExploreCode}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/code?" AppSubUrl) "q" .Keyword}}">
+				{{svg "octicon-code"}} {{ctx.Locale.Tr "explore.code"}}
+			</a>
 		{{end}}
 	</div>
 </overflow-menu>
