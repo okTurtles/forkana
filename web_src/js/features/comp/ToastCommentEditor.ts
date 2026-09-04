@@ -86,7 +86,9 @@ export class ToastCommentEditor {
       previewStyle = 'vertical',
       toolbarItems = [
         ['heading', 'bold', 'italic'],
-        ['indent', 'outdent', 'code', 'link'],
+        // See the note in toast-editor.ts: without `codeblock` a Visual-mode author cannot
+        // produce a fenced code block, so mermaid diagrams cannot be written here (#367).
+        ['indent', 'outdent', 'code', 'codeblock', 'link'],
         ['ul', 'ol', 'task'],
         ['image', 'table'],
       ],
