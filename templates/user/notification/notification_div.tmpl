@@ -42,6 +42,10 @@
 						<div class="tw-text-16 tw-py-0.5">
 							{{if $one.Issue}}
 								{{$one.Issue.Title | ctx.RenderUtils.RenderIssueSimpleTitle}}
+							{{else if $one.IsRepoTransferRejected}}
+								{{ctx.Locale.Tr "notification.transfer_rejected"}}
+							{{else if $one.IsRepoTransferPending}}
+								{{ctx.Locale.Tr "notification.transfer_pending"}}
 							{{else}}
 								{{$one.Repository.FullName}}
 							{{end}}

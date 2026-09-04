@@ -70,7 +70,8 @@ func subjectToSource(value []string) (result []activities_model.NotificationSour
 		case "commit":
 			result = append(result, activities_model.NotificationSourceCommit)
 		case "repository":
-			result = append(result, activities_model.NotificationSourceRepository)
+			// Both sources surface through the API as a "Repository" subject.
+			result = append(result, activities_model.NotificationSourceRepository, activities_model.NotificationSourceRepoTransferRejected)
 		}
 	}
 	return result
