@@ -42,7 +42,11 @@ export async function createToastEditor(
     hideModeSwitch = false,   // must be false to show the tabs
     toolbarItems = [
       ['heading', 'bold', 'italic'],
-      ['indent', 'outdent', 'code', 'link'],
+      // `codeblock` is what lets a Visual-mode author produce a fenced code block at all
+      // (issue #367). Without it there is no way to write a ```mermaid block except by
+      // switching to the Source editor: typing the backticks in Visual mode just escapes
+      // them, so diagrams were being saved as plain paragraphs and never rendered.
+      ['indent', 'outdent', 'code', 'codeblock', 'link'],
       ['ul', 'ol', 'task'],
       ['image', 'table'],
     ],
