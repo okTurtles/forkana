@@ -73,16 +73,16 @@ func testPullMerge(t *testing.T, session *TestSession, user, repo, pullnum strin
 
 	// Forkana: the merge form is submitted in a single click and sends no merge title or
 	// message, so the server has to generate the whole merge commit message.
-	if mergeStyle != repo_model.MergeStyleRebase {
-		assertMergeCommitMessageIsGenerated(t, user, repo, "")
+	if mergeStyle != repo_model.MergeStyleRebase && mergeStyle != repo_model.MergeStyleManuallyMerged {
+		assertMergeCommitMessageIsGenerated(t, user, repo)
 	}
 
 	return resp
 }
 
-// assertMergeCommitMessageIsGenerated checks that the last commit on the given branch (the
-// default branch when empty) carries the server-generated merge commit message trailers.
-func assertMergeCommitMessageIsGenerated(t *testing.T, ownerName, repoName, branch string) {
+// assertMergeCommitMessageIsGenerated checks that the last commit on the repository's default
+// branch carries the server-generated merge commit message trailers.
+func assertMergeCommitMessageIsGenerated(t *testing.T, ownerName, repoName string) {
 	t.Helper()
 
 	repo, err := repo_model.GetRepositoryByOwnerAndName(t.Context(), ownerName, repoName)
@@ -92,10 +92,7 @@ func assertMergeCommitMessageIsGenerated(t *testing.T, ownerName, repoName, bran
 	require.NoError(t, err)
 	defer gitRepo.Close()
 
-	if branch == "" {
-		branch = repo.DefaultBranch
-	}
-	commit, err := gitRepo.GetBranchCommit(branch)
+	commit, err := gitRepo.GetBranchCommit(repo.DefaultBranch)
 	require.NoError(t, err)
 
 	assert.Contains(t, commit.CommitMessage, "Reviewed-on: ")

@@ -33,7 +33,12 @@ async function mountMergeForm(overrides: Record<string, any> = {}): Promise<HTML
   window.config.pageData.pullRequestMergeForm = makeMergeForm(overrides);
   const root = document.createElement('div');
   document.body.append(root);
-  createApp(PullRequestMergeForm).mount(root);
+  const app = createApp(PullRequestMergeForm);
+  app.mount(root);
+  onTestFinished(() => {
+    app.unmount();
+    root.remove();
+  });
   await nextTick();
   return root;
 }
