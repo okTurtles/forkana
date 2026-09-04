@@ -19,10 +19,14 @@ afterEach(() => {
 // A search bar as the explore pages render it: the keyword field carries the keyword the page was
 // rendered for as its "value" attribute (so the field's defaultValue), and the sort and the filters
 // are radios inside that same form, checked to match the results currently on screen.
-function mountSearchForm(renderedKeyword: string): HTMLFormElement {
+// The explore pages also render the tab navbar, which carries the keyword over in its links; the
+// profile and admin pages render the same search bar without it. Pass withTabs for the former.
+function mountSearchForm(renderedKeyword: string, withTabs: boolean = false): HTMLFormElement {
   document.body.innerHTML = `
+    ${withTabs ? '<a data-explore-tab-link href="/explore/subjects">Subjects</a>' : ''}
     <form id="subject-search-form">
       <input type="search" name="q" value="${renderedKeyword}">
+      <input type="radio" name="sort" value="newest">
       <input type="radio" name="sort" value="oldest" checked>
       <input type="radio" name="fork" value="1" checked>
       <button type="submit">Search</button>
@@ -74,4 +78,56 @@ test('clearing the keyword clears the search, not the arrangement', () => {
   expect(params.has('q')).toBe(false);
   expect(params.get('sort')).toEqual('oldest');
   expect(params.get('fork')).toEqual('1');
+});
+
+// Pick one of the form's radios and let it fire the "change" the browser fires on a click.
+function pickRadio(searchForm: HTMLFormElement, name: string, value: string): void {
+  const radio = searchForm.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`);
+  radio.checked = true;
+  radio.dispatchEvent(new Event('change', {bubbles: true}));
+}
+
+test('a sort picked while a new keyword is typed searches from scratch too', () => {
+  const searchForm = mountSearchForm('mars', true);
+  (searchForm.elements.namedItem('q') as HTMLInputElement).value = 'forest';
+
+  pickRadio(searchForm, 'sort', 'newest');
+  const params = new URLSearchParams(navigatedTo);
+  expect(params.get('q')).toEqual('forest');
+  // the sort just picked is the point of the gesture, the previous filters are not
+  expect(params.get('sort')).toEqual('newest');
+  expect(params.has('fork')).toBe(false);
+});
+
+test('a sort picked without touching the keyword keeps the filters', () => {
+  const searchForm = mountSearchForm('mars', true);
+
+  pickRadio(searchForm, 'sort', 'newest');
+  const params = new URLSearchParams(navigatedTo);
+  expect(params.get('q')).toEqual('mars');
+  expect(params.get('sort')).toEqual('newest');
+  expect(params.get('fork')).toEqual('1');
+});
+
+test('leaving an edited keyword field searches from scratch where that navigates', () => {
+  // without the explore navbar (profiles, the admin repository list) the keyword field navigates
+  // on "change", and that navigation is a new search like any other
+  const searchForm = mountSearchForm('mars');
+  const keywordField = searchForm.elements.namedItem('q') as HTMLInputElement;
+  keywordField.value = 'forest';
+
+  keywordField.dispatchEvent(new Event('change', {bubbles: true}));
+  expect(navigatedTo).toEqual('q=forest');
+});
+
+test('the clear filters button still keeps the sort', () => {
+  const searchForm = mountSearchForm('mars', true);
+  searchForm.insertAdjacentHTML('beforeend', '<input type="radio" name="clear-filter" value="">');
+  (searchForm.elements.namedItem('q') as HTMLInputElement).value = 'forest';
+
+  pickRadio(searchForm, 'clear-filter', '');
+  const params = new URLSearchParams(navigatedTo);
+  expect(params.has('fork')).toBe(false);
+  expect(params.get('sort')).toEqual('oldest');
+  expect(params.has('clear-filter')).toBe(false);
 });

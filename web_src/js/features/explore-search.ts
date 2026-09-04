@@ -32,14 +32,19 @@ function updateTabLinks(keyword: string): void {
 // The filters offered beside the search field. The "clear filters" button drops exactly these.
 const filterParamNames = ['archived', 'fork', 'mirror', 'template', 'private', 'repo_role'];
 
-// Everything that arranges the results rather than selects them: the filters, the sort order, and
-// the page reached within that arrangement. All of it is rendered inside the same form as the
-// keyword field, so a native submit carries it along with whatever has just been typed.
-const arrangementParamNames = [...filterParamNames, 'sort', 'page'];
+// Drop the filters, leaving the sort order alone. This is what the "clear filters" button does.
+function dropFilterParams(params: URLSearchParams): void {
+  for (const name of filterParamNames) params.delete(name);
+}
 
-// Return the results to the way the plain, unfiltered page arranges them.
+// Return the results to the way the plain, unfiltered page arranges them: no filters and no sort.
+//
+// Both are rendered inside the same form as the keyword field, so a native submit carries them
+// along with whatever has just been typed. The page number needs no dropping: pagination is
+// rendered as links outside the form, so a query string rebuilt from the form alone never has one.
 function resetArrangement(params: URLSearchParams): void {
-  for (const name of arrangementParamNames) params.delete(name);
+  dropFilterParams(params);
+  params.delete('sort');
 }
 
 // The form's keyword field, when it has one.
@@ -57,6 +62,14 @@ function getKeyword(searchForm: HTMLFormElement): string {
 // filled in and which the browser keeps as "defaultValue" however the field is edited afterwards.
 function getRenderedKeyword(searchForm: HTMLFormElement): string {
   return getKeywordField(searchForm)?.defaultValue.trim() ?? '';
+}
+
+// Whether the field holds a search of its own that the page on screen is not the answer to. An
+// emptied field is not one: it asks for the unsearched page, which #335 returns without touching
+// the way the results are arranged.
+function isNewKeyword(searchForm: HTMLFormElement): boolean {
+  const keyword = getKeyword(searchForm);
+  return Boolean(keyword) && keyword !== getRenderedKeyword(searchForm);
 }
 
 // Query string the form should navigate to.
@@ -94,7 +107,15 @@ export function initExploreSearch() {
 
       const params = buildSearchParams(searchForm);
       if (e.target.name === 'clear-filter') {
-        for (const name of filterParamNames) params.delete(name);
+        dropFilterParams(params);
+      } else if (isNewKeyword(searchForm)) {
+        // A keyword edited but not submitted rides along with this control change, which makes the
+        // navigation a fresh search: it gets the fresh arrangement a submitted one gets, except for
+        // the control the user has just picked, which is the whole point of the gesture. Without
+        // this, picking a sort after typing a new keyword would search for it through the filters
+        // the previous results were left in, which is the bug this file exists to keep fixed.
+        resetArrangement(params);
+        if (e.target.name !== 'q') params.set(e.target.name, e.target.value);
       }
 
       window.location.search = params.toString();
@@ -125,11 +146,10 @@ export function initExploreSearch() {
     // Re-submitting the keyword already on screen keeps them: there the form is the only record of
     // a sort or a filter the user has just picked, and dropping it would undo that choice.
     searchForm.addEventListener('submit', (e: Event) => {
-      const keyword = getKeyword(searchForm);
-      if (keyword && keyword === getRenderedKeyword(searchForm)) return; // submit it natively
+      if (getKeyword(searchForm) && !isNewKeyword(searchForm)) return; // submit it natively
       e.preventDefault();
       const params = buildSearchParams(searchForm); // an empty keyword drops "q" and nothing else
-      if (keyword) resetArrangement(params);
+      if (isNewKeyword(searchForm)) resetArrangement(params);
       window.location.search = params.toString();
     });
   }
