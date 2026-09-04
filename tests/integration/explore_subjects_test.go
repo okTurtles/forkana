@@ -201,9 +201,15 @@ func TestExploreSubjectsSortOptions(t *testing.T) {
 	AssertHTMLElement(t, doc, `input[name="template"]`, false)
 	AssertHTMLElement(t, doc, `input[name="private"]`, false)
 
-	// Every offered sort value is one the handler actually resolves.
+	// Every offered sort value is one the handler actually resolves. A sort key the handler
+	// does not know is silently rewritten to "recentupdate" and still answers 200, so the
+	// status alone proves nothing: assert the dropdown comes back with the requested sort
+	// marked active, which is the resolved value the handler echoed into SortType.
 	for _, sortType := range sorts {
 		req := NewRequest(t, "GET", "/explore/subjects?sort="+sortType)
-		MakeRequest(t, req, http.StatusOK)
+		doc := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
+		active, exists := doc.Find(`#subject-search-form label.active input[name="sort"]`).Attr("value")
+		assert.True(t, exists, "no active sort option when requesting %s", sortType)
+		assert.Equal(t, sortType, active)
 	}
 }
