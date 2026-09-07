@@ -551,11 +551,9 @@ func registerWebRoutes(m *web.Router) {
 		m.Get("", func(ctx *context.Context) {
 			ctx.Redirect(setting.AppSubURL + "/explore/subjects")
 		})
-		m.Get("/articles", explore.Repos)
 		m.Get("/subjects", explore.Subjects)
 		m.Get("/subjects/suggestions", explore.SubjectSuggestions)
 		m.Get("/articles/history/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByDefaultBranch(), repo.SetEditorconfigIfExists, explore.RepoHistory)
-		m.Get("/articles/sitemap-{idx}.xml", sitemapEnabled, explore.Repos)
 		m.Get("/subjects/sitemap-{idx}.xml", sitemapEnabled, explore.Subjects)
 		m.Get("/users", explore.Users)
 		m.Get("/users/sitemap-{idx}.xml", sitemapEnabled, explore.Users)

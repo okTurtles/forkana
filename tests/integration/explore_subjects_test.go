@@ -28,24 +28,24 @@ func TestExploreSubjects(t *testing.T) {
 	assert.NotNil(t, subject2)
 
 	// Test basic page load
-	req := NewRequest(t, "GET", "/explore/articles")
+	req := NewRequest(t, "GET", "/explore/subjects")
 	resp := MakeRequest(t, req, http.StatusOK)
 	assert.Equal(t, http.StatusOK, resp.Code)
 
 	// Test search functionality
-	req = NewRequest(t, "GET", "/explore/articles?q=Alpha")
+	req = NewRequest(t, "GET", "/explore/subjects?q=Alpha")
 	resp = MakeRequest(t, req, http.StatusOK)
 	respStr := resp.Body.String()
-	assert.Contains(t, respStr, `value="Alpha"`)
+	assert.Contains(t, respStr, `<input type="search" name="q" value="Alpha"`)
 
-	// Test sorting
-	req = NewRequest(t, "GET", "/explore/articles?sort=alphabetically")
+	// Test sorting: the requested sort is the one marked as selected in the sort menu
+	req = NewRequest(t, "GET", "/explore/subjects?sort=alphabetically")
 	resp = MakeRequest(t, req, http.StatusOK)
 	respStr = resp.Body.String()
-	assert.Contains(t, respStr, `value="alphabetically"`)
+	assert.Contains(t, respStr, `checked value="alphabetically"`)
 
 	// Test pagination
-	req = NewRequest(t, "GET", "/explore/articles?page=1")
+	req = NewRequest(t, "GET", "/explore/subjects?page=1")
 	resp = MakeRequest(t, req, http.StatusOK)
 	assert.Equal(t, http.StatusOK, resp.Code)
 }
@@ -53,18 +53,20 @@ func TestExploreSubjects(t *testing.T) {
 func TestExploreSubjectsSorting(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	// Test all sort options
+	// Test all sort options the subjects list offers
 	sortOptions := []string{
 		"alphabetically",
 		"reversealphabetically",
-		"newest",
-		"oldest",
 		"recentupdate",
 		"leastupdate",
+		"mostforks",
+		"fewestforks",
+		"mostcontributors",
+		"fewestcontributors",
 	}
 
 	for _, sortType := range sortOptions {
-		req := NewRequest(t, "GET", "/explore/articles?sort="+sortType)
+		req := NewRequest(t, "GET", "/explore/subjects?sort="+sortType)
 		resp := MakeRequest(t, req, http.StatusOK)
 		assert.Equal(t, http.StatusOK, resp.Code, "Sort type %s should work", sortType)
 	}
@@ -131,4 +133,36 @@ func TestExploreSubjectsListMarkup(t *testing.T) {
 	// Neither the stock repository counts nor the created/updated line belong in the row.
 	assert.NotContains(t, html, "flex-item-trailing")
 	assert.NotContains(t, html, "octicon-repo-forked")
+}
+
+// TestExploreArticlesRemoved pins the removal of the unreachable /explore/articles listing.
+// Nothing in the UI ever linked to it; the history route below shares the prefix and stays.
+func TestExploreArticlesRemoved(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	MakeRequest(t, NewRequest(t, "GET", "/explore/articles"), http.StatusNotFound)
+	MakeRequest(t, NewRequest(t, "GET", "/explore/articles?q=test"), http.StatusNotFound)
+	MakeRequest(t, NewRequest(t, "GET", "/explore/articles/sitemap-1.xml"), http.StatusNotFound)
+
+	// The article history view is a different route and must keep working.
+	MakeRequest(t, NewRequest(t, "GET", "/explore/articles/history/user2/repo1"), http.StatusOK)
+}
+
+// TestExploreSubjectsSitemap pins the sitemap that moved off /explore/articles. It has to be XML
+// (the subjects sitemap route used to fall through to the HTML page) and it has to list article
+// URLs, which is exactly what crawlers were fed from the old path.
+func TestExploreSubjectsSitemap(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	resp := MakeRequest(t, NewRequest(t, "GET", "/explore/subjects/sitemap-1.xml"), http.StatusOK)
+	assert.Equal(t, "text/xml", resp.Header().Get("Content-Type"))
+
+	body := resp.Body.String()
+	assert.Contains(t, body, "<urlset")
+	assert.Contains(t, body, "<loc>"+setting.AppURL+"article/user2/example-subject</loc>")
+
+	// The sitemap index advertises the subjects path, not the removed articles one.
+	index := MakeRequest(t, NewRequest(t, "GET", "/sitemap.xml"), http.StatusOK).Body.String()
+	assert.Contains(t, index, setting.AppURL+"explore/subjects/sitemap-1.xml")
+	assert.NotContains(t, index, "explore/articles/sitemap-")
 }
