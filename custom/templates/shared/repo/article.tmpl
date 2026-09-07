@@ -40,8 +40,12 @@
                 {{end}}
             </div>
             {{/* ArticleLink points at the route the article was requested through, so the
-                 tabs keep the reader on the vanity URL or the permanent repository URL. */}}
-            {{$articleLink := or .ArticleLink (printf "%s/article/%s/%s" AppSubUrl (PathEscape .Repository.Owner.Name) (PathEscapeSegments (.Repository.GetSubject ctx)))}}
+                 tabs keep the reader on the vanity URL or the permanent repository URL.
+                 Every handler that renders this view sets it (prepareArticleView falls back
+                 to the repository link), so there is no fallback to build here: a local one
+                 could only hard-code the vanity URL, which resolves to a different article
+                 for an archived repository. */}}
+            {{$articleLink := .ArticleLink}}
             <div class="tw-flex tw-items-center tw-gap-4" id="article-tabs">
                 <div class="ui top attached tabular menu tw-my-10 tw-gap-1">
                     <a class="{{if .IsArticleModeRead}}active {{end}}item"

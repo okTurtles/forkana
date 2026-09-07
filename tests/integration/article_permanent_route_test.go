@@ -6,6 +6,7 @@ package integration
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -62,6 +63,26 @@ func TestArticlePermanentRoute(t *testing.T) {
 		require.Equal(t, 1, app.Length())
 		assert.Equal(t, "article", app.AttrOr("data-initial-view", ""))
 		assert.Equal(t, repo.Link(), app.AttrOr("data-article-canonical", ""))
+	})
+
+	// The subject route is the only entry point that does not set "ArticleLink" itself, so
+	// the tabs are built from the fallback in prepareArticleView. The template deliberately
+	// has none of its own: it could only hard-code the vanity url, which resolves to a
+	// different article once the rendered one is archived.
+	t.Run("SubjectRouteTabsFollowTheRenderedRoute", func(t *testing.T) {
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s?view=article", subjectName))
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		canonical := htmlDoc.Find("#repo-history-app").AttrOr("data-article-canonical", "")
+		require.NotEmpty(t, canonical, "the article view must always be rendered with a link")
+
+		for _, mode := range []string{"read", "edit", "history"} {
+			tab := htmlDoc.Find(fmt.Sprintf(`#article-tabs a[data-article-tab=%q]`, mode))
+			require.Equal(t, 1, tab.Length(), "tab %q must be rendered", mode)
+			assert.True(t, strings.HasPrefix(tab.AttrOr("href", ""), canonical+"?"),
+				"tab %q must link to %q, got %q", mode, canonical, tab.AttrOr("href", ""))
+		}
 	})
 
 	t.Run("SubPathsKeepCodeView", func(t *testing.T) {
