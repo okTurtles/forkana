@@ -662,10 +662,11 @@ func (repo *Repository) RepoPath() string {
 	return RepoPath(repo.OwnerName, repo.Name)
 }
 
-// Link returns the repository relative url for viewing articles
-// Uses subject name if available, falls back to repository name
-// Archived articles use the permanent repository url instead, because the subject
-// vanity url resolves to the active repository of that subject.
+// Link returns the repository relative url for viewing articles.
+// An archived article with a subject uses OperationsLink instead, because the subject
+// vanity url resolves to the active repository of that subject. Any other repository
+// yields /article/{owner}/{subject}, using the repository name in place of the subject
+// when none is assigned.
 func (repo *Repository) Link() string {
 	if repo.IsArchived && repo.SubjectID > 0 {
 		return repo.OperationsLink()
@@ -1055,7 +1056,10 @@ func GetActiveRepositoryByOwnerIDAndSubjectID(ctx context.Context, ownerID, subj
 		Where("owner_id = ?", ownerID).
 		And("subject_id = ?", subjectID).
 		And("is_archived = ?", false).
-		OrderBy("id ASC").
+		// Same tie-break as GetRepositoryByOwnerAndSubject, so the slot check and the
+		// vanity url agree on which repository wins if an owner ever ends up with
+		// several active ones for a subject.
+		OrderBy("updated_unix DESC, id DESC").
 		Get(&repo)
 	if err != nil {
 		return nil, err
