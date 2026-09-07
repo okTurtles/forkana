@@ -329,14 +329,13 @@ func TestUpdateIssuesCommitRefCommentLink(t *testing.T) {
 			expected: `<a href="/article/user2/Mermaid%20Graphs%20Example?version=aaaaaa2">ref link</a>`,
 		},
 		{
-			// an archived article is addressed by its permanent repository url, which
-			// does have a "/commit/{sha}" path
-			name: "ArchivedArticleUsesRepositoryCommitPath",
+			// an archived article is still served from the article view
+			name: "ArchivedArticleUsesArticleVersionLink",
 			sha:  "aaaaaa3",
 			prepare: func(repo *repo_model.Repository) {
 				repo.IsArchived = true
 			},
-			expected: `<a href="/user2/repo1/commit/aaaaaa3">ref link</a>`,
+			expected: `<a href="/article/user2/example-subject?version=aaaaaa3">ref link</a>`,
 		},
 	}
 

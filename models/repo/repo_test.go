@@ -74,8 +74,8 @@ func TestCommitLink(t *testing.T) {
 	}
 	assert.Equal(t, setting.AppSubURL+"/article/user13/Some%20Subject?version="+sha, article.CommitLink(sha))
 
-	// an archived article links through the permanent repository url, which has a
-	// "/commit/{sha}" route
+	// an archived article is still served from the article view, so its commit link
+	// keeps the "version" query parameter
 	archived := &Repository{
 		OwnerName:       "user13",
 		Name:            "repo11",
@@ -83,7 +83,7 @@ func TestCommitLink(t *testing.T) {
 		SubjectID:       1,
 		SubjectRelation: &Subject{ID: 1, Name: "Some Subject", Slug: "some-subject"},
 	}
-	assert.Equal(t, setting.AppSubURL+"/user13/repo11/commit/"+sha, archived.CommitLink(sha))
+	assert.Equal(t, setting.AppSubURL+"/article/user13/Some%20Subject?version="+sha, archived.CommitLink(sha))
 
 	assert.Empty(t, article.CommitLink("0000000000000000000000000000000000000000"))
 }
