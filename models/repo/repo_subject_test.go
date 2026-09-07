@@ -444,8 +444,8 @@ func TestSubjectLookupPrefersActiveRepository(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, active.ID, found.ID)
 
-	// the archived article is not addressable through the article namespace at all, so
-	// its link cannot be captured by the active repository of the subject
+	// the archived article is never linked through the article namespace, so its link
+	// cannot be captured by the active repository of the subject
 	assert.Equal(t, archived.OperationsLink(), archived.Link())
 	assert.NotEqual(t, found.Link(), archived.Link())
 }
