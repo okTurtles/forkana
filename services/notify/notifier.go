@@ -28,6 +28,7 @@ type Notifier interface {
 	RenameRepository(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, oldRepoName string)
 	TransferRepository(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, oldOwnerName string)
 	RepoPendingTransfer(ctx context.Context, doer, newOwner *user_model.User, repo *repo_model.Repository)
+	RepoTransferRejected(ctx context.Context, doer, initiator *user_model.User, repo *repo_model.Repository)
 
 	NewIssue(ctx context.Context, issue *issues_model.Issue, mentions []*user_model.User)
 	IssueChangeStatus(ctx context.Context, doer *user_model.User, commitID string, issue *issues_model.Issue, actionComment *issues_model.Comment, closeOrReopen bool)

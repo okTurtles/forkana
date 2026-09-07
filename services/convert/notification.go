@@ -75,7 +75,7 @@ func ToNotificationThread(ctx context.Context, n *activities_model.Notification)
 			URL:     url,
 			HTMLURL: url,
 		}
-	case activities_model.NotificationSourceRepository:
+	case activities_model.NotificationSourceRepository, activities_model.NotificationSourceRepoTransferRejected:
 		result.Subject = &api.NotificationSubject{
 			Type:  api.NotifySubjectRepository,
 			Title: n.Repository.FullName(),
