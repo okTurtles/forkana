@@ -426,11 +426,15 @@ func (repo *Repository) HTMLURL(ctxs ...context.Context) string {
 // note: won't check whether it's an right id
 func (repo *Repository) CommitLink(commitID string) (result string) {
 	if git.IsEmptyCommitID(commitID) {
-		result = ""
-	} else {
-		result = repo.Link() + "/commit/" + url.PathEscape(commitID)
+		return ""
 	}
-	return result
+	// Link() resolves to either the article vanity url or the permanent repository
+	// url; only the latter has a "/commit/{sha}" route, the article view selects a
+	// version through the "version" query parameter.
+	if link := repo.Link(); link != repo.OperationsLink() {
+		return link + "?version=" + url.QueryEscape(commitID)
+	}
+	return repo.OperationsLink() + "/commit/" + url.PathEscape(commitID)
 }
 
 // APIURL returns the repository API URL

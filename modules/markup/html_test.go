@@ -35,7 +35,7 @@ func TestRender_Commits(t *testing.T) {
 	sha := "65f1bf27bc3bf70f64657658635e66094edbcb4d"
 	repo := markup.TestAppURL + testRepoOwnerName + "/" + testRepoName + "/"
 	commit := util.URLJoin(repo, "commit", sha)
-	commitPath := "/article/user13/repo11/commit/" + sha
+	commitPath := "/article/user13/repo11?version=" + sha
 	tree := util.URLJoin(repo, "tree", sha, "src")
 
 	file := util.URLJoin(repo, "commit", sha, "example.txt")
@@ -68,6 +68,27 @@ func TestRender_Commits(t *testing.T) {
 	test(sha[:14]+".", `<p>`+expected14+`.</p>`)
 	test(sha[:14]+",", `<p>`+expected14+`,</p>`)
 	test("["+sha[:14]+"]", `<p>[`+expected14+`]</p>`)
+}
+
+// TestRender_CommitCrossReference makes sure that "owner/name@sha" references link to
+// the article view route ("/article/{owner}/{subject}?version={sha}"), the only route
+// that resolves a specific article version.
+func TestRender_CommitCrossReference(t *testing.T) {
+	defer testModule.MockVariableValue(&markup.RenderBehaviorForTesting.DisableAdditionalAttributes, true)()
+	test := func(input, expected string) {
+		rctx := markup.NewTestRenderContext(markup.TestAppURL, localMetas).WithRelativePath("a.md")
+		buffer, err := markup.RenderString(rctx, input)
+		assert.NoError(t, err)
+		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(buffer))
+	}
+
+	sha := "65f1bf27bc3bf70f64657658635e66094edbcb4d"
+	test("test-owner/test-repo@"+sha,
+		`<p><a href="/article/test-owner/test-repo?version=`+sha+`" class="commit" rel="nofollow">test-owner/test-repo@65f1bf27bc</a></p>`)
+	test("test-owner/test-repo@"+sha[:7],
+		`<p><a href="/article/test-owner/test-repo?version=`+sha[:7]+`" class="commit" rel="nofollow">test-owner/test-repo@`+sha[:7]+`</a></p>`)
+	test("see test-owner/test-repo@"+sha+" for details",
+		`<p>see <a href="/article/test-owner/test-repo?version=`+sha+`" class="commit" rel="nofollow">test-owner/test-repo@65f1bf27bc</a> for details</p>`)
 }
 
 func TestRender_CrossReferences(t *testing.T) {
