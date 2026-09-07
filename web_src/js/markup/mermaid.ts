@@ -1,5 +1,5 @@
 import {isDarkTheme} from '../utils.ts';
-import {makeCodeCopyButton} from './codecopy.ts';
+import {findCodeCopyButtonContainer, makeCodeCopyButton, normalizeCodeCopyText} from './codecopy.ts';
 import {displayError} from './common.ts';
 import {queryElems} from '../utils/dom.ts';
 import {html, htmlRaw} from '../utils/html.ts';
@@ -53,8 +53,11 @@ export async function initMarkupCodeMermaid(elMarkup: HTMLElement): Promise<void
       mermaidBlock.classList.add('mermaid-block', 'is-loading', 'tw-hidden');
       mermaidBlock.append(iframe);
 
-      const btn = makeCodeCopyButton();
-      btn.setAttribute('data-clipboard-text', source);
+      // reuse the generic copy button if it exists, appending it moves it into the mermaid block
+      // and avoids leaving a second overlapping button in the outer container
+      const btnContainer = findCodeCopyButtonContainer(pre);
+      const btn = btnContainer?.querySelector<HTMLButtonElement>(':scope > .code-copy') ?? makeCodeCopyButton();
+      btn.setAttribute('data-clipboard-text', normalizeCodeCopyText(source));
       mermaidBlock.append(btn);
 
       const updateIframeHeight = () => {
