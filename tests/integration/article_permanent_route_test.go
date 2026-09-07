@@ -130,6 +130,14 @@ func TestArticlePermanentRoute(t *testing.T) {
 		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 
+	// ArticleView builds the article link straight from "subjectname" without a fallback,
+	// which holds because the route cannot match an empty segment.
+	t.Run("ArticleURLWithoutSubjectDoesNotReachTheArticleView", func(t *testing.T) {
+		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/", owner.Name))
+		resp := session.MakeRequest(t, req, NoExpectedStatus)
+		assert.NotEqual(t, http.StatusOK, resp.Code)
+	})
+
 	// The repository name of an article is the slug of its subject, so an archived
 	// article can be named exactly like a subject the owner still has an active article
 	// for. Its permanent URL must keep resolving to the archived repository.
