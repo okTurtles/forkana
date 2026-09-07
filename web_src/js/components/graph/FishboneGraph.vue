@@ -45,6 +45,10 @@ import {
   registerRemeasureTriggers, sizeChanged,
   type ContainerSize,
 } from "./graph-viewport.ts";
+import {
+  readStoredSelection, writeStoredSelection,
+  type RepoSelection as RepoSelectionDetail,
+} from "../../modules/repo-selection.ts";
 
 // Inline types replacing former seeds module
 type Side = -1 | 1;
@@ -78,13 +82,6 @@ type Node = {
   statsPending?: boolean;
 };
 type Graph = Record<string, Node>;
-
-type RepoSelectionDetail = { owner: string; repo: string; subject?: string | null; archived?: boolean };
-
-const LS_OWNER_KEY = 'selectedArticleOwner';
-const LS_SUBJECT_KEY = 'selectedArticleSubject';
-const LS_REPO_KEY = 'selectedArticleRepo';
-const LS_ARCHIVED_KEY = 'selectedArticleArchived';
 
 /* ──────────────────────────────────────────────────────────────────────────────
    LAYOUT CONSTANTS (all values explained to avoid "magic numbers")
@@ -402,23 +399,6 @@ let pendingExternalSelection: RepoSelectionDetail | null = null;
 
 function normalize(value?: string | null) {
   return (value ?? '').toLowerCase();
-}
-
-function readStoredSelection(): RepoSelectionDetail | null {
-  try {
-    const owner = window.localStorage.getItem(LS_OWNER_KEY);
-    const repo = window.localStorage.getItem(LS_REPO_KEY);
-    const subject = window.localStorage.getItem(LS_SUBJECT_KEY);
-    const archived = window.localStorage.getItem(LS_ARCHIVED_KEY) === 'true';
-    if (!owner) return null;
-    if (repo) {
-      return { owner, repo, subject: subject || null, archived };
-    }
-    if (!subject) return null;
-    return { owner, repo: subject, subject, archived };
-  } catch {
-    return null;
-  }
 }
 
 function getSelectionDetailFromNode(n: Node): RepoSelectionDetail | null {
@@ -1482,7 +1462,7 @@ onMounted(async () => {
       resetView(true);
       applySelection(null, null);
       pendingExternalSelection = null;
-      persistSelectionDetail(null);
+      writeStoredSelection(null);
       window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: null }));
       window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: null }));
     }
@@ -1553,33 +1533,6 @@ onBeforeUnmount(() => {
 
 /* Derived for template binding */
 const kComputed = computed(() => currentK.value);
-
-function persistSelectionDetail(detail: RepoSelectionDetail | null) {
-  if (typeof window === 'undefined') return;
-  try {
-    if (!detail) {
-      window.localStorage.removeItem(LS_OWNER_KEY);
-      window.localStorage.removeItem(LS_SUBJECT_KEY);
-      window.localStorage.removeItem(LS_REPO_KEY);
-      window.localStorage.removeItem(LS_ARCHIVED_KEY);
-    } else {
-      window.localStorage.setItem(LS_OWNER_KEY, detail.owner);
-      if (detail.subject) {
-        window.localStorage.setItem(LS_SUBJECT_KEY, detail.subject);
-      } else {
-        window.localStorage.removeItem(LS_SUBJECT_KEY);
-      }
-      window.localStorage.setItem(LS_REPO_KEY, detail.repo);
-      if (detail.archived) {
-        window.localStorage.setItem(LS_ARCHIVED_KEY, 'true');
-      } else {
-        window.localStorage.removeItem(LS_ARCHIVED_KEY);
-      }
-    }
-  } catch {
-    // ignore storage quotas
-  }
-}
 
 /* ──────────────────────────────────────────────────────────────────────────────
    HOVER / OPEN — one bubble grows to 202px and the graph reflows around it
@@ -1773,7 +1726,7 @@ function onBubbleClick(n: Node) {
   if (!detail) return;
   const payload = { ...detail };
   applySelection(n, payload);
-  persistSelectionDetail(payload);
+  writeStoredSelection(payload);
   announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
   window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: payload }));
   window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
@@ -2057,7 +2010,7 @@ function onBubbleView(n: Node) {
   if (!detail) return;
   const payload = { ...detail };
   applySelection(n, payload);
-  persistSelectionDetail(payload);
+  writeStoredSelection(payload);
   window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
   window.dispatchEvent(new CustomEvent('repo:bubble-open-article', { detail: payload }));
 }

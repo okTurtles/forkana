@@ -4,15 +4,9 @@ import {initArticleEditor} from './article-editor.ts';
 import {initArticleSettings} from './article-settings.ts';
 import {GET} from '../modules/fetch.ts';
 import {BUBBLE_VISIBLE_EVENT} from '../components/graph/graph-viewport.ts';
+import {readStoredSelection, writeStoredSelection, type RepoSelection} from '../modules/repo-selection.ts';
 
 type ViewKey = 'bubble' | 'table' | 'article';
-
-type RepoSelection = {
-  owner: string;
-  repo: string;
-  subject?: string | null;
-  archived?: boolean;
-};
 
 type HistoryState = {
   view: ViewKey;
@@ -22,54 +16,6 @@ type HistoryState = {
   repo?: string | null;
   archived?: boolean;
 };
-
-const LS_OWNER_KEY = 'selectedArticleOwner';
-const LS_SUBJECT_KEY = 'selectedArticleSubject';
-const LS_REPO_KEY = 'selectedArticleRepo';
-const LS_ARCHIVED_KEY = 'selectedArticleArchived';
-
-function readStoredSelection(): RepoSelection | null {
-  try {
-    const owner = window.localStorage.getItem(LS_OWNER_KEY);
-    const repo = window.localStorage.getItem(LS_REPO_KEY);
-    const subject = window.localStorage.getItem(LS_SUBJECT_KEY);
-    const archived = window.localStorage.getItem(LS_ARCHIVED_KEY) === 'true';
-    if (!owner) return null;
-    if (repo) {
-      return {owner, repo, subject: subject || null, archived};
-    }
-    if (!subject) return null;
-    return {owner, repo: subject, subject, archived};
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredSelection(selection: RepoSelection | null) {
-  try {
-    if (!selection) {
-      window.localStorage.removeItem(LS_OWNER_KEY);
-      window.localStorage.removeItem(LS_SUBJECT_KEY);
-      window.localStorage.removeItem(LS_REPO_KEY);
-      window.localStorage.removeItem(LS_ARCHIVED_KEY);
-      return;
-    }
-    window.localStorage.setItem(LS_OWNER_KEY, selection.owner);
-    if (selection.subject) {
-      window.localStorage.setItem(LS_SUBJECT_KEY, selection.subject);
-    } else {
-      window.localStorage.removeItem(LS_SUBJECT_KEY);
-    }
-    window.localStorage.setItem(LS_REPO_KEY, selection.repo);
-    if (selection.archived) {
-      window.localStorage.setItem(LS_ARCHIVED_KEY, 'true');
-    } else {
-      window.localStorage.removeItem(LS_ARCHIVED_KEY);
-    }
-  } catch {
-    // ignore storage errors
-  }
-}
 
 function buildSubjectUrl(base: string, view?: ViewKey): string {
   if (!view) return base;
