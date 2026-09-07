@@ -566,6 +566,12 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	ctx.Data["IsArticleModeSettings"] = mode == "settings"
 	ctx.Data["ReadmeRequested"] = true
 
+	// Article routes set "ArticleLink" to the route the article was requested through;
+	// other entry points (subject page) fall back to the vanity article URL.
+	if _, ok := ctx.Data["ArticleLink"]; !ok {
+		ctx.Data["ArticleLink"] = ctx.Repo.Repository.Link()
+	}
+
 	// The Settings tab is only rendered for the article owner, so ownership must be
 	// known in every mode (edit mode refines this via prepareArticleForkOnEditData).
 	isRepoOwner := ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
@@ -827,6 +833,7 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["NeedsFork"] = false
 	ctx.Data["HasExistingFork"] = false
 	ctx.Data["ExistingFork"] = nil
+	ctx.Data["ExistingForkArchived"] = false
 	ctx.Data["IsRepoOwner"] = false
 	ctx.Data["BlockedByOwnArticle"] = false
 	ctx.Data["OwnRepoForSubject"] = nil
@@ -844,6 +851,7 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["OwnRepoForSubject"] = perms.OwnRepoForSubject
 	ctx.Data["HasExistingFork"] = perms.HasExistingFork
 	ctx.Data["ExistingFork"] = perms.ExistingFork
+	ctx.Data["ExistingForkArchived"] = perms.ExistingForkArchived
 	ctx.Data["NeedsFork"] = perms.NeedsFork
 	ctx.Data["CanSubmitChangeRequest"] = perms.CanSubmitChangeRequest
 }

@@ -55,8 +55,8 @@ type SearchUserOptions struct {
 
 	// ExcludeUserIDs filters out the given users. Empty means no filtering.
 	ExcludeUserIDs []int64
-	// ExcludeOwnersOfSubjectID filters out the users who already own a repository for
-	// the given subject. Zero means no filtering.
+	// ExcludeOwnersOfSubjectID filters out the users who already own an active
+	// (non-archived) repository for the given subject. Zero means no filtering.
 	ExcludeOwnersOfSubjectID int64
 }
 
@@ -182,7 +182,7 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 	if opts.ExcludeOwnersOfSubjectID > 0 {
 		cond = cond.And(builder.NotIn("`user`.id",
 			builder.Select("owner_id").From("repository").
-				Where(builder.Eq{"subject_id": opts.ExcludeOwnersOfSubjectID})))
+				Where(builder.Eq{"subject_id": opts.ExcludeOwnersOfSubjectID, "is_archived": false})))
 	}
 
 	e := db.GetEngine(ctx)

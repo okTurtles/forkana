@@ -318,6 +318,19 @@ func handleRepoHomeFeed(ctx *context.Context) bool {
 	return true
 }
 
+// handleRepoHomeArticle renders the article view for repositories bound to a subject.
+// The permanent repository URL always resolves to that exact repository, so an archived
+// article stays reachable even when the owner has a newer active one for the same subject.
+// Sub-paths (file tree, refs) keep the regular code view.
+func handleRepoHomeArticle(ctx *context.Context) bool {
+	if ctx.Repo.Repository.SubjectID == 0 || ctx.Repo.TreePath != "" || ctx.PathParam("*") != "" {
+		return false
+	}
+	ctx.Data["ArticleLink"] = ctx.Repo.Repository.OperationsLink()
+	renderArticleView(ctx)
+	return true
+}
+
 func prepareHomeTreeSideBarSwitch(ctx *context.Context) {
 	showFileTree := true
 	if ctx.Doer != nil {
@@ -369,6 +382,10 @@ func Home(ctx *context.Context) {
 	// Ideally the "feed" logic should be after this, but old code did so, so keep it as-is.
 	checkHomeCodeViewable(ctx)
 	if ctx.Written() {
+		return
+	}
+
+	if handleRepoHomeArticle(ctx) {
 		return
 	}
 
