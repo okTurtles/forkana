@@ -103,16 +103,19 @@ func TestArticleCommitLink(t *testing.T) {
 		assert.NotEmpty(t, htmlDoc.Find(".file-view.markup").Text())
 	})
 
-	// An archived article is addressed by its permanent repository URL, which does have a
-	// "/commit/{sha}" route.
-	t.Run("ArchivedArticleUsesRepositoryCommitRoute", func(t *testing.T) {
+	// An archived article stays reachable through the article view, so its commit link
+	// keeps the "version" query parameter.
+	t.Run("ArchivedArticleUsesArticleVersionLink", func(t *testing.T) {
 		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, true))
 		t.Cleanup(func() {
 			_ = repo_model.SetArchiveRepoState(t.Context(), repo, false)
 		})
 
-		link := repo.CommitLink(sha)
-		require.Equal(t, fmt.Sprintf("/%s/%s/commit/%s", url.PathEscape(owner.Name), url.PathEscape(repo.Name), sha), link)
+		reloaded := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
+		require.NoError(t, reloaded.LoadSubject(t.Context()))
+
+		link := reloaded.CommitLink(sha)
+		require.Equal(t, fmt.Sprintf("/article/%s/%s?version=%s", url.PathEscape(owner.Name), url.PathEscape(reloaded.GetSubject(t.Context())), sha), link)
 
 		req := NewRequest(t, "GET", link)
 		session.MakeRequest(t, req, http.StatusOK)
