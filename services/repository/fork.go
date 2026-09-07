@@ -84,11 +84,13 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 
 	g, gCtx := errgroup.WithContext(ctx)
 
-	// Check if user owns a different repository for the same subject
+	// Check if user owns a different active repository for the same subject. An archived
+	// repository is not an active article, so it does not consume the user's
+	// "one article per subject" slot and the getter leaves ownRepo nil for it.
 	if repo.SubjectID > 0 {
 		g.Go(func() error {
 			var err error
-			ownRepo, err = repo_model.GetRepositoryByOwnerIDAndSubjectID(gCtx, doer.ID, repo.SubjectID)
+			ownRepo, err = repo_model.GetActiveRepositoryByOwnerIDAndSubjectID(gCtx, doer.ID, repo.SubjectID)
 			return err
 		})
 	}
@@ -103,13 +105,6 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 	// Wait for both queries to complete
 	if err := g.Wait(); err != nil {
 		return nil, err
-	}
-
-	// An archived repository is not an active article, so it does not consume the
-	// user's "one article per subject" slot: treat it as if the user had no repo
-	// for the subject.
-	if ownRepo != nil && ownRepo.IsArchived {
-		ownRepo = nil
 	}
 
 	// Process the results to determine permissions.
@@ -301,16 +296,16 @@ func ForkRepository(ctx context.Context, doer, owner *user_model.User, opts Fork
 		return nil, err
 	}
 
-	// Check if user already owns a different repository for the same subject
-	// In Forkana, each user should only have one repository per subject
+	// Check if user already owns a different active repository for the same subject.
+	// In Forkana, each user should only have one repository per subject. An archived
+	// repository doesn't count: the owner can contribute to another article for the
+	// same subject once their own article is archived.
 	if opts.BaseRepo.SubjectID > 0 {
-		ownRepo, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, owner.ID, opts.BaseRepo.SubjectID)
+		ownRepo, err := repo_model.GetActiveRepositoryByOwnerIDAndSubjectID(ctx, owner.ID, opts.BaseRepo.SubjectID)
 		if err != nil {
 			return nil, err
 		}
-		// An archived repository doesn't count: the owner can contribute to another
-		// article for the same subject once their own article is archived.
-		if ownRepo != nil && !ownRepo.IsArchived && ownRepo.ID != opts.BaseRepo.ID {
+		if ownRepo != nil && ownRepo.ID != opts.BaseRepo.ID {
 			return nil, ErrUserOwnsSubjectRepo{
 				UserID:         owner.ID,
 				SubjectID:      opts.BaseRepo.SubjectID,
