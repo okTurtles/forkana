@@ -298,3 +298,75 @@ func TestUpdateIssuesCommit_AnotherRepoNoPermission(t *testing.T) {
 	unittest.AssertNotExistsBean(t, issueBean, "is_closed=1")
 	unittest.CheckConsistencyFor(t, &activities_model.Action{})
 }
+
+// TestUpdateIssuesCommitRefCommentLink checks the link of the commit reference comment
+// rendered by the issue timeline ("referenced this issue from a commit"). It has to
+// match the route of the repository the commit is in: the article view selects a
+// version through the "version" query parameter and has no "/commit/{sha}" path.
+func TestUpdateIssuesCommitRefCommentLink(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+	cases := []struct {
+		name     string
+		sha      string
+		prepare  func(repo *repo_model.Repository)
+		expected string
+	}{
+		{
+			name:     "Article",
+			sha:      "aaaaaa1",
+			expected: `<a href="/article/user2/example-subject?version=aaaaaa1">ref link</a>`,
+		},
+		{
+			// a subject is a display name, so its escaped form has to appear in the link
+			name: "ArticleSubjectWithSpecialCharacters",
+			sha:  "aaaaaa2",
+			prepare: func(repo *repo_model.Repository) {
+				repo.SubjectRelation = &repo_model.Subject{ID: repo.SubjectID, Name: "Mermaid Graphs Example"}
+			},
+			expected: `<a href="/article/user2/Mermaid%20Graphs%20Example?version=aaaaaa2">ref link</a>`,
+		},
+		{
+			// an archived article is addressed by its permanent repository url, which
+			// does have a "/commit/{sha}" path
+			name: "ArchivedArticleUsesRepositoryCommitPath",
+			sha:  "aaaaaa3",
+			prepare: func(repo *repo_model.Repository) {
+				repo.IsArchived = true
+			},
+			expected: `<a href="/user2/repo1/commit/aaaaaa3">ref link</a>`,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+			repo.Owner = user
+			if c.prepare != nil {
+				c.prepare(repo)
+			}
+
+			pushCommits := []*repository.PushCommit{
+				{
+					Sha1:           c.sha,
+					CommitterEmail: "user2@example.com",
+					CommitterName:  "User Two",
+					AuthorEmail:    "user2@example.com",
+					AuthorName:     "User Two",
+					Message:        "ref link\n\nrefers to #1",
+				},
+			}
+			assert.NoError(t, UpdateIssuesCommit(t.Context(), user, repo, pushCommits, repo.DefaultBranch))
+
+			comment := unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{
+				Type:      issues_model.CommentTypeCommitRef,
+				CommitSHA: c.sha,
+				PosterID:  user.ID,
+				IssueID:   1,
+			})
+			assert.Equal(t, c.expected, comment.Content)
+		})
+	}
+}
