@@ -346,7 +346,7 @@ func TestArticleCommitLink(t *testing.T) {
 
 		// the route only accepts an owner and a subject below "/article"
 		var segments []string
-		for _, segment := range strings.Split(parsed.EscapedPath(), "/") {
+		for segment := range strings.SplitSeq(parsed.EscapedPath(), "/") {
 			unescaped, err := url.PathUnescape(segment)
 			assert.NoError(t, err)
 			segments = append(segments, unescaped)
