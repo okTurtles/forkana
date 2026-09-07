@@ -121,7 +121,7 @@ func TestForkAndEditMiddlewareBypass(t *testing.T) {
 			"fork_and_edit=true should bypass CanWriteToBranch middleware")
 	})
 
-	// The editor handler reads the flag with ctx.FormBool, so the middleware has to
+	// The editor handler reads the flag from the bound form, so the middleware has to
 	// accept the same set of truthy values, otherwise the two gates disagree.
 	t.Run("NonOwnerWithForkAndEditAlternateTruthyValuePassesMiddleware", func(t *testing.T) {
 		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
@@ -143,6 +143,31 @@ func TestForkAndEditMiddlewareBypass(t *testing.T) {
 
 		assert.NotEqual(t, http.StatusNotFound, resp.Code,
 			"fork_and_edit=1 should bypass CanWriteToBranch middleware like fork_and_edit=true")
+	})
+
+	// "On" is not a value the form binder understands, so it binds to false and the
+	// handler would take the direct-commit path. The middleware must deny the request
+	// instead of letting it reach a repository the doer cannot write to.
+	t.Run("NonOwnerWithForkAndEditValueRejectedByBinderGetsDenied", func(t *testing.T) {
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL)
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		form := map[string]string{
+			"_csrf":         htmlDoc.GetCSRF(),
+			"last_commit":   htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":     "README.md",
+			"content":       "Test content with fork_and_edit=On",
+			"commit_choice": "direct",
+			"fork_and_edit": "On",
+		}
+
+		req = NewRequestWithValues(t, "POST", editURL, form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"a fork_and_edit value the binder rejects must not bypass CanWriteToBranch")
 	})
 }
 
@@ -522,6 +547,30 @@ func TestSubmitChangeRequestMiddlewareBypass(t *testing.T) {
 		// The response should NOT be 404 (middleware passed)
 		assert.NotEqual(t, http.StatusNotFound, resp.Code,
 			"submit_change_request=true should bypass CanWriteToBranch middleware")
+	})
+
+	// Same divergence as for fork_and_edit: "On" binds to false, so the handler would
+	// commit directly to the base repository if the middleware let the request through.
+	t.Run("NonOwnerWithSubmitChangeRequestValueRejectedByBinderGetsDenied", func(t *testing.T) {
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		req := NewRequest(t, "GET", editURL+"?submit_change_request=true")
+		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		form := map[string]string{
+			"_csrf":                 htmlDoc.GetCSRF(),
+			"last_commit":           htmlDoc.GetInputValueByName("last_commit"),
+			"tree_path":             "README.md",
+			"content":               "Test content with submit_change_request=On",
+			"commit_choice":         "direct",
+			"submit_change_request": "On",
+		}
+
+		req = NewRequestWithValues(t, "POST", editURL, form)
+		resp = sessionNonOwner.MakeRequest(t, req, NoExpectedStatus)
+
+		assert.Equal(t, http.StatusNotFound, resp.Code,
+			"a submit_change_request value the binder rejects must not bypass CanWriteToBranch")
 	})
 
 	t.Run("SubmitChangeRequestOnlyAllowedForEdit", func(t *testing.T) {

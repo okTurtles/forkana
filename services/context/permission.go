@@ -10,7 +10,16 @@ import (
 	auth_model "code.gitea.io/gitea/models/auth"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
+	"code.gitea.io/gitea/modules/web"
 )
+
+// editorWorkflowForm mirrors forms.EditorWorkflowForm, which is implemented by the
+// bound editor forms. It is redeclared here because services/forms imports this
+// package, so this package cannot import it back.
+type editorWorkflowForm interface {
+	IsForkAndEdit() bool
+	IsSubmitChangeRequest() bool
+}
 
 // RequireRepoAdmin returns a middleware for requiring repository admin permission
 func RequireRepoAdmin() func(ctx *Context) {
@@ -25,8 +34,11 @@ func RequireRepoAdmin() func(ctx *Context) {
 // CanWriteToBranch checks if the user is allowed to write to the branch of the repo
 // If the request has a truthy fork_and_edit or submit_change_request in the form data,
 // the check is skipped because the handler will create a fork/branch and commit to that instead.
-// Both flags are read with FormBool so that this gate and the editor handler, which uses
-// ctx.FormBool as well, always agree on whether the workflow is active.
+// Both flags are read from the form bound by web.Bind, which runs before this middleware on
+// the editor routes, so that this gate and the editor handler always agree on whether the
+// workflow is active: a value the binder rejects is bound to false and is therefore treated
+// as false here as well. Requests without a bound editor form fall through to the
+// permission check.
 //
 // Workflow support by action:
 //   - fork_and_edit: supports both _edit and _new (creates a personal fork)
@@ -42,23 +54,21 @@ func CanWriteToBranch() func(ctx *Context) {
 	return func(ctx *Context) {
 		editorAction := ctx.PathParam("editor_action")
 
-		// Allow fork-and-edit workflow to bypass write permission check for _edit and _new
-		// The handler will create a personal fork and commit to that instead
-		if ctx.FormBool("fork_and_edit") {
-			if editorAction == "_edit" || editorAction == "_new" {
+		if editorForm, ok := web.GetForm(ctx).(editorWorkflowForm); ok {
+			// Allow fork-and-edit workflow to bypass write permission check for _edit and _new
+			// The handler will create a personal fork and commit to that instead
+			if editorForm.IsForkAndEdit() && (editorAction == "_edit" || editorAction == "_new") {
 				return
 			}
-		}
 
-		// Allow submit-change-request workflow to bypass write permission check for _edit only
-		// This workflow creates an in-repo branch and PR to propose changes to existing articles
-		// It does NOT support _new - creating new files should be done in the user's own repository
-		if ctx.FormBool("submit_change_request") {
-			if editorAction == "_edit" {
-				return
-			}
+			// Allow submit-change-request workflow to bypass write permission check for _edit only
+			// This workflow creates an in-repo branch and PR to propose changes to existing articles
+			// It does NOT support _new - creating new files should be done in the user's own repository
 			// For _new action with submit_change_request, fall through to permission check
 			// which will correctly deny access for non-collaborators
+			if editorForm.IsSubmitChangeRequest() && editorAction == "_edit" {
+				return
+			}
 		}
 		if !ctx.Repo.CanWriteToBranch(ctx, ctx.Doer, ctx.Repo.BranchName) {
 			ctx.NotFound(nil)

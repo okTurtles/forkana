@@ -157,15 +157,20 @@ func prepareEditorCommitSubmittedForm[T forms.CommitCommonFormInterface](ctx *co
 	commitToNewBranch := commonForm.CommitChoice == editorCommitChoiceNewBranch || fromBaseBranch != ""
 	targetBranchName := util.Iif(commitToNewBranch, commonForm.NewBranchName, ctx.Repo.BranchName)
 
-	// Check if this is a submit-change-request workflow by checking the form value
-	// Skip branch protection check for submit-change-request workflow since it creates a new branch internally
-	isSubmitChangeRequest := allowSubmitChangeRequest && ctx.FormBool("submit_change_request")
-
-	// The fork-and-edit workflow never commits to the current repository, it commits to the
-	// doer's own fork, so the checks against the current repository do not apply to it.
-	// Only "_edit" and "_new" handle that workflow, matching context.CanWriteToBranch.
+	// Both workflow flags are read from the bound form, which is what decides the workflow
+	// further down in the handlers, so that these checks and context.CanWriteToBranch always
+	// agree on whether a workflow is active. Forms without the flags keep both false.
 	editorAction := ctx.PathParam("editor_action")
-	isForkAndEdit := ctx.FormBool("fork_and_edit") && (editorAction == "_edit" || editorAction == "_new")
+	var isSubmitChangeRequest, isForkAndEdit bool
+	if workflowForm, ok := any(form).(forms.EditorWorkflowForm); ok {
+		// Skip branch protection check for submit-change-request workflow since it creates a new branch internally
+		isSubmitChangeRequest = allowSubmitChangeRequest && workflowForm.IsSubmitChangeRequest()
+
+		// The fork-and-edit workflow never commits to the current repository, it commits to the
+		// doer's own fork, so the checks against the current repository do not apply to it.
+		// Only "_edit" and "_new" handle that workflow, matching context.CanWriteToBranch.
+		isForkAndEdit = workflowForm.IsForkAndEdit() && (editorAction == "_edit" || editorAction == "_new")
+	}
 
 	if targetBranchName == ctx.Repo.BranchName && !commitFormOptions.CanCommitToBranch && !commitFormOptions.NeedFork && !isSubmitChangeRequest && !isForkAndEdit {
 		ctx.JSONError(ctx.Tr("repo.editor.cannot_commit_to_protected_branch", targetBranchName))
