@@ -371,6 +371,20 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	ctx.Data["PageIsViewCode"] = true
 	ctx.Data["RepositoryUploadEnabled"] = false // Disable uploads in history view
 
+	// A tombstone keeps its git data on disk only so that its forks retain a valid
+	// ancestor. The git repository is deliberately left unopened, so no file, README or
+	// commit metadata is loaded: the frame is rendered and the article section shows the
+	// deletion notice instead.
+	if ctx.Repo.Repository.IsTombstone() {
+		ctx.Data["BranchName"] = ctx.Repo.Repository.DefaultBranch
+		ctx.Data["RepoLink"] = ctx.Repo.Repository.Link()
+		ctx.Data["ArticleMode"] = "read"
+		ctx.Data["IsArticleModeRead"] = true
+		ctx.Data["ReadmeRequested"] = true
+		ctx.HTML(http.StatusOK, "explore/repo_history")
+		return
+	}
+
 	// For empty/broken repositories, render the history view which will show a "Create first article" bubble
 	if ctx.Repo.Repository.IsEmpty || ctx.Repo.Repository.IsBroken() {
 		ctx.Data["IsRepoEmpty"] = true

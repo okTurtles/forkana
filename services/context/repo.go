@@ -429,6 +429,10 @@ func repoAssignment(ctx *Context, repo *repo_model.Repository) {
 	ctx.Repo.Repository = repo
 	ctx.Data["RepoName"] = ctx.Repo.Repository.Name
 	ctx.Data["IsEmptyRepo"] = ctx.Repo.Repository.IsEmpty
+	ctx.Data["IsTombstonedRepo"] = ctx.Repo.Repository.IsTombstone()
+	// Resolved here so the templates never have to call GetSubject with a context
+	// argument, which the template engine cannot always supply.
+	ctx.Data["SubjectName"] = ctx.Repo.Repository.GetSubject(ctx)
 }
 
 // RepoAssignment returns a middleware to handle repository assignment
@@ -636,6 +640,16 @@ func RepoAssignment(ctx *Context) {
 		ctx.Link == ctx.Repo.RepoLink+"/settings" ||
 		strings.HasPrefix(ctx.Link, ctx.Repo.RepoLink+"/settings/") ||
 		ctx.Link == ctx.Repo.RepoLink+"/-/migrate/status"
+
+	// A tombstone only keeps the git data around so that its forks retain a valid
+	// ancestor. Nothing but the placeholder home page may be served, and the git
+	// repository is deliberately left unopened so no content can leak.
+	if ctx.Repo.Repository.IsTombstone() {
+		if ctx.Link != ctx.Repo.RepoLink {
+			ctx.Redirect(ctx.Repo.RepoLink)
+		}
+		return
+	}
 
 	// Disable everything when the repo is being created
 	if ctx.Repo.Repository.IsBeingCreated() || ctx.Repo.Repository.IsBroken() {
@@ -858,6 +872,11 @@ func RepoRefByType(detectRefType git.RefType) func(*Context) {
 		if ctx.Repo.Repository.IsBeingCreated() || ctx.Repo.Repository.IsBroken() {
 			return // no git repo, so do nothing, users will see a "migrating" UI provided by "migrate/migrating.tmpl", or empty repo guide
 		}
+		if ctx.Repo.Repository.IsTombstone() {
+			// The git repo is intentionally not opened for tombstones, so no ref can be resolved.
+			ctx.NotFound(nil)
+			return
+		}
 		// Empty repository does not have reference information.
 		if ctx.Repo.Repository.IsEmpty {
 			branchName := ctx.Repo.Repository.DefaultBranch
@@ -1062,6 +1081,13 @@ func RepoAssignmentBySubject(ctx *Context) {
 		return
 	}
 
+	// GetPublicRepositoryBySubject only falls back to a tombstone when every article on
+	// the subject was deleted, and a tombstone must never have its content rendered.
+	if repo.IsTombstone() {
+		ctx.NotFound(nil)
+		return
+	}
+
 	// Load repository owner
 	if err = repo.LoadOwner(ctx); err != nil {
 		ctx.ServerError("LoadOwner", err)
@@ -1119,6 +1145,7 @@ func RepoAssignmentBySubject(ctx *Context) {
 	ctx.Data["Owner"] = ctx.Repo.Repository.Owner
 	ctx.Data["RepoName"] = ctx.Repo.Repository.Name
 	ctx.Data["IsEmptyRepo"] = ctx.Repo.Repository.IsEmpty
+	ctx.Data["SubjectName"] = ctx.Repo.Repository.GetSubject(ctx)
 	ctx.Data["CanWriteCode"] = ctx.Repo.CanWrite(unit_model.TypeCode)
 	ctx.Data["CanWriteIssues"] = ctx.Repo.CanWrite(unit_model.TypeIssues)
 	ctx.Data["CanWritePulls"] = ctx.Repo.CanWrite(unit_model.TypePullRequests)
@@ -1218,6 +1245,22 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
 
+	// Set here rather than further down because a tombstone returns early and its
+	// notice still renders the repository frame, which needs the repository itself.
+	ctx.Data["Title"] = repo.Owner.Name + "/" + repo.Name
+	ctx.Data["Repository"] = repo
+	ctx.Data["Owner"] = ctx.Repo.Repository.Owner
+
+	// A tombstone only keeps the git data around so that its forks retain a valid
+	// ancestor. Nothing but the placeholder article page may be served, and the git
+	// repository is deliberately left unopened so no content can leak.
+	if ctx.Repo.Repository.IsTombstone() {
+		if ctx.Link != ctx.Repo.RepoLink {
+			ctx.Redirect(ctx.Repo.RepoLink)
+		}
+		return
+	}
+
 	// Initialize Git repository (required for RepoRefByType middleware)
 	if ctx.Repo.GitRepo != nil {
 		setting.PanicInDevOrTesting("RepoAssignmentByOwnerAndSubject: GitRepo should be nil")
@@ -1284,9 +1327,6 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	}
 
 	// Set up additional repository data for templates (similar to RepoAssignment)
-	ctx.Data["Title"] = repo.Owner.Name + "/" + repo.Name
-	ctx.Data["Repository"] = repo
-	ctx.Data["Owner"] = ctx.Repo.Repository.Owner
 	ctx.Data["CanWriteCode"] = ctx.Repo.CanWrite(unit_model.TypeCode)
 	ctx.Data["CanWriteIssues"] = ctx.Repo.CanWrite(unit_model.TypeIssues)
 	ctx.Data["CanWritePulls"] = ctx.Repo.CanWrite(unit_model.TypePullRequests)

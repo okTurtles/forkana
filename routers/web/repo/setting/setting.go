@@ -92,6 +92,15 @@ func SettingsCtxData(ctx *context.Context) {
 		return
 	}
 	ctx.Data["PushMirrors"] = pushMirrors
+
+	// Deleting an article that has forks only leaves a tombstone behind, so the delete
+	// modal has to say so up front.
+	willBeTombstoned, err := repo_service.CanBeTombstoneDeleted(ctx, ctx.Repo.Repository)
+	if err != nil {
+		ctx.ServerError("CanBeTombstoneDeleted", err)
+		return
+	}
+	ctx.Data["RepoWillBeTombstoned"] = willBeTombstoned
 }
 
 // Settings show a repository's settings page
@@ -1097,15 +1106,26 @@ func handleSettingsPostDelete(ctx *context.Context) {
 		ctx.Repo.GitRepo.Close()
 	}
 
-	if err := repo_service.DeleteRepository(ctx, ctx.Doer, ctx.Repo.Repository, true); err != nil {
+	tombstoned, err := repo_service.DeleteRepository(ctx, ctx.Doer, ctx.Repo.Repository, true)
+	if err != nil {
 		ctx.ServerError("DeleteRepository", err)
 		return
 	}
-	log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
 
-	if fromArticle {
+	switch {
+	case tombstoned:
+		// The article had forks, so only a tombstone is left behind to keep their ancestry.
+		log.Trace("Repository tombstoned: %s/%s", ctx.Repo.Owner.Name, repo.Name)
+		if fromArticle {
+			ctx.Flash.Success(ctx.Tr("repo.settings.article_tombstone_success"))
+		} else {
+			ctx.Flash.Success(ctx.Tr("repo.settings.tombstone_success"))
+		}
+	case fromArticle:
+		log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
 		ctx.Flash.Success(ctx.Tr("repo.settings.article_delete_success"))
-	} else {
+	default:
+		log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
 		ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
 	}
 	// The dashboard renders base/alert, so the flash above stays visible; the owner

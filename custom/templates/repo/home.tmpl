@@ -17,9 +17,24 @@
 
 		{{template "repo/code/recently_pushed_new_branches" dict "RecentBranchesPromptData" .RecentBranchesPromptData}}
 
-        <div class="repo-home-filelist">
-            {{template "repo/view_content" .}}
-        </div>
+        {{if .IsTombstonedRepo}}
+            {{/* A deleted article keeps its commit history for its forks, but none of its
+            content or git metadata may be rendered here. */}}
+            <div class="ui warning message tw-text-center">
+                <p>
+                    {{if .Repository.TombstonedUnix.IsZero}}
+                        {{ctx.Locale.Tr "repo.tombstone.title"}}
+                    {{else}}
+                        {{ctx.Locale.Tr "repo.tombstone.title_date" (DateUtils.AbsoluteLong .Repository.TombstonedUnix)}}
+                    {{end}}
+                </p>
+                <p class="tw-text-14">{{ctx.Locale.Tr "repo.tombstone.desc"}}</p>
+            </div>
+        {{else}}
+            <div class="repo-home-filelist">
+                {{template "repo/view_content" .}}
+            </div>
+        {{end}}
 	</div>
 </div>
 {{template "base/footer" .}}

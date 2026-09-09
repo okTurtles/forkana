@@ -161,7 +161,7 @@
             {{svg "octicon-info" 16 "tw-flex-shrink-0"}}
             <span>{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_notice"
                 (HTMLFormat `<a href="%s">%s</a>` .RepoTransfer.Doer.HomeLink .RepoTransfer.Doer.DisplayName)
-                (HTMLFormat `<a href="%s">%s</a>` .RepoLink (.Repository.GetSubject ctx))}}</span>
+                (HTMLFormat `<a href="%s">%s</a>` .RepoLink .SubjectName)}}</span>
         </div>
         <div class="tw-flex tw-items-center tw-gap-2">
             <form class="tw-m-0" method="post" action="{{.RepoOperationsLink}}/action/accept_transfer">
@@ -188,14 +188,14 @@
     {{template "repo/header" .}}
 
     <div class="ui container">
-        {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscapeSegments (.Repository.GetSubject ctx)) }}
+        {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscapeSegments .SubjectName) }}
         <div id="repo-history-app"
             class="history-view-app"
             data-initial-view="{{.HistoryView}}"
             data-initial-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}"
             data-initial-owner="{{.Repository.Owner.Name}}"
             data-initial-repo="{{.Repository.Name}}"
-            data-initial-subject="{{.Repository.GetSubject ctx}}"
+            data-initial-subject="{{.SubjectName}}"
             data-subject-url="{{$subjectPath}}"
             data-bubble-url="{{QueryBuild $subjectPath "view" "bubble"}}"
             data-table-url="{{QueryBuild $subjectPath "view" "table"}}"

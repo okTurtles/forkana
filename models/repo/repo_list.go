@@ -315,6 +315,15 @@ type SearchRepoOptions struct {
 	// - Don't show forks, when opts.Fork is OptionalBoolNone.
 	// - Do not display repositories that don't have a description, an icon and topics.
 	OnlyShowRelevant bool
+	// Tombstoned articles are hidden from every listing unless this is set. They stay
+	// reachable by direct URL so that forks keep a resolvable ancestor.
+	IncludeTombstoned bool
+}
+
+// notTombstonedCond excludes tombstoned articles from a listing. Tombstones stay
+// reachable by direct URL, but they must never surface in search, explore or profiles.
+func notTombstonedCond() builder.Cond {
+	return builder.Eq{"is_tombstoned": false}
 }
 
 // UserOwnedRepoCond returns user ownered repositories
@@ -646,6 +655,10 @@ func SearchRepositoryCondition(opts SearchRepoOptions) builder.Cond {
 		cond = cond.And(builder.Eq{"is_archived": opts.Archived.Value()})
 	}
 
+	if !opts.IncludeTombstoned {
+		cond = cond.And(notTombstonedCond())
+	}
+
 	if opts.HasMilestones.Has() {
 		if opts.HasMilestones.Value() {
 			cond = cond.And(builder.Gt{"num_milestones": 0})
@@ -930,13 +943,17 @@ func AccessibleRepoIDsQuery(user *user_model.User) *builder.Builder {
 
 // FindUserCodeAccessibleRepoIDs finds all at Code level accessible repositories' ID by the user's id
 func FindUserCodeAccessibleRepoIDs(ctx context.Context, user *user_model.User) ([]int64, error) {
-	return SearchRepositoryIDsByCondition(ctx, AccessibleRepositoryCondition(user, unit.TypeCode))
+	return SearchRepositoryIDsByCondition(ctx, builder.NewCond().And(
+		notTombstonedCond(),
+		AccessibleRepositoryCondition(user, unit.TypeCode),
+	))
 }
 
 // FindUserCodeAccessibleOwnerRepoIDs finds all repository IDs for the given owner whose code the user can see.
 func FindUserCodeAccessibleOwnerRepoIDs(ctx context.Context, ownerID int64, user *user_model.User) ([]int64, error) {
 	return SearchRepositoryIDsByCondition(ctx, builder.NewCond().And(
 		builder.Eq{"owner_id": ownerID},
+		notTombstonedCond(),
 		AccessibleRepositoryCondition(user, unit.TypeCode),
 	))
 }
@@ -954,6 +971,9 @@ func GetUserRepositories(ctx context.Context, opts SearchRepoOptions) (Repositor
 	cond = cond.And(builder.Eq{"owner_id": opts.Actor.ID})
 	if !opts.Private {
 		cond = cond.And(builder.Eq{"is_private": false})
+	}
+	if !opts.IncludeTombstoned {
+		cond = cond.And(notTombstonedCond())
 	}
 
 	if len(opts.LowerNames) > 0 {

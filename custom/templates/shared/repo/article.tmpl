@@ -12,7 +12,26 @@
             <span class="tw-ml-2">Please select an article in bubble or table view.</span>
         </div>
         <div data-role="article-content" {{if not .ReadmeRequested}}hidden{{end}}>
-        {{if .ReadmeError}}
+        {{if .IsTombstonedRepo}}
+            {{/* A deleted article keeps its commit history for its forks, but neither the
+            content nor the git metadata may be rendered here, so only the notice is shown. */}}
+            <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
+                style="margin-top: -8px; margin-bottom: 28px"
+                href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments .SubjectName)) "view" "bubble"}}">
+                {{svg "octicon-chevron-left" 16}}
+                <span>{{ctx.Locale.Tr "repo.back_to_bubble_view"}}</span>
+            </a>
+            <div class="ui warning message">
+                <p>
+                    {{if .Repository.TombstonedUnix.IsZero}}
+                        {{ctx.Locale.Tr "repo.tombstone.title"}}
+                    {{else}}
+                        {{ctx.Locale.Tr "repo.tombstone.title_date" (DateUtils.AbsoluteLong .Repository.TombstonedUnix)}}
+                    {{end}}
+                </p>
+                <p class="tw-text-14">{{ctx.Locale.Tr "repo.tombstone.desc"}}</p>
+            </div>
+        {{else if .ReadmeError}}
             <div class="ui error message">
                 {{.ReadmeError}}
             </div>
@@ -23,7 +42,7 @@
             </div>
             <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
                 style="margin-top: -8px; margin-bottom: 28px"
-                href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (.Repository.GetSubject ctx)) "view" "bubble"}}">
+                href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments .SubjectName)) "view" "bubble"}}">
                 {{svg "octicon-chevron-left" 16}}
                 <span>{{ctx.Locale.Tr "repo.back_to_bubble_view"}}</span>
             </a>
@@ -42,25 +61,25 @@
             <div class="tw-flex tw-items-center tw-gap-4" id="article-tabs">
                 <div class="ui top attached tabular menu tw-my-10 tw-gap-1">
                     <a class="{{if .IsArticleModeRead}}active {{end}}item"
-                        href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (.Repository.GetSubject ctx)) "view" "article" "mode" "read"}}"
+                        href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (PathEscapeSegments .SubjectName)) "view" "article" "mode" "read"}}"
                         data-article-tab="read">
                         {{svg "octicon-book" 16}} Read
                     </a>
                     {{if not .Repository.IsArchived}}
                         <a class="{{if .IsArticleModeEdit}}active {{end}}item"
-                            href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (.Repository.GetSubject ctx)) "view" "article" "mode" "edit"}}"
+                            href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (PathEscapeSegments .SubjectName)) "view" "article" "mode" "edit"}}"
                             data-article-tab="edit">
                             {{svg "octicon-pencil" 16}} Edit
                         </a>
                     {{end}}
                     <a class="{{if .IsArticleModeHistory}}active {{end}}item"
-                        href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (.Repository.GetSubject ctx)) "view" "article" "mode" "history"}}"
+                        href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (PathEscapeSegments .SubjectName)) "view" "article" "mode" "history"}}"
                         data-article-tab="history">
                         {{svg "octicon-history" 16}} History
                     </a>
                     {{if .IsRepoOwner}}
                         <a class="{{if .IsArticleModeSettings}}active {{end}}item"
-                            href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (.Repository.GetSubject ctx)) "view" "article" "mode" "settings"}}"
+                            href="{{QueryBuild (printf "%s/article/%s/%s" AppSubUrl .Repository.Owner.Name (PathEscapeSegments .SubjectName)) "view" "article" "mode" "settings"}}"
                             data-article-tab="settings">
                             {{svg "octicon-gear" 16}} {{ctx.Locale.Tr "repo.settings"}}
                         </a>
