@@ -50,13 +50,18 @@ func DeleteRepo(ctx *context.Context) {
 		ctx.Repo.GitRepo.Close()
 	}
 
-	if err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true); err != nil {
+	tombstoned, err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true)
+	if err != nil {
 		ctx.ServerError("DeleteRepository", err)
 		return
 	}
-	log.Trace("Repository deleted: %s", repo.FullName())
-
-	ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
+	if tombstoned {
+		log.Trace("Repository tombstoned: %s", repo.FullName())
+		ctx.Flash.Success(ctx.Tr("repo.settings.tombstone_success"))
+	} else {
+		log.Trace("Repository deleted: %s", repo.FullName())
+		ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
+	}
 	ctx.JSONRedirect(setting.AppSubURL + "/-/admin/repos?page=" + url.QueryEscape(ctx.FormString("page")) + "&sort=" + url.QueryEscape(ctx.FormString("sort")))
 }
 

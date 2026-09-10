@@ -1188,12 +1188,17 @@ func Delete(ctx *context.APIContext) {
 		ctx.Repo.GitRepo.Close()
 	}
 
-	if err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true); err != nil {
+	tombstoned, err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true)
+	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
 
-	log.Trace("Repository deleted: %s/%s", owner.Name, repo.Name)
+	if tombstoned {
+		log.Trace("Repository tombstoned: %s/%s", owner.Name, repo.Name)
+	} else {
+		log.Trace("Repository deleted: %s/%s", owner.Name, repo.Name)
+	}
 	ctx.Status(http.StatusNoContent)
 }
 

@@ -62,6 +62,32 @@ func TestRepoAPIURL(t *testing.T) {
 	assert.Equal(t, "https://try.gitea.io/api/v1/repos/user12/repo10", repo.APIURL())
 }
 
+func TestCommitLink(t *testing.T) {
+	const sha = "65f1bf27bc3bf70f64657658635e66094edbcb4d"
+
+	// the article view resolves a version through the "version" query parameter
+	article := &Repository{
+		OwnerName:       "user13",
+		Name:            "repo11",
+		SubjectID:       1,
+		SubjectRelation: &Subject{ID: 1, Name: "Some Subject", Slug: "some-subject"},
+	}
+	assert.Equal(t, setting.AppSubURL+"/article/user13/Some%20Subject?version="+sha, article.CommitLink(sha))
+
+	// an archived article links through the permanent repository url, which has a
+	// "/commit/{sha}" route
+	archived := &Repository{
+		OwnerName:       "user13",
+		Name:            "repo11",
+		IsArchived:      true,
+		SubjectID:       1,
+		SubjectRelation: &Subject{ID: 1, Name: "Some Subject", Slug: "some-subject"},
+	}
+	assert.Equal(t, setting.AppSubURL+"/user13/repo11/commit/"+sha, archived.CommitLink(sha))
+
+	assert.Empty(t, article.CommitLink("0000000000000000000000000000000000000000"))
+}
+
 func TestWatchRepo(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 

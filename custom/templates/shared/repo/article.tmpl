@@ -12,7 +12,26 @@
             <span class="tw-ml-2">Please select an article in bubble or table view.</span>
         </div>
         <div data-role="article-content" {{if not .ReadmeRequested}}hidden{{end}}>
-        {{if .ReadmeError}}
+        {{if .IsTombstonedRepo}}
+            {{/* A deleted article keeps its commit history for its forks, but neither the
+            content nor the git metadata may be rendered here, so only the notice is shown. */}}
+            <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
+                style="margin-top: -8px; margin-bottom: 28px"
+                href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments .SubjectName)) "view" "bubble"}}">
+                {{svg "octicon-chevron-left" 16}}
+                <span>{{ctx.Locale.Tr "repo.back_to_bubble_view"}}</span>
+            </a>
+            <div class="ui warning message">
+                <p>
+                    {{if .Repository.TombstonedUnix.IsZero}}
+                        {{ctx.Locale.Tr "repo.tombstone.title"}}
+                    {{else}}
+                        {{ctx.Locale.Tr "repo.tombstone.title_date" (DateUtils.AbsoluteLong .Repository.TombstonedUnix)}}
+                    {{end}}
+                </p>
+                <p class="tw-text-14">{{ctx.Locale.Tr "repo.tombstone.desc"}}</p>
+            </div>
+        {{else if .ReadmeError}}
             <div class="ui error message">
                 {{.ReadmeError}}
             </div>
@@ -23,7 +42,7 @@
             </div>
             <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
                 style="margin-top: -8px; margin-bottom: 28px"
-                href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (.Repository.GetSubject ctx)) "view" "bubble"}}">
+                href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments .SubjectName)) "view" "bubble"}}">
                 {{svg "octicon-chevron-left" 16}}
                 <span>{{ctx.Locale.Tr "repo.back_to_bubble_view"}}</span>
             </a>

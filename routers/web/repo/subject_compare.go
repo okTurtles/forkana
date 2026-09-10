@@ -184,8 +184,11 @@ func CompareReadme(ctx *context.Context) {
 	ctx.Data["IsSplitStyle"] = true
 	ctx.Data["PageIsSubjectCompare"] = true
 
-	// Set Repository data needed by repo/header template for view tabs
+	// Set Repository data needed by repo/header template for view tabs. This route
+	// does not go through the repository assignment middleware, so the subject name
+	// the header builds its links from has to be resolved here.
 	ctx.Data["Repository"] = repo1
+	ctx.Data["SubjectName"] = repo1.GetSubject(ctx)
 	ctx.Data["IsBubbleView"] = false
 	ctx.Data["IsTableView"] = false
 	ctx.Data["IsArticleView"] = false

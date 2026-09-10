@@ -4,16 +4,23 @@
 package markup
 
 import (
+	"net/url"
 	"slices"
 	"strings"
 
 	"code.gitea.io/gitea/modules/base"
 	"code.gitea.io/gitea/modules/references"
-	"code.gitea.io/gitea/modules/util"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
+
+// articleCommitLink builds a root-relative link to the article view at a specific
+// commit. The article routes have no "/commit/{sha}" path: a version is selected
+// through the "version" query parameter, see routers/web/repo.ArticleView.
+func articleCommitLink(owner, name, commitID string) string {
+	return LinkTypeRoot + "/article/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "?version=" + url.QueryEscape(commitID)
+}
 
 type anyHashPatternResult struct {
 	PosStart  int
@@ -188,7 +195,7 @@ func hashCurrentPatternProcessor(ctx *RenderContext, node *html.Node) {
 			continue
 		}
 
-		link := "/:root/" + util.URLJoin("article", ctx.RenderOptions.Metas["user"], ctx.RenderOptions.Metas["repo"], "commit", hash)
+		link := articleCommitLink(ctx.RenderOptions.Metas["user"], ctx.RenderOptions.Metas["repo"], hash)
 		replaceContent(node, m[2], m[3], createCodeLink(link, base.ShortSha(hash), "commit"))
 		start = 0
 		node = node.NextSibling.NextSibling
@@ -205,7 +212,7 @@ func commitCrossReferencePatternProcessor(ctx *RenderContext, node *html.Node) {
 		}
 
 		refText := ref.Owner + "/" + ref.Name + "@" + base.ShortSha(ref.CommitSha)
-		linkHref := "/:root/" + util.URLJoin("article", ref.Owner, ref.Name, "commit", ref.CommitSha)
+		linkHref := articleCommitLink(ref.Owner, ref.Name, ref.CommitSha)
 		link := createLink(ctx, linkHref, refText, "commit")
 
 		replaceContent(node, ref.RefLocation.Start, ref.RefLocation.End, link)
