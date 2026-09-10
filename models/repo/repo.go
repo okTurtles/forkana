@@ -442,9 +442,12 @@ func (repo *Repository) CommitLink(commitID string) (result string) {
 	}
 	// Link() resolves to either the article vanity url or the permanent repository
 	// url; only the latter has a "/commit/{sha}" route, the article view selects a
-	// version through the "version" query parameter.
-	if link := repo.Link(); link != repo.OperationsLink() {
-		return link + "?version=" + url.QueryEscape(commitID)
+	// version through the "version" query parameter. An archived repository keeps
+	// being addressed by its permanent url, so it takes the "/commit/{sha}" route.
+	if !repo.IsArchived {
+		if link := repo.Link(); link != repo.OperationsLink() {
+			return link + "?version=" + url.QueryEscape(commitID)
+		}
 	}
 	return repo.OperationsLink() + "/commit/" + url.PathEscape(commitID)
 }
