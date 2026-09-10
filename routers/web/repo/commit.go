@@ -476,17 +476,24 @@ func processGitCommits(ctx *context.Context, gitCommits []*git.Commit) ([]*git_m
 // If a "version" query parameter is present, it shows the commit view
 // Otherwise, it shows the article view with read/edit/history modes
 func ArticleView(ctx *context.Context) {
+	// Keep in-page links on the subject the article was requested through. The route
+	// captures the segment, so it is always the name the repository was resolved by.
+	subject := ctx.PathParam("subjectname")
+	ctx.Data["ArticleLink"] = setting.AppSubURL + "/article/" + url.PathEscape(ctx.Repo.Owner.Name) + "/" + url.PathEscape(subject)
+
+	renderArticleView(ctx)
+}
+
+// renderArticleView renders the article view for the repository held by the context.
+// Callers must set "ArticleLink" beforehand so that in-page links stay on the route
+// the article was requested through (vanity subject URL or permanent repository URL).
+func renderArticleView(ctx *context.Context) {
 	// A tombstoned article is served through the regular frame; only its content is
-	// redacted, so the request keeps going from here.
+	// redacted, so the request keeps going from here. A tombstone exposes no git data,
+	// so no version of it can be served either.
 	isTombstone := ctx.Repo.Repository.IsTombstone()
 
-	// Get the subject name for the article link (use subject, not repo name)
-	subject := ctx.Repo.Repository.GetSubject(ctx)
-	articleLink := setting.AppSubURL + "/article/" + url.PathEscape(ctx.Repo.Owner.Name) + "/" + url.PathEscape(subject)
-	ctx.Data["ArticleLink"] = articleLink
-
-	// Check if version parameter is present. A tombstone exposes no git data, so no
-	// version of it can be served either.
+	// Check if version parameter is present
 	commitHash := ctx.FormString("version")
 	if commitHash != "" && !isTombstone {
 		// Show commit view for a specific version

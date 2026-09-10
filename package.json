@@ -39,7 +39,7 @@
     "idiomorph": "0.7.3",
     "jquery": "3.7.1",
     "katex": "0.16.22",
-    "mermaid": "11.11.0",
+    "mermaid": "11.15.0",
     "mini-css-extract-plugin": "2.9.4",
     "monaco-editor": "0.53.0",
     "monaco-editor-webpack-plugin": "7.1.0",
@@ -69,7 +69,7 @@
   },
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "4.5.0",
-    "@playwright/test": "1.55.0",
+    "@playwright/test": "1.62.1",
     "@stoplight/spectral-cli": "6.15.0",
     "@stylistic/eslint-plugin": "5.3.1",
     "@stylistic/stylelint-plugin": "4.0.0",
