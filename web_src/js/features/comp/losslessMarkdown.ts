@@ -13,13 +13,18 @@
 //     actually touched: the serialization is three-way merged back onto the pristine source
 //     (see markdownThreeWayMerge.ts), so untouched paragraphs keep their original bytes and
 //     their reference links keep rendering. When that merge cannot be done confidently the
-//     whole serialization is used, which is the pre-merge behavior.
+//     whole serialization is used, which is the pre-merge behavior;
+//   - markdown typed or pasted into the Visual editor is interpreted as markdown: the
+//     serializer's backslash escapes are removed from the adopted lines (see
+//     unescapeTypedMarkdown.ts), so `# Heading` or a ```mermaid fence typed in Visual mode
+//     is committed as real markdown instead of escaped literal text (issues #322, #367).
 //
 // It installs itself by overriding `editor.getMarkdown`/`editor.setMarkdown` (the same
 // pattern as installBase64WidgetPatch, which must be installed first so widget-placeholder
 // stripping is applied uniformly to every comparison).
 
-import {mergeVisualEdit} from './markdownThreeWayMerge.ts';
+import {mergeVisualEdit, type MergeStats} from './markdownThreeWayMerge.ts';
+import {unescapeTypedMarkdown} from './unescapeTypedMarkdown.ts';
 
 // Minimal structural surface of Toast UI Editor used by the tracker, so the fast unit tests
 // in losslessMarkdown.test.ts can drive it with a fake editor. The real editor is exercised
@@ -78,8 +83,17 @@ function restoreMarkdownSelection(editor: LosslessEditor, selection: [MarkdownPo
 // Resolves the markdown to commit for a WYSIWYG serialization, merging the user's Visual
 // edit back onto the pristine source. `null` from mergeVisualEdit means "not confident",
 // and the serialization is used wholesale (the behavior before the merge existed).
+//
+// Either way, the lines the user's Visual edit actually produced are then unescaped
+// (issues #322/#367): the serializer backslash-escapes markdown punctuation in typed text,
+// which would commit `\# Heading` or `\```mermaid` as literal text. Only adopted lines are
+// touched — pristine lines substituted by the merge keep their exact bytes, including any
+// deliberate `\*` escapes the author wrote in Source mode.
 function resolveSerialization(pristine: string, baseline: string, serialized: string): string {
-  return mergeVisualEdit(pristine, baseline, serialized) ?? serialized;
+  const stats: MergeStats = {};
+  const merged = mergeVisualEdit(pristine, baseline, serialized, stats);
+  if (merged === null) return unescapeTypedMarkdown(serialized);
+  return unescapeTypedMarkdown(merged, stats.adoptedLines);
 }
 
 export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea: HTMLTextAreaElement): void {

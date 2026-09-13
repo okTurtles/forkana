@@ -126,17 +126,19 @@ test('edits made in Source mode are kept verbatim', async () => {
   expect(fake.mdText).toBe(edited);
 });
 
-test('a Visual edit that replaces everything adopts the serialized form', async () => {
+test('a Visual edit that replaces everything adopts the serialized form, unescaped', async () => {
   const {fake, textarea, editor} = setup();
   fake.typeWysiwyg('Hello [world]');
-  const serialized = fake.serialize('Hello [world]');
-  // Nothing of the original survives, so there is nothing for the merge to preserve.
-  expect(editor.getMarkdown()).toBe(serialized);
-  expect(textarea.value).toBe(serialized);
+  // Nothing of the original survives, so there is nothing for the merge to preserve; the
+  // serializer's escapes are removed so what the user typed stays markdown (#322).
+  const expected = 'Hello [world]';
+  expect(fake.serialize('Hello [world]')).not.toBe(expected); // sanity: the serializer escapes
+  expect(editor.getMarkdown()).toBe(expected);
+  expect(textarea.value).toBe(expected);
   fake.changeMode('markdown');
   await flush();
-  expect(editor.getMarkdown()).toBe(serialized);
-  expect(fake.mdText).toBe(serialized);
+  expect(editor.getMarkdown()).toBe(expected);
+  expect(fake.mdText).toBe(expected);
 });
 
 // The tracker feeds (pristine source, entry baseline, current serialization) to the
@@ -149,7 +151,9 @@ test('a Visual edit to one line leaves the other lines byte-identical', async ()
   const editedLast = `${lines.at(-1)} edited`;
   fake.typeWysiwyg([...lines.slice(0, -1), editedLast].join('\n'));
 
-  const expected = [...lines.slice(0, -1), fake.serialize(editedLast)].join('\n');
+  // The edited line is adopted from the serialization, with the serializer's escapes
+  // removed (#322); the untouched lines keep their pristine bytes.
+  const expected = [...lines.slice(0, -1), editedLast].join('\n');
   expect(editor.getMarkdown()).toBe(expected);
   expect(textarea.value).toBe(expected);
   // the untouched hyperlink keeps its original, unescaped spelling

@@ -200,6 +200,11 @@ export type MergeStats = {
   // How many of `theirs`' lines were served from the pristine source byte-for-byte.
   preservedLines?: number;
   totalLines?: number;
+  // Provenance of each output line, parallel to the merged result: true = the line was
+  // adopted verbatim from `theirs` (the user's Visual edit produced it), false = it was
+  // substituted from the pristine source. Set only when the merge succeeds. Consumers use it
+  // to post-process only the lines the serializer actually authored (unescapeTypedMarkdown).
+  adoptedLines?: boolean[];
 };
 
 /**
@@ -345,5 +350,6 @@ export function mergeVisualEdit(
 
   stats.preservedLines = preserved;
   stats.totalLines = merged.length;
+  stats.adoptedLines = baseOfMerged.map((baseIdx) => baseIdx === -1);
   return merged.join('\n');
 }
