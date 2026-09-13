@@ -169,6 +169,41 @@ describe('documents nobody edited in Visual mode', () => {
     expect(textarea.value).toBe(edited);
   });
 
+  // Issue #320: Toast UI stores a mode-switch caret position measured against the serialized
+  // document. When the source runs blocks together with no blank lines, the serialization has
+  // MORE lines than the pristine source, so after the tracker's writeback restores the shorter
+  // pristine text that stored position points past the last line. With the caret parked on the
+  // trailing empty line (focusedNode = null) Toast UI cannot re-derive a fresh position on the
+  // next switch to Visual mode and applies the stale one: doc.child(line - 1) then threw
+  // "RangeError: Index N out of range for <paragraph(...)". The tracker now clamps the stored
+  // position whenever it replaces the document.
+  test('Source -> Visual switch does not throw when the serialization has more lines (issue #320)', async () => {
+    const article = [
+      '**Markdown** is a lightweight markup language for creating rich- or formatted_text.',
+      '- item_one',
+      '- item_two',
+      '# Heading_here',
+      'Closing paragraph_text.',
+      '',
+    ].join('\n');
+    const {editor, textarea} = createEditor(article);
+    // A user reading the article leaves the caret at the end of the document.
+    (editor as any).wwEditor.moveCursorToEnd(true);
+    await flush();
+    editor.changeMode('markdown');
+    await flush();
+    expect(() => editor.changeMode('wysiwyg')).not.toThrow();
+    await flush();
+    expect(editor.getMarkdown()).toBe(article);
+    expect(textarea.value).toBe(article);
+    // And the round trip keeps working afterwards.
+    editor.changeMode('markdown');
+    await flush();
+    expect(() => editor.changeMode('wysiwyg')).not.toThrow();
+    await flush();
+    expect(editor.getMarkdown()).toBe(article);
+  });
+
   test('the editor starts in Source mode losslessly too', async () => {
     const {editor, textarea} = createEditor(SAMPLE, 'markdown');
     expect(editor.getMarkdown()).toBe(SAMPLE);

@@ -75,6 +75,28 @@ function restoreMarkdownSelection(editor: LosslessEditor, selection: [MarkdownPo
   }
 }
 
+// Toast UI's core keeps a "mapped position" from the last markdown<->WYSIWYG conversion
+// (convertor.mappedPosWhenConverting) and, on the next mode switch, applies it verbatim
+// whenever it cannot re-derive a fresh one — which happens whenever its focusedNode is null,
+// e.g. because the caret sits on an empty line. That stored position was measured against
+// the *serialized* document. After the writeback below replaces the markdown document with
+// the pristine source — which can have fewer lines, since the serializer inserts blank-line
+// separators between blocks the source ran together — a stale markdown [line, ch] position
+// can point past the last line, and the core's mdEditor.setSelection then does
+// doc.child(line - 1) and throws "Index N out of range for <paragraph(...)" on the next
+// switch to Visual mode (issue #320). Clamping the stored position into the new text keeps
+// it structurally valid; it is only ever a caret fallback, so precision does not matter.
+function clampStaleMappedPos(editor: LosslessEditor, text: string): void {
+  const convertor = (editor as {convertor?: {getMappedPos?: () => unknown, setMappedPos?: (pos: unknown) => void}}).convertor;
+  if (typeof convertor?.getMappedPos !== 'function' || typeof convertor?.setMappedPos !== 'function') return;
+  const pos = convertor.getMappedPos();
+  if (!Array.isArray(pos) || pos.length !== 2 || typeof pos[0] !== 'number' || typeof pos[1] !== 'number') return;
+  const lines = text.split('\n');
+  const line = Math.min(Math.max(pos[0], 1), lines.length);
+  const ch = Math.min(Math.max(pos[1], 1), lines[line - 1].length + 1);
+  if (line !== pos[0] || ch !== pos[1]) convertor.setMappedPos([line, ch]);
+}
+
 // Resolves the markdown to commit for a WYSIWYG serialization, merging the user's Visual
 // edit back onto the pristine source. `null` from mergeVisualEdit means "not confident",
 // and the serialization is used wholesale (the behavior before the merge existed).
@@ -126,6 +148,9 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
     sourceText = markdown;
     mdSnapshot = markdown;
     if (!editor.isMarkdownMode()) wysiwygBaseline = baseGetMarkdown();
+    // The document just changed under the core's stored mode-switch position; keep that
+    // position structurally valid for the new text (issue #320).
+    clampStaleMappedPos(editor, markdown);
     syncTextarea();
   };
 
