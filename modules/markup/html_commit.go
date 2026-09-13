@@ -212,7 +212,13 @@ func commitCrossReferencePatternProcessor(ctx *RenderContext, node *html.Node) {
 		}
 
 		refText := ref.Owner + "/" + ref.Name + "@" + base.ShortSha(ref.CommitSha)
-		linkHref := articleCommitLink(ref.Owner, ref.Name, ref.CommitSha)
+		// If the cross-reference names the current repository by its repository name,
+		// the link must use the subject name, which is what the article route resolves.
+		refName := ref.Name
+		if ref.Owner == ctx.RenderOptions.Metas["user"] && ref.Name == ctx.RenderOptions.Metas["reponame"] {
+			refName = ctx.RenderOptions.Metas["repo"]
+		}
+		linkHref := articleCommitLink(ref.Owner, refName, ref.CommitSha)
 		link := createLink(ctx, linkHref, refText, "commit")
 
 		replaceContent(node, ref.RefLocation.Start, ref.RefLocation.End, link)

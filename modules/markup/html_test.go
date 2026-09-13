@@ -89,6 +89,16 @@ func TestRender_CommitCrossReference(t *testing.T) {
 		`<p><a href="/article/test-owner/test-repo?version=`+sha[:7]+`" class="commit" rel="nofollow">test-owner/test-repo@`+sha[:7]+`</a></p>`)
 	test("see test-owner/test-repo@"+sha+" for details",
 		`<p>see <a href="/article/test-owner/test-repo?version=`+sha+`" class="commit" rel="nofollow">test-owner/test-repo@65f1bf27bc</a> for details</p>`)
+
+	// A reference to the current repository by its repository name must link to the
+	// subject name, the only name the article route resolves.
+	metas := map[string]string{"user": testRepoOwnerName, "repo": "test-subject", "reponame": testRepoName}
+	rctx := markup.NewTestRenderContext(markup.TestAppURL, metas).WithRelativePath("a.md")
+	buffer, err := markup.RenderString(rctx, testRepoOwnerName+"/"+testRepoName+"@"+sha)
+	assert.NoError(t, err)
+	assert.Equal(t,
+		`<p><a href="/article/`+testRepoOwnerName+`/test-subject?version=`+sha+`" class="commit" rel="nofollow">`+testRepoOwnerName+`/`+testRepoName+`@65f1bf27bc</a></p>`,
+		strings.TrimSpace(buffer))
 }
 
 func TestRender_CrossReferences(t *testing.T) {
