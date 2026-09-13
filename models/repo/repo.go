@@ -422,9 +422,9 @@ func (repo *Repository) HTMLURL(ctxs ...context.Context) string {
 	return httplib.MakeAbsoluteURL(ctx, repo.Link())
 }
 
-// CommitLink make link to by commit full ID
-// note: won't check whether it's an right id
-func (repo *Repository) CommitLink(commitID string) (result string) {
+// CommitLink returns a link to the article view at the given commit ID.
+// It does not check whether the ID actually exists.
+func (repo *Repository) CommitLink(commitID string) string {
 	if git.IsEmptyCommitID(commitID) {
 		return ""
 	}
