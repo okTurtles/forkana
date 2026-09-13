@@ -123,6 +123,10 @@
         <p class="tw-mt-8">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_desc"}}</p>
         <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
             {{.CsrfTokenHtml}}
+            {{/* Chrome ignores autocomplete="off" for name-like fields; the invisible dummy
+            inputs absorb the browser's auto-fill so the new-owner value is always picked
+            through the backend-validated search dropdown (see the template's comments). */}}
+            {{template "base/disable_form_autofill"}}
             <input type="hidden" name="action" value="transfer">
             <input type="hidden" name="redirect_to_article" value="true">
             <div class="required field">
