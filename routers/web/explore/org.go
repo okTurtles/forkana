@@ -38,6 +38,12 @@ func Organizations(ctx *context.Context) {
 		"alphabetically",
 		"reversealphabetically",
 	)
+	// Remember what the request actually asked for before the form is rewritten below, so
+	// RenderUserSearch can tell a real user selection from the default filled in here: the
+	// page shares the users tab's sort dropdown, which must show nothing as selected until
+	// the user selects it (#292).
+	ctx.Data["RequestedSortType"] = ctx.FormString("sort")
+
 	sortOrder := ctx.FormString("sort")
 	if sortOrder == "" {
 		sortOrder = util.Iif(supportedSortOrders.Contains(setting.UI.ExploreDefaultSort), setting.UI.ExploreDefaultSort, "newest")

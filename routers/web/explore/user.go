@@ -27,6 +27,28 @@ const (
 
 var nullByte = []byte{0x00}
 
+// userSortOrders maps every "sort" value RenderUserSearch understands to its ORDER BY.
+// It is the single source of both the ordering and the answer to "did the request name a
+// sort this page knows?", so a sort order added here cannot be left out of the second
+// question and silently render as nothing selected (#292).
+//
+// The clauses name their table because the query may JOIN, and two tables can carry
+// columns of the same name.
+var userSortOrders = map[string]db.SearchOrderBy{
+	"newest":                "`user`.id DESC",
+	"oldest":                "`user`.id ASC",
+	"leastupdate":           "`user`.updated_unix ASC",
+	"reversealphabetically": "`user`.name DESC",
+	"lastlogin":             "`user`.last_login_unix ASC",
+	"reverselastlogin":      "`user`.last_login_unix DESC",
+	"alphabetically":        "`user`.name ASC",
+	"recentupdate":          "`user`.updated_unix DESC",
+}
+
+// userSortOrderFallback orders the listing when the request names no sort, or names one
+// this page does not understand.
+const userSortOrderFallback = "recentupdate"
+
 func isKeywordValid(keyword string) bool {
 	return !bytes.Contains([]byte(keyword), nullByte)
 }
@@ -102,43 +124,40 @@ func RenderUserSearch(ctx *context.Context, opts user_model.SearchUserOptions, t
 	}
 
 	var (
-		users   []*user_model.User
-		count   int64
-		err     error
-		orderBy db.SearchOrderBy
+		users []*user_model.User
+		count int64
+		err   error
 	)
 
-	// we can not set orderBy to `models.SearchOrderByXxx`, because there may be a JOIN in the statement, different tables may have the same name columns
+	// "sortOrder" is what the listing is ordered by and always ends up with a value.
+	// "SortType" is only what the user explicitly asked for: the sort dropdown marks an
+	// item active from it, and nothing should look selected before the user selects
+	// something (#292).
+	//
+	// The explore pages rewrite the form's "sort" value so their own default survives the
+	// SupportedSortOrders guard below, which would otherwise 404 on the fallback here. They
+	// record what was really requested in "RequestedSortType" first, so that rewrite is not
+	// mistaken for a user selection. Pages that do not rewrite the form -- the admin
+	// listings -- leave the key unset and the form value is already the requested one.
+	requestedSort := ctx.FormString("sort")
+	if v, ok := ctx.Data["RequestedSortType"].(string); ok {
+		requestedSort = v
+	}
 
 	sortOrder := ctx.FormString("sort")
 	if sortOrder == "" {
 		sortOrder = setting.UI.ExploreDefaultSort
 	}
-	ctx.Data["SortType"] = sortOrder
-
-	switch sortOrder {
-	case "newest":
-		orderBy = "`user`.id DESC"
-	case "oldest":
-		orderBy = "`user`.id ASC"
-	case "leastupdate":
-		orderBy = "`user`.updated_unix ASC"
-	case "reversealphabetically":
-		orderBy = "`user`.name DESC"
-	case "lastlogin":
-		orderBy = "`user`.last_login_unix ASC"
-	case "reverselastlogin":
-		orderBy = "`user`.last_login_unix DESC"
-	case "alphabetically":
-		orderBy = "`user`.name ASC"
-	case "recentupdate":
-		fallthrough
-	default:
-		// in case the sortType is not valid, we set it to recentupdate
-		sortOrder = "recentupdate"
-		ctx.Data["SortType"] = "recentupdate"
-		orderBy = "`user`.updated_unix DESC"
+	orderBy, ok := userSortOrders[sortOrder]
+	if !ok {
+		sortOrder = userSortOrderFallback
+		orderBy = userSortOrders[userSortOrderFallback]
 	}
+
+	if _, ok := userSortOrders[requestedSort]; !ok {
+		requestedSort = ""
+	}
+	ctx.Data["SortType"] = requestedSort
 
 	if opts.SupportedSortOrders != nil && !opts.SupportedSortOrders.Contains(sortOrder) {
 		ctx.NotFound(nil)
@@ -219,8 +238,16 @@ func Users(ctx *context.Context) {
 		"alphabetically",
 		"reversealphabetically",
 	)
+	// Remember what the request actually asked for before the form is rewritten below, so
+	// RenderUserSearch can tell a real user selection from the default filled in here
+	// (#292).
+	ctx.Data["RequestedSortType"] = ctx.FormString("sort")
+
 	sortOrder := ctx.FormString("sort")
 	if sortOrder == "" {
+		// RenderUserSearch defaults to "recentupdate", which this page does not offer and
+		// its SupportedSortOrders guard would answer with a 404, so pick a supported
+		// default here instead.
 		sortOrder = util.Iif(supportedSortOrders.Contains(setting.UI.ExploreDefaultSort), setting.UI.ExploreDefaultSort, "newest")
 		ctx.SetFormString("sort", sortOrder)
 	}
