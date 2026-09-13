@@ -138,7 +138,8 @@ func TestExploreSubjectsListMarkup(t *testing.T) {
 // to must carry the "active" class and no other tab may, and the tabs must live inside the
 // ".overflow-menu-items" wrapper: the <overflow-menu> web component waits for that element before
 // it initialises, and the CSS that aligns the active tab's underline with the menu rail is keyed
-// on it too. Without the wrapper the tab still renders, but unstyled and never collapsing.
+// on it too. Without the wrapper the tab still renders, but its underline sits a pixel off
+// the menu rail, and the menu never collapses into the overflow button.
 func TestExploreNavbarActiveTab(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -163,10 +164,10 @@ func TestExploreNavbarActiveTab(t *testing.T) {
 	// the tab the page belongs to is the active one, and the others are not
 	subjectsTab, subjectsPage := activeTab("/explore/subjects?q=mars")
 	assert.True(t, strings.HasPrefix(subjectsTab, subjectsHref),
-		"the Subjects tab should be the active one on /explore/subjects")
+		"the Subjects tab should be the active one on /explore/subjects, got %q", subjectsTab)
 	usersTab, _ := activeTab("/explore/users?q=mars")
 	assert.True(t, strings.HasPrefix(usersTab, usersHref),
-		"the Users tab should be the active one on /explore/users")
+		"the Users tab should be the active one on /explore/users, got %q", usersTab)
 
 	// the inactive tabs are still rendered, just not marked active. The "still rendered" half is
 	// what keeps the pair from passing vacuously against a tab that stopped rendering at all.
