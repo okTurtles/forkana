@@ -428,9 +428,11 @@ func (repo *Repository) CommitLink(commitID string) string {
 	if git.IsEmptyCommitID(commitID) {
 		return ""
 	}
-	// Link() resolves to the article view, which has no "/commit/{sha}" route: it
-	// selects a version through the "version" query parameter.
-	return repo.Link() + "?version=" + url.QueryEscape(commitID)
+	// The article view has no "/commit/{sha}" route: it selects a version through the
+	// "version" query parameter. The article path is built here rather than from
+	// Link(), because Link() sends an archived article to its repository route, which
+	// does not resolve a version of this repository.
+	return repo.articleLink() + "?version=" + url.QueryEscape(commitID)
 }
 
 // CommitHTMLURL returns the absolute URL of the article view at the given commit ID.
@@ -677,6 +679,12 @@ func (repo *Repository) RepoPath() string {
 // Link returns the repository relative url for viewing articles
 // Uses subject name if available, falls back to repository name
 func (repo *Repository) Link() string {
+	return repo.articleLink()
+}
+
+// articleLink returns the article view url of this repository, /article/{owner}/{subject},
+// using the repository name in place of the subject when none is assigned.
+func (repo *Repository) articleLink() string {
 	subject := repo.GetSubject(context.Background())
 	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(subject)
 }
