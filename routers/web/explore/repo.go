@@ -40,30 +40,19 @@ const (
 
 // RepoSearchOptions when calling search repositories
 type RepoSearchOptions struct {
-	OwnerID          int64
-	Private          bool
-	Restricted       bool
-	PageSize         int
-	OnlyShowRelevant bool
-	TplName          templates.TplName
+	OwnerID    int64
+	Private    bool
+	Restricted bool
+	PageSize   int
+	TplName    templates.TplName
 }
 
 // RenderRepoSearch render repositories search page
 // This function is also used to render the Admin Repository Management page.
 func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
-	// Sitemap index for sitemap paths
-	page := int(ctx.PathParamInt64("idx"))
-	isSitemap := ctx.PathParam("idx") != ""
-	if page <= 1 {
-		page = ctx.FormInt("page")
-	}
-
+	page := ctx.FormInt("page")
 	if page <= 0 {
 		page = 1
-	}
-
-	if isSitemap {
-		opts.PageSize = setting.UI.SitemapPagingNum
 	}
 
 	var (
@@ -92,8 +81,6 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 	ctx.Data["SortType"] = requestedSort
 
 	keyword := ctx.FormTrim("q")
-
-	ctx.Data["OnlyShowRelevant"] = opts.OnlyShowRelevant
 
 	topicOnly := ctx.FormBool("topic")
 	ctx.Data["TopicOnly"] = topicOnly
@@ -131,7 +118,6 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 		TopicOnly:          topicOnly,
 		Language:           language,
 		IncludeDescription: setting.UI.SearchRepoDescription,
-		OnlyShowRelevant:   opts.OnlyShowRelevant,
 		Archived:           archived,
 		Fork:               fork,
 		Mirror:             mirror,
@@ -142,18 +128,6 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 		ctx.ServerError("SearchRepository", err)
 		return
 	}
-	if isSitemap {
-		m := sitemap.NewSitemap()
-		for _, item := range repos {
-			m.Add(sitemap.URL{URL: item.HTMLURL(), LastMod: item.UpdatedUnix.AsTimePtr()})
-		}
-		ctx.Resp.Header().Set("Content-Type", "text/xml")
-		if _, err := m.WriteTo(ctx.Resp); err != nil {
-			log.Error("Failed writing sitemap: %v", err)
-		}
-		return
-	}
-
 	ctx.Data["Keyword"] = keyword
 	ctx.Data["Total"] = count
 	ctx.Data["Repos"] = repos
@@ -179,24 +153,21 @@ func renderSubjectsSitemap(ctx *context.Context) {
 		page = 1
 	}
 
-	// Same visibility scoping the removed article listing used: a non-admin only ever sees the
-	// public repositories plus their own.
-	var ownerID int64
-	if ctx.Doer != nil && !ctx.Doer.IsAdmin {
-		ownerID = ctx.Doer.ID
-	}
-
+	// Sitemaps are for crawlers, so they are uniformly public-only: no per-user scoping, which
+	// would leak private article URLs into cache-friendly .xml responses and desync the page
+	// count advertised by the sitemap index in routers/web/home.go, which only counts public
+	// repositories of public owners.
 	repos, _, err := repo_model.SearchRepository(ctx, repo_model.SearchRepoOptions{
 		ListOptions: db.ListOptions{
 			Page:     page,
 			PageSize: setting.UI.SitemapPagingNum,
 		},
-		Actor:      ctx.Doer,
-		OrderBy:    db.SearchOrderByRecentUpdated,
-		Private:    ctx.Doer != nil,
-		OwnerID:    ownerID,
-		AllPublic:  true,
-		AllLimited: true,
+		Actor: ctx.Doer,
+		// The id tiebreak keeps pagination stable when update times collide: without it the
+		// databases split ties differently, so a repository could move between sitemap pages
+		// (or, with every fixture at updated_unix 0, land on an arbitrary page in tests).
+		OrderBy:   db.SearchOrderByRecentUpdated + ", id ASC",
+		AllPublic: true,
 	})
 	if err != nil {
 		ctx.ServerError("SearchRepository", err)
@@ -397,7 +368,6 @@ func loadExactSubject(ctx *context.Context, keyword string) bool {
 func RepoHistory(ctx *context.Context) {
 	// Set page metadata
 	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - History View"
-	ctx.Data["PageIsExploreRepositories"] = true
 	ctx.Data["PageIsRepoHistory"] = true
 	ctx.Data["IsRepoHistoryView"] = true
 

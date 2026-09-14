@@ -193,7 +193,11 @@ func TestExploreArticlesRemoved(t *testing.T) {
 
 	MakeRequest(t, NewRequest(t, "GET", "/explore/articles"), http.StatusNotFound)
 	MakeRequest(t, NewRequest(t, "GET", "/explore/articles?q=test"), http.StatusNotFound)
-	MakeRequest(t, NewRequest(t, "GET", "/explore/articles/sitemap-1.xml"), http.StatusNotFound)
+
+	// The old sitemap paths are not dropped but permanently redirected: crawlers that indexed
+	// them keep polling the old address for a while, and must be pointed at the new one.
+	resp := MakeRequest(t, NewRequest(t, "GET", "/explore/articles/sitemap-1.xml"), http.StatusMovedPermanently)
+	assert.Equal(t, setting.AppSubURL+"/explore/subjects/sitemap-1.xml", resp.Header().Get("Location"))
 
 	// The article history view is a different route and must keep working.
 	MakeRequest(t, NewRequest(t, "GET", "/explore/articles/history/user2/repo1"), http.StatusOK)

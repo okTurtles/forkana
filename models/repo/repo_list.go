@@ -15,7 +15,6 @@ import (
 	"code.gitea.io/gitea/modules/container"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/optional"
-	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/util"
 
@@ -314,7 +313,6 @@ type SearchRepoOptions struct {
 	// When specified true, apply some filters over the conditions:
 	// - Don't show forks, when opts.Fork is OptionalBoolNone.
 	// - Do not display repositories that don't have a description, an icon and topics.
-	OnlyShowRelevant bool
 }
 
 // UserOwnedRepoCond returns user ownered repositories
@@ -622,15 +620,11 @@ func SearchRepositoryCondition(opts SearchRepoOptions) builder.Cond {
 			Where(builder.Eq{"language": opts.Language}).And(builder.Eq{"is_primary": true})))
 	}
 
-	if opts.Fork.Has() || opts.OnlyShowRelevant {
-		if opts.OnlyShowRelevant && !opts.Fork.Has() {
-			cond = cond.And(builder.Eq{"is_fork": false})
-		} else {
-			cond = cond.And(builder.Eq{"is_fork": opts.Fork.Value()})
+	if opts.Fork.Has() {
+		cond = cond.And(builder.Eq{"is_fork": opts.Fork.Value()})
 
-			if opts.ForkFrom > 0 && opts.Fork.Value() {
-				cond = cond.And(builder.Eq{"fork_id": opts.ForkFrom})
-			}
+		if opts.ForkFrom > 0 && opts.Fork.Value() {
+			cond = cond.And(builder.Eq{"fork_id": opts.ForkFrom})
 		}
 	}
 
@@ -652,29 +646,6 @@ func SearchRepositoryCondition(opts SearchRepoOptions) builder.Cond {
 		} else {
 			cond = cond.And(builder.Eq{"num_milestones": 0}.Or(builder.IsNull{"num_milestones"}))
 		}
-	}
-
-	if opts.OnlyShowRelevant {
-		// Only show a repo that has at least a topic, an icon, or a description
-		subQueryCond := builder.NewCond()
-
-		// Topic checking. Topics are present.
-		if setting.Database.Type.IsPostgreSQL() { // postgres stores the topics as json and not as text
-			subQueryCond = subQueryCond.Or(builder.And(builder.NotNull{"topics"}, builder.Neq{"(topics)::text": "[]"}))
-		} else {
-			subQueryCond = subQueryCond.Or(builder.And(builder.Neq{"topics": "null"}, builder.Neq{"topics": "[]"}))
-		}
-
-		// Description checking. Description not empty
-		subQueryCond = subQueryCond.Or(builder.Neq{"description": ""})
-
-		// Repo has a avatar
-		subQueryCond = subQueryCond.Or(builder.Neq{"avatar": ""})
-
-		// Always hide repo's that are empty
-		subQueryCond = subQueryCond.And(builder.Eq{"is_empty": false})
-
-		cond = cond.And(subQueryCond)
 	}
 
 	return cond
