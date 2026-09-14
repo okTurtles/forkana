@@ -4,14 +4,17 @@
 package integration
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
 
+	"code.gitea.io/gitea/models/renderhelper"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/gitrepo"
+	"code.gitea.io/gitea/modules/markup/markdown"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -19,7 +22,7 @@ import (
 )
 
 // TestArticleCommitLink covers the links that point at an article version, as generated
-// by Repository.CommitLink and by the markup processors for commit references. The
+// by Repository.CommitLink and by the commit cross-reference markup processor. The
 // article route resolves a version through the "version" query parameter, it has no
 // "/commit/{sha}" path.
 func TestArticleCommitLink(t *testing.T) {
@@ -52,10 +55,28 @@ func TestArticleCommitLink(t *testing.T) {
 		assert.NotEmpty(t, htmlDoc.Find(".file-view.markup").Text())
 	})
 
-	// The link built by markup.commitCrossReferencePatternProcessor for an
-	// "owner/subject@sha" reference must resolve to the same route.
+	// The link built by markup.commitCrossReferencePatternProcessor must point at the
+	// article route, whether the reference names the article by its subject or by its
+	// repository name, and that route has to resolve it.
 	t.Run("CrossReferenceLinkResolves", func(t *testing.T) {
-		req := NewRequest(t, "GET", articleURL+"?version="+sha)
+		renderRef := func(ref string) string {
+			rctx := renderhelper.NewRenderContextRepoComment(t.Context(), repo)
+			rendered, err := markdown.RenderString(rctx, "see "+ref+" for details")
+			require.NoError(t, err)
+
+			htmlDoc := NewHTMLParser(t, bytes.NewBufferString(string(rendered)))
+			href, exists := htmlDoc.Find("a.commit").Attr("href")
+			require.True(t, exists, "%q was not rendered as a commit link", ref)
+			return href
+		}
+
+		expected := articleURL + "?version=" + sha
+		assert.Equal(t, expected, renderRef(fmt.Sprintf("%s/%s@%s", owner.Name, subjectName, sha)))
+		// a reference by repository name has to be rewritten to the subject name, the
+		// only name the article route resolves
+		assert.Equal(t, expected, renderRef(fmt.Sprintf("%s/%s@%s", owner.Name, repo.Name, sha)))
+
+		req := NewRequest(t, "GET", expected)
 		session.MakeRequest(t, req, http.StatusOK)
 
 		req = NewRequest(t, "GET", articleURL+"?version="+sha[:7])

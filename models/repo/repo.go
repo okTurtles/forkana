@@ -433,6 +433,18 @@ func (repo *Repository) CommitLink(commitID string) string {
 	return repo.Link() + "?version=" + url.QueryEscape(commitID)
 }
 
+// CommitHTMLURL returns the absolute URL of the article view at the given commit ID.
+// It does not check whether the ID actually exists.
+func (repo *Repository) CommitHTMLURL(commitID string, ctxs ...context.Context) string {
+	link := repo.CommitLink(commitID)
+	if link == "" {
+		return ""
+	}
+	// FIXME: like HTMLURL, this is also used from mail templates, so the "ctx" is optional.
+	ctx := util.OptionalArg(ctxs, context.TODO())
+	return httplib.MakeAbsoluteURL(ctx, link)
+}
+
 // APIURL returns the repository API URL
 func (repo *Repository) APIURL() string {
 	return setting.AppURL + "api/v1/repos/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(repo.Name)
