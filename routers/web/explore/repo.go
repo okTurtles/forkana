@@ -191,8 +191,11 @@ func renderSubjectsSitemap(ctx *context.Context) {
 			Page:     page,
 			PageSize: setting.UI.SitemapPagingNum,
 		},
-		Actor:      ctx.Doer,
-		OrderBy:    db.SearchOrderByRecentUpdated,
+		Actor: ctx.Doer,
+		// The id tiebreak keeps pagination stable when update times collide: without it the
+		// databases split ties differently, so a repository could move between sitemap pages
+		// (or, with every fixture at updated_unix 0, land on an arbitrary page in tests).
+		OrderBy:    db.SearchOrderByRecentUpdated + ", id ASC",
 		Private:    ctx.Doer != nil,
 		OwnerID:    ownerID,
 		AllPublic:  true,
