@@ -40,7 +40,7 @@ func ShowBranchFeed(ctx *context.Context, repo *repo.Repository, formatType stri
 		feed.Items = append(feed.Items, &feeds.Item{
 			Id:    commit.ID.String(),
 			Title: strings.TrimSpace(strings.Split(commit.Message(), "\n")[0]),
-			Link:  &feeds.Link{Href: repo.HTMLURL() + "/commit/" + commit.ID.String()},
+			Link:  &feeds.Link{Href: repo.CommitHTMLURL(commit.ID.String(), ctx)},
 			Author: &feeds.Author{
 				Name:  commit.Author.Name,
 				Email: commit.Author.Email,
