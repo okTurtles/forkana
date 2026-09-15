@@ -457,6 +457,101 @@ describe('Visual edits are merged back onto the pristine source', () => {
     });
   });
 
+  // Issue #367: articles were being saved with their ```mermaid fences gone, so the server
+  // had no `language-mermaid` code element left to render as a diagram. These pin that the
+  // tracker is not the culprit — a fenced code block survives every path through it — so a
+  // future change to the merge cannot start eating fences unnoticed.
+  describe('fenced code blocks (mermaid) survive every path', () => {
+    const FENCED = [
+      '# Title',
+      '',
+      'Intro paragraph.',
+      '',
+      '```mermaid',
+      'flowchart TD',
+      '  Start --> Stop',
+      '```',
+      '',
+      'Outro paragraph.',
+      '',
+    ].join('\n');
+
+    test('a fence typed in Source mode is stored verbatim', () => {
+      const {editor, textarea} = createEditor(FENCED, 'markdown');
+      expect(editor.getMarkdown()).toBe(FENCED);
+      expect(textarea.value).toBe(FENCED);
+    });
+
+    test('a fence survives Source -> Visual -> Source with no edit', async () => {
+      const {editor, textarea} = createEditor(FENCED, 'markdown');
+      editor.changeMode('wysiwyg');
+      await flush();
+      editor.changeMode('markdown');
+      await flush();
+      expect(editor.getMarkdown()).toBe(FENCED);
+      expect(textarea.value).toBe(FENCED);
+    });
+
+    test('a fence survives submitting straight from Visual mode', () => {
+      const {editor} = createEditor(FENCED);
+      expect(editor.getMarkdown()).toBe(FENCED);
+    });
+
+    test('a fence survives an unrelated Visual edit elsewhere', async () => {
+      const {editor} = createEditor(FENCED);
+      editInVisual(editor, 'Intro paragraph.', 'Intro paragraph, edited.');
+      await flush();
+      const output: string = editor.getMarkdown();
+      expect(output).toContain('Intro paragraph, edited.');
+      expect(output).toContain('```mermaid\nflowchart TD\n  Start --> Stop\n```');
+    });
+
+    test('editing the diagram itself in Visual mode keeps the fence and its language', async () => {
+      const {editor} = createEditor(FENCED);
+      editInVisual(editor, '  Start --> Stop', '  Start --> Middle --> Stop');
+      await flush();
+      const output: string = editor.getMarkdown();
+      expect(output).toContain('```mermaid');
+      expect(output).toContain('Start --> Middle --> Stop');
+      expect(output).toContain('Outro paragraph.');
+    });
+
+    // The other half of #367: with no `codeblock` toolbar button there was no way to make a
+    // code block in Visual mode at all, so diagram source was authored as plain paragraphs
+    // and serialized without any fence. This pins that the button is wired up and that the
+    // block it inserts carries its language through to the markdown.
+    test('the codeblock toolbar item is present and emits a language-carrying fence', async () => {
+      const el = document.createElement('div');
+      document.body.append(el);
+      const editor: any = new Editor({
+        el,
+        initialEditType: 'wysiwyg',
+        usageStatistics: false,
+        toolbarItems: [['indent', 'outdent', 'code', 'codeblock', 'link']],
+      });
+      await flush();
+      expect(el.querySelector('button.codeblock')).not.toBe(null);
+
+      editor.setMarkdown('flowchart TD\n');
+      editor.exec('codeBlock');
+      await flush();
+      expect(editor.getMarkdown()).toBe('```\nflowchart TD\n```');
+
+      // Typing "mermaid" into the block's language input sets the node attribute; the
+      // serializer must carry it into the info string, which is what the server renders on.
+      const view = editor.wwEditor.view;
+      let pos = -1;
+      view.state.doc.descendants((node: any, p: number) => {
+        if (node.type.name === 'codeBlock') pos = p;
+      });
+      expect(pos).toBeGreaterThanOrEqual(0);
+      const attrs = view.state.doc.nodeAt(pos).attrs;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {...attrs, language: 'mermaid'}));
+      await flush();
+      expect(editor.getMarkdown()).toBe('```mermaid\nflowchart TD\n```');
+    });
+  });
+
   test('a whole-document rewrite falls back to the serialization', async () => {
     const {editor, textarea} = createEditor(SAMPLE);
     const view = wysiwygView(editor);
