@@ -174,6 +174,52 @@ func TestExploreSubjectsSitemap(t *testing.T) {
 	assert.NotContains(t, index, "explore/articles/sitemap-")
 }
 
+// TestExploreSubjectsSortOptions pins the Sort dropdown of the Subjects tab, in document
+// order (#291). The list drifts silently whenever the shared template is touched, so the
+// order is asserted, not just the set.
+func TestExploreSubjectsSortOptions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	req := NewRequest(t, "GET", "/explore/subjects")
+	doc := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
+
+	var sorts []string
+	doc.Find(`input[name="sort"]`).Each(func(_ int, s *goquery.Selection) {
+		value, _ := s.Attr("value")
+		sorts = append(sorts, value)
+	})
+	assert.Equal(t, []string{
+		"alphabetically",
+		"reversealphabetically",
+		"recentupdate",
+		"leastupdate",
+		"mostcontributors",
+		"fewestcontributors",
+		"mostforks",
+		"fewestforks",
+	}, sorts)
+
+	// The archived and fork filters stay; the mirror, template and private ones never
+	// belonged to the Subjects tab.
+	AssertHTMLElement(t, doc, `input[name="archived"]`, 2)
+	AssertHTMLElement(t, doc, `input[name="fork"][type="radio"]`, 2)
+	AssertHTMLElement(t, doc, `input[name="mirror"]`, false)
+	AssertHTMLElement(t, doc, `input[name="template"]`, false)
+	AssertHTMLElement(t, doc, `input[name="private"]`, false)
+
+	// Every offered sort value is one the handler actually resolves. A sort key the handler
+	// does not know is silently rewritten to "recentupdate" and still answers 200, so the
+	// status alone proves nothing: assert the dropdown comes back with the requested sort
+	// marked active, which is the resolved value the handler echoed into SortType.
+	for _, sortType := range sorts {
+		req := NewRequest(t, "GET", "/explore/subjects?sort="+sortType)
+		doc := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
+		active, exists := doc.Find(`#subject-search-form label.active input[name="sort"]`).Attr("value")
+		assert.True(t, exists, "no active sort option when requesting %s", sortType)
+		assert.Equal(t, sortType, active)
+	}
+}
+
 // TestExploreSubjectsNoDefaultSortSelected covers #292: the sort dropdown used to paint its
 // default entry ("Most recently updated") in the static grey active state before the user
 // had chosen anything, because the handler echoed its internal ordering default back to the
