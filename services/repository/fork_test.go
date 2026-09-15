@@ -503,6 +503,53 @@ func TestCheckForkOnEditPermissions(t *testing.T) {
 		assert.Equal(t, rootRepo.ID, perms.OwnRepoForSubject.ID, "OwnRepoForSubject should be the user's root article")
 	})
 
+	t.Run("ArchivedOwnArticleDoesNotBlock", func(t *testing.T) {
+		// Same setup as BlockedBySubjectOwnership, but the user's own article for the
+		// subject is archived, so it must not block contributions to other articles.
+		subject, err := repo_model.GetOrCreateSubject(t.Context(), "ArchivedOwnArticle Test Subject")
+		assert.NoError(t, err)
+
+		userWithRoot := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		rootRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+		forkRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
+
+		// Verify ownership matches our expectations: the user owns the archived article
+		// but not the one they contribute to, otherwise IsRepoOwner would short-circuit
+		assert.Equal(t, userWithRoot.ID, rootRepo.OwnerID)
+		assert.NotEqual(t, userWithRoot.ID, forkRepo.OwnerID)
+
+		originalRoot := *rootRepo
+		originalFork := *forkRepo
+
+		rootRepo.SubjectID = subject.ID
+		rootRepo.IsFork = false
+		rootRepo.ForkID = 0
+		rootRepo.IsArchived = true
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), rootRepo, "subject_id", "is_fork", "fork_id", "is_archived"))
+
+		forkRepo.SubjectID = subject.ID
+		forkRepo.IsFork = true
+		forkRepo.ForkID = rootRepo.ID
+		assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), forkRepo, "subject_id", "is_fork", "fork_id"))
+
+		t.Cleanup(func() {
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), &originalRoot, "subject_id", "is_fork", "fork_id", "is_archived"); err != nil {
+				t.Logf("Warning: cleanup failed for rootRepo: %v", err)
+			}
+			if err := repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), &originalFork, "subject_id", "is_fork", "fork_id"); err != nil {
+				t.Logf("Warning: cleanup failed for forkRepo: %v", err)
+			}
+		})
+
+		perms, err := CheckForkOnEditPermissions(t.Context(), userWithRoot, forkRepo)
+		assert.NoError(t, err)
+		assert.False(t, perms.BlockedBySubject, "An archived own article must not block the user")
+		assert.Nil(t, perms.OwnRepoForSubject, "OwnRepoForSubject should not be set for an archived repo")
+		assert.False(t, perms.HasExistingFork, "User should have no fork of this repo, so Case 1 is the branch under test")
+		assert.True(t, perms.NeedsFork, "User should be able to fork the other article")
+		assert.True(t, perms.CanSubmitChangeRequest, "User should be able to submit change requests")
+	})
+
 	t.Run("IndirectForkCanSubmitChangeRequest", func(t *testing.T) {
 		// User owns a fork-of-fork (indirect fork) and tries to submit a change request to the root.
 		// This tests the case where:

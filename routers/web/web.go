@@ -551,12 +551,15 @@ func registerWebRoutes(m *web.Router) {
 		m.Get("", func(ctx *context.Context) {
 			ctx.Redirect(setting.AppSubURL + "/explore/subjects")
 		})
-		m.Get("/articles", explore.Repos)
 		m.Get("/subjects", explore.Subjects)
 		m.Get("/subjects/suggestions", explore.SubjectSuggestions)
 		m.Get("/articles/history/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByDefaultBranch(), repo.SetEditorconfigIfExists, explore.RepoHistory)
-		m.Get("/articles/sitemap-{idx}.xml", sitemapEnabled, explore.Repos)
 		m.Get("/subjects/sitemap-{idx}.xml", sitemapEnabled, explore.Subjects)
+		// Crawlers that indexed the removed article listing's sitemaps keep requesting the old
+		// paths for a while; point them at the same content under its new address.
+		m.Get("/articles/sitemap-{idx}.xml", sitemapEnabled, func(ctx *context.Context) {
+			ctx.Redirect(setting.AppSubURL+"/explore/subjects/sitemap-"+ctx.PathParam("idx")+".xml", http.StatusMovedPermanently)
+		})
 		m.Get("/users", explore.Users)
 		m.Get("/users/sitemap-{idx}.xml", sitemapEnabled, explore.Users)
 		m.Get("/organizations", explore.Organizations)
