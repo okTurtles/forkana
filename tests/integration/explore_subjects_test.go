@@ -6,6 +6,7 @@ package integration
 import (
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"code.gitea.io/gitea/models/db"
@@ -138,6 +139,53 @@ func TestExploreSubjectsListMarkup(t *testing.T) {
 	assert.NotContains(t, html, "octicon-repo-forked")
 }
 
+// TestExploreNavbarActiveTab locks the explore navbar markup from #294. The tab the page belongs
+// to must carry the "active" class and no other tab may, and the tabs must live inside the
+// ".overflow-menu-items" wrapper: the <overflow-menu> web component waits for that element before
+// it initialises, and the CSS that aligns the active tab's underline with the menu rail is keyed
+// on it too. Without the wrapper the tab still renders, but its underline sits a pixel off
+// the menu rail, and the menu never collapses into the overflow button.
+func TestExploreNavbarActiveTab(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// activeTab returns the href of the one active tab together with the parsed page, so the
+	// caller can make further assertions about the same response instead of fetching it again.
+	activeTab := func(path string) (string, *HTMLDoc) {
+		req := NewRequest(t, "GET", path)
+		resp := MakeRequest(t, req, http.StatusOK)
+		h := NewHTMLParser(t, resp.Body)
+
+		// exactly one tab is active, and it is inside the overflow-menu wrapper
+		active := h.Find(`overflow-menu .overflow-menu-items a.item.active`)
+		assert.Equal(t, 1, active.Length(), "exactly one explore tab should be active on %s", path)
+		href, exists := active.Attr("href")
+		assert.True(t, exists, "the active explore tab should be a link on %s", path)
+		return href, h
+	}
+
+	subjectsHref := setting.AppSubURL + "/explore/subjects"
+	usersHref := setting.AppSubURL + "/explore/users"
+
+	// the tab the page belongs to is the active one, and the others are not
+	subjectsTab, subjectsPage := activeTab("/explore/subjects?q=mars")
+	assert.True(t, strings.HasPrefix(subjectsTab, subjectsHref),
+		"the Subjects tab should be the active one on /explore/subjects, got %q", subjectsTab)
+	usersTab, _ := activeTab("/explore/users?q=mars")
+	assert.True(t, strings.HasPrefix(usersTab, usersHref),
+		"the Users tab should be the active one on /explore/users, got %q", usersTab)
+
+	// the inactive tabs are still rendered, just not marked active. The "still rendered" half is
+	// what keeps the pair from passing vacuously against a tab that stopped rendering at all.
+	// Only the Users tab gets this pair: the Code tab is gated on "IsRepoIndexerEnabled", which
+	// explore.Subjects never puts in the template data, so it never renders here and asserting it
+	// is not active would be trivially true. The "exactly one active tab" check above already
+	// covers every other tab anyway.
+	assert.Equal(t, 1, subjectsPage.Find(`overflow-menu .overflow-menu-items a.item[href^="`+usersHref+`"]`).Length(),
+		"the Users tab should still be rendered on /explore/subjects")
+	assert.Equal(t, 0, subjectsPage.Find(`overflow-menu .overflow-menu-items a.item.active[href^="`+usersHref+`"]`).Length(),
+		"the Users tab must not be active on /explore/subjects")
+}
+
 // TestExploreArticlesRemoved pins the removal of the unreachable /explore/articles listing.
 // Nothing in the UI ever linked to it; the history route below shares the prefix and stays.
 func TestExploreArticlesRemoved(t *testing.T) {
@@ -172,6 +220,52 @@ func TestExploreSubjectsSitemap(t *testing.T) {
 	index := MakeRequest(t, NewRequest(t, "GET", "/sitemap.xml"), http.StatusOK).Body.String()
 	assert.Contains(t, index, setting.AppURL+"explore/subjects/sitemap-1.xml")
 	assert.NotContains(t, index, "explore/articles/sitemap-")
+}
+
+// TestExploreSubjectsSortOptions pins the Sort dropdown of the Subjects tab, in document
+// order (#291). The list drifts silently whenever the shared template is touched, so the
+// order is asserted, not just the set.
+func TestExploreSubjectsSortOptions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	req := NewRequest(t, "GET", "/explore/subjects")
+	doc := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
+
+	var sorts []string
+	doc.Find(`input[name="sort"]`).Each(func(_ int, s *goquery.Selection) {
+		value, _ := s.Attr("value")
+		sorts = append(sorts, value)
+	})
+	assert.Equal(t, []string{
+		"alphabetically",
+		"reversealphabetically",
+		"recentupdate",
+		"leastupdate",
+		"mostcontributors",
+		"fewestcontributors",
+		"mostforks",
+		"fewestforks",
+	}, sorts)
+
+	// The archived and fork filters stay; the mirror, template and private ones never
+	// belonged to the Subjects tab.
+	AssertHTMLElement(t, doc, `input[name="archived"]`, 2)
+	AssertHTMLElement(t, doc, `input[name="fork"][type="radio"]`, 2)
+	AssertHTMLElement(t, doc, `input[name="mirror"]`, false)
+	AssertHTMLElement(t, doc, `input[name="template"]`, false)
+	AssertHTMLElement(t, doc, `input[name="private"]`, false)
+
+	// Every offered sort value is one the handler actually resolves. A sort key the handler
+	// does not know is silently rewritten to "recentupdate" and still answers 200, so the
+	// status alone proves nothing: assert the dropdown comes back with the requested sort
+	// marked active, which is the resolved value the handler echoed into SortType.
+	for _, sortType := range sorts {
+		req := NewRequest(t, "GET", "/explore/subjects?sort="+sortType)
+		doc := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
+		active, exists := doc.Find(`#subject-search-form label.active input[name="sort"]`).Attr("value")
+		assert.True(t, exists, "no active sort option when requesting %s", sortType)
+		assert.Equal(t, sortType, active)
+	}
 }
 
 // TestExploreSubjectsNoDefaultSortSelected covers #292: the sort dropdown used to paint its
