@@ -12,8 +12,9 @@ import (
 
 // TestRepoSearchBlankKeyword locks the #257 regression: a blank keyword submitted with relevance
 // ordering used to leave the "relevance_score" placeholder in the ORDER BY clause and fail the
-// query with a 500. The fix lives in repo_model.SearchRepository, so it is exercised through the
-// two surviving callers: the subjects list, and the admin repository list (RenderRepoSearch).
+// query with a 500. The fix lives in repo_model.SearchRepository; the only remaining web caller
+// is the admin repository list (RenderRepoSearch). The subjects request is just a smoke test:
+// it ignores these params entirely and must keep returning 200.
 func TestRepoSearchBlankKeyword(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
