@@ -422,15 +422,29 @@ func (repo *Repository) HTMLURL(ctxs ...context.Context) string {
 	return httplib.MakeAbsoluteURL(ctx, repo.Link())
 }
 
-// CommitLink make link to by commit full ID
-// note: won't check whether it's an right id
-func (repo *Repository) CommitLink(commitID string) (result string) {
+// CommitLink returns a link to the article view at the given commit ID.
+// It does not check whether the ID actually exists.
+func (repo *Repository) CommitLink(commitID string) string {
 	if git.IsEmptyCommitID(commitID) {
-		result = ""
-	} else {
-		result = repo.Link() + "/commit/" + url.PathEscape(commitID)
+		return ""
 	}
-	return result
+	// The article view has no "/commit/{sha}" route: it selects a version through the
+	// "version" query parameter. The article path is built here rather than from
+	// Link(), because Link() sends an archived article to its repository route, which
+	// does not resolve a version of this repository.
+	return repo.articleLink() + "?version=" + url.QueryEscape(commitID)
+}
+
+// CommitHTMLURL returns the absolute URL of the article view at the given commit ID.
+// It does not check whether the ID actually exists.
+func (repo *Repository) CommitHTMLURL(commitID string, ctxs ...context.Context) string {
+	link := repo.CommitLink(commitID)
+	if link == "" {
+		return ""
+	}
+	// FIXME: like HTMLURL, this is also used from mail templates, so the "ctx" is optional.
+	ctx := util.OptionalArg(ctxs, context.TODO())
+	return httplib.MakeAbsoluteURL(ctx, link)
 }
 
 // APIURL returns the repository API URL
@@ -671,7 +685,14 @@ func (repo *Repository) Link() string {
 	if repo.IsArchived && repo.SubjectID > 0 {
 		return repo.OperationsLink()
 	}
-	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(repo.GetSubject(context.Background()))
+	return repo.articleLink()
+}
+
+// articleLink returns the article view url of this repository, /article/{owner}/{subject},
+// using the repository name in place of the subject when none is assigned.
+func (repo *Repository) articleLink() string {
+	subject := repo.GetSubject(context.Background())
+	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(subject)
 }
 
 // OperationsLink returns the repository relative url for repository operations
