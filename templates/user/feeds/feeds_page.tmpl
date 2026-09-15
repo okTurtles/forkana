@@ -85,7 +85,7 @@
 					{{$repo := .Repo}}
 					<div class="feeds-card-body tw-flex tw-flex-col tw-gap-1">
 						{{range $push.Commits}}
-							{{$commitLink := printf "%s/commit/%s" $repoLink .Sha1}}
+							{{$commitLink := printf "%s?version=%s" $repoLink (.Sha1|PathEscape)}}
 							<div class="flex-text-block">
 								<img loading="lazy" alt class="ui avatar" src="{{$push.AvatarLink ctx .AuthorEmail}}" title="{{.AuthorName}}" width="16" height="16">
 								<a class="ui sha label" href="{{$commitLink}}">{{ShortSha .Sha1}}</a>

@@ -6,7 +6,6 @@ package activities
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strconv"
 
 	"code.gitea.io/gitea/models/db"
@@ -282,7 +281,7 @@ func (n *Notification) HTMLURL(ctx context.Context) string {
 		}
 		return n.Issue.HTMLURL(ctx)
 	case NotificationSourceCommit:
-		return n.Repository.HTMLURL(ctx) + "/commit/" + url.PathEscape(n.CommitID)
+		return n.Repository.CommitHTMLURL(n.CommitID, ctx)
 	case NotificationSourceRepository:
 		return n.Repository.HTMLURL(ctx)
 	}
@@ -298,7 +297,7 @@ func (n *Notification) Link(ctx context.Context) string {
 		}
 		return n.Issue.Link()
 	case NotificationSourceCommit:
-		return n.Repository.Link() + "/commit/" + url.PathEscape(n.CommitID)
+		return n.Repository.CommitLink(n.CommitID)
 	case NotificationSourceRepository:
 		return n.Repository.Link()
 	}
