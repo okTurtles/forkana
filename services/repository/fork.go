@@ -43,10 +43,17 @@ type ForkOnEditPermissions struct {
 	HasExistingFork bool
 	// ExistingFork is the user's existing fork (nil if none)
 	ExistingFork *repo_model.Repository
-	// BlockedBySubject is true if the user already owns a different repo for the same subject
-	// that is NOT a fork of the current repository (i.e., they have their own independent article)
+	// ExistingForkArchived is true if the user's existing fork is archived, and therefore
+	// read-only: it cannot be committed to, and forking again is refused as the fork exists.
+	// Only reachable when the fork is not the user's article for the subject, because an
+	// archived repo never occupies the subject slot.
+	ExistingForkArchived bool
+	// BlockedBySubject is true if the user already owns a different active (non-archived)
+	// repo for the same subject that is NOT a fork of the current repository
+	// (i.e., they have their own independent article)
 	BlockedBySubject bool
-	// OwnRepoForSubject is the user's existing repo for the subject (nil if none)
+	// OwnRepoForSubject is the user's existing active repo for the subject (nil if none,
+	// or if their repo for the subject is archived)
 	OwnRepoForSubject *repo_model.Repository
 	// CanSubmitChangeRequest is true if the user can submit a change request to this repository.
 	// This is true when the user has an existing fork of this repo (or any repo in the same subject's
@@ -79,11 +86,13 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 
 	g, gCtx := errgroup.WithContext(ctx)
 
-	// Check if user owns a different repository for the same subject
+	// Check if user owns a different active repository for the same subject. An archived
+	// repository is not an active article, so it does not consume the user's
+	// "one article per subject" slot and the getter leaves ownRepo nil for it.
 	if repo.SubjectID > 0 {
 		g.Go(func() error {
 			var err error
-			ownRepo, err = repo_model.GetRepositoryByOwnerIDAndSubjectID(gCtx, doer.ID, repo.SubjectID)
+			ownRepo, err = repo_model.GetActiveRepositoryByOwnerIDAndSubjectID(gCtx, doer.ID, repo.SubjectID)
 			return err
 		})
 	}
@@ -107,7 +116,7 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 	//    - If they have a fork of this repo: HasExistingFork=true, CanSubmitChangeRequest=true
 	//    - If they don't have a fork: NeedsFork=true, CanSubmitChangeRequest=true
 	//
-	// 2. User has a repo for this subject (ownRepo != nil):
+	// 2. User has an active (non-archived) repo for this subject (ownRepo != nil):
 	//    a. Their repo IS a fork of this repo (ownRepo.ID == existingFork.ID):
 	//       - HasExistingFork=true, CanSubmitChangeRequest=true
 	//       - They can submit change requests to propose changes to this article
@@ -165,6 +174,7 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 	if existingFork != nil {
 		perms.HasExistingFork = true
 		perms.ExistingFork = existingFork
+		perms.ExistingForkArchived = existingFork.IsArchived
 	} else {
 		perms.NeedsFork = true
 	}
@@ -286,10 +296,12 @@ func ForkRepository(ctx context.Context, doer, owner *user_model.User, opts Fork
 		return nil, err
 	}
 
-	// Check if user already owns a different repository for the same subject
-	// In Forkana, each user should only have one repository per subject
+	// Check if user already owns a different active repository for the same subject.
+	// In Forkana, each user should only have one repository per subject. An archived
+	// repository doesn't count: the owner can contribute to another article for the
+	// same subject once their own article is archived.
 	if opts.BaseRepo.SubjectID > 0 {
-		ownRepo, err := repo_model.GetRepositoryByOwnerIDAndSubjectID(ctx, owner.ID, opts.BaseRepo.SubjectID)
+		ownRepo, err := repo_model.GetActiveRepositoryByOwnerIDAndSubjectID(ctx, owner.ID, opts.BaseRepo.SubjectID)
 		if err != nil {
 			return nil, err
 		}

@@ -46,6 +46,25 @@ type EditRepoFileForm struct {
 	ChangeRequestDescription string // Optional custom description for the Change Request
 }
 
+// EditorWorkflowForm exposes the editor workflow flags of a bound form.
+// The permission middleware and the editor handlers read the flags through this
+// interface instead of re-parsing the raw request, so that every gate sees the
+// value the binder produced: the binder accepts only "on" and the values
+// strconv.ParseBool understands, and web.Bind silently binds anything else to
+// false, whereas Base.FormBool also accepts a case-insensitive "on".
+type EditorWorkflowForm interface {
+	IsForkAndEdit() bool
+	IsSubmitChangeRequest() bool
+}
+
+func (f *EditRepoFileForm) IsForkAndEdit() bool {
+	return f.ForkAndEdit
+}
+
+func (f *EditRepoFileForm) IsSubmitChangeRequest() bool {
+	return f.SubmitChangeRequest
+}
+
 type DeleteRepoFileForm struct {
 	CommitCommonForm
 }

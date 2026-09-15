@@ -16,6 +16,14 @@ export type ToastEditorOptions = {
   toolbarItems?: string[][];
 };
 
+// Same pattern as ToastCommentEditor's `_giteaToastCommentEditor`: the textarea is hidden and
+// the editor owns the content, so the instance has to be reachable from the DOM for anything
+// that needs to read or replace it without a reference to the editor (E2E tests, in particular
+// — writing to the textarea directly is undone by the lossless tracker's next syncTextarea()).
+type ToastEditorContainer = HTMLElement & {_giteaToastEditor?: Editor};
+
+const toastEditorContainerSelector = '#toast-editor-container';
+
 // resolveRelativeSrc resolves a relative image path (e.g. "./img/a.png", "../b.png")
 // against the raw URL of the file being edited. The base URL is provided by the server
 // (data-raw-file-url), so it already accounts for appSubUrl and branch names containing
@@ -49,7 +57,7 @@ export async function createToastEditor(
   } = options;
 
   // Use the existing container from the template
-  let container = document.querySelector<HTMLElement>('#toast-editor-container');
+  let container = document.querySelector<ToastEditorContainer>(toastEditorContainerSelector);
   if (!container) {
     container = document.createElement('div');
     container.id = 'toast-editor-container';
@@ -226,6 +234,10 @@ export async function createToastEditor(
   // installBase64WidgetPatch so comparisons see widget-stripped output.
   installLosslessMarkdownTracker(editor, textarea);
 
+  // Published only after the tracker is installed, so every consumer that reaches the editor
+  // through the DOM gets the lossless getMarkdown/setMarkdown.
+  container._giteaToastEditor = editor;
+
   // Rename mode switch labels
   const switchEl = container.querySelector('.toastui-editor-mode-switch');
   if (switchEl) {
@@ -246,5 +258,7 @@ export async function createToastEditor(
 }
 
 export function destroyToastEditor(editor: Editor): void {
+  const container = document.querySelector<ToastEditorContainer>(toastEditorContainerSelector);
+  if (container?._giteaToastEditor === editor) delete container._giteaToastEditor;
   editor.destroy();
 }
