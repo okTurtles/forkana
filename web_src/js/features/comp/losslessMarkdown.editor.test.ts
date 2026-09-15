@@ -241,13 +241,17 @@ describe('Visual edits are merged back onto the pristine source', () => {
   // to be committed as literal text.
   test('a mermaid fence typed as text in Visual mode is committed as a real fence', async () => {
     const {editor, textarea} = createEditor(SAMPLE);
-    for (const line of ['```mermaid', 'flowchart TD', 'Start --> Stop', '```']) {
+    for (const line of ['```mermaid', 'flowchart TD', 'Start_node --> Stop_node', '```']) {
       appendParagraphInVisual(editor, line);
     }
     await flush();
     const output: string = editor.getMarkdown();
     expect(output).toContain('```mermaid');
     expect(output).not.toContain('\\`');
+    // The body was serialized as escaped paragraphs; its escapes must be removed too, or
+    // the diagram source would contain literal `\_` (the second half of #322/#367).
+    expect(output).toContain('Start_node --> Stop_node');
+    expect(output).not.toContain('\\_node');
     expect(textarea.value).toBe(output);
     expectSamplePreserved(output);
   });

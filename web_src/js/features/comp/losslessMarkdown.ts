@@ -90,10 +90,27 @@ function restoreMarkdownSelection(editor: LosslessEditor, selection: [MarkdownPo
 // touched — pristine lines substituted by the merge keep their exact bytes, including any
 // deliberate `\*` escapes the author wrote in Source mode.
 function resolveSerialization(pristine: string, baseline: string, serialized: string): string {
+  // No effective Visual edit: nothing came from the user, so nothing may be unescaped.
+  // Both callers below already pre-check this, but a future caller that does not must get
+  // the pristine bytes back, never a full-document unescape.
+  if (serialized === baseline) return pristine;
   const stats: MergeStats = {};
   const merged = mergeVisualEdit(pristine, baseline, serialized, stats);
-  if (merged === null) return unescapeTypedMarkdown(serialized);
-  return unescapeTypedMarkdown(merged, stats.adoptedLines);
+  if (merged !== null) return unescapeTypedMarkdown(merged, stats.adoptedLines);
+  // Wholesale fallback: the merge refused, so the serialization is committed as-is — but
+  // only the lines the user actually changed or added may be unescaped. A serialization
+  // line byte-identical to an entry-baseline line is untouched serializer output (the same
+  // positive evidence the merge's SUBSTITUTION RULE uses), and the serializer reproduces an
+  // author's deliberate Source-mode escapes byte-for-byte, so unescaping those lines would
+  // turn a deliberate `\*` into real emphasis.
+  const unclaimed = new Map<string, number>();
+  for (const line of baseline.split('\n')) unclaimed.set(line, (unclaimed.get(line) ?? 0) + 1);
+  const adopted = serialized.split('\n').map((line) => {
+    const left = unclaimed.get(line) ?? 0;
+    if (left > 0) unclaimed.set(line, left - 1);
+    return left === 0;
+  });
+  return unescapeTypedMarkdown(serialized, adopted);
 }
 
 export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea: HTMLTextAreaElement): void {

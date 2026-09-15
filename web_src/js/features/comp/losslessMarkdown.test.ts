@@ -201,6 +201,30 @@ test('empty initial content stays empty', () => {
   expect(textarea.value).toBe('');
 });
 
+// When the three-way merge refuses (here: a serializer normalizeLine does not model, so
+// base coverage fails), the serialization is committed wholesale — but only the lines the
+// user actually changed or added may be unescaped. Untouched lines are serializer output
+// that reproduces the author's deliberate Source-mode escapes byte-for-byte, and those must
+// survive (the #262 guarantee).
+test('the wholesale fallback unescapes only the lines the user changed', () => {
+  const doc = 'alpha with a deliberate \\*escape\\*\nbravo line';
+  const fake = new FakeEditor('wysiwyg');
+  // Appending a marker to every line defeats normalization-based alignment (the merge
+  // falls back); escaping `_` mimics the serializer escaping typed markdown.
+  fake.serialize = (s: string) => s.split('\n').map((l) => `${l.replaceAll('_', '\\_')};`).join('\n');
+  const textarea = document.createElement('textarea');
+  textarea.value = doc;
+  installLosslessMarkdownTracker(fake, textarea);
+
+  fake.typeWysiwyg(`${doc}\nnew _typed_ line`);
+  const output = fake.getMarkdown();
+  // The untouched line keeps the deliberate escape (it is byte-identical to the baseline).
+  expect(output).toContain('deliberate \\*escape\\*');
+  // The new line is adopted and unescaped.
+  expect(output).toContain('new _typed_ line;');
+  expect(output).not.toContain('\\_typed\\_');
+});
+
 test('a Visual edit yields widget-stripped markdown, never $$widget placeholders', () => {
   const IMG = '![a](data:image/png;base64,AAA)';
   const doc = `Intro\n\n${IMG}\n\nOutro`;

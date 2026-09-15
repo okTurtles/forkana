@@ -2,38 +2,64 @@
 //
 // Toast UI's WYSIWYG→markdown serializer backslash-escapes markdown punctuation in every
 // text node: typing `# Heading`, `**bold**` or a ```` ```mermaid ```` fence in Visual mode
-// is saved as `\# Heading`, `\*\*bold\*\*`, `\```mermaid` — which then renders as literal
-// text instead of markdown. That is standard WYSIWYG semantics ("what you typed is what you
-// get"), but Forkana's product decision is the opposite: markdown-looking input typed or
-// pasted into the Visual editor is markdown and must render as such.
+// is saved as `\# Heading`, `\*\*bold\*\*`, `` \`\`\`mermaid `` — which then renders as
+// literal text instead of markdown. That is standard WYSIWYG semantics ("what you see is
+// what you get"), but Forkana's product decision is the opposite: markdown-looking input
+// typed or pasted into the Visual editor is markdown and must render as such.
 //
 // unescapeTypedMarkdown() removes those serializer escapes from the lines of a Visual edit,
-// so the committed source contains real markdown. It is careful about the one place where a
+// so the committed source contains real markdown. It is careful about the places where a
 // backslash is user content rather than a serializer artifact — code:
-//   - fenced code blocks: content lines are verbatim (the serializer never escapes inside a
-//     fence, so a `\d` there is the user's regex) and are left untouched. Fences are tracked
-//     as they form: an escaped `\```mermaid` line unescapes into a real opening fence, and
-//     from then on its content is protected until a closing fence — itself possibly still
-//     escaped — ends the block;
+//   - real fenced code blocks (a raw ``` fence in the input, i.e. a WYSIWYG code block,
+//     whose content the serializer emits verbatim): content lines are left untouched, so a
+//     `\d` there is the user's regex. Fences are tracked as they form, and the block's
+//     content is protected until a closing fence ends it;
+//   - fences typed as plain text (the #322/#367 case): the opener arrives escaped
+//     (`` \`\`\`mermaid ``) because at serialization time there was no fence — every line,
+//     the body included, was serialized as an escaped *paragraph*. So when the opener itself
+//     needed unescaping to become a fence, the adopted body lines are serializer-escaped
+//     text too and their escapes are removed as well; a closing fence — itself possibly
+//     still escaped — ends the block;
 //   - inline code spans: `` `a\*b` `` keeps its backslash, escapes around it are removed.
+//
+// Inherent limitation of the typed-fence path: the serializer has already interleaved the
+// body's paragraphs with blank lines and collapsed multi-space runs before this module ever
+// sees the text, and that loss cannot be undone here. The code-block toolbar button remains
+// the only fully lossless way to author a code block in Visual mode.
+//
+// `<` is deliberately excluded from unescaping: stripping the serializer's `\<` would
+// promote literal angle-bracket text typed in Visual mode (`<br>`, `<script>`) to raw HTML,
+// which no #322/#367 construct needs and which would silently change the text's meaning.
 //
 // The caller says which lines were actually produced by the user's Visual edit (see
 // `adoptedLines` in markdownThreeWayMerge.ts); all other lines are pristine source bytes and
 // are never modified — only scanned, so that fences already present in the article still
 // protect their content.
 
-// CommonMark honors a backslash escape only before ASCII punctuation, which is exactly the
-// set Toast UI's serializer produces.
-const ASCII_PUNCTUATION_RE = /[!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~\\]/;
+// The escaped-punctuation set is shared with the three-way merge (single source of truth;
+// markdownThreeWayMerge.ts does not import this module, so there is no cycle).
+import {ASCII_PUNCTUATION_RE, stripEscapes} from './markdownThreeWayMerge.ts';
+
+// Is `ch` a character whose serializer escape this module removes? See the module comment
+// for why `<` is excluded.
+function isUnescapable(ch: string): boolean {
+  return ch !== '<' && ASCII_PUNCTUATION_RE.test(ch);
+}
 
 // An opening or closing code fence: up to 3 spaces of indentation, then a run of 3+
 // backticks or tildes. m[2] is the fence run, m[3] the rest (info string, if opening).
 const FENCE_LINE_RE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
 
-type FenceState = {char: string, len: number};
+type FenceState = {
+  char: string,
+  len: number,
+  // True when the opener was an escaped text line: the fence was typed as paragraphs, so
+  // its adopted body lines carry serializer escapes too (see the module comment).
+  bodyIsTypedText: boolean,
+};
 
-// Does this line open a fenced code block?
-function fenceOpen(line: string): FenceState | null {
+// Parses a line as the opening fence of a code block, or null if it is not one.
+function parseOpeningFence(line: string): Omit<FenceState, 'bodyIsTypedText'> | null {
   const m = FENCE_LINE_RE.exec(line);
   if (!m) return null;
   const char = m[2][0];
@@ -49,28 +75,13 @@ function closesFence(line: string, fence: FenceState): boolean {
   return m !== null && m[2][0] === fence.char && m[2].length >= fence.len && m[3].trim() === '';
 }
 
-// Removes every backslash escape, with no code-span awareness. Used only to test whether an
-// escaped line would be a closing code fence, never to emit general content.
-function unescapeAll(line: string): string {
-  let out = '';
-  for (let i = 0; i < line.length; i++) {
-    if (line[i] === '\\' && i + 1 < line.length && ASCII_PUNCTUATION_RE.test(line[i + 1])) {
-      out += line[i + 1];
-      i++;
-    } else {
-      out += line[i];
-    }
-  }
-  return out;
-}
-
 // Removes backslash escapes outside inline code spans; code-span content is verbatim.
 export function unescapeLine(line: string): string {
   let out = '';
   let i = 0;
   while (i < line.length) {
     const ch = line[i];
-    if (ch === '\\' && i + 1 < line.length && ASCII_PUNCTUATION_RE.test(line[i + 1])) {
+    if (ch === '\\' && i + 1 < line.length && isUnescapable(line[i + 1])) {
       out += line[i + 1];
       i += 2;
       continue;
@@ -130,15 +141,31 @@ export function unescapeTypedMarkdown(text: string, adoptedLines?: boolean[]): s
     const line = lines[i];
     const adopted = adoptedLines ? adoptedLines[i] === true : true;
     if (fence) {
-      // Inside a fenced code block: content is verbatim. The only transformation allowed is
-      // recognizing an adopted line as the (still escaped) closing fence.
+      // Inside a fenced code block. A raw closing fence always ends it.
       if (closesFence(line, fence)) {
         out[i] = line;
         fence = null;
         continue;
       }
+      if (adopted && fence.bodyIsTypedText) {
+        // The opener was an escaped text line, so this fence was typed as paragraphs and
+        // this adopted body line was serialized as an escaped paragraph, not as verbatim
+        // code: its escapes are serializer artifacts and are removed (stripEscapes, not
+        // unescapeLine — there are no inline code spans inside a code block, and every
+        // escape here, `\<` included, is a paragraph-serialization artifact).
+        const candidate = stripEscapes(line);
+        if (closesFence(candidate, fence)) {
+          out[i] = candidate;
+          fence = null;
+          continue;
+        }
+        out[i] = candidate;
+        continue;
+      }
       if (adopted) {
-        const candidate = unescapeAll(line);
+        // Real fence: content is verbatim. The only transformation allowed is recognizing
+        // an adopted line as the (still escaped) closing fence.
+        const candidate = stripEscapes(line);
         if (closesFence(candidate, fence)) {
           out[i] = candidate;
           fence = null;
@@ -150,7 +177,8 @@ export function unescapeTypedMarkdown(text: string, adoptedLines?: boolean[]): s
     }
     const result = adopted ? unescapeLine(line) : line;
     out[i] = result;
-    fence = fenceOpen(result);
+    const opener = parseOpeningFence(result);
+    fence = opener ? {...opener, bodyIsTypedText: adopted && result !== line} : null;
   }
   return out.join('\n');
 }

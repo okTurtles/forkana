@@ -51,8 +51,14 @@
 // corrupting an article.
 
 // Backslash escapes the serializer adds (`\[`, `\_`, `\.`, ...). CommonMark only honors a
-// backslash before ASCII punctuation, which is exactly the set the serializer uses.
-const ESCAPED_PUNCTUATION_RE = /\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~\\])/g;
+// backslash before ASCII punctuation, which is exactly the set the serializer uses. This is
+// the single source of truth for that set — unescapeTypedMarkdown.ts imports it too.
+export const ASCII_PUNCTUATION_RE = /[!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~\\]/;
+const ESCAPED_PUNCTUATION_RE = new RegExp(String.raw`\\(${ASCII_PUNCTUATION_RE.source})`, 'g');
+
+// Removes every serializer backslash escape from a line, with no code-span awareness.
+// Used for comparison/probing, never to emit general content.
+export const stripEscapes = (line: string): string => line.replace(ESCAPED_PUNCTUATION_RE, '$1');
 const UNORDERED_BULLET_RE = /^(\s*)[*+-](\s)/;
 const ORDERED_MARKER_RE = /^(\s*\d{1,9})[.)](\s)/;
 const SPACE_RUN_RE = /[ \t]+/g;
@@ -78,7 +84,7 @@ const MIN_BASE_COVERAGE = 0.5;
 // Reduces a line to the form both the pristine source and the serialization agree on.
 // Deliberately lossy: it exists only for comparison, never for output.
 export function normalizeLine(line: string): string {
-  const unescaped = line.replace(ESCAPED_PUNCTUATION_RE, '$1');
+  const unescaped = stripEscapes(line);
   if (RULE_LINE_RE.test(unescaped)) {
     return unescaped.replace(RULE_RUN_RE, (run) => run[0]).replace(SPACE_RUN_RE, ' ').trimEnd();
   }
@@ -219,7 +225,13 @@ export function mergeVisualEdit(
   theirs: string,
   stats: MergeStats = {},
 ): string | null {
-  if (theirs === base) return ours; // nothing was edited
+  if (theirs === base) {
+    // Nothing was edited: no line comes from the serializer, so nothing may be unescaped.
+    // Setting this explicitly matters because unescapeTypedMarkdown treats an *absent*
+    // adoptedLines as "every line was adopted" (the wholesale fallback).
+    stats.adoptedLines = [];
+    return ours;
+  }
   if (!base && ours) {
     // No usable base (Visual mode was never entered cleanly): nothing to anchor against.
     stats.fallbackReason = 'base-unrecognized';

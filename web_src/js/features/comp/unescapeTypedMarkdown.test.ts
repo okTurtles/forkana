@@ -27,15 +27,30 @@ test('unescapeLine unescapes after an unmatched backtick run', () => {
   expect(unescapeLine('\\```mermaid')).toBe('```mermaid');
 });
 
-test('a typed mermaid fence with an escaped opening backtick becomes a real fence', () => {
-  // Exactly the shape reported on issue #367: the serializer escapes the leading backtick.
-  const escaped = ['\\```mermaid', 'flowchart TD', ' Start --> Stop', '\\```'].join('\n');
+test('a typed mermaid fence becomes a real fence (#367)', () => {
+  // The serializer escapes every backtick of a typed fence line (reEscapePairedChars), so
+  // the real #367 shape is `\`\`\`mermaid`. A partially escaped opener is handled too.
+  const escaped = ['\\`\\`\\`mermaid', 'flowchart TD', ' Start --> Stop', '\\`\\`\\`'].join('\n');
   expect(unescapeTypedMarkdown(escaped)).toBe(['```mermaid', 'flowchart TD', ' Start --> Stop', '```'].join('\n'));
+  expect(unescapeTypedMarkdown('\\```mermaid\ngraph LR\n\\```')).toBe('```mermaid\ngraph LR\n```');
 });
 
-test('a fully escaped fence becomes a real fence and its content is untouched', () => {
+test('a fully escaped fence becomes a real fence; non-punctuation backslashes in its body survive', () => {
   const escaped = ['\\`\\`\\`js', String.raw`const re = /\d+/;`, '\\`\\`\\`'].join('\n');
   expect(unescapeTypedMarkdown(escaped)).toBe(['```js', String.raw`const re = /\d+/;`, '```'].join('\n'));
+});
+
+test('a fence typed as text has serializer escapes removed from its body too', () => {
+  // #322/#367 regression: the body of a typed fence was serialized as escaped *paragraphs*
+  // (there was no fence at serialization time), so its escapes are artifacts.
+  const escaped = ['\\`\\`\\`js', String.raw`const my\_var = a \* b;`, '\\`\\`\\`'].join('\n');
+  expect(unescapeTypedMarkdown(escaped)).toBe(['```js', 'const my_var = a * b;', '```'].join('\n'));
+});
+
+test('pristine lines inside a typed fence are still left verbatim', () => {
+  const doc = ['\\```', String.raw`pristine \_bytes\_`, '\\```'].join('\n');
+  expect(unescapeTypedMarkdown(doc, [true, false, true]))
+    .toBe(['```', String.raw`pristine \_bytes\_`, '```'].join('\n'));
 });
 
 test('content of an already-real fence is never unescaped', () => {
@@ -43,9 +58,13 @@ test('content of an already-real fence is never unescaped', () => {
   expect(unescapeTypedMarkdown(doc)).toBe(doc);
 });
 
-test('tilde fences are recognized too', () => {
-  const escaped = ['\\~~~', String.raw`keep \_this\_ verbatim`, '\\~~~'].join('\n');
-  expect(unescapeTypedMarkdown(escaped)).toBe(['~~~', String.raw`keep \_this\_ verbatim`, '~~~'].join('\n'));
+test('tilde fences are recognized too, and a typed tilde fence body is unescaped', () => {
+  const escaped = ['\\~~~', String.raw`typed \_body\_ text`, '\\~~~'].join('\n');
+  expect(unescapeTypedMarkdown(escaped)).toBe(['~~~', 'typed _body_ text', '~~~'].join('\n'));
+});
+
+test('escaped angle brackets are never unescaped (no raw-HTML promotion)', () => {
+  expect(unescapeLine(String.raw`a \<br> tag and \*bold\*`)).toBe(String.raw`a \<br> tag and *bold*`);
 });
 
 test('adoptedLines protects pristine lines from any change', () => {
