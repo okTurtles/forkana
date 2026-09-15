@@ -251,6 +251,12 @@ func (ns *notificationService) PullRequestReviewRequest(ctx context.Context, doe
 	}
 }
 
+func (ns *notificationService) RepoTransferRejected(ctx context.Context, doer, initiator *user_model.User, repo *repo_model.Repository) {
+	if err := activities_model.CreateRepoTransferRejectedNotification(ctx, doer, initiator, repo); err != nil {
+		log.Error("CreateRepoTransferRejectedNotification: %v", err)
+	}
+}
+
 func (ns *notificationService) RepoPendingTransfer(ctx context.Context, doer, newOwner *user_model.User, repo *repo_model.Repository) {
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		return activities_model.CreateRepoTransferNotification(ctx, doer, newOwner, repo)

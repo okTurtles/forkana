@@ -4,10 +4,12 @@
 package repository
 
 import (
+	"context"
 	"sync"
 	"testing"
 
 	activities_model "code.gitea.io/gitea/models/activities"
+	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/models/organization"
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -29,6 +31,35 @@ func registerNotifier() {
 	notifySync.Do(func() {
 		notify_service.RegisterNotifier(feed.NewNotifier())
 	})
+}
+
+// transferRejectionRecorder records RepoTransferRejected calls so the tests can assert the
+// hook fires (and does not fire) without pulling the whole notification stack in.
+type transferRejectionRecorder struct {
+	notify_service.NullNotifier
+	calls     int
+	doer      *user_model.User
+	initiator *user_model.User
+	repo      *repo_model.Repository
+}
+
+func (r *transferRejectionRecorder) RepoTransferRejected(_ context.Context, doer, initiator *user_model.User, repo *repo_model.Repository) {
+	r.calls++
+	r.doer, r.initiator, r.repo = doer, initiator, repo
+}
+
+var (
+	rejectionRecorder     = &transferRejectionRecorder{}
+	rejectionRecorderSync sync.Once
+)
+
+func registerRejectionRecorder(t *testing.T) *transferRejectionRecorder {
+	t.Helper()
+	rejectionRecorderSync.Do(func() {
+		notify_service.RegisterNotifier(rejectionRecorder)
+	})
+	*rejectionRecorder = transferRejectionRecorder{}
+	return rejectionRecorder
 }
 
 func TestTransferOwnership(t *testing.T) {
@@ -165,4 +196,79 @@ func TestRepositoryTransferRejection(t *testing.T) {
 	err = AcceptTransferOwnership(t.Context(), repo, doer)
 	assert.Error(t, err)
 	assert.True(t, IsRepositoryLimitReached(err))
+}
+
+// TestRepositoryTransferRejectionNotifiesInitiator pins that rejecting a pending transfer
+// tells the user who started it, and that rejecting your own transfer stays quiet.
+func TestRepositoryTransferRejectionNotifiesInitiator(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	recorder := registerRejectionRecorder(t)
+
+	// repo_transfer.yml id=2: doer_id=16 offered repo 21 to recipient_id=10
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 21})
+	recipient := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 10})
+	initiator := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 16})
+
+	// the bell row telling the recipient a response is awaited must not survive the rejection
+	pending := &activities_model.Notification{
+		UserID: recipient.ID,
+		RepoID: repo.ID,
+		Status: activities_model.NotificationStatusUnread,
+		Source: activities_model.NotificationSourceRepository,
+	}
+	require.NoError(t, db.Insert(t.Context(), pending))
+
+	require.NoError(t, RejectRepositoryTransfer(t.Context(), repo, recipient))
+
+	assert.Equal(t, activities_model.NotificationStatusRead,
+		unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{ID: pending.ID}).Status)
+
+	assert.Equal(t, 1, recorder.calls)
+	require.NotNil(t, recorder.initiator)
+	assert.Equal(t, initiator.ID, recorder.initiator.ID)
+	assert.Equal(t, recipient.ID, recorder.doer.ID)
+	assert.Equal(t, repo.ID, recorder.repo.ID)
+
+	// the transfer is gone and the repository is usable again
+	unittest.AssertNotExistsBean(t, &repo_model.RepoTransfer{RepoID: repo.ID})
+	assert.Equal(t, repo_model.RepositoryReady,
+		unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID}).Status)
+
+	// Nobody needs to be told about their own action. The row is inserted directly because
+	// CreatePendingRepositoryTransfer refuses a recipient who already owns the repository;
+	// the case is reachable when the initiator gains the right to accept after starting the
+	// transfer (an org recipient they were later allowed to create repositories in).
+	*recorder = transferRejectionRecorder{}
+	selfRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	require.NoError(t, db.Insert(t.Context(), &repo_model.RepoTransfer{
+		DoerID:      user2.ID,
+		RecipientID: user2.ID,
+		RepoID:      selfRepo.ID,
+	}))
+
+	require.NoError(t, RejectRepositoryTransfer(t.Context(), selfRepo, user2))
+	assert.Equal(t, 0, recorder.calls)
+	unittest.AssertNotExistsBean(t, &repo_model.RepoTransfer{RepoID: selfRepo.ID})
+}
+
+// TestRepositoryTransferRejectionFailureIsSilent pins that a rejection that never happened
+// does not notify anybody.
+func TestRepositoryTransferRejectionFailureIsSilent(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	recorder := registerRejectionRecorder(t)
+
+	// repo 2 has no pending transfer
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+	err := RejectRepositoryTransfer(t.Context(), repo, unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2}))
+	assert.True(t, repo_model.IsErrNoPendingTransfer(err))
+	assert.Equal(t, 0, recorder.calls)
+
+	// a user who may not act on the transfer cannot trigger it either
+	// repo_transfer.yml id=2 offers repo 21 to user 10, user 4 is a bystander
+	pending := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 21})
+	err = RejectRepositoryTransfer(t.Context(), pending, unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4}))
+	assert.ErrorIs(t, err, util.ErrPermissionDenied)
+	assert.Equal(t, 0, recorder.calls)
+	unittest.AssertExistsAndLoadBean(t, &repo_model.RepoTransfer{RepoID: pending.ID})
 }

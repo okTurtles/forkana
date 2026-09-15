@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
+	activities_model "code.gitea.io/gitea/models/activities"
 	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
@@ -121,6 +123,44 @@ func TestArticleSettingsTransfer(t *testing.T) {
 		AssertHTMLElement(t, htmlDoc, "#article-transfer-notice", true)
 		assert.Contains(t, htmlDoc.Find("#article-transfer-notice").Text(),
 			fmt.Sprintf("%s wants to transfer the article %s to you.", owner.DisplayName(), subjectName))
+	})
+
+	t.Run("RejectNotifiesInitiator", func(t *testing.T) {
+		// no notification for the initiator exists while the transfer is still pending
+		unittest.AssertNotExistsBean(t, &activities_model.Notification{
+			UserID: owner.ID,
+			RepoID: repo.ID,
+			Source: activities_model.NotificationSourceRepoTransferRejected,
+		})
+
+		recipientSession := loginUser(t, recipient.Name)
+		req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/action/reject_transfer", owner.Name, repo.Name), map[string]string{
+			"_csrf": GetUserCSRFToken(t, recipientSession),
+		})
+		recipientSession.MakeRequest(t, req, http.StatusSeeOther)
+
+		// the article stays with its original owner and is usable again
+		reverted := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
+		assert.Equal(t, repo_model.RepositoryReady, reverted.Status)
+		assert.Equal(t, owner.ID, reverted.OwnerID)
+		unittest.AssertNotExistsBean(t, &repo_model.RepoTransfer{RepoID: repo.ID})
+
+		// and the owner is told the transfer was rejected rather than left guessing
+		notification := unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{
+			UserID: owner.ID,
+			RepoID: repo.ID,
+			Source: activities_model.NotificationSourceRepoTransferRejected,
+		})
+		assert.Equal(t, activities_model.NotificationStatusUnread, notification.Status)
+		assert.Equal(t, recipient.ID, notification.UpdatedBy)
+
+		// the notification list names the rejection instead of repeating the article path
+		htmlDoc := NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, "GET", "/notifications"), http.StatusOK).Body)
+		assert.Contains(t, htmlDoc.Find("#notification_"+strconv.FormatInt(notification.ID, 10)).Text(),
+			"Your transfer of this article was rejected.")
+
+		// restore the pending transfer the following subtests expect
+		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name))
 	})
 
 	t.Run("Cancel", func(t *testing.T) {
