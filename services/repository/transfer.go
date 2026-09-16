@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	activities_model "code.gitea.io/gitea/models/activities"
 	"code.gitea.io/gitea/models/db"
 	issues_model "code.gitea.io/gitea/models/issues"
 	"code.gitea.io/gitea/models/organization"
@@ -313,6 +314,9 @@ func transferOwnership(ctx context.Context, doer *user_model.User, newOwnerName 
 	if err := repo_model.DeleteRepositoryTransfer(ctx, repo.ID); err != nil {
 		return fmt.Errorf("deleteRepositoryTransfer: %w", err)
 	}
+	if err := activities_model.MarkRepoTransferNotificationsRead(ctx, repo.ID); err != nil {
+		return fmt.Errorf("MarkRepoTransferNotificationsRead: %w", err)
+	}
 	repo.Status = repo_model.RepositoryReady
 	if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "status"); err != nil {
 		return err
@@ -481,11 +485,15 @@ func StartRepositoryTransfer(ctx context.Context, doer, newOwner *user_model.Use
 	return nil
 }
 
-// RejectRepositoryTransfer marks the repository as ready and remove pending transfer entry,
-// thus cancel the transfer process.
-// The accepter can reject the transfer.
+// RejectRepositoryTransfer marks the repository as ready and removes the pending transfer
+// entry, thus cancelling the transfer process.
+// The recipient can reject the transfer.
 func RejectRepositoryTransfer(ctx context.Context, repo *repo_model.Repository, doer *user_model.User) error {
-	return db.WithTx(ctx, func(ctx context.Context) error {
+	// The user who started the transfer is the one who needs to be told it was rejected,
+	// so capture them before the transaction deletes the pending transfer row.
+	var initiator *user_model.User
+
+	if err := db.WithTx(ctx, func(ctx context.Context) error {
 		repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, repo)
 		if err != nil {
 			return err
@@ -494,6 +502,7 @@ func RejectRepositoryTransfer(ctx context.Context, repo *repo_model.Repository, 
 		if err := repoTransfer.LoadAttributes(ctx); err != nil {
 			return err
 		}
+		initiator = repoTransfer.Doer
 
 		if !repoTransfer.CanUserAcceptOrRejectTransfer(ctx, doer) {
 			return util.ErrPermissionDenied
@@ -504,8 +513,21 @@ func RejectRepositoryTransfer(ctx context.Context, repo *repo_model.Repository, 
 			return err
 		}
 
-		return repo_model.DeleteRepositoryTransfer(ctx, repo.ID)
-	})
+		if err := repo_model.DeleteRepositoryTransfer(ctx, repo.ID); err != nil {
+			return err
+		}
+
+		return activities_model.MarkRepoTransferNotificationsRead(ctx, repo.ID)
+	}); err != nil {
+		return err
+	}
+
+	// No point telling someone about their own action.
+	if initiator != nil && initiator.ID != doer.ID {
+		notify_service.RepoTransferRejected(ctx, doer, initiator, repo)
+	}
+
+	return nil
 }
 
 func canUserCancelTransfer(ctx context.Context, r *repo_model.RepoTransfer, u *user_model.User) bool {
@@ -552,6 +574,10 @@ func CancelRepositoryTransfer(ctx context.Context, repoTransfer *repo_model.Repo
 			return err
 		}
 
-		return repo_model.DeleteRepositoryTransfer(ctx, repoTransfer.RepoID)
+		if err := repo_model.DeleteRepositoryTransfer(ctx, repoTransfer.RepoID); err != nil {
+			return err
+		}
+
+		return activities_model.MarkRepoTransferNotificationsRead(ctx, repoTransfer.RepoID)
 	})
 }
