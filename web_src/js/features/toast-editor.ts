@@ -3,6 +3,7 @@ import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 import {installLosslessMarkdownTracker} from './comp/losslessMarkdown.ts';
+import {defaultToolbarItems} from './comp/toastEditorToolbar.ts';
 import {showErrorToast} from '../modules/toast.ts';
 import {ensureFilesWithinLimit, getMaxAttachmentSize, showFileTooLargeError} from './comp/editorFileLimit.ts';
 import {POST} from '../modules/fetch.ts';
@@ -40,16 +41,7 @@ export async function createToastEditor(
     previewStyle = 'vertical',
     usageStatistics = false,
     hideModeSwitch = false,   // must be false to show the tabs
-    toolbarItems = [
-      ['heading', 'bold', 'italic'],
-      // `codeblock` is what lets a Visual-mode author produce a fenced code block at all
-      // (issue #367). Without it there is no way to write a ```mermaid block except by
-      // switching to the Source editor: typing the backticks in Visual mode just escapes
-      // them, so diagrams were being saved as plain paragraphs and never rendered.
-      ['indent', 'outdent', 'code', 'codeblock', 'link'],
-      ['ul', 'ol', 'task'],
-      ['image', 'table'],
-    ],
+    toolbarItems = defaultToolbarItems,
   } = options;
 
   // Use the existing container from the template

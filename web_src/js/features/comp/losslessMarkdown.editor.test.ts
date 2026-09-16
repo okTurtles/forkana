@@ -10,6 +10,7 @@
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
 import Editor from '@toast-ui/editor';
 import {installLosslessMarkdownTracker} from './losslessMarkdown.ts';
+import {defaultToolbarItems} from './toastEditorToolbar.ts';
 import {installBase64WidgetPatch, createBase64WidgetRule} from './base64ImageWidget.ts';
 
 // Deliberately contains the constructs Toast UI's WYSIWYG serializer damages: a
@@ -518,8 +519,9 @@ describe('Visual edits are merged back onto the pristine source', () => {
 
     // The other half of #367: with no `codeblock` toolbar button there was no way to make a
     // code block in Visual mode at all, so diagram source was authored as plain paragraphs
-    // and serialized without any fence. This pins that the button is wired up and that the
-    // block it inserts carries its language through to the markdown.
+    // and serialized without any fence. Building the editor with the same defaultToolbarItems
+    // the product editors consume is what makes this a regression guard: dropping `codeblock`
+    // from the shared default (how #367 happened) fails the button assertion below.
     test('the codeblock toolbar item is present and emits a language-carrying fence', async () => {
       const el = document.createElement('div');
       document.body.append(el);
@@ -527,7 +529,7 @@ describe('Visual edits are merged back onto the pristine source', () => {
         el,
         initialEditType: 'wysiwyg',
         usageStatistics: false,
-        toolbarItems: [['indent', 'outdent', 'code', 'codeblock', 'link']],
+        toolbarItems: defaultToolbarItems,
       });
       await flush();
       expect(el.querySelector('button.codeblock')).not.toBe(null);
@@ -545,8 +547,9 @@ describe('Visual edits are merged back onto the pristine source', () => {
         if (node.type.name === 'codeBlock') pos = p;
       });
       expect(pos).toBeGreaterThanOrEqual(0);
-      const attrs = view.state.doc.nodeAt(pos).attrs;
-      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {...attrs, language: 'mermaid'}));
+      const node = view.state.doc.nodeAt(pos);
+      expect(node?.type.name).toBe('codeBlock');
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {...node!.attrs, language: 'mermaid'}));
       await flush();
       expect(editor.getMarkdown()).toBe('```mermaid\nflowchart TD\n```');
     });

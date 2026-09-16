@@ -7,6 +7,7 @@
 import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {hideElem, generateElemId} from '../../utils/dom.ts';
+import {defaultToolbarItems} from './toastEditorToolbar.ts';
 import {imageInfo} from '../../utils/image.ts';
 import {
   EventUploadStateChanged,
@@ -84,14 +85,7 @@ export class ToastCommentEditor {
       height = '200px',
       initialEditType = 'wysiwyg',
       previewStyle = 'vertical',
-      toolbarItems = [
-        ['heading', 'bold', 'italic'],
-        // See the note in toast-editor.ts: without `codeblock` a Visual-mode author cannot
-        // produce a fenced code block, so mermaid diagrams cannot be written here (#367).
-        ['indent', 'outdent', 'code', 'codeblock', 'link'],
-        ['ul', 'ol', 'task'],
-        ['image', 'table'],
-      ],
+      toolbarItems = defaultToolbarItems,
     } = this.options;
 
     this.editorWrapper.style.minHeight = height;
