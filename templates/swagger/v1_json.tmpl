@@ -25185,6 +25185,11 @@
           "type": "string",
           "x-go-name": "ID"
         },
+        "is_tombstoned": {
+          "description": "IsTombstoned marks an article that its author deleted. The node stays in the\ngraph because its descendants need the ancestry, but the article itself is no\nlonger readable, so the client must not present it as a live one.",
+          "type": "boolean",
+          "x-go-name": "IsTombstoned"
+        },
         "level": {
           "type": "integer",
           "format": "int64",
