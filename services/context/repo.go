@@ -429,6 +429,8 @@ func repoAssignment(ctx *Context, repo *repo_model.Repository) {
 	ctx.Repo.Repository = repo
 	ctx.Data["RepoName"] = ctx.Repo.Repository.Name
 	ctx.Data["IsEmptyRepo"] = ctx.Repo.Repository.IsEmpty
+	// The "Repo" suffix follows IsEmptyRepo above: the template data holds flags of the
+	// doer and of the request too, so a repository state says which one it describes.
 	ctx.Data["IsTombstonedRepo"] = ctx.Repo.Repository.IsTombstone()
 	// Resolved here so the templates never have to call GetSubject with a context
 	// argument, which the template engine cannot always supply.

@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCanBeTombstoneDeleted(t *testing.T) {
+func TestWouldBeTombstonedOnDelete(t *testing.T) {
 	unittest.PrepareTestEnv(t)
 
 	cases := []struct {
@@ -32,7 +32,7 @@ func TestCanBeTombstoneDeleted(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: c.repoID})
-			got, err := repo_service.CanBeTombstoneDeleted(t.Context(), repo)
+			got, err := repo_service.WouldBeTombstonedOnDelete(t.Context(), repo)
 			require.NoError(t, err)
 			assert.Equal(t, c.expected, got)
 		})
@@ -52,10 +52,10 @@ func TestTombstoneRepository(t *testing.T) {
 	assert.True(t, stored.IsTombstone())
 	assert.Equal(t, repo.TombstonedUnix, stored.TombstonedUnix)
 
-	// A tombstone cannot be tombstoned again, so it is never reported as deletable.
-	deletable, err := repo_service.CanBeTombstoneDeleted(t.Context(), stored)
+	// A tombstone cannot be tombstoned again, so no warning is reported for it.
+	wouldTombstone, err := repo_service.WouldBeTombstonedOnDelete(t.Context(), stored)
 	require.NoError(t, err)
-	assert.False(t, deletable)
+	assert.False(t, wouldTombstone)
 
 	// Tombstoning is idempotent.
 	require.NoError(t, repo_service.TombstoneRepository(t.Context(), stored))

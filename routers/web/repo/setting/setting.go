@@ -95,9 +95,9 @@ func SettingsCtxData(ctx *context.Context) {
 
 	// Deleting an article that has forks only leaves a tombstone behind, so the delete
 	// modal has to say so up front.
-	willBeTombstoned, err := repo_service.CanBeTombstoneDeleted(ctx, ctx.Repo.Repository)
+	willBeTombstoned, err := repo_service.WouldBeTombstonedOnDelete(ctx, ctx.Repo.Repository)
 	if err != nil {
-		ctx.ServerError("CanBeTombstoneDeleted", err)
+		ctx.ServerError("WouldBeTombstonedOnDelete", err)
 		return
 	}
 	ctx.Data["RepoWillBeTombstoned"] = willBeTombstoned

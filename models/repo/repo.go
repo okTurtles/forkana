@@ -330,7 +330,9 @@ func (repo *Repository) IsBroken() bool {
 }
 
 // IsTombstone indicates that the article was deleted by its author but is kept
-// as a tombstone because other articles were forked from it.
+// as a tombstone because other articles were forked from it. It reads the
+// IsTombstoned field through a nil-safe receiver; the names differ because Go
+// forbids a method and a field of the same name on one type.
 func (repo *Repository) IsTombstone() bool {
 	return repo != nil && repo.IsTombstoned
 }

@@ -46,9 +46,11 @@ func repoHasForks(ctx context.Context, repo *repo_model.Repository) (bool, error
 	return hasForks, nil
 }
 
-// CanBeTombstoneDeleted reports whether deleting the repository would tombstone it
-// rather than remove it. It is used by the UI to warn the author up front.
-func CanBeTombstoneDeleted(ctx context.Context, repo *repo_model.Repository) (bool, error) {
+// WouldBeTombstonedOnDelete reports whether deleting the repository would leave a
+// tombstone behind rather than remove it, because other articles were forked from it.
+// It is used by the UI to warn the author up front, which is why an existing tombstone
+// reports false: its deletion notice has already been shown.
+func WouldBeTombstonedOnDelete(ctx context.Context, repo *repo_model.Repository) (bool, error) {
 	if repo.IsTombstoned {
 		return false, nil
 	}
