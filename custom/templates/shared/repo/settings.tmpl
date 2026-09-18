@@ -204,9 +204,10 @@
             {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
             <ul class="tw-m-0 tw-pl-4">
                 <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_1"}}</li>
-                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_2" (printf "%s/%s" .Repository.OwnerName (HTMLFormat "%s" $subjectName))}}</li>
                 {{if .RepoWillBeTombstoned}}
                 <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_tombstone"}}</li>
+                {{else}}
+                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_2" (printf "%s/%s" .Repository.OwnerName (HTMLFormat "%s" $subjectName))}}</li>
                 {{end}}
             </ul>
         </div>

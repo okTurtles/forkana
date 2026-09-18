@@ -1119,11 +1119,7 @@ func handleSettingsPostDelete(ctx *context.Context) {
 	case outcome == repo_service.RepositoryTombstoned:
 		// The article had forks, so only a tombstone is left behind to keep their ancestry.
 		log.Trace("Repository tombstoned: %s/%s", ctx.Repo.Owner.Name, repo.Name)
-		if fromArticle {
-			ctx.Flash.Success(ctx.Tr("repo.settings.article_tombstone_success"))
-		} else {
-			ctx.Flash.Success(ctx.Tr("repo.settings.tombstone_success"))
-		}
+		ctx.Flash.Success(ctx.Tr("repo.settings.tombstone_success"))
 	case outcome == repo_service.RepositoryAlreadyTombstoned:
 		// Unreachable in practice: RepoAssignment redirects a tombstone away from its
 		// settings page. Reported honestly rather than as a deletion that never happened.
@@ -1136,8 +1132,8 @@ func handleSettingsPostDelete(ctx *context.Context) {
 		log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
 		ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
 	}
-	// The dashboard renders base/alert, so the flash above stays visible; the owner
-	// profile template does not.
+	// An organization dashboard renders base/alert, so the flash above stays visible
+	// there; the user home page and the owner profile template do not.
 	ctx.Redirect(ctx.Repo.Owner.DashboardLink())
 }
 
