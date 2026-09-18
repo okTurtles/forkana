@@ -54,6 +54,48 @@ func TestDeleteOwnerRepositoriesDirectly(t *testing.T) {
 	assert.NoError(t, repo_service.DeleteOwnerRepositoriesDirectly(t.Context(), user))
 }
 
+func TestDeleteOwnerRepositoriesDirectlyKeepsTombstones(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	// repo 10 is the base of repo 11, so deleting it leaves a tombstone behind.
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 12})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	require.NoError(t, repo_service.TombstoneRepository(t.Context(), repo))
+
+	require.NoError(t, repo_service.DeleteOwnerRepositoriesDirectly(t.Context(), owner))
+
+	// Purging the tombstone would strip repo 11 of its ancestor, so it survives and
+	// the owner is anonymized instead.
+	unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+
+	ownsTombstones, err := repo_service.OwnsTombstones(t.Context(), owner.ID)
+	require.NoError(t, err)
+	assert.True(t, ownsTombstones)
+}
+
+func TestAnonymizeTombstoneOwner(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 12})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	require.NoError(t, repo_service.TombstoneRepository(t.Context(), repo))
+
+	require.NoError(t, repo_service.AnonymizeTombstoneOwner(t.Context(), owner))
+
+	anonymized := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 12})
+	assert.Equal(t, "deleted-user-12", anonymized.Name)
+	assert.Equal(t, "deleted-user-12", anonymized.LowerName)
+	assert.Equal(t, "Deleted user", anonymized.FullName)
+	assert.NotContains(t, anonymized.Email, "user12")
+	assert.False(t, anonymized.IsActive)
+	assert.True(t, anonymized.ProhibitLogin)
+
+	// The tombstone keeps pointing at the owner, under its anonymized name.
+	kept := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	assert.Equal(t, owner.ID, kept.OwnerID)
+	assert.Equal(t, "deleted-user-12", kept.OwnerName)
+}
+
 func TestDeleteRepositoryDirectlyCleansUpSubject(t *testing.T) {
 	unittest.PrepareTestEnv(t)
 

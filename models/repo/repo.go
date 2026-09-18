@@ -1245,6 +1245,9 @@ func (err ErrUserOwnRepos) Error() string {
 type CountRepositoryOptions struct {
 	OwnerID int64
 	Private optional.Option[bool]
+	// Tombstoned counts only tombstoned repositories when true and only live ones
+	// when false. Unset counts both.
+	Tombstoned optional.Option[bool]
 }
 
 // CountRepositories returns number of repositories.
@@ -1258,6 +1261,9 @@ func CountRepositories(ctx context.Context, opts CountRepositoryOptions) (int64,
 	}
 	if opts.Private.Has() {
 		sess.And("is_private=?", opts.Private.Value())
+	}
+	if opts.Tombstoned.Has() {
+		sess.And("is_tombstoned=?", opts.Tombstoned.Value())
 	}
 
 	count, err := sess.Count(new(Repository))

@@ -6,6 +6,7 @@ package org
 import (
 	"context"
 	"fmt"
+	"os"
 
 	actions_model "code.gitea.io/gitea/models/actions"
 	activities_model "code.gitea.io/gitea/models/activities"
@@ -17,14 +18,17 @@ import (
 	secret_model "code.gitea.io/gitea/models/secret"
 	user_model "code.gitea.io/gitea/models/user"
 	issue_indexer "code.gitea.io/gitea/modules/indexer/issues"
+	"code.gitea.io/gitea/modules/optional"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/util"
 	repo_service "code.gitea.io/gitea/services/repository"
 )
 
-// deleteOrganization deletes models associated to an organization.
-func deleteOrganization(ctx context.Context, org *org_model.Organization) error {
+// deleteOrganization deletes models associated to an organization. When anonymize
+// is set the organization row itself is kept, stripped of its identity, because it
+// still owns tombstones.
+func deleteOrganization(ctx context.Context, org *org_model.Organization, anonymize bool) error {
 	if org.Type != user_model.UserTypeOrganization {
 		return fmt.Errorf("%s is a user not an organization", org.Name)
 	}
@@ -43,6 +47,10 @@ func deleteOrganization(ctx context.Context, org *org_model.Organization) error 
 		return fmt.Errorf("DeleteBeans: %w", err)
 	}
 
+	if anonymize {
+		return repo_service.AnonymizeTombstoneOwner(ctx, org.AsUser())
+	}
+
 	if _, err := db.GetEngine(ctx).ID(org.ID).Delete(new(user_model.User)); err != nil {
 		return fmt.Errorf("Delete: %w", err)
 	}
@@ -52,6 +60,16 @@ func deleteOrganization(ctx context.Context, org *org_model.Organization) error 
 
 // DeleteOrganization completely and permanently deletes everything of organization.
 func DeleteOrganization(ctx context.Context, org *org_model.Organization, purge bool) error {
+	oldOrgName := org.Name
+	oldAvatarPath := ""
+	if len(org.Avatar) > 0 {
+		oldAvatarPath = org.CustomAvatarRelativePath()
+	}
+
+	// Tombstones outlive their owner: the organization row stays as their owner and
+	// is anonymized instead of removed, see repo_service.AnonymizeTombstoneOwner.
+	anonymize := false
+
 	if err := db.WithTx(ctx, func(ctx context.Context) error {
 		if purge {
 			err := repo_service.DeleteOwnerRepositoriesDirectly(ctx, org.AsUser())
@@ -60,12 +78,21 @@ func DeleteOrganization(ctx context.Context, org *org_model.Organization, purge 
 			}
 		}
 
-		// Check ownership of repository.
-		count, err := repo_model.CountRepositories(ctx, repo_model.CountRepositoryOptions{OwnerID: org.ID})
+		// Check ownership of repository. Tombstones are excluded: they are kept on
+		// purpose and must not block the deletion of the organization that owns them.
+		count, err := repo_model.CountRepositories(ctx, repo_model.CountRepositoryOptions{
+			OwnerID:    org.ID,
+			Tombstoned: optional.Some(false),
+		})
 		if err != nil {
 			return fmt.Errorf("GetRepositoryCount: %w", err)
 		} else if count > 0 {
 			return repo_model.ErrUserOwnRepos{UID: org.ID}
+		}
+
+		anonymize, err = repo_service.OwnsTombstones(ctx, org.ID)
+		if err != nil {
+			return err
 		}
 
 		// Check ownership of packages.
@@ -75,7 +102,7 @@ func DeleteOrganization(ctx context.Context, org *org_model.Organization, purge 
 			return packages_model.ErrUserOwnPackages{UID: org.ID}
 		}
 
-		if err := deleteOrganization(ctx, org); err != nil {
+		if err := deleteOrganization(ctx, org, anonymize); err != nil {
 			return fmt.Errorf("DeleteOrganization: %w", err)
 		}
 		return nil
@@ -86,16 +113,21 @@ func DeleteOrganization(ctx context.Context, org *org_model.Organization, purge 
 	// FIXME: system notice
 	// Note: There are something just cannot be roll back,
 	//	so just keep error logs of those operations.
-	path := user_model.UserPath(org.Name)
+	oldPath := user_model.UserPath(oldOrgName)
 
-	if err := util.RemoveAll(path); err != nil {
-		return fmt.Errorf("failed to RemoveAll %s: %w", path, err)
+	if anonymize {
+		// The remaining git data belongs to the tombstones, which are now owned by
+		// the anonymized organization, so the directory moves instead of being removed.
+		if err := util.Rename(oldPath, user_model.UserPath(org.Name)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to rename %s: %w", oldPath, err)
+		}
+	} else if err := util.RemoveAll(oldPath); err != nil {
+		return fmt.Errorf("failed to RemoveAll %s: %w", oldPath, err)
 	}
 
-	if len(org.Avatar) > 0 {
-		avatarPath := org.CustomAvatarRelativePath()
-		if err := storage.Avatars.Delete(avatarPath); err != nil {
-			return fmt.Errorf("failed to remove %s: %w", avatarPath, err)
+	if oldAvatarPath != "" {
+		if err := storage.Avatars.Delete(oldAvatarPath); err != nil {
+			return fmt.Errorf("failed to remove %s: %w", oldAvatarPath, err)
 		}
 	}
 
