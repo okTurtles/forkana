@@ -637,6 +637,18 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		if transfer, ok := ctx.Data["RepoTransfer"].(*repo_model.RepoTransfer); ok {
 			ctx.Data["ArticleTransferRecipient"] = transfer.Recipient
 		}
+
+		// Deleting an article that has forks only leaves a tombstone behind, so the delete
+		// modal has to say so up front. Only the settings tab renders that modal, so the
+		// fork lookup is skipped in the other modes.
+		if mode == "settings" {
+			willBeTombstoned, err := repo_service.CanBeTombstoneDeleted(ctx, ctx.Repo.Repository)
+			if err != nil {
+				// the warning is informational, a failed lookup must not take the page down
+				log.Error("CanBeTombstoneDeleted %s: %v", ctx.Repo.Repository.FullName(), err)
+			}
+			ctx.Data["RepoWillBeTombstoned"] = willBeTombstoned
+		}
 	}
 
 	// Find README.md file
