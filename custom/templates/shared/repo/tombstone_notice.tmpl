@@ -1,0 +1,15 @@
+{{define "shared/repo/tombstone_notice"}}
+{{/* A deleted article keeps its commit history for its forks, but neither its content
+nor its git metadata may be rendered, so only this notice is shown in its place.
+Takes dict "Repository" and an optional "ExtraClass" for the wrapper. */}}
+<div class="ui warning message {{.ExtraClass}}">
+    <p>
+        {{if .Repository.TombstonedUnix.IsZero}}
+            {{ctx.Locale.Tr "repo.tombstone.title"}}
+        {{else}}
+            {{ctx.Locale.Tr "repo.tombstone.title_date" (DateUtils.AbsoluteLong .Repository.TombstonedUnix)}}
+        {{end}}
+    </p>
+    <p class="tw-text-14">{{ctx.Locale.Tr "repo.tombstone.desc"}}</p>
+</div>
+{{end}}

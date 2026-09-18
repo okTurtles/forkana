@@ -6,6 +6,7 @@ package integration
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"testing"
 
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -99,7 +100,7 @@ func TestAdminDeleteArticleTombstoneFlash(t *testing.T) {
 	session := loginUser(t, "user1")
 	req := NewRequestWithValues(t, "POST", "/-/admin/repos/delete", map[string]string{
 		"_csrf": GetUserCSRFToken(t, session),
-		"id":    fmt.Sprintf("%d", repo.ID),
+		"id":    strconv.FormatInt(repo.ID, 10),
 	})
 	session.MakeRequest(t, req, http.StatusOK)
 
