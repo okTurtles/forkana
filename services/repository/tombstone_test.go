@@ -67,14 +67,48 @@ func TestDeleteRepositoryTombstonesWhenForked(t *testing.T) {
 	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
 
-	tombstoned, err := repo_service.DeleteRepository(t.Context(), doer, repo, false)
+	outcome, err := repo_service.DeleteRepository(t.Context(), doer, repo, false)
 	require.NoError(t, err)
-	assert.True(t, tombstoned)
+	assert.Equal(t, repo_service.RepositoryTombstoned, outcome)
 
 	// The row and the fork relation are kept so that the fork retains its ancestor.
 	stored := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
 	assert.True(t, stored.IsTombstone())
 	unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 11, ForkID: 10})
+}
+
+func TestDeleteRepositoryReportsTombstoneNoOp(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	require.NoError(t, repo_service.TombstoneRepository(t.Context(), repo))
+
+	// Deleting a tombstone whose forks are still around changes nothing, and the caller
+	// must be able to tell that apart from an effective deletion.
+	outcome, err := repo_service.DeleteRepository(t.Context(), doer, repo, false)
+	require.NoError(t, err)
+	assert.Equal(t, repo_service.RepositoryAlreadyTombstoned, outcome)
+
+	unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 11, ForkID: 10})
+}
+
+func TestDeleteRepositoryRemovesTombstoneWithoutForks(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	require.NoError(t, repo_service.TombstoneRepository(t.Context(), repo))
+
+	// Once the last fork is gone the tombstone has nothing left to preserve.
+	require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), 11))
+
+	outcome, err := repo_service.DeleteRepository(t.Context(), doer, repo, false)
+	require.NoError(t, err)
+	assert.Equal(t, repo_service.RepositoryDeleted, outcome)
+
+	unittest.AssertNotExistsBean(t, &repo_model.Repository{ID: 10})
 }
 
 func TestSearchRepositoryExcludesTombstones(t *testing.T) {

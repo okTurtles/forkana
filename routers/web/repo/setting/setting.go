@@ -1109,14 +1109,14 @@ func handleSettingsPostDelete(ctx *context.Context) {
 		ctx.Repo.GitRepo.Close()
 	}
 
-	tombstoned, err := repo_service.DeleteRepository(ctx, ctx.Doer, ctx.Repo.Repository, true)
+	outcome, err := repo_service.DeleteRepository(ctx, ctx.Doer, ctx.Repo.Repository, true)
 	if err != nil {
 		ctx.ServerError("DeleteRepository", err)
 		return
 	}
 
 	switch {
-	case tombstoned:
+	case outcome == repo_service.RepositoryTombstoned:
 		// The article had forks, so only a tombstone is left behind to keep their ancestry.
 		log.Trace("Repository tombstoned: %s/%s", ctx.Repo.Owner.Name, repo.Name)
 		if fromArticle {
@@ -1124,6 +1124,11 @@ func handleSettingsPostDelete(ctx *context.Context) {
 		} else {
 			ctx.Flash.Success(ctx.Tr("repo.settings.tombstone_success"))
 		}
+	case outcome == repo_service.RepositoryAlreadyTombstoned:
+		// Unreachable in practice: RepoAssignment redirects a tombstone away from its
+		// settings page. Reported honestly rather than as a deletion that never happened.
+		log.Trace("Repository left as a tombstone, forks still depend on it: %s/%s", ctx.Repo.Owner.Name, repo.Name)
+		ctx.Flash.Warning(ctx.Tr("repo.settings.tombstone_no_op"))
 	case fromArticle:
 		log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
 		ctx.Flash.Success(ctx.Tr("repo.settings.article_delete_success"))

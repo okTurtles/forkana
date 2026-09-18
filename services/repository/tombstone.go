@@ -55,19 +55,40 @@ func CanBeTombstoneDeleted(ctx context.Context, repo *repo_model.Repository) (bo
 	return repoHasForks(ctx, repo)
 }
 
+// DeleteOutcome reports what a deletion request did to the repository. It is not a
+// success flag: callers must tell an effective deletion from a request that changed
+// nothing, so that they do not report a removal that never happened.
+type DeleteOutcome int
+
+const (
+	// RepositoryDeleted means the repository row and its git data were removed.
+	RepositoryDeleted DeleteOutcome = iota
+	// RepositoryTombstoned means the repository was turned into a tombstone because
+	// forks still depend on its history.
+	RepositoryTombstoned
+	// RepositoryAlreadyTombstoned means nothing happened: the repository already was a
+	// tombstone and its forks still depend on it, so it cannot be removed yet.
+	RepositoryAlreadyTombstoned
+)
+
 // deleteOrTombstoneRepository hard-deletes the repository when nothing was forked
-// from it, and tombstones it otherwise. It reports whether a tombstone was created.
-func deleteOrTombstoneRepository(ctx context.Context, repo *repo_model.Repository) (tombstoned bool, err error) {
+// from it, and tombstones it otherwise.
+func deleteOrTombstoneRepository(ctx context.Context, repo *repo_model.Repository) (DeleteOutcome, error) {
 	hasForks, err := repoHasForks(ctx, repo)
 	if err != nil {
-		return false, err
+		return RepositoryDeleted, err
 	}
 	if !hasForks {
+		// Once the last fork is gone nothing depends on the history any more, so an
+		// existing tombstone is removed here too.
 		// DeleteRepositoryDirectly opens its own transaction and removes the git data,
 		// so it must not run inside a surrounding transaction here.
-		return false, DeleteRepositoryDirectly(ctx, repo.ID)
+		return RepositoryDeleted, DeleteRepositoryDirectly(ctx, repo.ID)
 	}
-	return true, TombstoneRepository(ctx, repo)
+	if repo.IsTombstoned {
+		return RepositoryAlreadyTombstoned, nil
+	}
+	return RepositoryTombstoned, TombstoneRepository(ctx, repo)
 }
 
 // OwnsTombstones reports whether the owner still owns tombstoned repositories,

@@ -45,6 +45,9 @@ type RepoSearchOptions struct {
 	Restricted bool
 	PageSize   int
 	TplName    templates.TplName
+	// IncludeTombstoned surfaces tombstones, which every public listing hides. Only the
+	// admin panel sets it: an administrator has to be able to find a tombstone to act on it.
+	IncludeTombstoned bool
 }
 
 // RenderRepoSearch render repositories search page
@@ -123,6 +126,7 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 		Mirror:             mirror,
 		Template:           template,
 		IsPrivate:          private,
+		IncludeTombstoned:  opts.IncludeTombstoned,
 	})
 	if err != nil {
 		ctx.ServerError("SearchRepository", err)

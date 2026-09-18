@@ -47,6 +47,9 @@ func Repos(ctx *context.Context) {
 		Private:  true,
 		PageSize: setting.UI.Admin.RepoPagingNum,
 		TplName:  tplRepos,
+		// A tombstone is hidden everywhere else, and its owner's settings page is
+		// redirected away, so this listing is the only place it can be acted on.
+		IncludeTombstoned: true,
 	})
 }
 
@@ -62,15 +65,19 @@ func DeleteRepo(ctx *context.Context) {
 		ctx.Repo.GitRepo.Close()
 	}
 
-	tombstoned, err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true)
+	outcome, err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true)
 	if err != nil {
 		ctx.ServerError("DeleteRepository", err)
 		return
 	}
-	if tombstoned {
+	switch outcome {
+	case repo_service.RepositoryTombstoned:
 		log.Trace("Repository tombstoned: %s", repo.FullName())
 		ctx.Flash.Success(ctx.Tr("repo.settings.tombstone_success"))
-	} else {
+	case repo_service.RepositoryAlreadyTombstoned:
+		log.Trace("Repository left as a tombstone, forks still depend on it: %s", repo.FullName())
+		ctx.Flash.Warning(ctx.Tr("repo.settings.tombstone_no_op"))
+	default:
 		log.Trace("Repository deleted: %s", repo.FullName())
 		ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
 	}
