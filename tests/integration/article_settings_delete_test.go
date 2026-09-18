@@ -89,6 +89,72 @@ func TestArticleSettingsDeleteKeepsTombstone(t *testing.T) {
 	require.True(t, tombstoned.IsTombstoned)
 }
 
+// A tombstone is served through its permanent repository URL only: it is the one url
+// that keeps addressing the deleted article once the owner writes a new one on the same
+// subject. Every other route redirects there, and the page renders the deletion notice
+// instead of any content.
+func TestTombstonedArticleWeb(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	forkArticle(t, repo)
+
+	session := loginUser(t, owner.Name)
+	req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name),
+		deleteForm(GetUserCSRFToken(t, session), owner.Name, subjectName))
+	session.MakeRequest(t, req, http.StatusSeeOther)
+
+	repo = unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
+	require.True(t, repo.IsTombstoned)
+
+	repoURL := fmt.Sprintf("/%s/%s", owner.Name, repo.Name)
+	require.Equal(t, repoURL, repo.Link())
+
+	assertNotice := func(t *testing.T) {
+		t.Helper()
+		req := NewRequest(t, "GET", repoURL)
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		notice := htmlDoc.Find(".history-view-section--article .warning.message").Text()
+		assert.Contains(t, notice, "deleted by its author")
+		// no content of the article may be rendered next to the notice
+		assert.Equal(t, 0, htmlDoc.Find("#article-tabs").Length())
+	}
+
+	t.Run("PermanentURLRendersNotice", func(t *testing.T) {
+		assertNotice(t)
+	})
+
+	// An archived article is deleted the same way, and its permanent URL is the only
+	// route it ever had, so nothing redirects to it: the handler has to render it.
+	t.Run("ArchivedTombstoneRendersNotice", func(t *testing.T) {
+		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, true))
+		t.Cleanup(func() {
+			_ = repo_model.SetArchiveRepoState(t.Context(), repo, false)
+		})
+		assertNotice(t)
+	})
+
+	t.Run("OtherRoutesRedirectToPermanentURL", func(t *testing.T) {
+		for _, path := range []string{
+			fmt.Sprintf("/article/%s/%s", owner.Name, subjectName),
+			repoURL + "/src/branch/" + repo.DefaultBranch,
+			repoURL + "/raw/branch/" + repo.DefaultBranch + "/README.md",
+			repoURL + "/commits/branch/" + repo.DefaultBranch,
+		} {
+			req := NewRequest(t, "GET", path)
+			resp := session.MakeRequest(t, req, http.StatusSeeOther)
+			assert.Equal(t, repoURL, resp.Header().Get("Location"), "%s must redirect to the notice", path)
+		}
+	})
+
+	t.Run("ApiContentsIsNotFound", func(t *testing.T) {
+		req := NewRequest(t, "GET", fmt.Sprintf("/api/v1/repos/%s/%s/contents/README.md", owner.Name, repo.Name))
+		session.MakeRequest(t, req, http.StatusNotFound)
+	})
+}
+
 // The article owner's flow redirects to the dashboard, which renders no alert, so the
 // wording is asserted on the admin listing, which does.
 func TestAdminDeleteArticleTombstoneFlash(t *testing.T) {

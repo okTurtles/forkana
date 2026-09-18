@@ -380,6 +380,13 @@ func redirectFollowSymlink(ctx *context.Context, treePathEntry *git.TreeEntry) b
 // Home render repository home page
 func Home(ctx *context.Context) {
 	if ctx.Repo.Repository.IsTombstone() {
+		// A tombstone is only ever served here: every other route redirects to this one.
+		// An article renders the deletion notice in the article frame, like the vanity
+		// url did before the deletion; a repository without a subject has no such frame
+		// and falls back to the repository one, which redacts it the same way.
+		if handleRepoHomeArticle(ctx) {
+			return
+		}
 		handleRepoTombstone(ctx)
 		ctx.HTML(http.StatusOK, tplRepoHome)
 		return

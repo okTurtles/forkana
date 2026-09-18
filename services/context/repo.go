@@ -875,8 +875,9 @@ func RepoRefByType(detectRefType git.RefType) func(*Context) {
 			return // no git repo, so do nothing, users will see a "migrating" UI provided by "migrate/migrating.tmpl", or empty repo guide
 		}
 		if ctx.Repo.Repository.IsTombstone() {
-			// The git repo is intentionally not opened for tombstones, so no ref can be resolved.
-			ctx.NotFound(nil)
+			// The git repo is intentionally not opened for tombstones, so no ref can be
+			// resolved. The repository assignment has already redirected every other route
+			// to the home link, whose handler renders the deletion notice.
 			return
 		}
 		// Empty repository does not have reference information.

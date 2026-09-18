@@ -691,12 +691,12 @@ func (repo *Repository) RepoPath() string {
 }
 
 // Link returns the repository relative url for viewing articles.
-// An archived article with a subject uses OperationsLink instead, because the subject
-// vanity url resolves to the active repository of that subject. Any other repository
-// yields /article/{owner}/{subject}, using the repository name in place of the subject
-// when none is assigned.
+// An archived article with a subject, and a tombstone, use OperationsLink instead,
+// because the subject vanity url resolves to the active repository of that subject,
+// which is a different article. Any other repository yields /article/{owner}/{subject},
+// using the repository name in place of the subject when none is assigned.
 func (repo *Repository) Link() string {
-	if repo.IsArchived && repo.SubjectID > 0 {
+	if repo.IsTombstone() || (repo.IsArchived && repo.SubjectID > 0) {
 		return repo.OperationsLink()
 	}
 	return repo.articleLink()
