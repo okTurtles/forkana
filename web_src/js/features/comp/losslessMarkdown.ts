@@ -40,10 +40,21 @@ export type LosslessEditor = {
   // these, and the caret restore is skipped when they are absent.
   getSelection?(): unknown;
   setSelection?(start: unknown, end: unknown): void;
+  // Optional: Toast UI's convertor keeps the stored mode-switch caret position that
+  // clampStaleMappedPos below keeps valid. The unit-test fakes omit it, and the clamp is
+  // skipped when it is absent.
+  convertor?: {getMappedPos?(): unknown, setMappedPos?(pos: unknown): void};
 };
 
 // A 1-based [line, ch] position in the markdown (Source) editor.
 type MarkdownPos = [number, number];
+
+// Clamps a 1-based markdown [line, ch] position into the given lines so it is always
+// structurally valid (an out-of-range position makes Toast UI throw).
+function clampMarkdownPos([line, ch]: MarkdownPos, lines: string[]): MarkdownPos {
+  const clampedLine = Math.min(Math.max(line, 1), lines.length);
+  return [clampedLine, Math.min(Math.max(ch, 1), lines[clampedLine - 1].length + 1)];
+}
 
 // Reads the markdown-mode caret/selection, or null if it is unavailable or not in the
 // markdown-mode shape (in WYSIWYG mode Toast UI returns two flat numbers instead).
@@ -69,15 +80,34 @@ function readMarkdownSelection(editor: LosslessEditor): [MarkdownPos, MarkdownPo
 function restoreMarkdownSelection(editor: LosslessEditor, selection: [MarkdownPos, MarkdownPos] | null, text: string): void {
   if (!selection || !editor.setSelection) return;
   const lines = text.split('\n');
-  const clamp = ([line, ch]: MarkdownPos): MarkdownPos => {
-    const clampedLine = Math.min(Math.max(line, 1), lines.length);
-    return [clampedLine, Math.min(Math.max(ch, 1), lines[clampedLine - 1].length + 1)];
-  };
   try {
-    editor.setSelection(clamp(selection[0]), clamp(selection[1]));
+    editor.setSelection(clampMarkdownPos(selection[0], lines), clampMarkdownPos(selection[1], lines));
   } catch {
     // Leave the caret where setMarkdown(cursorToEnd) put it rather than break the mode switch.
   }
+}
+
+// Toast UI's core keeps a "mapped position" from the last markdown<->WYSIWYG conversion
+// (convertor.mappedPosWhenConverting) and, on the next mode switch, applies it verbatim
+// whenever it cannot re-derive a fresh one — which happens whenever the conversion finds no
+// top-level match for its focusedNode: it is null before the first edit, or it is a node
+// that does not belong to the document being converted (e.g. the stale WYSIWYG node left
+// over from the other editor, or a text node when the caret sits inside a paragraph). That
+// stored position was measured against the *serialized* document. After the writeback below
+// replaces the markdown document with the pristine source — which can have fewer lines,
+// since the serializer inserts blank-line separators between blocks the source ran
+// together — a stale markdown [line, ch] position can point past the last line, and the
+// core's mdEditor.setSelection then does doc.child(line - 1) and throws "Index N out of
+// range for <paragraph(...)" on the next switch to Visual mode (issue #320). Clamping the
+// stored position into the new text keeps it structurally valid; it is only ever a caret
+// fallback, so precision does not matter.
+function clampStaleMappedPos(editor: LosslessEditor, text: string): void {
+  const convertor = editor.convertor;
+  if (typeof convertor?.getMappedPos !== 'function' || typeof convertor?.setMappedPos !== 'function') return;
+  const pos = convertor.getMappedPos();
+  if (!Array.isArray(pos) || pos.length !== 2 || typeof pos[0] !== 'number' || typeof pos[1] !== 'number') return;
+  const [line, ch] = clampMarkdownPos([pos[0], pos[1]], text.split('\n'));
+  if (line !== pos[0] || ch !== pos[1]) convertor.setMappedPos([line, ch]);
 }
 
 // Resolves the markdown to commit for a WYSIWYG serialization, merging the user's Visual
@@ -157,6 +187,9 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
     sourceText = markdown;
     mdSnapshot = markdown;
     if (!editor.isMarkdownMode()) wysiwygBaseline = baseGetMarkdown();
+    // The document just changed under the core's stored mode-switch position; keep that
+    // position structurally valid for the new text (issue #320).
+    clampStaleMappedPos(editor, markdown);
     syncTextarea();
   };
 
@@ -164,7 +197,12 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
     if (suppressChange) return;
     // Markdown mode is lossless (the source is stored verbatim), so the editor content is authoritative.
     // WYSIWYG changes are only adopted lazily via getLosslessMarkdown's baseline check.
-    if (editor.isMarkdownMode()) sourceText = baseGetMarkdown();
+    if (editor.isMarkdownMode()) {
+      sourceText = baseGetMarkdown();
+      // Source-mode edits can shrink the document below the convertor's stored mode-switch
+      // line exactly like the writeback does; keep that position valid here too (issue #320).
+      clampStaleMappedPos(editor, sourceText);
+    }
     syncTextarea();
   });
 

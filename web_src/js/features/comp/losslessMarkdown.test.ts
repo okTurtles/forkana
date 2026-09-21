@@ -10,6 +10,9 @@ class FakeEditor implements LosslessEditor {
   mode: 'markdown' | 'wysiwyg';
   mdText = '';
   wwSource = '';
+  // Optional, like on the real editor: tests that pin the mode-switch position clamp
+  // (issue #320) attach one; everything else exercises the convertor-less skip path.
+  convertor?: {getMappedPos?(): unknown, setMappedPos?(pos: unknown): void};
   private handlers: Record<string, Array<(...args: unknown[]) => void>> = {};
 
   constructor(mode: 'markdown' | 'wysiwyg' = 'wysiwyg') {
@@ -251,4 +254,61 @@ test('a Visual edit yields widget-stripped markdown, never $$widget placeholders
   expect(edited).not.toContain('$$widget');
   expect(edited).toContain(IMG);
   expect(textarea.value).toBe(edited);
+});
+
+// Pins the clamping contract of the convertor's stored mode-switch position (issue #320)
+// against a minimal fake convertor: the real-editor tests prove the crash is gone, these
+// pin the boundary math cheaply.
+describe('the convertor stored mode-switch position is kept valid (issue #320)', () => {
+  function setupWithConvertor(initial: string, storedPos: unknown) {
+    const fake = new FakeEditor('markdown');
+    let stored = storedPos;
+    let setCalls = 0;
+    fake.convertor = {
+      getMappedPos: () => stored,
+      setMappedPos: (pos: unknown) => {
+        stored = pos;
+        setCalls++;
+      },
+    };
+    const textarea = document.createElement('textarea');
+    textarea.value = initial;
+    installLosslessMarkdownTracker(fake, textarea);
+    return {fake, getStored: () => stored, getSetCalls: () => setCalls};
+  }
+
+  test('a stored position past the document is clamped on programmatic replacement', () => {
+    const {getStored} = setupWithConvertor('one\ntwo', [500, 50]);
+    expect(getStored()).toStrictEqual([2, 4]); // last line, one past its last char
+  });
+
+  test('a below-range position is clamped up to [1, 1]', () => {
+    const {getStored} = setupWithConvertor('one\ntwo', [0, 0]);
+    expect(getStored()).toStrictEqual([1, 1]);
+  });
+
+  test('an in-range position is left untouched', () => {
+    const {getStored, getSetCalls} = setupWithConvertor('one\ntwo', [2, 2]);
+    expect(getStored()).toStrictEqual([2, 2]);
+    expect(getSetCalls()).toBe(0); // no gratuitous rewrite
+  });
+
+  test('a numeric (WYSIWYG-shaped) or malformed position is not touched', () => {
+    // Toast UI clamps numeric positions itself; the tracker must not turn them into arrays.
+    expect(setupWithConvertor('one\ntwo', 42).getStored()).toBe(42);
+    expect(setupWithConvertor('one\ntwo', null).getStored()).toBe(null);
+    expect(setupWithConvertor('one\ntwo', [1]).getStored()).toStrictEqual([1]);
+    expect(setupWithConvertor('one\ntwo', ['a', 'b']).getStored()).toStrictEqual(['a', 'b']);
+  });
+
+  test('a user edit in Source mode that shrinks the document re-clamps the position', () => {
+    const {fake, getStored} = setupWithConvertor('one\ntwo\nthree', [3, 5]);
+    expect(getStored()).toStrictEqual([3, 5]); // valid so far
+    fake.typeMarkdown('only'); // user edit path: change handler, not the setMarkdown override
+    expect(getStored()).toStrictEqual([1, 5]);
+  });
+
+  test('an editor without a convertor is simply skipped', () => {
+    expect(() => setup('markdown')).not.toThrow();
+  });
 });
