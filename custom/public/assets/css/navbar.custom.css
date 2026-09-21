@@ -13,9 +13,10 @@
 
 /* ── #386: navbar polish ────────────────────────────────────────────────── */
 
-/* Item 18: the layout sets the nav links (Change Requests, Explore) in
-   semibold, not regular. The "View modes" label is a span and is untouched. */
-#navbar .navbar-left > a.item {
+/* Item 18: the layout sets EVERY entry in the left navigation — Change
+   Requests, Explore and the "View modes" label alike — in semibold, not
+   regular. `.item` rather than `a.item`, so the span is covered too. */
+#navbar .navbar-left > .item {
   font-weight: var(--font-weight-semibold);
 }
 
