@@ -28,10 +28,15 @@
   flex-wrap: nowrap;
 }
 
-/* The article Follow control sits beside the subject title (#386 item 1) */
+/* Subject header variant with the article Follow control under the title */
+.repo-header-with-follow {
+  padding-bottom: 38px;
+}
+
 .repo-header-follow {
   display: flex;
-  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
 }
 
 /* ── Subject view tabs row (#386) ─────────────────────────────────────────
