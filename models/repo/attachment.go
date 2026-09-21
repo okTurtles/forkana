@@ -19,15 +19,29 @@ import (
 	"code.gitea.io/gitea/modules/util"
 )
 
+// AttachmentPurpose tells what an attachment was uploaded for. It distinguishes
+// article-editor uploads, whose lifetime is governed by article associations,
+// from the legacy issue/release drafts cleaned up by DeleteOrphanedAttachments.
+type AttachmentPurpose int
+
+const (
+	// AttachmentPurposeUnspecified is the value of every attachment uploaded
+	// before this column existed.
+	AttachmentPurposeUnspecified AttachmentPurpose = 0
+	// AttachmentPurposeArticle marks an upload made from the article editor.
+	AttachmentPurposeArticle AttachmentPurpose = 1
+)
+
 // Attachment represent a attachment of issue/comment/release.
 type Attachment struct {
-	ID                int64  `xorm:"pk autoincr"`
-	UUID              string `xorm:"uuid UNIQUE"`
-	RepoID            int64  `xorm:"INDEX"`           // this should not be zero
-	IssueID           int64  `xorm:"INDEX"`           // maybe zero when creating
-	ReleaseID         int64  `xorm:"INDEX"`           // maybe zero when creating
-	UploaderID        int64  `xorm:"INDEX DEFAULT 0"` // Notice: will be zero before this column added
-	CommentID         int64  `xorm:"INDEX"`
+	ID                int64             `xorm:"pk autoincr"`
+	UUID              string            `xorm:"uuid UNIQUE"`
+	RepoID            int64             `xorm:"INDEX"`           // this should not be zero
+	IssueID           int64             `xorm:"INDEX"`           // maybe zero when creating
+	ReleaseID         int64             `xorm:"INDEX"`           // maybe zero when creating
+	UploaderID        int64             `xorm:"INDEX DEFAULT 0"` // Notice: will be zero before this column added
+	CommentID         int64             `xorm:"INDEX"`
+	Purpose           AttachmentPurpose `xorm:"NOT NULL DEFAULT 0"` // Notice: will be zero before this column added
 	Name              string
 	DownloadCount     int64              `xorm:"DEFAULT 0"`
 	Size              int64              `xorm:"DEFAULT 0"`
