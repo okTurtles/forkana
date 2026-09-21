@@ -97,6 +97,9 @@ func removeAllRepositoriesFromTeam(ctx context.Context, t *organization.Team) (e
 	e := db.GetEngine(ctx)
 	repos, err := repo_model.GetTeamRepositories(ctx, &repo_model.SearchTeamRepoOptions{
 		TeamID: t.ID,
+		// All team_repo rows are dropped below, tombstones included, so their access and
+		// watch rows have to be revoked with them.
+		IncludeTombstoned: true,
 	})
 	if err != nil {
 		return fmt.Errorf("GetTeamRepositories: %w", err)

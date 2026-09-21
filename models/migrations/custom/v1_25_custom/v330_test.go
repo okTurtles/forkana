@@ -14,7 +14,7 @@ import (
 	"xorm.io/xorm/schemas"
 )
 
-// Test_AddArticleAttachmentTable tests the v329 migration that creates the
+// Test_AddArticleAttachmentTable tests the v330 migration that creates the
 // article_attachment table and adds attachment.purpose.
 func Test_AddArticleAttachmentTable(t *testing.T) {
 	// Attachment table structure before migration (minimal columns).
@@ -66,14 +66,14 @@ func Test_AddArticleAttachmentTable(t *testing.T) {
 		assert.NotNil(t, table.GetColumn("purpose"), "purpose column should exist")
 
 		_, err := x.Exec("INSERT INTO attachment (uuid, repo_id, issue_id, release_id, comment_id, name) VALUES (?, ?, ?, ?, ?, ?)",
-			"v329-default", 1, 0, 0, 0, "attach")
+			"v330-default", 1, 0, 0, 0, "attach")
 		assert.NoError(t, err)
 
 		type attachmentResult struct {
 			Purpose int
 		}
 		var results []attachmentResult
-		assert.NoError(t, x.Table("attachment").Where("uuid = ?", "v329-default").Find(&results))
+		assert.NoError(t, x.Table("attachment").Where("uuid = ?", "v330-default").Find(&results))
 		assert.Len(t, results, 1)
 		assert.Equal(t, 0, results[0].Purpose, "purpose should default to 0 for legacy rows")
 	})

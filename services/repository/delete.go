@@ -415,6 +415,9 @@ func DeleteOwnerRepositoriesDirectly(ctx context.Context, owner *user_model.User
 			Private: true,
 			OwnerID: owner.ID,
 			Actor:   owner,
+			// Tombstones are deliberately left behind: purging one would strip its
+			// forks of their ancestor. The owner row is anonymized instead, see
+			// AnonymizeTombstoneOwner.
 		})
 		if err != nil {
 			return fmt.Errorf("GetUserRepositories: %w", err)

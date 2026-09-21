@@ -7,12 +7,16 @@ import (
 	"net/http"
 	"testing"
 
+	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/json"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/services/contexttest"
+	repo_service "code.gitea.io/gitea/services/repository"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShadowPassword(t *testing.T) {
@@ -71,6 +75,32 @@ func TestShadowPassword(t *testing.T) {
 	for _, k := range kases {
 		assert.Equal(t, k.Result, shadowPassword(k.Provider, k.CfgItem))
 	}
+}
+
+func TestReposListsTombstones(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	// repo 10 is the base of repo 11, so it can only be tombstoned, and the admin
+	// listing is the only place left where it can be found.
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	require.NoError(t, repo_service.TombstoneRepository(t.Context(), repo))
+
+	ctx, resp := contexttest.MockContext(t, "GET http://host/-/admin/repos?q=repo10")
+	contexttest.LoadUser(t, ctx, 1)
+	Repos(ctx)
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	repos, ok := ctx.Data["Repos"].([]*repo_model.Repository)
+	require.True(t, ok)
+	assert.Contains(t, repoIDs(repos), repo.ID)
+}
+
+func repoIDs(repos []*repo_model.Repository) []int64 {
+	ids := make([]int64, 0, len(repos))
+	for _, repo := range repos {
+		ids = append(ids, repo.ID)
+	}
+	return ids
 }
 
 func TestSelfCheckPost(t *testing.T) {
