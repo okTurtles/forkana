@@ -28,15 +28,48 @@
   flex-wrap: nowrap;
 }
 
-/* Subject header variant with the article Follow control under the title */
-.repo-header-with-follow {
-  padding-bottom: 38px;
-}
-
+/* The article Follow control sits beside the subject title (#386 item 1) */
 .repo-header-follow {
   display: flex;
-  justify-content: center;
-  margin-top: 6px;
+  align-items: center;
+}
+
+/* ── Subject view tabs row (#386) ─────────────────────────────────────────
+   Item 2: the tabs are centred in the CONTAINER, not in the space left over
+   next to the Compare button — the button is lifted out of the flow and pinned
+   to the right edge, so it no longer pushes the tabs left of centre. */
+#subject-view-tabs ~ #compare-mode-button {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+overflow-menu:has(> #compare-mode-button) {
+  position: relative;
+}
+
+/* Item 4 (and 3): the view-tab icons follow the label's colour instead of the
+   static gray that .svg.octicon-file carries elsewhere in the app. */
+#subject-view-tabs .item .svg {
+  color: inherit;
+}
+
+/* Item 5: the Compare button reads as a button — bold label, a hover you can
+   see, and (via the `primary` class copycontent.ts toggles) a filled active
+   state with white text. */
+#compare-mode-button {
+  font-weight: var(--font-weight-semibold) !important;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+#compare-mode-button:hover:not(.primary) {
+  background: var(--color-secondary) !important;
+}
+
+#compare-mode-button.primary {
+  background: var(--color-primary) !important;
+  color: var(--color-primary-contrast) !important;
 }
 
 /* ── Mobile ───────────────────────────────────────────────────────────────

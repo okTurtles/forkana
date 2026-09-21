@@ -2,16 +2,20 @@
 {{with .Repository}}
 	{{$canFollow := not (and $.IsSigned (eq $.SignedUser.ID .OwnerID))}}
 	<div class="ui container">
-		<div class="repo-header tw-flex tw-flex-col tw-items-center tw-pt-14 {{if $canFollow}}repo-header-with-follow{{else}}tw-pb-10{{end}}">
-			<h1 class="tw-text-40 tw-m-0">{{.GetSubject ctx}}</h1>
-			<!-- Does header need to be a link?
-				<a class="muted" href="{{$.RepoLink}}"></a>
-			-->
-			{{if $canFollow}}
-				<div class="repo-header-follow">
-					{{template "repo/watch_unwatch" $}}
-				</div>
-			{{end}}
+		<div class="repo-header tw-flex tw-flex-col tw-items-center tw-pt-14 tw-pb-10">
+			{{/* The Follow control sits BESIDE the title, not under it (#386 item 1):
+			     the figma keeps the space under the title clear for the view tabs. */}}
+			<div class="repo-header-title tw-flex tw-items-center tw-justify-center tw-gap-3">
+				<h1 class="tw-text-40 tw-m-0">{{.GetSubject ctx}}</h1>
+				<!-- Does header need to be a link?
+					<a class="muted" href="{{$.RepoLink}}"></a>
+				-->
+				{{if $canFollow}}
+					<div class="repo-header-follow">
+						{{template "repo/watch_unwatch" $}}
+					</div>
+				{{end}}
+			</div>
 		</div>
 	</div>
 {{end}}
