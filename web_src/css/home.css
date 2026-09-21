@@ -95,6 +95,43 @@
   background: var(--color-hover);
 }
 
+/* ===== Homepage search button =====
+
+   Sits inside the right end of the search field and only shows while the field holds
+   text (initHomeSearch in web_src/js/features/home-search.ts), per the Figma design. */
+
+.home-search-button {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+  color: var(--color-primary-contrast);
+  background: var(--color-primary);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.home-search-button:hover {
+  background: var(--color-primary-hover);
+}
+
+.home-search-button:active {
+  background: var(--color-primary-active);
+}
+
+/* Overrides the "tw-pr-4" utility of the field while the button is shown, so a long keyword
+   scrolls instead of running underneath the button. "!important" is required no matter the
+   specificity: tailwind runs with `important: true` (tailwind.config.ts), so every tw- utility
+   on the input is itself !important. */
+#home-search-form input[name="q"].home-search-input-with-button {
+  padding-right: 90px !important;
+}
+
 /* ===== Homepage search validation ===== */
 
 .home-search-error {

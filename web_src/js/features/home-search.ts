@@ -9,6 +9,7 @@ const {appSubUrl} = window.config;
 // has been typed so far, so that an existing subject can be opened without a full search first.
 const inputSelector = '#home-search-input';
 const suggestionsSelector = '#home-search-suggestions';
+const buttonSelector = '#home-search-button';
 
 // How long the typing has to pause before the suggestions are fetched.
 const debounceMs = 200;
@@ -25,18 +26,26 @@ export function highlightKeyword(name: string, keyword: string): string {
 class HomeSearch {
   private readonly input: HTMLInputElement;
   private readonly suggestions: HTMLElement;
+  private readonly button: HTMLElement | null;
   private debounceTimer: number | null = null;
   private abortController: AbortController | null = null;
   // Index of the suggestion the keyboard is on, -1 while the typed keyword itself is "selected".
   private activeIndex: number = -1;
 
-  constructor(input: HTMLInputElement, suggestions: HTMLElement) {
+  constructor(input: HTMLInputElement, suggestions: HTMLElement, button: HTMLElement | null = null) {
     this.input = input;
     this.suggestions = suggestions;
+    this.button = button;
   }
 
   init(): void {
-    this.input.addEventListener('input', () => this.scheduleSearch());
+    this.input.addEventListener('input', () => {
+      this.updateButton();
+      this.scheduleSearch();
+    });
+    // The browser may restore a keyword when navigating back to the page, in which case the
+    // button has to be there right away.
+    this.updateButton();
     // Coming back to a field that still holds a keyword should offer the suggestions again.
     this.input.addEventListener('focus', () => this.scheduleSearch());
     this.input.addEventListener('keydown', (e: KeyboardEvent) => this.onKeyDown(e));
@@ -55,6 +64,16 @@ class HomeSearch {
         this.close();
       }
     });
+  }
+
+  // The Search button (custom/templates/home.tmpl) only appears while the field holds text,
+  // like the Figma design shows -- there is nothing to submit otherwise.
+  private updateButton(): void {
+    if (!this.button) return;
+    const hasKeyword = Boolean(this.input.value.trim());
+    this.button.classList.toggle('tw-hidden', !hasKeyword);
+    // Make room for the button inside the field so a long keyword doesn't run underneath it.
+    this.input.classList.toggle('home-search-input-with-button', hasKeyword);
   }
 
   private scheduleSearch(): void {
@@ -155,5 +174,5 @@ export function initHomeSearch(): void {
   const input = document.querySelector<HTMLInputElement>(inputSelector);
   const suggestions = document.querySelector<HTMLElement>(suggestionsSelector);
   if (!input || !suggestions) return;
-  new HomeSearch(input, suggestions).init();
+  new HomeSearch(input, suggestions, document.querySelector<HTMLElement>(buttonSelector)).init();
 }
