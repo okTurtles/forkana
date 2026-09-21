@@ -237,16 +237,47 @@ describe('Visual edits are merged back onto the pristine source', () => {
     expectSamplePreserved(output);
   });
 
-  // The one line the user actually touched legitimately gets the serializer's spelling —
-  // its reference link is collateral damage of editing that very sentence. Everything else,
-  // including the link *definition* that makes it resolve, must survive.
+  // #367: an author who types a ```mermaid fence as plain text in Visual mode must get a
+  // real, renderable fence — the raw serializer escapes the leading backtick(s), which used
+  // to be committed as literal text.
+  test('a mermaid fence typed as text in Visual mode is committed as a real fence', async () => {
+    const {editor, textarea} = createEditor(SAMPLE);
+    for (const line of ['```mermaid', 'flowchart TD', 'Start_node --> Stop_node', '```']) {
+      appendParagraphInVisual(editor, line);
+    }
+    await flush();
+    const output: string = editor.getMarkdown();
+    expect(output).toContain('```mermaid');
+    expect(output).not.toContain('\\`');
+    // The body was serialized as escaped paragraphs; its escapes must be removed too, or
+    // the diagram source would contain literal `\_` (the second half of #322/#367).
+    expect(output).toContain('Start_node --> Stop_node');
+    expect(output).not.toContain('\\_node');
+    expect(textarea.value).toBe(output);
+    expectSamplePreserved(output);
+  });
+
+  // #322: markdown typed as text in Visual mode (heading + emphasis) stays markdown.
+  test('markdown typed as text in Visual mode is committed unescaped', async () => {
+    const {editor} = createEditor(SAMPLE);
+    appendParagraphInVisual(editor, '## Typed heading with **bold** text');
+    await flush();
+    const output: string = editor.getMarkdown();
+    expect(output).toContain('## Typed heading with **bold** text');
+    expectSamplePreserved(output);
+  });
+
+  // The one line the user actually touched gets the serializer's spelling with the escapes
+  // removed again (#322), so its reference link keeps rendering. Everything else, including
+  // the link *definition* that makes it resolve, must survive byte-for-byte.
   test('editing the paragraph that holds the reference link only re-serializes that line', async () => {
     const {editor} = createEditor(SAMPLE);
     editInVisual(editor, 'and snake_case_word.', 'and snake_case_word, extended.');
     await flush();
     const output: string = editor.getMarkdown();
-    expect(output).toContain('\\[the program\\]\\[1\\]'); // that line, re-serialized
-    expect(output).toContain(DEFINITION_LINE); // but the definition is intact
+    expect(output).toContain('[the program][1]'); // that line, re-serialized and unescaped
+    expect(output).not.toContain('\\[the program\\]'); // never the escaped literal spelling
+    expect(output).toContain(DEFINITION_LINE); // and the definition is intact
     expectSamplePreserved(output, LINK_LINE);
   });
 
@@ -563,7 +594,9 @@ describe('Visual edits are merged back onto the pristine source', () => {
     await flush();
     const output: string = editor.getMarkdown();
     expect(output).not.toContain('Research program');
-    expect(output).toContain('Everything\\_replaced');
+    // Fallback output is the serialization with the escapes removed (#322).
+    expect(output).toContain('Everything_replaced.');
+    expect(output).not.toContain('Everything\\_replaced');
     expect(textarea.value).toBe(output);
   });
 });
