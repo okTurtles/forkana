@@ -105,6 +105,11 @@ func TestDeleteRepositoryDirectlyKeepsSharedAttachments(t *testing.T) {
 		require.NoError(t, db.Insert(t.Context(), attach))
 		return attach
 	}
+	newLinkedAttachment := func(uuid string, issueID, releaseID int64) *repo_model.Attachment {
+		attach := &repo_model.Attachment{UUID: uuid, RepoID: 1, UploaderID: 2, IssueID: issueID, ReleaseID: releaseID, Name: "image.png"}
+		require.NoError(t, db.Insert(t.Context(), attach))
+		return attach
+	}
 
 	// an article upload outlives the repository it was uploaded to: the associations
 	// govern its lifetime, and the garbage collector reclaims it once they are gone
@@ -114,12 +119,18 @@ func TestDeleteRepositoryDirectlyKeepsSharedAttachments(t *testing.T) {
 	require.NoError(t, repo_model.AddArticleAttachments(t.Context(), 2, []int64{shared.ID}))
 	// nobody else's
 	sole := newAttachment("5c1a7e40-0000-4000-8000-00000000f003", repo_model.AttachmentPurposeUnspecified)
+	// an attachment linked to an issue or a release belongs to that unit alone, so its
+	// lifetime is unchanged by the association work: it goes with the repository
+	issueLinked := newLinkedAttachment("5c1a7e40-0000-4000-8000-00000000f004", 1, 0)
+	releaseLinked := newLinkedAttachment("5c1a7e40-0000-4000-8000-00000000f005", 0, 1)
 
 	require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), 1))
 
 	unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: article.ID})
 	unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: shared.ID})
 	unittest.AssertNotExistsBean(t, &repo_model.Attachment{ID: sole.ID})
+	unittest.AssertNotExistsBean(t, &repo_model.Attachment{ID: issueLinked.ID})
+	unittest.AssertNotExistsBean(t, &repo_model.Attachment{ID: releaseLinked.ID})
 
 	// the deleted repository keeps none of its own associations
 	unittest.AssertNotExistsBean(t, &repo_model.ArticleAttachment{RepoID: 1})
