@@ -2402,7 +2402,7 @@ function goToComparison() {
 .graph-dimmed :deep(.branch),
 .graph-dimmed :deep(.child-stem),
 .graph-dimmed :deep(.joint-parent) {
-  opacity: 0.35;
+  opacity: 0.6;
   transition: opacity 150ms ease;
 }
 
