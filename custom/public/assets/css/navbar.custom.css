@@ -41,13 +41,11 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
   /* A little air between the navbar and the card. */
   margin-top: 8px;
-  padding: 4px;
 }
 
-/* Hovered entries read as a rounded pill inside the card, instead of a square
-   highlight running edge to edge (and poking out of the card's own rounded
-   corners on the first and last item). The 4px padding above is what gives
-   the pill its inset. */
+/* Hovered entries run edge to edge but keep rounded corners, matching the
+   card's own radius so the first and last item never poke square corners out
+   of it. */
 #navbar .ui.dropdown .menu.user-menu > .item {
   border-radius: 8px;
 }
