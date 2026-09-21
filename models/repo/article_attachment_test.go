@@ -212,6 +212,19 @@ func TestCountUnassociatedLegacyAttachments(t *testing.T) {
 	assert.Equal(t, before, count)
 }
 
+func TestCountDanglingArticleAttachments(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	before, err := repo_model.CountDanglingArticleAttachments(t.Context())
+	assert.NoError(t, err)
+
+	require.NoError(t, db.Insert(t.Context(), &repo_model.ArticleAttachment{RepoID: 1, AttachmentID: 9999999}))
+
+	count, err := repo_model.CountDanglingArticleAttachments(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, before+1, count)
+}
+
 func TestRetainedRepoAttachmentIDs(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 

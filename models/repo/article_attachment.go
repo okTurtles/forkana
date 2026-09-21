@@ -240,6 +240,19 @@ func CountUnassociatedLegacyAttachments(ctx context.Context) (int64, error) {
 		Count(new(Attachment))
 }
 
+// CountDanglingArticleAttachments returns how many associations point at an
+// attachment row that no longer exists. Reconciliation reports them rather than
+// deleting them: an association is only ever removed with its repository, and a
+// dangling row means something deleted an attachment out from under it.
+func CountDanglingArticleAttachments(ctx context.Context) (int64, error) {
+	return db.GetEngine(ctx).Table("article_attachment").
+		Where(builder.NotExists(
+			builder.Select("1").From("attachment").
+				Where(builder.Expr("attachment.id = article_attachment.attachment_id")),
+		)).
+		Count(new(ArticleAttachment))
+}
+
 // RetainedRepoAttachmentIDs returns the attachments uploaded to a repository
 // that must survive its deletion: article uploads, whose lifetime is governed by
 // the associations and the garbage collector, and anything another repository

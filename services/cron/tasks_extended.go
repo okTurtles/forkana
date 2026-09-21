@@ -15,6 +15,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/updatechecker"
 	asymkey_service "code.gitea.io/gitea/services/asymkey"
+	attachment_service "code.gitea.io/gitea/services/attachment"
 	repo_service "code.gitea.io/gitea/services/repository"
 	archiver_service "code.gitea.io/gitea/services/repository/archiver"
 	user_service "code.gitea.io/gitea/services/user"
@@ -248,6 +249,31 @@ func registerGCArticleAttachments() {
 	})
 }
 
+type ReconcileArticleAttachmentsConfig struct {
+	BaseConfig
+	BatchSize int
+}
+
+func registerReconcileArticleAttachments() {
+	RegisterTaskFatal("reconcile_article_attachments", &ReconcileArticleAttachmentsConfig{
+		BaseConfig: BaseConfig{
+			// Disabled by default: the run walks the article history of every
+			// repository, which an instance should schedule deliberately.
+			Enabled:    false,
+			RunAtStart: false,
+			Schedule:   "@every 24h",
+		},
+		// How many repositories are loaded per page, not a cap on the run.
+		BatchSize: attachment_service.DefaultBackfillBatchSize,
+	}, func(ctx context.Context, _ *user_model.User, config Config) error {
+		reconcileConfig := config.(*ReconcileArticleAttachmentsConfig)
+		_, err := attachment_service.ReconcileArticleAttachments(ctx, attachment_service.ReconcileOptions{
+			BatchSize: reconcileConfig.BatchSize,
+		})
+		return err
+	})
+}
+
 func registerRebuildIssueIndexer() {
 	RegisterTaskFatal("rebuild_issue_indexer", &BaseConfig{
 		Enabled:    false,
@@ -273,5 +299,6 @@ func initExtendedTasks() {
 	registerDeleteOldSystemNotices()
 	registerGCLFS()
 	registerGCArticleAttachments()
+	registerReconcileArticleAttachments()
 	registerRebuildIssueIndexer()
 }

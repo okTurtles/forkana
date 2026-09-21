@@ -31,6 +31,9 @@ type BackfillOptions struct {
 	BatchSize int
 	// StartRepoID resumes an interrupted run at that repository ID.
 	StartRepoID int64
+	// suppressReport leaves the reporting to a caller that has more to say,
+	// so a single run never produces two notices.
+	suppressReport bool
 }
 
 // BackfillResult reports what a run found. Per-reference detail goes to the
@@ -100,7 +103,9 @@ func BackfillArticleAttachments(ctx context.Context, opts BackfillOptions) (*Bac
 	}
 	result.UnassociatedLegacy = unassociated
 
-	reportBackfill(result, readOnly)
+	if !opts.suppressReport {
+		reportBackfill(result, readOnly)
+	}
 	return result, nil
 }
 
