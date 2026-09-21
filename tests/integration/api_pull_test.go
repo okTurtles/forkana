@@ -255,7 +255,7 @@ func TestAPIMergePullGeneratesMergeMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		message := commit.CommitMessage
-		assert.Contains(t, message, fmt.Sprintf("API merge message (#%d)", pullIssue.Index))
+		assert.Contains(t, message, fmt.Sprintf("Merge pull request 'API merge message' (#%d)", pullIssue.Index))
 		assert.Contains(t, message, "Reviewed-on: ")
 	})
 }
