@@ -23,6 +23,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // notExistingAttachmentUUID is a well-formed UUID that no attachment fixture uses.
@@ -347,4 +348,59 @@ func TestGetAttachment(t *testing.T) {
 			tc.session.MakeRequest(t, req, tc.want)
 		})
 	}
+}
+
+// TestEditorAttachmentRecordsArticlePurpose verifies that the editor upload endpoint records the
+// article purpose while the issue endpoint keeps the unspecified one, which is what keeps the
+// article-attachment garbage collector away from unfinished issue and release drafts.
+func TestEditorAttachmentRecordsArticlePurpose(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	session := loginUser(t, "user2")
+	csrf := GetUserCSRFToken(t, session)
+
+	editorUUID := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+	editorAttach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: editorUUID})
+	assert.Equal(t, repo_model.AttachmentPurposeArticle, editorAttach.Purpose)
+
+	issueUUID := createAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+	issueAttach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: issueUUID})
+	assert.Equal(t, repo_model.AttachmentPurposeUnspecified, issueAttach.Purpose)
+}
+
+// TestDeleteAttachmentRefusesAssociated covers the shared-lifetime rule: once an attachment is
+// referenced by committed article content, its uploader may no longer remove it directly, because
+// other repositories — forks included — reference the same blob. A pending upload stays removable.
+func TestDeleteAttachmentRefusesAssociated(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	const removeURL = "user2/repo1/issues/attachments/remove"
+	session := loginUser(t, "user2")
+	csrf := GetUserCSRFToken(t, session)
+
+	removeReq := func(uuid string) *RequestWrapper {
+		return NewRequestWithValues(t, "POST", removeURL, map[string]string{"_csrf": csrf, "file": uuid})
+	}
+
+	t.Run("PendingUploadIsRemovable", func(t *testing.T) {
+		uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		session.MakeRequest(t, removeReq(uuid), http.StatusOK)
+		unittest.AssertNotExistsBean(t, &repo_model.Attachment{UUID: uuid})
+	})
+
+	t.Run("AssociatedAttachmentIsRefused", func(t *testing.T) {
+		uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), attach.RepoID, []int64{attach.ID}))
+
+		session.MakeRequest(t, removeReq(uuid), http.StatusConflict)
+		unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+	})
+
+	// A linked issue attachment carries no association, so its removal path is unchanged.
+	t.Run("IssueAttachmentIsUnaffected", func(t *testing.T) {
+		uuid := createAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		session.MakeRequest(t, removeReq(uuid), http.StatusOK)
+		unittest.AssertNotExistsBean(t, &repo_model.Attachment{UUID: uuid})
+	})
 }

@@ -25,16 +25,24 @@ import (
 
 // UploadIssueAttachment response for Issue/PR attachments
 func UploadIssueAttachment(ctx *context.Context) {
-	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Attachment.AllowedTypes)
+	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Attachment.AllowedTypes, repo_model.AttachmentPurposeUnspecified)
 }
 
 // UploadReleaseAttachment response for uploading release attachments
 func UploadReleaseAttachment(ctx *context.Context) {
-	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Repository.Release.AllowedTypes)
+	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Repository.Release.AllowedTypes, repo_model.AttachmentPurposeUnspecified)
+}
+
+// UploadEditorAttachment response for images pasted or dropped in the article/file editor.
+// It differs from UploadIssueAttachment only in the recorded purpose, which is what lets the
+// article-attachment garbage collector tell an abandoned editor upload apart from an unfinished
+// issue or release draft.
+func UploadEditorAttachment(ctx *context.Context) {
+	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Attachment.AllowedTypes, repo_model.AttachmentPurposeArticle)
 }
 
 // UploadAttachment response for uploading attachments
-func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string) {
+func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string, purpose repo_model.AttachmentPurpose) {
 	if !setting.Attachment.Enabled {
 		ctx.HTTPError(http.StatusNotFound, "attachment is not enabled")
 		return
@@ -55,6 +63,7 @@ func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string) {
 		Name:       header.Filename,
 		UploaderID: ctx.Doer.ID,
 		RepoID:     repoID,
+		Purpose:    purpose,
 	})
 	if err != nil {
 		if upload.IsErrFileTypeForbidden(err) {
@@ -91,6 +100,18 @@ func DeleteAttachment(ctx *context.Context) {
 	}
 	if !ctx.IsSigned || (ctx.Doer.ID != attach.UploaderID) {
 		ctx.HTTPError(http.StatusForbidden)
+		return
+	}
+	// An attachment referenced by committed article content is shared: the repositories that
+	// reference it — including forks the uploader has no say over — would lose the blob. Only
+	// dropping the last association may delete it, which is the garbage collector's job.
+	associations, err := repo_model.CountArticleAttachmentRepos(ctx, attach.ID)
+	if err != nil {
+		ctx.HTTPError(http.StatusInternalServerError, fmt.Sprintf("CountArticleAttachmentRepos: %v", err))
+		return
+	}
+	if associations > 0 {
+		ctx.HTTPError(http.StatusConflict, "attachment is referenced by article content")
 		return
 	}
 	err = repo_model.DeleteAttachment(ctx, attach, true)
