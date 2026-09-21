@@ -10,3 +10,30 @@
 .ui.menu .item.svg-no-margin > svg{
   margin: 0;
 }
+
+/* ── #386: navbar polish ────────────────────────────────────────────────── */
+
+/* Item 18: the layout sets the nav links (Change Requests, Explore) in
+   semibold, not regular. The "View modes" label is a span and is untouched. */
+#navbar .navbar-left > a.item {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Item 19: the "+" link and the profile dropdown take the same grey hover as
+   every other navbar item instead of staying white. */
+#navbar .item.ui.dropdown:hover {
+  background: var(--color-nav-hover-bg);
+}
+
+/* Item 20: the profile picture is a circle, as in the layout. */
+#navbar .ui.avatar {
+  border-radius: 50%;
+}
+
+/* Item 21: the profile menu matches the layout — an unframed white card with
+   a soft shadow rather than a bordered light-grey Fomantic menu. */
+#navbar .ui.dropdown .menu.user-menu {
+  background: var(--color-nav-bg);
+  border: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
