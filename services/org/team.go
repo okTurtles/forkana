@@ -133,6 +133,9 @@ func UpdateTeam(ctx context.Context, t *organization.Team, authChanged, includeA
 		if authChanged {
 			repos, err := repo_model.GetTeamRepositories(ctx, &repo_model.SearchTeamRepoOptions{
 				TeamID: t.ID,
+				// A tombstone keeps its team membership, so its access rows have to be
+				// recalculated along with the rest.
+				IncludeTombstoned: true,
 			})
 			if err != nil {
 				return fmt.Errorf("GetTeamRepositories: %w", err)
@@ -288,6 +291,9 @@ func removeTeamMember(ctx context.Context, team *organization.Team, user *user_m
 
 	repos, err := repo_model.GetTeamRepositories(ctx, &repo_model.SearchTeamRepoOptions{
 		TeamID: team.ID,
+		// The departing member loses access to the team's tombstones as well, so their
+		// access, watch and assignee rows have to be revoked here too.
+		IncludeTombstoned: true,
 	})
 	if err != nil {
 		return err

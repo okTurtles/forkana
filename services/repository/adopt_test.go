@@ -17,6 +17,7 @@ import (
 	"code.gitea.io/gitea/modules/util"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCheckUnadoptedRepositories_Add(t *testing.T) {
@@ -65,6 +66,19 @@ func TestCheckUnadoptedRepositories(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Empty(t, unadopted.repositories)
 	assert.Equal(t, 0, unadopted.index)
+}
+
+func TestCheckUnadoptedRepositoriesSkipsTombstones(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// A tombstone keeps its directory, so it must not be offered for adoption or
+	// for directory deletion.
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+	require.NoError(t, TombstoneRepository(t.Context(), repo))
+
+	unadopted := &unadoptedRepositories{start: 0, end: 100}
+	require.NoError(t, checkUnadoptedRepositories(t.Context(), "user2", []string{repo.LowerName}, unadopted))
+	assert.Empty(t, unadopted.repositories)
 }
 
 func TestListUnadoptedRepositories_ListOptions(t *testing.T) {
