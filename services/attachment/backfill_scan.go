@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"code.gitea.io/gitea/modules/container"
@@ -149,10 +150,5 @@ func readBlobContent(rd *bufio.Reader, size int64) (string, error) {
 }
 
 func isArticlePath(path string) bool {
-	for _, articlePath := range ArticleContentPaths {
-		if path == articlePath {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ArticleContentPaths, path)
 }
