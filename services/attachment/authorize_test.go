@@ -45,19 +45,21 @@ func TestCanAssociate(t *testing.T) {
 	t.Run("NilArguments", func(t *testing.T) {
 		attach := newTestAttachment(t, repo1.ID, user2.ID)
 
-		ok, err := CanAssociate(t.Context(), user2, nil, attach)
+		ok, reason, err := CanAssociate(t.Context(), user2, nil, attach)
 		assert.NoError(t, err)
 		assert.False(t, ok)
+		assert.Equal(t, DenyInvalidArgument, reason)
 
-		ok, err = CanAssociate(t.Context(), user2, repo1, nil)
+		ok, reason, err = CanAssociate(t.Context(), user2, repo1, nil)
 		assert.NoError(t, err)
 		assert.False(t, ok)
+		assert.Equal(t, DenyInvalidArgument, reason)
 	})
 
 	t.Run("OriginRepository", func(t *testing.T) {
 		attach := newTestAttachment(t, repo1.ID, user2.ID)
 
-		ok, err := CanAssociate(t.Context(), nil, repo1, attach)
+		ok, _, err := CanAssociate(t.Context(), nil, repo1, attach)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -66,7 +68,7 @@ func TestCanAssociate(t *testing.T) {
 		attach := newTestAttachment(t, repo1.ID, user2.ID)
 		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repo2.ID, []int64{attach.ID}))
 
-		ok, err := CanAssociate(t.Context(), nil, repo2, attach)
+		ok, _, err := CanAssociate(t.Context(), nil, repo2, attach)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -74,7 +76,7 @@ func TestCanAssociate(t *testing.T) {
 	t.Run("PendingUploadByDoer", func(t *testing.T) {
 		attach := newTestAttachment(t, repo1.ID, user2.ID)
 
-		ok, err := CanAssociate(t.Context(), user2, repo2, attach)
+		ok, _, err := CanAssociate(t.Context(), user2, repo2, attach)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -82,9 +84,48 @@ func TestCanAssociate(t *testing.T) {
 	t.Run("PendingUploadByAnotherUser", func(t *testing.T) {
 		attach := newTestAttachment(t, repo1.ID, user2.ID)
 
-		ok, err := CanAssociate(t.Context(), user13, repo2, attach)
+		ok, reason, err := CanAssociate(t.Context(), user13, repo2, attach)
 		assert.NoError(t, err)
 		assert.False(t, ok)
+		assert.Equal(t, DenyUnrelatedRepository, reason)
+	})
+
+	// A pending issue or release draft must not be captured as article content
+	// by a commit that happens to reference its UUID: that would publish it to
+	// everyone who can read the article.
+	t.Run("UnspecifiedPurposeIsRefusedEverywhere", func(t *testing.T) {
+		attach := newTestAttachment(t, repo1.ID, user2.ID)
+		attach.Purpose = repo_model.AttachmentPurposeUnspecified
+
+		for name, target := range map[string]*repo_model.Repository{
+			"OriginRepository": repo1,
+			"PendingUpload":    repo2,
+		} {
+			t.Run(name, func(t *testing.T) {
+				ok, reason, err := CanAssociate(t.Context(), user2, target, attach)
+				assert.NoError(t, err)
+				assert.False(t, ok)
+				assert.Equal(t, DenyNotArticlePurpose, reason)
+			})
+		}
+	})
+
+	// An existing association is a recorded fact rather than an inference, so
+	// it stays trusted whatever the attachment was uploaded for; this is what
+	// keeps backfilled legacy rows working.
+	t.Run("UnspecifiedPurposeKeepsAnExistingAssociation", func(t *testing.T) {
+		attach := newTestAttachment(t, repo1.ID, user2.ID)
+		attach.Purpose = repo_model.AttachmentPurposeUnspecified
+		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repo10.ID, []int64{attach.ID}))
+
+		ok, _, err := CanAssociate(t.Context(), nil, repo10, attach)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+
+		// ... and a fork inherits it, still without any purpose inference.
+		ok, _, err = CanAssociate(t.Context(), nil, repo11, attach)
+		assert.NoError(t, err)
+		assert.True(t, ok)
 	})
 
 	t.Run("UploaderCannotMoveALinkedAttachment", func(t *testing.T) {
@@ -92,7 +133,7 @@ func TestCanAssociate(t *testing.T) {
 		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: 12})
 		require.Equal(t, user2.ID, attach.UploaderID)
 
-		ok, err := CanAssociate(t.Context(), user2, repo1, attach)
+		ok, _, err := CanAssociate(t.Context(), user2, repo1, attach)
 		assert.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -101,7 +142,7 @@ func TestCanAssociate(t *testing.T) {
 		attach := newTestAttachment(t, repo1.ID, user2.ID)
 		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repo1.ID, []int64{attach.ID}))
 
-		ok, err := CanAssociate(t.Context(), user2, repo2, attach)
+		ok, _, err := CanAssociate(t.Context(), user2, repo2, attach)
 		assert.NoError(t, err)
 		assert.False(t, ok)
 	})
@@ -109,7 +150,7 @@ func TestCanAssociate(t *testing.T) {
 	t.Run("ForkInheritsFromOriginRepository", func(t *testing.T) {
 		attach := newTestAttachment(t, repo10.ID, user13.ID)
 
-		ok, err := CanAssociate(t.Context(), nil, repo11, attach)
+		ok, _, err := CanAssociate(t.Context(), nil, repo11, attach)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -118,7 +159,7 @@ func TestCanAssociate(t *testing.T) {
 		attach := newTestAttachment(t, repo1.ID, user2.ID)
 		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repo10.ID, []int64{attach.ID}))
 
-		ok, err := CanAssociate(t.Context(), nil, repo11, attach)
+		ok, _, err := CanAssociate(t.Context(), nil, repo11, attach)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
@@ -126,9 +167,10 @@ func TestCanAssociate(t *testing.T) {
 	t.Run("UnrelatedRepositoryIsRefused", func(t *testing.T) {
 		attach := newTestAttachment(t, repo10.ID, user13.ID)
 
-		ok, err := CanAssociate(t.Context(), user2, repo2, attach)
+		ok, reason, err := CanAssociate(t.Context(), user2, repo2, attach)
 		assert.NoError(t, err)
 		assert.False(t, ok)
+		assert.Equal(t, DenyUnrelatedRepository, reason)
 	})
 
 	// Knowing the UUID of an attachment held by a private repository must not
@@ -141,7 +183,7 @@ func TestCanAssociate(t *testing.T) {
 		public := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 		require.False(t, public.IsPrivate)
 
-		ok, err := CanAssociate(t.Context(), user2, public, attach)
+		ok, _, err := CanAssociate(t.Context(), user2, public, attach)
 		assert.NoError(t, err)
 		assert.False(t, ok)
 	})

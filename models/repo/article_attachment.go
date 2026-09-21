@@ -7,6 +7,8 @@ import (
 	"context"
 
 	"code.gitea.io/gitea/models/db"
+	"code.gitea.io/gitea/models/unit"
+	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/container"
 	"code.gitea.io/gitea/modules/timeutil"
 
@@ -90,6 +92,26 @@ func CountArticleAttachmentRepos(ctx context.Context, attachmentID int64) (int64
 		return 0, nil
 	}
 	return db.GetEngine(ctx).Count(&ArticleAttachment{AttachmentID: attachmentID})
+}
+
+// ArticleAttachmentAccessible reports whether the user may read the attachment
+// through at least one of the repositories that keep it alive. An attachment is
+// shared, so it outlives its origin repository and must not be bound to it:
+// access follows the associations, exactly as LFS object access follows the
+// repositories holding the object.
+func ArticleAttachmentAccessible(ctx context.Context, user *user_model.User, attachmentID int64) (bool, error) {
+	if attachmentID == 0 {
+		return false, nil
+	}
+	if user != nil && user.IsAdmin {
+		count, err := CountArticleAttachmentRepos(ctx, attachmentID)
+		return count > 0, err
+	}
+	cond := AccessibleRepositoryCondition(user, unit.TypeCode)
+	count, err := db.GetEngine(ctx).Where(cond).
+		Join("INNER", "repository", "`article_attachment`.repo_id = `repository`.id").
+		Count(&ArticleAttachment{AttachmentID: attachmentID})
+	return count > 0, err
 }
 
 // GetRepoArticleAttachmentIDs returns the IDs of every attachment associated

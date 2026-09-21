@@ -55,12 +55,12 @@ func AssociateArticleAttachments(ctx context.Context, doer *user_model.User, rep
 
 	attachmentIDs := make([]int64, 0, len(attachments))
 	for _, attach := range attachments {
-		allowed, err := CanAssociate(ctx, doer, repo, attach)
+		allowed, reason, err := CanAssociate(ctx, doer, repo, attach)
 		if err != nil {
 			return fmt.Errorf("CanAssociate [attachment: %d]: %w", attach.ID, err)
 		}
 		if !allowed {
-			log.Info("article attachment %s referenced by %s is not associable, skipped", attach.UUID, repo.FullName())
+			log.Warn("article attachment %s referenced by %s is not associable (%s), skipped", attach.UUID, repo.FullName(), reason)
 			continue
 		}
 		attachmentIDs = append(attachmentIDs, attach.ID)

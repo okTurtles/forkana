@@ -76,32 +76,62 @@ func createEditorAttachment(t *testing.T, session *TestSession, csrf, repoURL, f
 	return uploadAttachmentTo(t, session, csrf, repoURL+"/editor-attachments", filename, buff, expectedStatus)
 }
 
-// TestEditorAttachmentServedToRepoReaders verifies that an attachment uploaded via the
-// article/file editor (linked only by RepoID, never to an issue/release) is served to anyone
-// with repo read permission — not just the uploader — so embedded article images are visible
-// to readers, while remaining hidden from users without read access to a private repo.
+// TestEditorAttachmentServedToRepoReaders covers the serving rule for attachments that are not
+// linked to an issue or release: access follows the article associations, so a pending editor
+// upload stays private to its uploader, while a committed one is served to the readers of every
+// repository that keeps it alive — and to nobody else.
 func TestEditorAttachmentServedToRepoReaders(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	owner := loginUser(t, "user2")
 	user8 := loginUser(t, "user8")
+	csrf := GetUserCSRFToken(t, owner)
 
 	// A fresh request per call: session.MakeRequest stamps the session cookie onto the
 	// request, so reusing one *http.Request across sessions would leak the first cookie.
 	attachReq := func(uuid string) *RequestWrapper { return NewRequest(t, "GET", "/attachments/"+uuid) }
+	associate := func(t *testing.T, uuid string, repoID int64) {
+		t.Helper()
+		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repoID, []int64{attach.ID}))
+	}
 
-	// Public repo: readable by the uploader and by any other reader (incl. anonymous). Serving
-	// to non-uploaders is the new behavior — previously an unlinked attachment was uploader-only.
-	pubUUID := createEditorAttachment(t, owner, GetUserCSRFToken(t, owner), "user2/repo1", "image.png", generateImg(), http.StatusOK)
-	owner.MakeRequest(t, attachReq(pubUUID), http.StatusOK)
-	user8.MakeRequest(t, attachReq(pubUUID), http.StatusOK)
-	MakeRequest(t, attachReq(pubUUID), http.StatusOK) // anonymous
+	// A pending upload is still being previewed by its author and is referenced by no article.
+	t.Run("PendingUploadIsUploaderOnly", func(t *testing.T) {
+		uuid := createEditorAttachment(t, owner, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
 
-	// Private repo: readable by the owner, blocked for users without read access.
-	privUUID := createEditorAttachment(t, owner, GetUserCSRFToken(t, owner), "user2/repo2", "image.png", generateImg(), http.StatusOK)
-	owner.MakeRequest(t, attachReq(privUUID), http.StatusOK)
-	user8.MakeRequest(t, attachReq(privUUID), http.StatusNotFound)
-	MakeRequest(t, attachReq(privUUID), http.StatusNotFound) // anonymous
+		owner.MakeRequest(t, attachReq(uuid), http.StatusOK)
+		user8.MakeRequest(t, attachReq(uuid), http.StatusNotFound)
+		MakeRequest(t, attachReq(uuid), http.StatusNotFound) // anonymous
+	})
+
+	t.Run("AssociatedWithAPublicRepository", func(t *testing.T) {
+		uuid := createEditorAttachment(t, owner, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		associate(t, uuid, 1) // user2/repo1 is public
+
+		owner.MakeRequest(t, attachReq(uuid), http.StatusOK)
+		user8.MakeRequest(t, attachReq(uuid), http.StatusOK)
+		MakeRequest(t, attachReq(uuid), http.StatusOK) // anonymous
+	})
+
+	t.Run("AssociatedWithAPrivateRepository", func(t *testing.T) {
+		uuid := createEditorAttachment(t, owner, csrf, "user2/repo2", "image.png", generateImg(), http.StatusOK)
+		associate(t, uuid, 2) // user2/repo2 is private
+
+		owner.MakeRequest(t, attachReq(uuid), http.StatusOK)
+		user8.MakeRequest(t, attachReq(uuid), http.StatusNotFound)
+		MakeRequest(t, attachReq(uuid), http.StatusNotFound) // anonymous
+	})
+
+	// A repository the attachment is not associated with must not serve it, even when the
+	// caller may read that repository: the URL scope only narrows.
+	t.Run("ScopeMustHoldTheAssociation", func(t *testing.T) {
+		uuid := createEditorAttachment(t, owner, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		associate(t, uuid, 1)
+
+		user8.MakeRequest(t, NewRequest(t, "GET", "/user2/repo1/attachments/"+uuid), http.StatusOK)
+		user8.MakeRequest(t, NewRequest(t, "GET", "/user5/repo4/attachments/"+uuid), http.StatusNotFound)
+	})
 }
 
 // thumbnailAlts returns the alt attributes of the images rendered by the attachment list, i.e. the

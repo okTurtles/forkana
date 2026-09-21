@@ -9,7 +9,6 @@ import (
 
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
-	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/httpcache"
 	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/log"
@@ -124,26 +123,31 @@ func DeleteAttachment(ctx *context.Context) {
 	})
 }
 
-// unlinkedAttachmentRepoReadable reports whether an attachment that is not linked to an issue
-// or release (carrying only a RepoID) may be served to the current user based on their read
-// permission for the owning repository. This covers file/article editor uploads (the intended
-// case), but also any other repo-scoped unlinked attachment such as a pending issue/release
-// draft. Because the originating unit can no longer be recovered without the link, it gates on
-// unit.TypeCode as a deliberately conservative default; the uploader-only fallback in
-// ServeAttachment still applies when this returns false.
-func unlinkedAttachmentRepoReadable(ctx *context.Context, attach *repo_model.Attachment) bool {
-	if attach.RepoID == 0 {
-		return false
+// attachmentServingScope returns the repository named by the request URL, when the route has
+// one. "/{username}/{reponame}/attachments/{uuid}" already carries the assigned repository,
+// while "/article/{username}/{subjectname}/attachments/{uuid}" is served without
+// RepoAssignment — opening the git repository and counting branches, tags and releases for
+// every embedded image is not worth it — so the owner/subject pair is resolved directly here.
+//
+// A scope that cannot be resolved yields nil, which degrades the request to the unscoped rule
+// rather than to a 404: the same caller reaches the very same attachment through the global
+// "/attachments/{uuid}" route.
+func attachmentServingScope(ctx *context.Context) *repo_model.Repository {
+	if ctx.Repo != nil && ctx.Repo.Repository != nil {
+		return ctx.Repo.Repository
 	}
-	repo, err := repo_model.GetRepositoryByID(ctx, attach.RepoID)
-	if err != nil || repo == nil {
-		return false
+	ownerName, subjectName := ctx.PathParam("username"), ctx.PathParam("subjectname")
+	if ownerName == "" || subjectName == "" {
+		return nil
 	}
-	perm, err := access_model.GetUserRepoPermission(ctx, repo, ctx.Doer)
+	repo, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, ownerName, subjectName)
 	if err != nil {
-		return false
+		if !repo_model.IsErrRepoNotExist(err) && !repo_model.IsErrSubjectNotExist(err) {
+			log.Error("GetRepositoryByOwnerAndSubject [owner: %s, subject: %s]: %v", ownerName, subjectName, err)
+		}
+		return nil
 	}
-	return perm.CanRead(unit.TypeCode)
+	return repo
 }
 
 // GetAttachment serve attachments with the given UUID
@@ -165,10 +169,14 @@ func ServeAttachment(ctx *context.Context, uuid string) {
 	}
 
 	if repository == nil { // If not linked to an issue or release
-		// Editor/article attachments carry only a RepoID (no issue/release). Authorize them by
-		// repository read permission so article readers can view embedded images; otherwise fall
-		// back to uploader-only for genuinely context-less uploads (e.g. pending comment drafts).
-		if !unlinkedAttachmentRepoReadable(ctx, attach) && !(ctx.IsSigned && attach.UploaderID == ctx.Doer.ID) {
+		// Article attachments are shared across the repositories associated with them, so
+		// access follows those associations rather than the repository they were uploaded to.
+		canServe, err := attachment.CanServe(ctx, ctx.Doer, attachmentServingScope(ctx), attach)
+		if err != nil {
+			ctx.ServerError("CanServe", err)
+			return
+		}
+		if !canServe {
 			ctx.HTTPError(http.StatusNotFound)
 			return
 		}
