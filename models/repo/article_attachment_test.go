@@ -174,6 +174,44 @@ func TestDeleteUnreferencedArticleAttachment(t *testing.T) {
 	assert.False(t, deleted)
 }
 
+func TestMarkAttachmentsArticlePurpose(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	legacy := addAttachment(t, &repo_model.Attachment{UUID: "3d6b1f2c-0000-4000-8000-00000000d001", RepoID: 1, UploaderID: 2, Name: "legacy.png"}, timeutil.TimeStamp(1000))
+	// an issue draft is never article content, whatever a scan observed
+	draft := addAttachment(t, &repo_model.Attachment{UUID: "3d6b1f2c-0000-4000-8000-00000000d002", RepoID: 1, IssueID: 1, UploaderID: 2, Name: "draft.png"}, timeutil.TimeStamp(1000))
+
+	updated, err := repo_model.MarkAttachmentsArticlePurpose(t.Context(), []int64{legacy.ID, draft.ID})
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1, updated)
+	assert.Equal(t, repo_model.AttachmentPurposeArticle, unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: legacy.ID}).Purpose)
+	assert.Equal(t, repo_model.AttachmentPurposeUnspecified, unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: draft.ID}).Purpose)
+
+	updated, err = repo_model.MarkAttachmentsArticlePurpose(t.Context(), nil)
+	assert.NoError(t, err)
+	assert.EqualValues(t, 0, updated)
+}
+
+func TestCountUnassociatedLegacyAttachments(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	before, err := repo_model.CountUnassociatedLegacyAttachments(t.Context())
+	assert.NoError(t, err)
+
+	legacy := addAttachment(t, &repo_model.Attachment{UUID: "3d6b1f2c-0000-4000-8000-00000000e001", RepoID: 1, UploaderID: 2, Name: "legacy.png"}, timeutil.TimeStamp(1000))
+	addAttachment(t, &repo_model.Attachment{UUID: "3d6b1f2c-0000-4000-8000-00000000e002", RepoID: 1, UploaderID: 2, Purpose: repo_model.AttachmentPurposeArticle, Name: "article.png"}, timeutil.TimeStamp(1000))
+
+	count, err := repo_model.CountUnassociatedLegacyAttachments(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, before+1, count)
+
+	// once a repository keeps it alive, the read fallback is no longer what serves it
+	require.NoError(t, repo_model.AddArticleAttachments(t.Context(), 1, []int64{legacy.ID}))
+	count, err = repo_model.CountUnassociatedLegacyAttachments(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, before, count)
+}
+
 func TestRetainedRepoAttachmentIDs(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 

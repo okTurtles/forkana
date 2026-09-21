@@ -200,6 +200,46 @@ func DeleteUnreferencedArticleAttachment(ctx context.Context, attachmentID int64
 	return count > 0, err
 }
 
+// MarkAttachmentsArticlePurpose records that attachments the backfill inferred
+// to be article content are article uploads, so their lifetime follows the
+// associations from now on and the garbage collector may eventually reclaim
+// them. Rows that already carry a purpose, and rows an issue, comment or
+// release claims, are left untouched.
+func MarkAttachmentsArticlePurpose(ctx context.Context, attachmentIDs []int64) (int64, error) {
+	if len(attachmentIDs) == 0 {
+		return 0, nil
+	}
+	return db.GetEngine(ctx).Table("attachment").
+		In("id", attachmentIDs).
+		Where(builder.Eq{
+			"purpose":    AttachmentPurposeUnspecified,
+			"issue_id":   0,
+			"comment_id": 0,
+			"release_id": 0,
+		}).
+		Cols("purpose").
+		Update(&Attachment{Purpose: AttachmentPurposeArticle})
+}
+
+// CountUnassociatedLegacyAttachments returns how many attachments of
+// unspecified purpose no repository keeps alive. They are the rows that the
+// legacy read fallback, and nothing else, still authorizes, so the count is
+// what a backfill verification reports as remaining exposure.
+func CountUnassociatedLegacyAttachments(ctx context.Context) (int64, error) {
+	return db.GetEngine(ctx).Table("attachment").
+		Where(builder.Eq{
+			"attachment.purpose":    AttachmentPurposeUnspecified,
+			"attachment.issue_id":   0,
+			"attachment.comment_id": 0,
+			"attachment.release_id": 0,
+		}).
+		And(builder.NotExists(
+			builder.Select("1").From("article_attachment").
+				Where(builder.Expr("article_attachment.attachment_id = attachment.id")),
+		)).
+		Count(new(Attachment))
+}
+
 // RetainedRepoAttachmentIDs returns the attachments uploaded to a repository
 // that must survive its deletion: article uploads, whose lifetime is governed by
 // the associations and the garbage collector, and anything another repository
