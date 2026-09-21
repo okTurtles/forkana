@@ -4,14 +4,17 @@
 package integration
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
 
+	"code.gitea.io/gitea/models/renderhelper"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/gitrepo"
+	"code.gitea.io/gitea/modules/markup/markdown"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -19,7 +22,7 @@ import (
 )
 
 // TestArticleCommitLink covers the links that point at an article version, as generated
-// by Repository.CommitLink and by the markup processors for commit references. The
+// by Repository.CommitLink and by the commit cross-reference markup processor. The
 // article route resolves a version through the "version" query parameter, it has no
 // "/commit/{sha}" path.
 func TestArticleCommitLink(t *testing.T) {
@@ -52,10 +55,28 @@ func TestArticleCommitLink(t *testing.T) {
 		assert.NotEmpty(t, htmlDoc.Find(".file-view.markup").Text())
 	})
 
-	// The link built by markup.commitCrossReferencePatternProcessor for an
-	// "owner/subject@sha" reference must resolve to the same route.
+	// The link built by markup.commitCrossReferencePatternProcessor must point at the
+	// article route, whether the reference names the article by its subject or by its
+	// repository name, and that route has to resolve it.
 	t.Run("CrossReferenceLinkResolves", func(t *testing.T) {
-		req := NewRequest(t, "GET", articleURL+"?version="+sha)
+		renderRef := func(ref string) string {
+			rctx := renderhelper.NewRenderContextRepoComment(t.Context(), repo)
+			rendered, err := markdown.RenderString(rctx, "see "+ref+" for details")
+			require.NoError(t, err)
+
+			htmlDoc := NewHTMLParser(t, bytes.NewBufferString(string(rendered)))
+			href, exists := htmlDoc.Find("a.commit").Attr("href")
+			require.True(t, exists, "%q was not rendered as a commit link", ref)
+			return href
+		}
+
+		expected := articleURL + "?version=" + sha
+		assert.Equal(t, expected, renderRef(fmt.Sprintf("%s/%s@%s", owner.Name, subjectName, sha)))
+		// a reference by repository name has to be rewritten to the subject name, the
+		// only name the article route resolves
+		assert.Equal(t, expected, renderRef(fmt.Sprintf("%s/%s@%s", owner.Name, repo.Name, sha)))
+
+		req := NewRequest(t, "GET", expected)
 		session.MakeRequest(t, req, http.StatusOK)
 
 		req = NewRequest(t, "GET", articleURL+"?version="+sha[:7])
@@ -103,16 +124,19 @@ func TestArticleCommitLink(t *testing.T) {
 		assert.NotEmpty(t, htmlDoc.Find(".file-view.markup").Text())
 	})
 
-	// An archived article is addressed by its permanent repository URL, which does have a
-	// "/commit/{sha}" route.
-	t.Run("ArchivedArticleUsesRepositoryCommitRoute", func(t *testing.T) {
+	// An archived article stays reachable through the article view, so its commit link
+	// keeps the "version" query parameter.
+	t.Run("ArchivedArticleUsesArticleVersionLink", func(t *testing.T) {
 		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, true))
 		t.Cleanup(func() {
 			_ = repo_model.SetArchiveRepoState(t.Context(), repo, false)
 		})
 
-		link := repo.CommitLink(sha)
-		require.Equal(t, fmt.Sprintf("/%s/%s/commit/%s", url.PathEscape(owner.Name), url.PathEscape(repo.Name), sha), link)
+		reloaded := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
+		require.NoError(t, reloaded.LoadSubject(t.Context()))
+
+		link := reloaded.CommitLink(sha)
+		require.Equal(t, fmt.Sprintf("/article/%s/%s?version=%s", url.PathEscape(owner.Name), url.PathEscape(reloaded.GetSubject(t.Context())), sha), link)
 
 		req := NewRequest(t, "GET", link)
 		session.MakeRequest(t, req, http.StatusOK)

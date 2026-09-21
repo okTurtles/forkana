@@ -6,13 +6,17 @@ package integration
 import (
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
+	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExploreSubjects(t *testing.T) {
@@ -28,24 +32,24 @@ func TestExploreSubjects(t *testing.T) {
 	assert.NotNil(t, subject2)
 
 	// Test basic page load
-	req := NewRequest(t, "GET", "/explore/articles")
+	req := NewRequest(t, "GET", "/explore/subjects")
 	resp := MakeRequest(t, req, http.StatusOK)
 	assert.Equal(t, http.StatusOK, resp.Code)
 
 	// Test search functionality
-	req = NewRequest(t, "GET", "/explore/articles?q=Alpha")
+	req = NewRequest(t, "GET", "/explore/subjects?q=Alpha")
 	resp = MakeRequest(t, req, http.StatusOK)
 	respStr := resp.Body.String()
-	assert.Contains(t, respStr, `value="Alpha"`)
+	assert.Contains(t, respStr, `<input type="search" name="q" value="Alpha"`)
 
-	// Test sorting
-	req = NewRequest(t, "GET", "/explore/articles?sort=alphabetically")
+	// Test sorting: the requested sort is the one marked as selected in the sort menu
+	req = NewRequest(t, "GET", "/explore/subjects?sort=alphabetically")
 	resp = MakeRequest(t, req, http.StatusOK)
 	respStr = resp.Body.String()
-	assert.Contains(t, respStr, `value="alphabetically"`)
+	assert.Contains(t, respStr, `checked value="alphabetically"`)
 
 	// Test pagination
-	req = NewRequest(t, "GET", "/explore/articles?page=1")
+	req = NewRequest(t, "GET", "/explore/subjects?page=1")
 	resp = MakeRequest(t, req, http.StatusOK)
 	assert.Equal(t, http.StatusOK, resp.Code)
 }
@@ -53,18 +57,20 @@ func TestExploreSubjects(t *testing.T) {
 func TestExploreSubjectsSorting(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	// Test all sort options
+	// Test all sort options the subjects list offers
 	sortOptions := []string{
 		"alphabetically",
 		"reversealphabetically",
-		"newest",
-		"oldest",
 		"recentupdate",
 		"leastupdate",
+		"mostforks",
+		"fewestforks",
+		"mostcontributors",
+		"fewestcontributors",
 	}
 
 	for _, sortType := range sortOptions {
-		req := NewRequest(t, "GET", "/explore/articles?sort="+sortType)
+		req := NewRequest(t, "GET", "/explore/subjects?sort="+sortType)
 		resp := MakeRequest(t, req, http.StatusOK)
 		assert.Equal(t, http.StatusOK, resp.Code, "Sort type %s should work", sortType)
 	}
@@ -131,4 +137,241 @@ func TestExploreSubjectsListMarkup(t *testing.T) {
 	// Neither the stock repository counts nor the created/updated line belong in the row.
 	assert.NotContains(t, html, "flex-item-trailing")
 	assert.NotContains(t, html, "octicon-repo-forked")
+}
+
+// TestExploreNavbarActiveTab locks the explore navbar markup from #294. The tab the page belongs
+// to must carry the "active" class and no other tab may, and the tabs must live inside the
+// ".overflow-menu-items" wrapper: the <overflow-menu> web component waits for that element before
+// it initialises, and the CSS that aligns the active tab's underline with the menu rail is keyed
+// on it too. Without the wrapper the tab still renders, but its underline sits a pixel off
+// the menu rail, and the menu never collapses into the overflow button.
+func TestExploreNavbarActiveTab(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// activeTab returns the href of the one active tab together with the parsed page, so the
+	// caller can make further assertions about the same response instead of fetching it again.
+	activeTab := func(path string) (string, *HTMLDoc) {
+		req := NewRequest(t, "GET", path)
+		resp := MakeRequest(t, req, http.StatusOK)
+		h := NewHTMLParser(t, resp.Body)
+
+		// exactly one tab is active, and it is inside the overflow-menu wrapper
+		active := h.Find(`overflow-menu .overflow-menu-items a.item.active`)
+		assert.Equal(t, 1, active.Length(), "exactly one explore tab should be active on %s", path)
+		href, exists := active.Attr("href")
+		assert.True(t, exists, "the active explore tab should be a link on %s", path)
+		return href, h
+	}
+
+	subjectsHref := setting.AppSubURL + "/explore/subjects"
+	usersHref := setting.AppSubURL + "/explore/users"
+
+	// the tab the page belongs to is the active one, and the others are not
+	subjectsTab, subjectsPage := activeTab("/explore/subjects?q=mars")
+	assert.True(t, strings.HasPrefix(subjectsTab, subjectsHref),
+		"the Subjects tab should be the active one on /explore/subjects, got %q", subjectsTab)
+	usersTab, _ := activeTab("/explore/users?q=mars")
+	assert.True(t, strings.HasPrefix(usersTab, usersHref),
+		"the Users tab should be the active one on /explore/users, got %q", usersTab)
+
+	// the inactive tabs are still rendered, just not marked active. The "still rendered" half is
+	// what keeps the pair from passing vacuously against a tab that stopped rendering at all.
+	// Only the Users tab gets this pair: the Code tab is gated on "IsRepoIndexerEnabled", which
+	// explore.Subjects never puts in the template data, so it never renders here and asserting it
+	// is not active would be trivially true. The "exactly one active tab" check above already
+	// covers every other tab anyway.
+	assert.Equal(t, 1, subjectsPage.Find(`overflow-menu .overflow-menu-items a.item[href^="`+usersHref+`"]`).Length(),
+		"the Users tab should still be rendered on /explore/subjects")
+	assert.Equal(t, 0, subjectsPage.Find(`overflow-menu .overflow-menu-items a.item.active[href^="`+usersHref+`"]`).Length(),
+		"the Users tab must not be active on /explore/subjects")
+}
+
+// TestExploreArticlesRemoved pins the removal of the unreachable /explore/articles listing.
+// Nothing in the UI ever linked to it; the history route below shares the prefix and stays.
+func TestExploreArticlesRemoved(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	MakeRequest(t, NewRequest(t, "GET", "/explore/articles"), http.StatusNotFound)
+	MakeRequest(t, NewRequest(t, "GET", "/explore/articles?q=test"), http.StatusNotFound)
+
+	// The old sitemap paths are not dropped but permanently redirected: crawlers that indexed
+	// them keep polling the old address for a while, and must be pointed at the new one.
+	resp := MakeRequest(t, NewRequest(t, "GET", "/explore/articles/sitemap-1.xml"), http.StatusMovedPermanently)
+	assert.Equal(t, setting.AppSubURL+"/explore/subjects/sitemap-1.xml", resp.Header().Get("Location"))
+
+	// The article history view is a different route and must keep working.
+	MakeRequest(t, NewRequest(t, "GET", "/explore/articles/history/user2/repo1"), http.StatusOK)
+}
+
+// TestExploreSubjectsSitemap pins the sitemap that moved off /explore/articles. It has to be XML
+// (the subjects sitemap route used to fall through to the HTML page) and it has to list article
+// URLs, which is exactly what crawlers were fed from the old path.
+func TestExploreSubjectsSitemap(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	resp := MakeRequest(t, NewRequest(t, "GET", "/explore/subjects/sitemap-1.xml"), http.StatusOK)
+	assert.Equal(t, "text/xml", resp.Header().Get("Content-Type"))
+
+	body := resp.Body.String()
+	assert.Contains(t, body, "<urlset")
+	assert.Contains(t, body, "<loc>"+setting.AppURL+"article/user2/example-subject</loc>")
+
+	// The sitemap index advertises the subjects path, not the removed articles one.
+	index := MakeRequest(t, NewRequest(t, "GET", "/sitemap.xml"), http.StatusOK).Body.String()
+	assert.Contains(t, index, setting.AppURL+"explore/subjects/sitemap-1.xml")
+	assert.NotContains(t, index, "explore/articles/sitemap-")
+}
+
+// TestExploreSubjectsSortOptions pins the Sort dropdown of the Subjects tab, in document
+// order (#291). The list drifts silently whenever the shared template is touched, so the
+// order is asserted, not just the set.
+func TestExploreSubjectsSortOptions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	req := NewRequest(t, "GET", "/explore/subjects")
+	doc := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
+
+	var sorts []string
+	doc.Find(`input[name="sort"]`).Each(func(_ int, s *goquery.Selection) {
+		value, _ := s.Attr("value")
+		sorts = append(sorts, value)
+	})
+	assert.Equal(t, []string{
+		"alphabetically",
+		"reversealphabetically",
+		"recentupdate",
+		"leastupdate",
+		"mostcontributors",
+		"fewestcontributors",
+		"mostforks",
+		"fewestforks",
+	}, sorts)
+
+	// The archived and fork filters stay; the mirror, template and private ones never
+	// belonged to the Subjects tab.
+	AssertHTMLElement(t, doc, `input[name="archived"]`, 2)
+	AssertHTMLElement(t, doc, `input[name="fork"][type="radio"]`, 2)
+	AssertHTMLElement(t, doc, `input[name="mirror"]`, false)
+	AssertHTMLElement(t, doc, `input[name="template"]`, false)
+	AssertHTMLElement(t, doc, `input[name="private"]`, false)
+
+	// Every offered sort value is one the handler actually resolves. A sort key the handler
+	// does not know is silently rewritten to "recentupdate" and still answers 200, so the
+	// status alone proves nothing: assert the dropdown comes back with the requested sort
+	// marked active, which is the resolved value the handler echoed into SortType.
+	for _, sortType := range sorts {
+		req := NewRequest(t, "GET", "/explore/subjects?sort="+sortType)
+		doc := NewHTMLParser(t, MakeRequest(t, req, http.StatusOK).Body)
+		active, exists := doc.Find(`#subject-search-form label.active input[name="sort"]`).Attr("value")
+		assert.True(t, exists, "no active sort option when requesting %s", sortType)
+		assert.Equal(t, sortType, active)
+	}
+}
+
+// TestExploreSubjectsNoDefaultSortSelected covers #292: the sort dropdown used to paint its
+// default entry ("Most recently updated") in the static grey active state before the user
+// had chosen anything, because the handler echoed its internal ordering default back to the
+// template. Nothing may look selected until the user selects it.
+func TestExploreSubjectsNoDefaultSortSelected(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	req := NewRequest(t, "GET", "/explore/subjects")
+	resp := MakeRequest(t, req, http.StatusOK)
+	h := NewHTMLParser(t, resp.Body)
+	assert.Equal(t, 0, h.Find(`.menu label.active.item`).Length(), "no sort entry may be active before the user picks one")
+	assert.Equal(t, 0, h.Find(`.menu input[name="sort"][checked]`).Length(), "no sort radio may be checked before the user picks one")
+
+	// Once a sort is explicitly requested, that entry -- and only that entry -- is active.
+	req = NewRequest(t, "GET", "/explore/subjects?sort=alphabetically")
+	resp = MakeRequest(t, req, http.StatusOK)
+	h = NewHTMLParser(t, resp.Body)
+	active := h.Find(`.menu label.active.item`)
+	assert.Equal(t, 1, active.Length())
+	value, exists := active.Find(`input[name="sort"]`).Attr("value")
+	assert.True(t, exists)
+	assert.Equal(t, "alphabetically", value)
+	assert.Equal(t, 1, h.Find(`.menu input[name="sort"][checked]`).Length())
+}
+
+// TestExploreSubjectsExactMatchNotHiddenByFilters covers #319: searching for a subject that
+// already exists used to offer "Want to create it?" whenever the active filters hid it from the
+// exact-match lookup. The "not a fork" filter does exactly that for any subject that already has
+// a fork, and accepting the offer routes through GetOrCreateSubject, which returns the existing
+// subject and attaches yet another article to it.
+func TestExploreSubjectsExactMatchNotHiddenByFilters(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// example-subject is the fixture subject of repo1, a public non-fork repository that really
+	// exists on disk, so the "View existing subject" link can be followed below.
+	const subjectName = "example-subject"
+	subject, err := repo_model.GetSubjectByName(t.Context(), subjectName)
+	require.NoError(t, err)
+
+	// Give it a fork, so that the "fork=0" filter excludes the subject from the exact-match lookup.
+	require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{
+		OwnerID: 3, OwnerName: "user3",
+		Name: "fork-filter-probe-fork", LowerName: "fork-filter-probe-fork",
+		SubjectID: subject.ID, IsFork: true,
+	}))
+
+	path := "/explore/subjects?fork=0&q=" + url.QueryEscape(subjectName)
+	createSelector := `a[href^="` + setting.AppSubURL + `/repo/create?subject="]`
+	viewSelector := `a[href="` + setting.AppSubURL + `/subject/` + subjectName + `"]`
+
+	subjectHrefs := func(h *HTMLDoc) []string {
+		hrefs := make([]string, 0)
+		h.Find(`a[href^="` + setting.AppSubURL + `/subject/"]`).Each(func(_ int, s *goquery.Selection) {
+			href, _ := s.Attr("href")
+			hrefs = append(hrefs, href)
+		})
+		return hrefs
+	}
+
+	// Signed out.
+	resp := MakeRequest(t, NewRequest(t, "GET", path), http.StatusOK)
+	anonDoc := NewHTMLParser(t, resp.Body)
+	AssertHTMLElement(t, anonDoc, createSelector, false)
+	AssertHTMLElement(t, anonDoc, viewSelector, true)
+
+	// Signed in.
+	session := loginUser(t, "user2")
+	resp = session.MakeRequest(t, NewRequest(t, "GET", path), http.StatusOK)
+	authDoc := NewHTMLParser(t, resp.Body)
+	AssertHTMLElement(t, authDoc, createSelector, false)
+	AssertHTMLElement(t, authDoc, viewSelector, true)
+
+	// The link the affordance offers must not dead-end: /subject/{name} only renders when the
+	// subject has a public repository behind it.
+	MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape(subjectName)), http.StatusOK)
+
+	// explore.Subjects never reads ctx.Doer, so the two responses must list the same subjects in
+	// the same order. This pins the "signed-in users see fewer subjects" hypothesis as ruled out.
+	assert.Equal(t, subjectHrefs(anonDoc), subjectHrefs(authDoc))
+
+	// Positive control: the offer is still made for a name that really is free, so the assertions
+	// above cannot pass just because the selector stopped matching anything.
+	resp = MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?fork=0&q="+url.QueryEscape("No Such Subject Here")), http.StatusOK)
+	AssertHTMLElement(t, NewHTMLParser(t, resp.Body), createSelector, true)
+
+	// A subject with nothing public behind it cannot be linked to - /subject/{name} would 404 -
+	// so it keeps the create offer, which attaches the new article to that same subject.
+	const privateName = "Private Only Probe"
+	privateSubject, err := repo_model.GetOrCreateSubject(t.Context(), privateName)
+	require.NoError(t, err)
+	require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{
+		OwnerID: 2, OwnerName: "user2",
+		Name: "private-only-probe-root", LowerName: "private-only-probe-root",
+		SubjectID: privateSubject.ID, IsFork: false, IsPrivate: true,
+	}))
+	require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{
+		OwnerID: 3, OwnerName: "user3",
+		Name: "private-only-probe-fork", LowerName: "private-only-probe-fork",
+		SubjectID: privateSubject.ID, IsFork: true, IsPrivate: true,
+	}))
+
+	resp = MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?fork=0&q="+url.QueryEscape(privateName)), http.StatusOK)
+	privateDoc := NewHTMLParser(t, resp.Body)
+	AssertHTMLElement(t, privateDoc, createSelector, true)
+	AssertHTMLElement(t, privateDoc, `a[href="`+setting.AppSubURL+`/subject/Private%20Only%20Probe"]`, false)
+	MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape(privateName)), http.StatusNotFound)
 }

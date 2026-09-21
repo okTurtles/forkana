@@ -2,9 +2,8 @@ import {initHomeSearchValidation} from './home-search-validation.ts';
 
 function setupHomeSearch(): {form: HTMLFormElement, input: HTMLInputElement, error: HTMLElement} {
   document.body.innerHTML = `
-    <form id="home-search-form" action="/explore/articles" method="get">
+    <form id="home-search-form" action="/explore/subjects" method="get">
       <input id="search" name="q" type="text">
-      <input type="hidden" name="sort" value="score">
     </form>
     <div id="home-search-error" class="home-search-error tw-hidden" role="alert">Type correct subject</div>
   `;

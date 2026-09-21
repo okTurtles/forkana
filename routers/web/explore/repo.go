@@ -34,39 +34,25 @@ import (
 )
 
 const (
-	// tplExploreRepos explore repositories page template
-	tplExploreRepos templates.TplName = "explore/repos"
 	// tplExploreSubjects explore subjects page template
-	tplExploreSubjects     templates.TplName = "explore/subjects"
-	relevantReposOnlyParam string            = "only_show_relevant"
+	tplExploreSubjects templates.TplName = "explore/subjects"
 )
 
 // RepoSearchOptions when calling search repositories
 type RepoSearchOptions struct {
-	OwnerID          int64
-	Private          bool
-	Restricted       bool
-	PageSize         int
-	OnlyShowRelevant bool
-	TplName          templates.TplName
+	OwnerID    int64
+	Private    bool
+	Restricted bool
+	PageSize   int
+	TplName    templates.TplName
 }
 
 // RenderRepoSearch render repositories search page
 // This function is also used to render the Admin Repository Management page.
 func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
-	// Sitemap index for sitemap paths
-	page := int(ctx.PathParamInt64("idx"))
-	isSitemap := ctx.PathParam("idx") != ""
-	if page <= 1 {
-		page = ctx.FormInt("page")
-	}
-
+	page := ctx.FormInt("page")
 	if page <= 0 {
 		page = 1
-	}
-
-	if isSitemap {
-		opts.PageSize = setting.UI.SitemapPagingNum
 	}
 
 	var (
@@ -76,22 +62,25 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 		orderBy db.SearchOrderBy
 	)
 
-	sortOrder := ctx.FormString("sort")
-	if sortOrder == "" {
-		sortOrder = setting.UI.ExploreDefaultSort
-	}
-
-	if order, ok := repo_model.OrderByFlatMap[sortOrder]; ok {
+	// The listing always needs an ORDER BY, so an absent or unrecognised "sort" falls back
+	// to the configured default. What the user asked for is a separate question:
+	// "SortType" drives the active entry of the sort dropdown, so it stays empty unless the
+	// request names a sort the page understands, and nothing looks selected before the user
+	// has selected it (#292).
+	requestedSort := ctx.FormString("sort")
+	if order, ok := repo_model.OrderByFlatMap[requestedSort]; ok {
 		orderBy = order
 	} else {
-		sortOrder = "recentupdate"
-		orderBy = db.SearchOrderByRecentUpdated
+		requestedSort = ""
+		if order, ok := repo_model.OrderByFlatMap[setting.UI.ExploreDefaultSort]; ok {
+			orderBy = order
+		} else {
+			orderBy = db.SearchOrderByRecentUpdated
+		}
 	}
-	ctx.Data["SortType"] = sortOrder
+	ctx.Data["SortType"] = requestedSort
 
 	keyword := ctx.FormTrim("q")
-
-	ctx.Data["OnlyShowRelevant"] = opts.OnlyShowRelevant
 
 	topicOnly := ctx.FormBool("topic")
 	ctx.Data["TopicOnly"] = topicOnly
@@ -129,7 +118,6 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 		TopicOnly:          topicOnly,
 		Language:           language,
 		IncludeDescription: setting.UI.SearchRepoDescription,
-		OnlyShowRelevant:   opts.OnlyShowRelevant,
 		Archived:           archived,
 		Fork:               fork,
 		Mirror:             mirror,
@@ -140,18 +128,6 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 		ctx.ServerError("SearchRepository", err)
 		return
 	}
-	if isSitemap {
-		m := sitemap.NewSitemap()
-		for _, item := range repos {
-			m.Add(sitemap.URL{URL: item.HTMLURL(), LastMod: item.UpdatedUnix.AsTimePtr()})
-		}
-		ctx.Resp.Header().Set("Content-Type", "text/xml")
-		if _, err := m.WriteTo(ctx.Resp); err != nil {
-			log.Error("Failed writing sitemap: %v", err)
-		}
-		return
-	}
-
 	ctx.Data["Keyword"] = keyword
 	ctx.Data["Total"] = count
 	ctx.Data["Repos"] = repos
@@ -164,40 +140,58 @@ func RenderRepoSearch(ctx *context.Context, opts *RepoSearchOptions) {
 	ctx.HTML(http.StatusOK, opts.TplName)
 }
 
-// Repos render explore repositories page
-func Repos(ctx *context.Context) {
-	ctx.Data["UsersPageIsDisabled"] = setting.Service.Explore.DisableUsersPage
-	ctx.Data["OrganizationsPageIsDisabled"] = setting.Service.Explore.DisableOrganizationsPage
-	ctx.Data["CodePageIsDisabled"] = setting.Service.Explore.DisableCodePage
-	ctx.Data["Title"] = ctx.Tr("explore")
-	ctx.Data["PageIsExplore"] = true
-	ctx.Data["ShowRepoOwnerOnList"] = true
-	ctx.Data["PageIsExploreRepositories"] = true
-	ctx.Data["IsRepoIndexerEnabled"] = setting.Indexer.RepoIndexerEnabled
-
-	var ownerID int64
-	if ctx.Doer != nil && !ctx.Doer.IsAdmin {
-		ownerID = ctx.Doer.ID
+// renderSubjectsSitemap writes one sitemap page for the /explore/subjects/sitemap-{idx}.xml paths.
+//
+// The entries are *article* URLs, not subject URLs: these sitemaps used to live under
+// /explore/articles/sitemap-{idx}.xml and were served by the (now removed) article listing, so
+// emitting one URL per repository here keeps crawlers seeing exactly the same set of pages —
+// only the path of the sitemap itself changed. The page count advertised by the sitemap index in
+// routers/web/home.go is derived from the repository count for the same reason.
+func renderSubjectsSitemap(ctx *context.Context) {
+	page := int(ctx.PathParamInt64("idx"))
+	if page <= 0 {
+		page = 1
 	}
 
-	onlyShowRelevant := setting.UI.OnlyShowRelevantRepos
-
-	_ = ctx.Req.ParseForm() // parse the form first, to prepare the ctx.Req.Form field
-	if len(ctx.Req.Form[relevantReposOnlyParam]) != 0 {
-		onlyShowRelevant = ctx.FormBool(relevantReposOnlyParam)
-	}
-
-	RenderRepoSearch(ctx, &RepoSearchOptions{
-		PageSize:         setting.UI.ExplorePagingNum,
-		OwnerID:          ownerID,
-		Private:          ctx.Doer != nil,
-		TplName:          tplExploreRepos,
-		OnlyShowRelevant: onlyShowRelevant,
+	// Sitemaps are for crawlers, so they are uniformly public-only: no per-user scoping, which
+	// would leak private article URLs into cache-friendly .xml responses and desync the page
+	// count advertised by the sitemap index in routers/web/home.go, which only counts public
+	// repositories of public owners.
+	repos, _, err := repo_model.SearchRepository(ctx, repo_model.SearchRepoOptions{
+		ListOptions: db.ListOptions{
+			Page:     page,
+			PageSize: setting.UI.SitemapPagingNum,
+		},
+		Actor: ctx.Doer,
+		// The id tiebreak keeps pagination stable when update times collide: without it the
+		// databases split ties differently, so a repository could move between sitemap pages
+		// (or, with every fixture at updated_unix 0, land on an arbitrary page in tests).
+		OrderBy:   db.SearchOrderByRecentUpdated + ", id ASC",
+		AllPublic: true,
 	})
+	if err != nil {
+		ctx.ServerError("SearchRepository", err)
+		return
+	}
+
+	m := sitemap.NewSitemap()
+	for _, item := range repos {
+		m.Add(sitemap.URL{URL: item.HTMLURL(), LastMod: item.UpdatedUnix.AsTimePtr()})
+	}
+	ctx.Resp.Header().Set("Content-Type", "text/xml")
+	if _, err := m.WriteTo(ctx.Resp); err != nil {
+		log.Error("Failed writing sitemap: %v", err)
+	}
 }
 
 // Subjects render explore subjects page (articles list)
 func Subjects(ctx *context.Context) {
+	// The sitemap paths (/explore/subjects/sitemap-{idx}.xml) are served by this handler too.
+	if ctx.PathParam("idx") != "" {
+		renderSubjectsSitemap(ctx)
+		return
+	}
+
 	ctx.Data["UsersPageIsDisabled"] = setting.Service.Explore.DisableUsersPage
 	ctx.Data["OrganizationsPageIsDisabled"] = setting.Service.Explore.DisableOrganizationsPage
 	ctx.Data["CodePageIsDisabled"] = setting.Service.Explore.DisableCodePage
@@ -211,19 +205,17 @@ func Subjects(ctx *context.Context) {
 		page = 1
 	}
 
-	// Get sort order
-	sortOrder := ctx.FormString("sort")
-	if sortOrder == "" {
-		sortOrder = string(repo_model.SubjectSortRecentUpdate)
-	}
-
-	// Map sort order to database ORDER BY clause
-	orderBy := repo_model.SubjectOrderBy(repo_model.SubjectSortType(sortOrder))
+	// Get sort order. The listing always needs an ORDER BY, so an absent or unrecognised
+	// "sort" falls back to the default; "SortType" only carries a sort the request actually
+	// named, so the sort dropdown shows nothing as selected until the user selects
+	// something (#292).
+	requestedSort := ctx.FormString("sort")
+	orderBy := repo_model.SubjectOrderBy(repo_model.SubjectSortType(requestedSort))
 	if orderBy == "" {
-		sortOrder = string(repo_model.SubjectSortRecentUpdate)
+		requestedSort = ""
 		orderBy = repo_model.SubjectOrderBy(repo_model.SubjectSortRecentUpdate)
 	}
-	ctx.Data["SortType"] = sortOrder
+	ctx.Data["SortType"] = requestedSort
 
 	// Get search keyword
 	keyword := ctx.FormTrim("q")
@@ -285,6 +277,12 @@ func Subjects(ctx *context.Context) {
 		}
 		similarSubjects = similarResults
 
+		// The filtered lookup above decides whether the exact-match row is rendered, but it must
+		// not decide whether the "want to create it?" offer is made.
+		if exactMatch == nil && !loadExactSubject(ctx, keyword) {
+			return
+		}
+
 		// For pagination total, we count exact + similar
 		count = int64(len(similarSubjects))
 		if exactMatch != nil {
@@ -324,11 +322,52 @@ func Subjects(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplExploreSubjects)
 }
 
+// loadExactSubject exposes the subject that the search keyword would resolve to as
+// ctx.Data["ExactSubject"], looked up without any of the active filters.
+//
+// The subjects list offers to create a subject when its own, filtered query comes back without
+// an exact match, and taking that offer routes through GetOrCreateSubject, which returns the
+// existing subject and just attaches the new article to it. So a subject that merely happens to
+// be hidden - by "not a fork", by "archived" - invites the user to create a duplicate (#319).
+// shared/subject/list.tmpl uses this key to link to the subject instead.
+//
+// The lookup goes through the slug on purpose: it is UNIQUE and is exactly the collision rule
+// GetOrCreateSubject applies, so any keyword that would be swallowed by an existing subject is
+// caught here, including one that only differs by accents, punctuation or case. That also makes
+// GenerateSlugFromName's "subject" fallback for punctuation-only keywords harmless: creating
+// such a keyword really would land on a subject whose slug is "subject".
+//
+// The key is only set when /subject/{name} can actually render the subject, i.e. when it has at
+// least one public repository - the same lookup RepoAssignmentBySubject performs - so the link
+// the template offers cannot dead-end in a 404. A subject with nothing public behind it keeps
+// the create offer, which attaches the new article to that very subject rather than duplicating
+// it. Returns false when it has already sent a server error.
+func loadExactSubject(ctx *context.Context, keyword string) bool {
+	subject, err := repo_model.GetSubjectBySlug(ctx, repo_model.GenerateSlugFromName(keyword))
+	if err != nil {
+		if !repo_model.IsErrSubjectNotExist(err) {
+			ctx.ServerError("GetSubjectBySlug", err)
+			return false
+		}
+		return true
+	}
+
+	if _, err := repo_model.GetPublicRepositoryBySubject(ctx, subject.Name); err != nil {
+		if !repo_model.IsErrRepoWithSubjectNotExist(err) && !repo_model.IsErrSubjectNotExist(err) {
+			ctx.ServerError("GetPublicRepositoryBySubject", err)
+			return false
+		}
+		return true
+	}
+
+	ctx.Data["ExactSubject"] = subject
+	return true
+}
+
 // RepoHistory renders repository history page - an alternative interface to repo home
 func RepoHistory(ctx *context.Context) {
 	// Set page metadata
 	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - History View"
-	ctx.Data["PageIsExploreRepositories"] = true
 	ctx.Data["PageIsRepoHistory"] = true
 	ctx.Data["IsRepoHistoryView"] = true
 

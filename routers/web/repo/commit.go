@@ -503,7 +503,6 @@ func renderArticleView(ctx *context.Context) {
 
 	// Set up page metadata for article view
 	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - Article"
-	ctx.Data["PageIsExploreRepositories"] = true
 	ctx.Data["PageIsRepoHistory"] = true
 	ctx.Data["IsRepoHistoryView"] = true
 
@@ -559,7 +558,6 @@ func articleCommitView(ctx *context.Context, commitHash string) {
 
 	// Set up page metadata for article view
 	ctx.Data["Title"] = ctx.Repo.Repository.FullName() + " - Article (Version)"
-	ctx.Data["PageIsExploreRepositories"] = true
 	ctx.Data["PageIsRepoHistory"] = true
 	ctx.Data["IsRepoHistoryView"] = true
 
