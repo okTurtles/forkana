@@ -1457,9 +1457,10 @@ onMounted(async () => {
     const target = ev.target as Element;
     if (!target.closest("g.node")) {
       if (openArticle.value) return;  // the article owns the view; Back (if any) closes it
-      /* Clicking empty canvas drops the hover and re-centres the graph. */
+      /* Clicking empty canvas drops the hover and clears the selection. It
+         does NOT re-centre the graph (#386 item 12): a click is not a pan,
+         and the scheme visibly shifting under an idle click read as a bug. */
       collapseAll();
-      resetView(true);
       applySelection(null, null);
       pendingExternalSelection = null;
       writeStoredSelection(null);
@@ -1643,6 +1644,19 @@ function reflow() {
       const t = zoomTransform(svgRef.value);
       const clamped = constrainToViewport(t, zoomExtent());
       if (clamped !== t) svgSel.call(zoomBehavior.transform as any, clamped);
+    }
+    /* #386 item 8: a fast sweep can outrun the enter/leave events — the layout
+       reflows and the bubble that grew is no longer the one under the pointer,
+       leaving it stuck enlarged. Once the tween settles, ask the DOM where the
+       pointer really is and correct the hover from that evidence. Keyboard
+       hovers are exempt: the bubble holds the focus, and the pointer parked
+       elsewhere says nothing about it. */
+    if (hoveredId.value !== null && pointerClient.x >= 0) {
+      const focused = typeof document !== 'undefined' ? document.activeElement : null;
+      const hoveredEl = svgRef.value?.querySelector(`g.node[data-node-id="${cssEscape(hoveredId.value)}"]`);
+      const keyboardOwned = !!(focused && hoveredEl?.contains(focused));
+      const under = nodeUnderPointer();
+      if (!keyboardOwned && under !== hoveredId.value) setHovered(under);
     }
     updateHistoryAnchor();
   });
@@ -2114,7 +2128,8 @@ function goToComparison() {
         <!-- SVG world: IMPORTANT → touch-action:none enables pinch zoom; d3 handles it -->
         <!-- SVG is always rendered to keep refs valid -->
         <svg
-          ref="svgRef" class="tw-w-full" :class="{ 'graph-hidden': isLoading || errorMessage || !hasData }"
+          ref="svgRef" class="tw-w-full"
+          :class="{ 'graph-hidden': isLoading || errorMessage || !hasData, 'graph-dimmed': expandedId !== null }"
           :style="{ height: svgHeight + 'px' }" style="touch-action: none;" role="img"
           aria-label="Fork repository graph showing contributors and relationships" tabindex="0"
         >
@@ -2305,7 +2320,13 @@ function goToComparison() {
      "calc(100vh - 25rem)" guess. */
   flex: 1 1 0;
   min-height: 0;
-  overflow: auto;
+  /* HIDDEN, not auto (#386 items 13/14/15): an inner scrollbar here gave the
+     page two scrollbars, scrolled independently of the wheel-pan the canvas
+     already implements, and could scroll the legend out of sight. The canvas
+     is sized to the box minus the legend (graphViewportHeight), so nothing
+     needs to scroll: a graph taller than the canvas is panned, and the page
+     keeps its single scrollbar. */
+  overflow: hidden;
 }
 
 .f-fishbone-graph svg:focus {
@@ -2327,6 +2348,32 @@ function goToComparison() {
    past the fold and give the (overflow:auto) graph box a scrollbar. */
 .graph-container > svg {
   display: block;
+}
+
+/* ── HOVER DIMMING (#386 item 9) ──────────────────────────────────────────
+   While one bubble is expanded the rest of the scheme steps back: every other
+   bubble and every connector fades, so the hovered article is unmistakably the
+   subject of the picture (as the figma draws it). Opacity only — geometry is
+   owned by the reflow tween. */
+.graph-dimmed :deep(g.node),
+.graph-dimmed :deep(.trunk),
+.graph-dimmed :deep(.branch),
+.graph-dimmed :deep(.child-stem),
+.graph-dimmed :deep(.joint-parent) {
+  opacity: 0.35;
+  transition: opacity 150ms ease;
+}
+
+.graph-dimmed :deep(g.node.is-expanded) {
+  opacity: 1;
+}
+
+:deep(g.node),
+:deep(.trunk),
+:deep(.branch),
+:deep(.child-stem),
+:deep(.joint-parent) {
+  transition: opacity 150ms ease;
 }
 
 /* Hide graph content when showing states, but keep SVG rendered */

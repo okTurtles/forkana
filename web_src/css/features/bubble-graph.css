@@ -82,8 +82,9 @@
      min-height: 0", so it can never be taller than this box, and what it cannot
      fit (the legend under a min-height canvas) scrolls inside
      ".f-fishbone-graph". A scroll container here would only clip overlays. */
-  /* bleed over the container's horizontal padding, as before */
-  margin-top: -1rem;
+  /* bleed over the container's horizontal padding, as before. NO top bleed
+     (#386 item 11): a negative top margin pulled the canvas up under the view
+     tabs' divider, so panned bubbles were painted over the line from above. */
   margin-left: -1rem;
   margin-right: -1rem;
   width: calc(100% + 2rem);
