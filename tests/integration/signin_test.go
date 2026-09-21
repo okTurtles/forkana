@@ -101,6 +101,47 @@ func TestSigninWithRememberMe(t *testing.T) {
 	session.MakeRequest(t, req, http.StatusOK)
 }
 
+func TestSigninIgnoresStaleRedirectCookie(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	baseURL, _ := url.Parse(setting.AppURL)
+
+	// Simulate a "last viewed page" left over from browsing while signed out (issue #382)
+	session := emptyTestSession(t)
+	session.jar.SetCookies(baseURL, []*http.Cookie{{Name: "redirect_to", Value: url.QueryEscape("/explore/subjects")}})
+
+	// Opening the sign-in page without an explicit redirect_to must clear the stale cookie
+	req := NewRequest(t, "GET", "/user/login")
+	session.MakeRequest(t, req, http.StatusOK)
+
+	// Signing in must land on the home page, not the stale page
+	req = NewRequestWithValues(t, "POST", "/user/login", map[string]string{
+		"user_name": user.Name,
+		"password":  userPassword,
+	})
+	resp := session.MakeRequest(t, req, http.StatusSeeOther)
+	assert.Equal(t, "/", test.RedirectURL(resp))
+}
+
+func TestSigninHonorsExplicitRedirectParam(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+	// An explicit redirect_to parameter (e.g. from an invite link) must still be honored
+	session := emptyTestSession(t)
+	req := NewRequest(t, "GET", "/user/login?redirect_to="+url.QueryEscape("/user/settings"))
+	session.MakeRequest(t, req, http.StatusOK)
+
+	req = NewRequestWithValues(t, "POST", "/user/login", map[string]string{
+		"user_name": user.Name,
+		"password":  userPassword,
+	})
+	resp := session.MakeRequest(t, req, http.StatusSeeOther)
+	assert.Equal(t, "/user/settings", test.RedirectURL(resp))
+}
+
 func TestEnablePasswordSignInFormAndEnablePasskeyAuth(t *testing.T) {
 	t.Skip("Skipping for Forkana - needs investigation")
 	defer tests.PrepareTestEnv(t)()

@@ -154,6 +154,17 @@ func CheckAutoLogin(ctx *context.Context) bool {
 	redirectTo := ctx.FormString("redirect_to")
 	if len(redirectTo) > 0 {
 		middleware.SetRedirectToCookie(ctx.Resp, redirectTo)
+	} else if ctx.GetSiteCookie("redirect_to") != "" {
+		// Opening the sign-in page without an explicit "redirect_to" parameter must not
+		// resurrect a location saved earlier (e.g. a page browsed while signed out),
+		// otherwise signing in would land on that stale page instead of the user's
+		// home page (see issue #382). Drop any leftover cookie so sign-in always
+		// leads to the home page unless a redirect was explicitly requested.
+		middleware.DeleteRedirectToCookie(ctx.Resp)
+		if isSucceed {
+			ctx.Redirect(setting.AppSubURL + "/")
+			return true
+		}
 	}
 
 	if isSucceed {
