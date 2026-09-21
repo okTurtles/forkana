@@ -97,8 +97,8 @@ func SettingsCtxData(ctx *context.Context) {
 	// modal has to say so up front.
 	willBeTombstoned, err := repo_service.WouldBeTombstonedOnDelete(ctx, ctx.Repo.Repository)
 	if err != nil {
-		ctx.ServerError("WouldBeTombstonedOnDelete", err)
-		return
+		// the warning is informational, a failed lookup must not take the page down
+		log.Error("WouldBeTombstonedOnDelete %s: %v", ctx.Repo.Repository.FullName(), err)
 	}
 	ctx.Data["RepoWillBeTombstoned"] = willBeTombstoned
 }
