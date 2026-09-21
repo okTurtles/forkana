@@ -12,11 +12,17 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
+	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/git"
+	"code.gitea.io/gitea/modules/queue"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/tests"
@@ -402,5 +408,94 @@ func TestDeleteAttachmentRefusesAssociated(t *testing.T) {
 		uuid := createAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
 		session.MakeRequest(t, removeReq(uuid), http.StatusOK)
 		unittest.AssertNotExistsBean(t, &repo_model.Attachment{UUID: uuid})
+	})
+}
+
+// TestArticleCommitAssociatesAttachments exercises the web/API commit hook end to end: the
+// association is derived from the blob as it was actually committed, so it only exists once the
+// ref has moved. It needs a running instance because the commit goes through the push hooks.
+func TestArticleCommitAssociatesAttachments(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		session := loginUser(t, "user2")
+		csrf := GetUserCSRFToken(t, session)
+		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		articleContent := func(uuid string) string {
+			return fmt.Sprintf("# Article\n\n![img](/attachments/%s)\n", uuid)
+		}
+		associated := func(t *testing.T, repoID, attachmentID int64) bool {
+			t.Helper()
+			has, err := repo_model.HasArticleAttachment(t.Context(), repoID, attachmentID)
+			require.NoError(t, err)
+			return has
+		}
+
+		t.Run("ReferenceFromUploadRepo", func(t *testing.T) {
+			uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+			attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+
+			_, err := createFileInBranch(user2, repo1, "article-associated.md", repo1.DefaultBranch, articleContent(uuid))
+			require.NoError(t, err)
+			assert.True(t, associated(t, repo1.ID, attach.ID))
+		})
+
+		t.Run("CommitWithoutReferenceAssociatesNothing", func(t *testing.T) {
+			uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+			attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+
+			_, err := createFileInBranch(user2, repo1, "article-plain.md", repo1.DefaultBranch, "# Article\n")
+			require.NoError(t, err)
+			assert.False(t, associated(t, repo1.ID, attach.ID))
+		})
+
+		// Attachment 2 belongs to another repository and to an issue there. Referencing it must
+		// neither fail the commit nor grant repo1's readers access.
+		t.Run("UnauthorizedReferenceIsSkipped", func(t *testing.T) {
+			attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: 2})
+
+			_, err := createFileInBranch(user2, repo1, "article-borrowed.md", repo1.DefaultBranch, articleContent(attach.UUID))
+			require.NoError(t, err)
+			assert.False(t, associated(t, repo1.ID, attach.ID))
+		})
+	})
+}
+
+// TestArticlePushAssociatesAttachments covers the central post-ref-update hook: article content
+// that arrives by plain Git push, without ever passing through the editor, is discovered too.
+func TestArticlePushAssociatesAttachments(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		session := loginUser(t, "user2")
+		csrf := GetUserCSRFToken(t, session)
+		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+
+		oldPath, oldUser := u.Path, u.User
+		defer func() { u.Path, u.User = oldPath, oldUser }()
+		u.Path = repo1.FullName() + ".git"
+		u.User = url.UserPassword("user2", userPassword)
+
+		dstPath := t.TempDir()
+		doGitClone(dstPath, u)(t)
+
+		content := fmt.Sprintf("# Article\n\n![img](/attachments/%s)\n", uuid)
+		require.NoError(t, os.WriteFile(filepath.Join(dstPath, "README.md"), []byte(content), 0o644))
+		require.NoError(t, git.AddChanges(t.Context(), dstPath, true))
+		signature := git.Signature{Email: "user2@example.com", Name: "user2"}
+		require.NoError(t, git.CommitChanges(t.Context(), dstPath, git.CommitChangesOptions{
+			Committer: &signature,
+			Author:    &signature,
+			Message:   "embed an attachment",
+		}))
+		doGitPushTestRepository(dstPath, "origin", "master")(t)
+
+		// pushUpdates runs on the push queue, so the association is not visible synchronously.
+		require.NoError(t, queue.GetManager().FlushAll(t.Context(), 30*time.Second))
+
+		has, err := repo_model.HasArticleAttachment(t.Context(), repo1.ID, attach.ID)
+		require.NoError(t, err)
+		assert.True(t, has)
 	})
 }

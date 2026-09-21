@@ -24,6 +24,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/modules/util"
+	attachment_service "code.gitea.io/gitea/services/attachment"
 	issue_service "code.gitea.io/gitea/services/issue"
 	notify_service "code.gitea.io/gitea/services/notify"
 	pull_service "code.gitea.io/gitea/services/pull"
@@ -186,6 +187,14 @@ func pushUpdates(optsList []*repo_module.PushUpdateOptions) error {
 				}
 				if err != nil {
 					return err
+				}
+
+				// Article content can also arrive by plain Git push, so the central post-ref-update
+				// path discovers references too. Only the branch tip is scanned: inserts are
+				// idempotent, so a commit that already went through the web path costs nothing,
+				// and walking arbitrary history belongs to reconciliation.
+				if err := attachment_service.AssociateArticleAttachmentsFromCommit(ctx, pusher, repo, newCommit, attachment_service.ArticleContentPaths); err != nil {
+					attachment_service.ReportAssociationFailure(repo, branch, err)
 				}
 
 				// delete cache for divergence
