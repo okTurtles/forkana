@@ -41,6 +41,8 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
   /* A little air between the navbar and the card. */
   margin-top: 8px;
+  /* Clip the edge-to-edge hover highlight to the card's rounded corners. */
+  overflow: hidden;
 }
 
 /* Hovered entries run edge to edge but keep rounded corners, matching the
