@@ -268,6 +268,13 @@ func DeleteRepositoryDirectly(ctx context.Context, repoID int64, ignoreOrgTeams 
 		}
 	}
 
+	// Drop this repository's article attachment associations. The attachment rows and
+	// stored objects stay behind: another repository may still reference them, and the
+	// garbage collector reclaims whatever is left unreferenced.
+	if err := repo_model.DeleteArticleAttachmentsByRepoID(ctx, repoID); err != nil {
+		return fmt.Errorf("delete article attachments [%d]: %w", repoID, err)
+	}
+
 	// Get all attachments with both issue_id and release_id are zero
 	var newAttachments []*repo_model.Attachment
 	if err := sess.Where(builder.Eq{
