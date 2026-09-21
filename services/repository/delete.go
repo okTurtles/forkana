@@ -275,13 +275,21 @@ func DeleteRepositoryDirectly(ctx context.Context, repoID int64, ignoreOrgTeams 
 		return fmt.Errorf("delete article attachments [%d]: %w", repoID, err)
 	}
 
+	// Attachments this repository uploaded but does not own alone: article uploads and
+	// anything another repository still keeps alive. They outlive the repository, and the
+	// garbage collector reclaims whatever ends up unreferenced.
+	retainedAttachmentIDs, err := repo_model.RetainedRepoAttachmentIDs(ctx, repoID)
+	if err != nil {
+		return fmt.Errorf("retained attachments [%d]: %w", repoID, err)
+	}
+
 	// Get all attachments with both issue_id and release_id are zero
 	var newAttachments []*repo_model.Attachment
 	if err := sess.Where(builder.Eq{
 		"repo_id":    repo.ID,
 		"issue_id":   0,
 		"release_id": 0,
-	}).Find(&newAttachments); err != nil {
+	}).NotIn("id", retainedAttachmentIDs).Find(&newAttachments); err != nil {
 		return err
 	}
 
@@ -290,7 +298,7 @@ func DeleteRepositoryDirectly(ctx context.Context, repoID int64, ignoreOrgTeams 
 		newAttachmentPaths = append(newAttachmentPaths, attach.RelativePath())
 	}
 
-	if _, err := sess.Where("repo_id=?", repo.ID).Delete(new(repo_model.Attachment)); err != nil {
+	if _, err := sess.Where("repo_id=?", repo.ID).NotIn("id", retainedAttachmentIDs).Delete(new(repo_model.Attachment)); err != nil {
 		return err
 	}
 

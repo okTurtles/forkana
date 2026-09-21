@@ -148,3 +148,75 @@ func DeleteArticleAttachmentsByRepoID(ctx context.Context, repoID int64) error {
 	_, err := db.GetEngine(ctx).Delete(&ArticleAttachment{RepoID: repoID})
 	return err
 }
+
+// unreferencedArticleAttachmentCond matches attachments the garbage collector
+// may reclaim: article uploads that no repository keeps alive any more and that
+// no issue, comment or release links to.
+//
+// Only AttachmentPurposeArticle rows qualify. An unspecified-purpose row may be
+// a legacy article attachment whose association has not been backfilled yet, so
+// collecting it would destroy a live article image.
+func unreferencedArticleAttachmentCond() builder.Cond {
+	return builder.Eq{
+		"attachment.purpose":    AttachmentPurposeArticle,
+		"attachment.issue_id":   0,
+		"attachment.comment_id": 0,
+		"attachment.release_id": 0,
+	}.And(builder.NotExists(
+		builder.Select("1").From("article_attachment").
+			Where(builder.Expr("article_attachment.attachment_id = attachment.id")),
+	))
+}
+
+// FindUnreferencedArticleAttachments returns at most limit attachments that are
+// no longer referenced by any repository and were created before olderThan.
+//
+// The age condition is the grace period: an attachment is created before the
+// commit that associates it, and the association may still be on its way.
+func FindUnreferencedArticleAttachments(ctx context.Context, olderThan timeutil.TimeStamp, limit int) ([]*Attachment, error) {
+	attachments := make([]*Attachment, 0, min(limit, 64))
+	sess := db.GetEngine(ctx).Table("attachment").
+		Where(unreferencedArticleAttachmentCond()).
+		And(builder.Lt{"attachment.created_unix": olderThan}).
+		Asc("attachment.id")
+	if limit > 0 {
+		sess = sess.Limit(limit)
+	}
+	return attachments, sess.Find(&attachments)
+}
+
+// DeleteUnreferencedArticleAttachment deletes the attachment row only if it is
+// still unreferenced, and reports whether it did. The condition is re-evaluated
+// by the database as part of the delete, so an association committed in the
+// meantime keeps the attachment alive.
+func DeleteUnreferencedArticleAttachment(ctx context.Context, attachmentID int64) (bool, error) {
+	if attachmentID == 0 {
+		return false, nil
+	}
+	count, err := db.GetEngine(ctx).Table("attachment").
+		Where(unreferencedArticleAttachmentCond()).
+		And(builder.Eq{"attachment.id": attachmentID}).
+		Delete(&Attachment{})
+	return count > 0, err
+}
+
+// RetainedRepoAttachmentIDs returns the attachments uploaded to a repository
+// that must survive its deletion: article uploads, whose lifetime is governed by
+// the associations and the garbage collector, and anything another repository
+// still keeps alive.
+func RetainedRepoAttachmentIDs(ctx context.Context, repoID int64) ([]int64, error) {
+	ids := make([]int64, 0, 8)
+	if repoID == 0 {
+		return ids, nil
+	}
+	return ids, db.GetEngine(ctx).Table("attachment").
+		Where(builder.Eq{"attachment.repo_id": repoID}).
+		And(builder.Eq{"attachment.purpose": AttachmentPurposeArticle}.Or(
+			builder.Exists(
+				builder.Select("1").From("article_attachment").
+					Where(builder.Expr("article_attachment.attachment_id = attachment.id")),
+			),
+		)).
+		Cols("attachment.id").
+		Find(&ids)
+}
