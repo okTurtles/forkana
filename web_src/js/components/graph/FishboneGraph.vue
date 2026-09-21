@@ -41,6 +41,7 @@ import {
 } from "./bubble-size.ts";
 import {
   DEFAULT_CONTAINER_HEIGHT, DEFAULT_CONTAINER_WIDTH, MAX_LAYOUT_WIDTH,
+  SIZE_EPSILON,
   canvasHeightFor, isMeasurable, layoutWidthFor, observeContainerResize,
   registerRemeasureTriggers, sizeChanged,
   type ContainerSize,
@@ -143,6 +144,11 @@ const ZOOM_OUT_FIT_FRACTION = 0.5; // ...and it may not shrink below half of the
    the pan clamp keeps it reachable and stops it being flung away. */
 const RESET_SCALE = 1;          // The graph renders at 1:1 — see ./bubble-size.ts
 const RESET_TOP_MARGIN = 40;    // Minimum top margin when resetting the view
+/* Extra canvas height beyond the resting layout's own extent, so the hover
+   reflow (which pushes neighbours outward around a 101px bubble) never spills
+   past the canvas edge. One hover radius is a deliberate over-estimate: the
+   true worst case would need the expanded layout run once per node. */
+const HOVER_HEIGHT_HEADROOM = BUBBLE_HOVER_RADIUS;
 /* NOTE: a MAX_REF_DROP constant used to cap how far a child could be pushed
    down (baseY + 130). It was applied AFTER collision resolution and therefore
    silently threw the result away, which is what made bubbles overlap once the
@@ -845,6 +851,24 @@ function graphViewportHeight() {
   return canvasHeightFor(containerHeight, legendH);
 }
 
+/** Vertical extent the canvas needs to show the WHOLE graph at 1:1, from the
+   RESTING placements — never the frame on screen. The hover reflow moves
+   nodes every animation frame; sizing off it would change the canvas height
+   per frame (a page reflow per frame, and a feedback loop through the
+   ResizeObserver). The resting layout only changes on the discrete relayout
+   events, so this number does too. The headroom is the most a hover can grow
+   the picture past its resting bounds, taken as a flat allowance rather than
+   re-running the layout expanded once per node to find the true maximum. */
+function restingContentHeight(): number {
+  if (!restingPlacements.size) return 0;
+  let minY = Infinity, maxY = -Infinity;
+  for (const p of restingPlacements.values()) {
+    minY = Math.min(minY, p.y - p.r);
+    maxY = Math.max(maxY, p.y + p.r);
+  }
+  return (maxY - minY) + 2 * RESET_TOP_MARGIN + HOVER_HEIGHT_HEADROOM;
+}
+
 /** Give the canvas box the height it actually has, in EVERY state.
 
    This used to happen only where a layout ran — setFrame() and resetView() —
@@ -855,9 +879,18 @@ function graphViewportHeight() {
    bubble is centred in that box by CSS, so it was centred in a box taller than
    the one on screen — 35px low on a desktop, 153px low on a phone. That is the
    "not centered vertically" report, and it is a measurement bug, not an offset
-   to nudge. Called from mount, resize, and every branch of the fetch. */
+   to nudge. Called from mount, resize, and every branch of the fetch.
+
+   The canvas is the LARGER of the space the page gives it and the height the
+   resting graph needs (#386 items 13/14/15): a graph that fits is centred in
+   the free space exactly as before, and a taller one GROWS the canvas — the
+   page's own scrollbar scrolls it, instead of an inner scroll box or a
+   wheel-pan duplicating what the page already does. Cheap enough for the
+   per-frame calls it gets from setFrame(): one Map iteration, no DOM reads
+   beyond the legend height, and stable during a hover by construction (the
+   resting layout does not move). */
 function syncCanvasHeight() {
-  svgHeight.value = graphViewportHeight();
+  svgHeight.value = Math.max(graphViewportHeight(), Math.ceil(restingContentHeight()));
 }
 
 /** Read the container box and adopt it. Returns true when the numbers the
@@ -880,12 +913,20 @@ function measureContainer(): boolean {
 /** The single re-measure path: the ResizeObserver, a window resize, the tab
    coming back to the foreground and the view switch all end up here.
 
-   Two guarantees keep it from feeding itself. It observes the CONTAINER, never
-   the <svg> it draws into, so a taller canvas cannot enlarge what is being
-   observed; and measureContainer() bails when the box has not moved, so a
-   redelivery costs one getBoundingClientRect and stops. */
+   Three guarantees keep it from feeding itself. It observes the CONTAINER,
+   never the <svg> it draws into; measureContainer() bails when the box has
+   not moved, so a redelivery costs one getBoundingClientRect and stops; and a
+   HEIGHT-only change never re-runs the layout. That last one matters now that
+   the container may grow to fit a content-sized canvas: the growth comes back
+   through the observer as a height change, and the layout does not depend on
+   height (the dials are width-and-complexity only, and radii are fixed
+   pixels), so answering it with a relayout would be a cycle that converges
+   only by luck. Height-only deliveries re-sync the canvas and the framing and
+   stop there. */
 function scheduleRemeasure() {
+  const prevLayoutWidth = containerWidth;
   if (!measureContainer()) return;
+  const widthChanged = Math.abs(containerWidth - prevLayoutWidth) > SIZE_EPSILON;
   /* Synchronously, so the new box lands in THIS frame's flush rather than the
      next: layoutAndRender() re-syncs it too (before its own early returns), so
      this is about being a frame earlier, not about reaching a state the rAF
@@ -896,7 +937,7 @@ function scheduleRemeasure() {
   if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
   pendingRaf = requestAnimationFrame(() => {
     pendingRaf = null;
-    layoutAndRender();
+    if (widthChanged) layoutAndRender();
     /* Re-frame only a view the user has not taken over. The bail-out above
        already means an unchanged box costs nothing; this covers the genuine
        resize, where re-centring at 1:1 would silently discard a pan or zoom
@@ -1266,7 +1307,7 @@ function constrainToViewport(t: ZoomTransform, extent: [[number, number], [numbe
    themselves and then have to honour the same bound. */
 function zoomExtent(): [[number, number], [number, number]] {
   const box = svgRef.value?.getBoundingClientRect();
-  return [[0, 0], [box?.width ?? containerWidth, box?.height ?? graphViewportHeight()]];
+  return [[0, 0], [box?.width ?? containerWidth, box?.height ?? svgHeight.value]];
 }
 
 /** Keep the zoom-out floor tied to the current fit, so the graph can always be
@@ -1299,13 +1340,15 @@ function resetView(animated = false) {
 
   if (nodesList.value.length === 0) return;
 
-  /* Vertical fit must use the scroll viewport (the measured container), NOT the
-     <svg> client rect: `svgHeight` is applied by Vue on the next tick, so right
+  /* Vertical fit must use the canvas height just computed, NOT the <svg>
+     client rect: `svgHeight` is applied by Vue on the next tick, so right
      after layoutAndRender() the rect can still report the previous canvas
-     height. Fitting against a stale, too-tall rect is what left the graph
-     hanging above a band of empty space. */
-  const viewportH = graphViewportHeight();
-  syncCanvasHeight();            // the legend may have appeared since the layout ran
+     height. Fitting against a stale rect is what left the graph hanging above
+     a band of empty space. Sync first — the legend may have appeared since
+     the layout ran — then read the value it produced: a content-sized canvas
+     fits its graph by construction, so the centring below just works. */
+  syncCanvasHeight();
+  const viewportH = svgHeight.value;
 
   const b = contentBounds();
   const contentW = b.maxX - b.minX, contentH = b.maxY - b.minY;
@@ -1431,12 +1474,13 @@ onMounted(async () => {
   zoomBehavior = zoom()
     .scaleExtent([ZOOM_MIN, ZOOM_MAX])
     /* Finite canvas (#104). d3 runs this on every interactive gesture and on
-       translateBy/scaleBy — i.e. on the wheel-pan path below. resetView() and
+       translateBy/scaleBy. resetView() and
        focusNode() set a transform directly, which d3 does NOT pass through
        constrain, but both centre what they are showing, so they satisfy it by
        construction and stay free to frame the graph however they like. */
     .constrain(constrainToViewport as any)
-    /* Filter: pinch and ctrl+wheel zoom; plain wheel should pan (handled below). */
+    /* Filter: pinch and ctrl+wheel zoom; plain wheel is left alone so the
+       PAGE scrolls (the canvas is content-sized, see the note further down). */
     .filter((event: any) => event.type === "wheel" ? event.ctrlKey : true)
     .on("zoom", (e: any) => {
       const z: ZoomTransform = e.transform; currentK.value = z.k;
@@ -1469,12 +1513,11 @@ onMounted(async () => {
     }
   });
 
-  /* Wheel pans (natural trackpad behavior). Ctrl+wheel handled by d3-zoom. */
-  svgSel.on("wheel.pan", (ev: any) => {
-    if (ev.ctrlKey) return;       // let ctrl+wheel zoom handler run
-    ev.preventDefault();
-    svgSel.call(zoomBehavior.translateBy as any, -ev.deltaX, -ev.deltaY);
-  }, { passive: false });
+  /* NOTE: a "wheel.pan" handler used to live here, translating the world on
+     plain wheel. The canvas is content-sized now (syncCanvasHeight), so the
+     whole graph is inside the page and a plain wheel should do what it does
+     everywhere else on the page: scroll it. Ctrl+wheel (and pinch) still zoom
+     through d3-zoom's filter above, and dragging still pans. */
 
   /* Observe container width for responsive dials */
   await nextTick();
@@ -2125,12 +2168,15 @@ function goToComparison() {
 
       <!-- Graph container with relative positioning for overlays -->
       <div class="graph-container">
-        <!-- SVG world: IMPORTANT → touch-action:none enables pinch zoom; d3 handles it -->
+        <!-- SVG world: touch-action pan-y — a content-sized canvas can be most
+             of the page, so a vertical touch drag must stay with the browser
+             (page scroll) or a phone could not scroll past the graph at all.
+             Horizontal drags and pinches still reach d3. -->
         <!-- SVG is always rendered to keep refs valid -->
         <svg
           ref="svgRef" class="tw-w-full"
           :class="{ 'graph-hidden': isLoading || errorMessage || !hasData, 'graph-dimmed': expandedId !== null }"
-          :style="{ height: svgHeight + 'px' }" style="touch-action: none;" role="img"
+          :style="{ height: svgHeight + 'px' }" style="touch-action: pan-y;" role="img"
           aria-label="Fork repository graph showing contributors and relationships" tabindex="0"
         >
           <defs>
@@ -2310,23 +2356,19 @@ function goToComparison() {
 <style scoped>
 .f-fishbone-graph {
   width: 100%;
-  /* Fill the box .history-bubble-root is given by the page's flex layout (see
-     web_src/css/features/bubble-graph.css). "flex-basis: 0" plus
-     "min-height: 0" keeps the height coming from the free space rather than
-     from the canvas this component sizes off that very height, and any
-     leftover (the legend under a min-height canvas) scrolls in here rather
-     than growing the page past the footer. Outside a flex parent this falls
-     back to an auto height, which is the pre-#149 behaviour minus the
-     "calc(100vh - 25rem)" guess. */
-  flex: 1 1 0;
-  min-height: 0;
-  /* HIDDEN, not auto (#386 items 13/14/15): an inner scrollbar here gave the
-     page two scrollbars, scrolled independently of the wheel-pan the canvas
-     already implements, and could scroll the legend out of sight. The canvas
-     is sized to the box minus the legend (graphViewportHeight), so nothing
-     needs to scroll: a graph taller than the canvas is panned, and the page
-     keeps its single scrollbar. */
-  overflow: hidden;
+  /* Fill the free space .history-bubble-root is given by the page's flex
+     layout (see web_src/css/features/bubble-graph.css) — but GROW past it
+     when the canvas needs more. The canvas is content-sized now
+     (syncCanvasHeight in the script above, #386 items 13/14/15): a graph that
+     fits is centred in the free space, and a taller one makes this box, and
+     with it the page, taller — the page's single scrollbar scrolls the graph.
+     "flex-basis: auto" (not 0) is what lets the content height win; the
+     circularity the old "1 1 0 / min-height: 0 / overflow: hidden" trio
+     guarded against is gone because the canvas is sized from the RESTING
+     layout plus the measured free space, never from this box's own content,
+     and height-only remeasures no longer re-run the layout
+     (scheduleRemeasure). */
+  flex: 1 0 auto;
 }
 
 .f-fishbone-graph svg:focus {

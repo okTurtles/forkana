@@ -67,21 +67,24 @@
    class; styled by class so the rule keeps the same (0,1,0) specificity as the
    rest of this file and can be overridden by a utility class. */
 .history-bubble-root {
-  /* "flex-basis: 0" on purpose: the graph sizes its canvas from the box it is
-     given (FishboneGraph measures its container), so a content-based basis
-     would be circular. The box takes the free space, floored by min-height. */
+  /* "flex-basis: auto": the box takes the free space, floored by min-height,
+     and GROWS when the graph inside needs more — the canvas is content-sized
+     now (FishboneGraph's syncCanvasHeight) and the page's own scrollbar is
+     what scrolls a tall graph. This is not the circularity the old
+     "flex-basis: 0" comment warned about: the canvas height is derived from
+     the resting layout plus the measured FREE space, and FishboneGraph
+     ignores height-only re-measures for layout purposes, so content cannot
+     feed back into itself. */
   display: flex;
   flex-direction: column;
-  flex: 1 1 0;
+  flex: 1 0 auto;
   /* 320px is MIN_SVG_HEIGHT in web_src/js/components/graph/graph-viewport.ts:
      the canvas never draws itself smaller than that, so a floor any higher
      than it would make a viewport of ordinary height overflow -- exactly the
      20-odd pixels that pushed the footer below the fold before. */
   min-height: 320px;
-  /* No "overflow" here on purpose: the only child is "flex: 1 1 0;
-     min-height: 0", so it can never be taller than this box, and what it cannot
-     fit (the legend under a min-height canvas) scrolls inside
-     ".f-fishbone-graph". A scroll container here would only clip overlays. */
+  /* No "overflow" here on purpose: the child grows this box rather than
+     overflowing it, and a scroll container here would only clip overlays. */
   /* bleed over the container's horizontal padding, as before. NO top bleed
      (#386 item 11): a negative top margin pulled the canvas up under the view
      tabs' divider, so panned bubbles were painted over the line from above. */
