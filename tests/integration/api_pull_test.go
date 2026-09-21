@@ -19,6 +19,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/setting"
 	api "code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/services/convert"
@@ -26,10 +27,12 @@ import (
 	"code.gitea.io/gitea/services/gitdiff"
 	issue_service "code.gitea.io/gitea/services/issue"
 	pull_service "code.gitea.io/gitea/services/pull"
+	repo_service "code.gitea.io/gitea/services/repository"
 	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAPIViewPulls(t *testing.T) {
@@ -185,6 +188,76 @@ func TestAPIMergePullWIP(t *testing.T) {
 	}).AddTokenAuth(token)
 
 	MakeRequest(t, req, http.StatusMethodNotAllowed)
+}
+
+// Forkana (#371): an API merge without an explicit MergeMessageField must keep the
+// server-generated merge commit body, i.e. the Reviewed-on/Reviewed-by trailers.
+func TestAPIMergePullGeneratesMergeMessage(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+		baseRepo, err := repo_service.CreateRepository(t.Context(), user, user, repo_service.CreateRepoOptions{
+			Name:          "api-merge-message",
+			AutoInit:      true,
+			Readme:        "Default",
+			DefaultBranch: "main",
+		})
+		require.NoError(t, err)
+
+		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{
+				{
+					Operation:     "create",
+					TreePath:      "article.md",
+					ContentReader: strings.NewReader("Some content\n"),
+				},
+			},
+			Message:   "Add an article",
+			OldBranch: "main",
+			NewBranch: "edit",
+		})
+		require.NoError(t, err)
+
+		pullIssue := &issues_model.Issue{
+			RepoID:   baseRepo.ID,
+			Title:    "API merge message",
+			PosterID: user.ID,
+			Poster:   user,
+			IsPull:   true,
+		}
+		pullRequest := &issues_model.PullRequest{
+			HeadRepoID: baseRepo.ID,
+			BaseRepoID: baseRepo.ID,
+			HeadBranch: "edit",
+			BaseBranch: "main",
+			HeadRepo:   baseRepo,
+			BaseRepo:   baseRepo,
+			Type:       issues_model.PullRequestGitea,
+		}
+		require.NoError(t, pull_service.NewPullRequest(t.Context(), &pull_service.NewPullRequestOptions{
+			Repo: baseRepo, Issue: pullIssue, PullRequest: pullRequest,
+		}))
+
+		session := loginUser(t, user.Name)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+
+		// no MergeTitleField and no MergeMessageField: the server must generate both
+		req := NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/merge", user.Name, baseRepo.Name, pullIssue.Index), &forms.MergePullRequestForm{
+			Do: string(repo_model.MergeStyleMerge),
+		}).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusOK)
+
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), baseRepo)
+		require.NoError(t, err)
+		defer gitRepo.Close()
+
+		commit, err := gitRepo.GetBranchCommit("main")
+		require.NoError(t, err)
+
+		message := commit.CommitMessage
+		assert.Contains(t, message, fmt.Sprintf("API merge message (#%d)", pullIssue.Index))
+		assert.Contains(t, message, "Reviewed-on: ")
+	})
 }
 
 func TestAPICreatePullSuccess(t *testing.T) {

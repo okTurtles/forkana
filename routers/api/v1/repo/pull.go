@@ -976,8 +976,9 @@ func MergePullRequest(ctx *context.APIContext) {
 	}
 
 	message := strings.TrimSpace(form.MergeTitleField)
+	var defaultBody string
 	if len(message) == 0 {
-		message, _, err = pull_service.GetDefaultMergeMessage(ctx, ctx.Repo.GitRepo, pr, repo_model.MergeStyle(form.Do))
+		message, defaultBody, err = pull_service.GetDefaultMergeMessage(ctx, ctx.Repo.GitRepo, pr, repo_model.MergeStyle(form.Do))
 		if err != nil {
 			ctx.APIErrorInternal(err)
 			return
@@ -987,6 +988,10 @@ func MergePullRequest(ctx *context.APIContext) {
 	form.MergeMessageField = strings.TrimSpace(form.MergeMessageField)
 	if len(form.MergeMessageField) > 0 {
 		message += "\n\n" + form.MergeMessageField
+	} else if defaultBody != "" {
+		// Keep the generated body (e.g. Reviewed-on/Reviewed-by trailers) when the
+		// caller doesn't provide an explicit merge message, matching the web UI.
+		message += "\n\n" + defaultBody
 	}
 
 	if form.MergeWhenChecksSucceed {
