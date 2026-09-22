@@ -137,7 +137,7 @@
 				</div><!-- end content avatar menu -->
 			</div><!-- end dropdown avatar menu -->
 		{{else}}
-		<a class="item tw-bg-transparent hover:tw-underline{{if .PageIsSignIn}} active{{end}}" rel="nofollow" href="{{AppSubUrl}}/user/login{{if not .PageIsSignIn}}?redirect_to={{QueryEscape .CurrentURL}}{{end}}">
+		<a class="item tw-bg-transparent hover:tw-underline{{if .PageIsSignIn}} active{{end}}" rel="nofollow" href="{{AppSubUrl}}/user/login">
 			<span class="tw-ml-1">{{ctx.Locale.Tr "sign_in"}}</span>
 		</a>
 			{{if .ShowRegistrationButton}}
