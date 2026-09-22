@@ -21,6 +21,10 @@ type StarredReposOptions struct {
 	StarrerID      int64
 	RepoOwnerID    int64
 	IncludePrivate bool
+	// IncludeTombstoned keeps tombstones in the result. Listings must leave it unset;
+	// callers that clean up the star rows themselves have to set it, or the rows of a
+	// tombstone would be left behind.
+	IncludeTombstoned bool
 }
 
 func (opts *StarredReposOptions) ToConds() builder.Cond {
@@ -36,6 +40,9 @@ func (opts *StarredReposOptions) ToConds() builder.Cond {
 		cond = cond.And(builder.Eq{
 			"repository.is_private": false,
 		})
+	}
+	if !opts.IncludeTombstoned {
+		cond = cond.And(notTombstonedCond())
 	}
 	return cond
 }
@@ -59,6 +66,10 @@ type WatchedReposOptions struct {
 	WatcherID      int64
 	RepoOwnerID    int64
 	IncludePrivate bool
+	// IncludeTombstoned keeps tombstones in the result. Listings must leave it unset;
+	// callers that clean up the watch rows themselves have to set it, or the rows of a
+	// tombstone would be left behind.
+	IncludeTombstoned bool
 }
 
 func (opts *WatchedReposOptions) ToConds() builder.Cond {
@@ -74,6 +85,9 @@ func (opts *WatchedReposOptions) ToConds() builder.Cond {
 		cond = cond.And(builder.Eq{
 			"repository.is_private": false,
 		})
+	}
+	if !opts.IncludeTombstoned {
+		cond = cond.And(notTombstonedCond())
 	}
 	return cond.And(builder.Neq{
 		"watch.mode": WatchModeDont,

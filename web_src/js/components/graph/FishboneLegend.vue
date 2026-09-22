@@ -1,5 +1,11 @@
 <script setup lang="ts">
 /* Simple, reusable legend; keeps layout file cleaner. */
+
+defineProps<{
+  /* Only graphs that actually contain a deleted article explain the muted,
+     dashed bubble — the key is noise everywhere else. */
+  hasTombstones?: boolean;
+}>();
 </script>
 
 <template>
@@ -15,6 +21,14 @@
            of the default (black) border. -->
       <span class="legend-swatch legend-swatch--contention inline-block tw-w-4 tw-h-4 tw-rounded-full"/>
       <span class="tw-text-sm">Point of contention</span>
+    </div>
+    <div v-if="hasTombstones" class="tw-flex tw-items-center tw-gap-2 tw-text-slate-600">
+      <span
+        class="inline-block tw-w-4 tw-h-4 tw-rounded-full"
+        style="background: radial-gradient(circle at 35% 30%, #FAFBFC 0%, #EEF2F7 60%, #E6EBF2 100%);
+                   border:1px dashed #9CA3AF; opacity:.55"
+      />
+      <span class="tw-text-sm">Deleted article</span>
     </div>
   </div>
 </template>

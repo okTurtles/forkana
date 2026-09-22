@@ -75,6 +75,10 @@ type Node = {
   /* Archived articles are opened through their permanent repository url, because
      the subject vanity url resolves to the active repository of that subject. */
   isArchived?: boolean;
+  /* The author deleted this article. Its node stays in the graph — the forks
+     below it need the ancestry — and stays interactive; the bubble is only
+     drawn as a tombstone so the deletion is visible. */
+  isTombstoned?: boolean;
   /* The API answered 0 contributors for a repository that HAS content, which
      means the stats are still being generated server-side, not that nobody
      wrote it (see buildGraphFromApi). `contributors` carries a placeholder 1
@@ -346,6 +350,9 @@ const hasData = computed(() => {
 
   return false;
 });
+
+/* The legend only explains the muted, dashed bubble when the graph has one. */
+const hasTombstones = computed(() => Object.values(state.graph).some((n) => n.isTombstoned === true));
 
 /* Container size drives the canvas height AND the responsive dials; observe it
    and re-measure on every change (#348). `measured` is the RAW box; the width
@@ -654,6 +661,7 @@ function buildGraphFromApi(root: any): Graph {
     const fullName: string | null = repo?.full_name ?? (ownerName && repoName ? `${ownerName}/${repoName}` : null);
     const isEmpty: boolean = repo?.empty === true;
     const isArchived: boolean = repo?.archived === true;
+    const isTombstoned: boolean = n?.is_tombstoned === true;
     const description: string = typeof repo?.description === 'string' ? repo.description : '';
 
     /* A repository with content has at least one commit and therefore at least
@@ -681,6 +689,7 @@ function buildGraphFromApi(root: any): Graph {
       description: description || undefined,
       isEmpty: isEmpty,
       isArchived,
+      isTombstoned,
       statsPending,
     };
     if (!node.repoSubject && parentId === null && props.subject) {
@@ -2245,6 +2254,7 @@ function goToComparison() {
                 :expanded="expandedId === f.node.id" :frozen="labelFrozen.has(f.node.id)"
                 :is-active="selectedNodeId === f.node.id" :is-compare-mode="isCompareMode"
                 :compare-state="getCompareState(f.node.id)"
+                :is-tombstoned="f.node.isTombstoned === true"
                 @click="() => onBubbleClick(f.node)" @hover="(id, on, pt) => onBubbleHover(id, on, pt)"
               />
             </template>
@@ -2341,7 +2351,7 @@ function goToComparison() {
       <!-- End graph-container -->
 
       <div ref="legendRef">
-        <LegendFishbone v-if="hasData"/>
+        <LegendFishbone v-if="hasData" :has-tombstones="hasTombstones"/>
       </div>
 
       <!-- Compare Popup Modal -->

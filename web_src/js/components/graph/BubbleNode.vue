@@ -91,6 +91,10 @@ const props = defineProps<{
   isActive?: boolean;             // selected article (persisted selection)
   isCompareMode?: boolean;        // whether compare mode is active
   compareState?: 'none' | 'first' | 'second';  // compare selection state
+  /* The author deleted this article. The bubble is kept — the forks below it
+     need the ancestry — and stays interactive; it is drawn muted and dashed
+     and says so in the expanded card. */
+  isTombstoned?: boolean;
 }>();
 
 /* Emits so the parent can wire up interactions without D3 binding. The parent
@@ -235,9 +239,12 @@ function onKeyDown(ev: KeyboardEvent) {
 <template>
   <!-- One node group at (x,y); we let the parent group receive the world transform -->
   <g
-    class="node cursor-pointer select-none" :class="{ 'is-expanded': expanded, 'is-frozen': frozen }"
+    class="node cursor-pointer select-none"
+    :class="{ 'is-expanded': expanded, 'is-frozen': frozen, 'is-tombstoned': isTombstoned }"
     :transform="gTransform" :data-node-id="id" role="button"
-    :aria-label="`Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
+    :aria-label="isTombstoned
+      ? `Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}, deleted by its author. Press Enter to select.`
+      : `Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
     :aria-pressed="isActive ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
     @pointerdown="onPointerDown" @pointerenter="onPointerEnter" @pointerleave="onPointerLeave"
     @focusin="onFocusIn" @focusout="onFocusOut"
@@ -251,7 +258,7 @@ function onKeyDown(ev: KeyboardEvent) {
       }" :r="r" fill="url(#bubbleGrad)"
       :stroke="props.compareState === 'first' || props.compareState === 'second' ? 'var(--color-primary)' : isActive || expanded ? 'var(--color-primary)' : 'none'"
       :stroke-width="props.compareState === 'first' || props.compareState === 'second' ? 3 : 1"
-      :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : 'none'"
+      :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : props.isTombstoned ? '4,4' : 'none'"
       filter="url(#softShadow)"
     />
 
@@ -268,7 +275,10 @@ function onKeyDown(ev: KeyboardEvent) {
              line and no text gets SMALLER as the bubble gets bigger. -->
         <div class="expanded-count-number">{{ contributors }}</div>
         <div class="expanded-count-label">{{ getLabelText(contributors) }}</div>
-        <div v-if="description" class="expanded-description">{{ description }}</div>
+        <!-- The excerpt is the article's content and a tombstone has none left
+             to show; the card says what happened to it instead. -->
+        <div v-if="isTombstoned" class="expanded-deleted">Deleted by its author</div>
+        <div v-else-if="description" class="expanded-description">{{ description }}</div>
         <div v-if="updatedAt" class="expanded-updated">
           <div>Last updated</div>
           <div>{{ formattedDate }}</div>
@@ -326,6 +336,24 @@ function onKeyDown(ev: KeyboardEvent) {
    inert. */
 .node.is-expanded {
   cursor: default;
+}
+
+/* ── TOMBSTONE ───────────────────────────────────────────────────────────
+   A deleted article keeps its place in the graph so its forks keep their
+   ancestry, and it stays selectable like any other bubble; it is only drawn
+   faded with a dashed outline (the dash pattern itself is on the circle, next
+   to the compare-mode one it has to co-exist with). The stroke is set here
+   rather than in the binding so it also wins over the hover/focus rules
+   below. */
+.node.is-tombstoned {
+  opacity: 0.55;
+}
+
+.node.is-tombstoned .node-circle,
+.node.is-tombstoned .node-circle:hover,
+.node.is-tombstoned:focus .node-circle {
+  stroke: var(--color-text-light-3, #9ca3af);
+  stroke-width: 1;
 }
 
 /* ── LABEL OPACITY IS DECOUPLED FROM THE GEOMETRY ────────────────────────
@@ -443,6 +471,13 @@ function onKeyDown(ev: KeyboardEvent) {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
+}
+
+.expanded-deleted {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-text-light-2, #6b7280);
 }
 
 .expanded-updated {
