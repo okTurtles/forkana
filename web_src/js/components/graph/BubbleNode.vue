@@ -331,10 +331,6 @@ function onKeyDown(ev: KeyboardEvent) {
   stroke-width: 1;
 }
 
-.node-circle:hover {
-  cursor: pointer;
-}
-
 /* The expanded bubble paints over its neighbours' connectors, and its two
    buttons have to be clickable even though the label layer is otherwise
    inert. */

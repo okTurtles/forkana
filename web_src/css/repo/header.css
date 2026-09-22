@@ -60,6 +60,14 @@ overflow-menu:has(> #compare-mode-button) {
   position: relative;
 }
 
+/* The pinned button is out of the flow, so neither the centred tab row nor
+   overflow-menu's own child measurement knows it is there. Reserve its width
+   on BOTH sides (so the tabs stay centred) to keep mid-width viewports from
+   running the tabs underneath it. */
+overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
+  margin: 0 110px;
+}
+
 /* Item 4 (and 3): the view-tab icons follow the label's colour instead of the
    static gray that .svg.octicon-file carries elsewhere in the app. */
 #subject-view-tabs .item .svg {
