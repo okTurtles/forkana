@@ -65,15 +65,19 @@ func Test_AddArticleAttachmentTable(t *testing.T) {
 		assert.NotNil(t, table, "attachment table should exist")
 		assert.NotNil(t, table.GetColumn("purpose"), "purpose column should exist")
 
+		// The xorm "uuid" tag maps to PostgreSQL's native uuid type, which rejects any
+		// literal that is not a well-formed UUID, so this cannot be a readable label.
+		const legacyUUID = "3f1b9c2e-7d4a-4c8b-9e5f-0a1b2c3d4e5f"
+
 		_, err := x.Exec("INSERT INTO attachment (uuid, repo_id, issue_id, release_id, comment_id, name) VALUES (?, ?, ?, ?, ?, ?)",
-			"v330-default", 1, 0, 0, 0, "attach")
+			legacyUUID, 1, 0, 0, 0, "attach")
 		assert.NoError(t, err)
 
 		type attachmentResult struct {
 			Purpose int
 		}
 		var results []attachmentResult
-		assert.NoError(t, x.Table("attachment").Where("uuid = ?", "v330-default").Find(&results))
+		assert.NoError(t, x.Table("attachment").Where("uuid = ?", legacyUUID).Find(&results))
 		assert.Len(t, results, 1)
 		assert.Equal(t, 0, results[0].Purpose, "purpose should default to 0 for legacy rows")
 	})
