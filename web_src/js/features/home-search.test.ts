@@ -36,3 +36,16 @@ test('search button appears only while the field holds text', () => {
   expect(button.classList.contains('tw-hidden')).toBe(true);
   expect(input.classList.contains('home-search-input-with-button')).toBe(false);
 });
+
+test('search button is shown right away when the browser restored a keyword', () => {
+  document.body.innerHTML = `
+    <form id="home-search-form">
+      <input id="home-search-input" name="q" type="text"/>
+      <button id="home-search-button" class="tw-hidden">Search</button>
+    </form>
+    <div id="home-search-suggestions" class="tw-hidden"></div>
+  `;
+  document.querySelector<HTMLInputElement>('#home-search-input').value = 'mars';
+  initHomeSearch();
+  expect(document.querySelector('#home-search-button').classList.contains('tw-hidden')).toBe(false);
+});

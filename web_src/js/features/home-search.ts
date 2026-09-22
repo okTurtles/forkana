@@ -1,5 +1,5 @@
 import {GET} from '../modules/fetch.ts';
-import {createElementFromHTML, hideElem, showElem} from '../utils/dom.ts';
+import {createElementFromHTML, hideElem, showElem, toggleElem} from '../utils/dom.ts';
 import {html, htmlEscape, htmlRaw} from '../utils/html.ts';
 import {pathEscapeSegments} from '../utils/url.ts';
 
@@ -26,13 +26,13 @@ export function highlightKeyword(name: string, keyword: string): string {
 class HomeSearch {
   private readonly input: HTMLInputElement;
   private readonly suggestions: HTMLElement;
-  private readonly button: HTMLElement | null;
+  private readonly button: HTMLButtonElement | null;
   private debounceTimer: number | null = null;
   private abortController: AbortController | null = null;
   // Index of the suggestion the keyboard is on, -1 while the typed keyword itself is "selected".
   private activeIndex: number = -1;
 
-  constructor(input: HTMLInputElement, suggestions: HTMLElement, button: HTMLElement | null = null) {
+  constructor(input: HTMLInputElement, suggestions: HTMLElement, button: HTMLButtonElement | null = null) {
     this.input = input;
     this.suggestions = suggestions;
     this.button = button;
@@ -66,19 +66,27 @@ class HomeSearch {
     });
   }
 
+  // What has been typed so far, the single definition of "the field holds a keyword".
+  private get keyword(): string {
+    return this.input.value.trim();
+  }
+
   // The Search button (custom/templates/home.tmpl) only appears while the field holds text,
   // like the Figma design shows -- there is nothing to submit otherwise.
   private updateButton(): void {
     if (!this.button) return;
-    const hasKeyword = Boolean(this.input.value.trim());
-    this.button.classList.toggle('tw-hidden', !hasKeyword);
-    // Make room for the button inside the field so a long keyword doesn't run underneath it.
+    const hasKeyword = this.keyword !== '';
+    toggleElem(this.button, hasKeyword);
+    // Make room for the button inside the field so a long keyword doesn't run underneath it,
+    // sized off the rendered button so a longer translated label still fits. The button must be
+    // visible (not display:none) for offsetWidth, so measure after showing it.
     this.input.classList.toggle('home-search-input-with-button', hasKeyword);
+    if (hasKeyword) this.input.style.setProperty('--home-search-button-inset', `${this.button.offsetWidth + 24}px`);
   }
 
   private scheduleSearch(): void {
     if (this.debounceTimer !== null) clearTimeout(this.debounceTimer);
-    const keyword = this.input.value.trim();
+    const keyword = this.keyword;
     if (!keyword) {
       this.close();
       return;
@@ -174,5 +182,5 @@ export function initHomeSearch(): void {
   const input = document.querySelector<HTMLInputElement>(inputSelector);
   const suggestions = document.querySelector<HTMLElement>(suggestionsSelector);
   if (!input || !suggestions) return;
-  new HomeSearch(input, suggestions, document.querySelector<HTMLElement>(buttonSelector)).init();
+  new HomeSearch(input, suggestions, document.querySelector<HTMLButtonElement>(buttonSelector)).init();
 }
