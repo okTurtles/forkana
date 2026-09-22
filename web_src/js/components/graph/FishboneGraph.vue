@@ -2407,25 +2407,26 @@ function goToComparison() {
    bubble and every connector fades, so the hovered article is unmistakably the
    subject of the picture (as the figma draws it). Opacity only — geometry is
    owned by the reflow tween. */
+:deep(g.node),
+:deep(.trunk),
+:deep(.branch),
+:deep(.child-stem),
+:deep(.joint-parent) {
+  /* On the base selector, not only the dimmed one, so the fade-out animates
+     too when the hover ends. */
+  transition: opacity 150ms ease;
+}
+
 .graph-dimmed :deep(g.node),
 .graph-dimmed :deep(.trunk),
 .graph-dimmed :deep(.branch),
 .graph-dimmed :deep(.child-stem),
 .graph-dimmed :deep(.joint-parent) {
   opacity: 0.6;
-  transition: opacity 150ms ease;
 }
 
 .graph-dimmed :deep(g.node.is-expanded) {
   opacity: 1;
-}
-
-:deep(g.node),
-:deep(.trunk),
-:deep(.branch),
-:deep(.child-stem),
-:deep(.joint-parent) {
-  transition: opacity 150ms ease;
 }
 
 /* Hide graph content when showing states, but keep SVG rendered */

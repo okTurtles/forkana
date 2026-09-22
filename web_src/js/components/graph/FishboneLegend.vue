@@ -37,8 +37,8 @@ defineProps<{
 .legend-swatch--article {
   background: radial-gradient(circle at 35% 30%,
     var(--bubble-grad-start, #fafbfc) 0%,
-    var(--bubble-grad-mid, #e3e9f1) 60%,
-    var(--bubble-grad-end, #d5dde8) 100%);
+    var(--bubble-grad-mid, #eef2f7) 60%,
+    var(--bubble-grad-end, #e6ebf2) 100%);
   box-shadow: 0 1px 2px rgba(100, 116, 139, 0.25);
 }
 

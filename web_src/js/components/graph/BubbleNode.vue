@@ -205,6 +205,10 @@ watch(
 /* Convenience computed transform strings */
 const gTransform = computed(() => `translate(${props.x},${props.y})`);
 
+/* Picked for either slot of a comparison — the states that thicken and colour
+   the ring. */
+const compareSelected = computed(() => props.compareState === 'first' || props.compareState === 'second');
+
 /* Pointer handlers relay events upward (so the parent can grow this bubble and
    reflow the graph around it). `pointerType` travels with the event because
    touch has no hover: the parent turns the FIRST tap into a hover and the
@@ -256,8 +260,8 @@ function onKeyDown(ev: KeyboardEvent) {
         'compare-selected-first': props.compareState === 'first',
         'compare-selected-second': props.compareState === 'second'
       }" :r="r" fill="url(#bubbleGrad)"
-      :stroke="props.compareState === 'first' || props.compareState === 'second' ? 'var(--color-primary)' : isActive || expanded ? 'var(--color-primary)' : 'none'"
-      :stroke-width="props.compareState === 'first' || props.compareState === 'second' ? 3 : 1"
+      :stroke="compareSelected || isActive || expanded ? 'var(--color-primary)' : 'none'"
+      :stroke-width="compareSelected ? 3 : 1"
       :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : props.isTombstoned ? '4,4' : 'none'"
       filter="url(#softShadow)"
     />

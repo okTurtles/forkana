@@ -43,11 +43,17 @@
    Item 2: the tabs are centred in the CONTAINER, not in the space left over
    next to the Compare button — the button is lifted out of the flow and pinned
    to the right edge, so it no longer pushes the tabs left of centre. */
-#subject-view-tabs ~ #compare-mode-button {
+/* Item 5 lives here too: the Compare button reads as a button — bold label, a
+   hover you can see, and (via the `primary` class copycontent.ts toggles) a
+   filled active state with white text. The ID alone outweighs Fomantic's
+   class-only button rules, so no !important is needed. */
+#compare-mode-button {
   position: absolute;
   right: 0;
   top: 50%;
   transform: translateY(-50%);
+  font-weight: var(--font-weight-semibold);
+  transition: background 0.1s ease, color 0.1s ease;
 }
 
 overflow-menu:has(> #compare-mode-button) {
@@ -60,21 +66,13 @@ overflow-menu:has(> #compare-mode-button) {
   color: inherit;
 }
 
-/* Item 5: the Compare button reads as a button — bold label, a hover you can
-   see, and (via the `primary` class copycontent.ts toggles) a filled active
-   state with white text. */
-#compare-mode-button {
-  font-weight: var(--font-weight-semibold) !important;
-  transition: background 0.1s ease, color 0.1s ease;
-}
-
 #compare-mode-button:hover:not(.primary) {
-  background: var(--color-secondary) !important;
+  background: var(--color-secondary);
 }
 
 #compare-mode-button.primary {
-  background: var(--color-primary) !important;
-  color: var(--color-primary-contrast) !important;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
 }
 
 /* ── Mobile ───────────────────────────────────────────────────────────────

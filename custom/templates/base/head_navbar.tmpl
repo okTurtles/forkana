@@ -71,7 +71,7 @@
 			{{/* #386 item 19: a single-purpose "+" — no triangle, no one-entry
 			     dropdown. It goes straight to creating a subject, and the tooltip
 			     says so. */}}
-			<a class="item" href="{{AppSubUrl}}/repo/create" data-tooltip-content="+ New Subject">
+			<a class="item" href="{{AppSubUrl}}/repo/create" data-tooltip-content="{{ctx.Locale.Tr "new_repo"}}">
 				{{svg "octicon-plus"}}
 				<span class="only-mobile tw-ml-1">{{ctx.Locale.Tr "create_new"}}</span>
 			</a>
@@ -90,7 +90,7 @@
 						{{svg "octicon-person"}}
 						{{ctx.Locale.Tr "your_profile"}}
 					</a>
-					<a class="item" href="{{AppSubUrl}}/notifications/subscriptions">
+					<a class="item" href="{{AppSubUrl}}/notifications/watching">
 						{{svg "octicon-eye"}}
 						{{ctx.Locale.Tr "notification.watched"}}
 					</a>
