@@ -403,6 +403,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(326, "Forkana: add slug column to subjects table", v1_25_custom.AddSubjectSlugColumn),
 		newMigration(327, "Forkana: add composite indexes for fork-on-edit optimization", v1_25_custom.AddCompositeIndexesForForkOnEdit),
 		newMigration(328, "Forkana: add is_forked and forked_repo_id to pull_request", v1_25_custom.AddIsForkedToPullRequest),
+		newMigration(329, "Forkana: add is_tombstoned and tombstoned_unix to repository", v1_25_custom.AddTombstoneToRepository),
 	}
 	return preparedMigrations
 }

@@ -162,6 +162,10 @@ type ForkNode struct {
 	Contributors *ContributorStats `json:"contributors,omitempty"`
 	Level        int               `json:"level"`
 	Children     []*ForkNode       `json:"children"`
+	// IsTombstoned marks an article that its author deleted. The node stays in the
+	// graph because its descendants need the ancestry, but the article itself is no
+	// longer readable, so the client must not present it as a live one.
+	IsTombstoned bool `json:"is_tombstoned"`
 
 	// Internal field for batch processing (not exported to JSON)
 	repo *repo_model.Repository `json:"-"`
@@ -760,6 +764,7 @@ func convertNodesToAPI(ctx context.Context, node *ForkNode) {
 	if node.repo != nil {
 		permission := createReadPermission(ctx, node.repo)
 		node.Repository = convert.ToRepo(ctx, node.repo, permission)
+		node.IsTombstoned = node.repo.IsTombstone()
 		// Clear the internal repo reference to free memory
 		node.repo = nil
 	}

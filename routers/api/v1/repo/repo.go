@@ -1171,6 +1171,8 @@ func Delete(ctx *context.APIContext) {
 	//     "$ref": "#/responses/forbidden"
 	//   "404":
 	//     "$ref": "#/responses/notFound"
+	//   "409":
+	//     "$ref": "#/responses/error"
 
 	owner := ctx.Repo.Owner
 	repo := ctx.Repo.Repository
@@ -1188,12 +1190,23 @@ func Delete(ctx *context.APIContext) {
 		ctx.Repo.GitRepo.Close()
 	}
 
-	if err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true); err != nil {
+	outcome, err := repo_service.DeleteRepository(ctx, ctx.Doer, repo, true)
+	if err != nil {
 		ctx.APIErrorInternal(err)
 		return
 	}
 
-	log.Trace("Repository deleted: %s/%s", owner.Name, repo.Name)
+	switch outcome {
+	case repo_service.RepositoryTombstoned:
+		log.Trace("Repository tombstoned: %s/%s", owner.Name, repo.Name)
+	case repo_service.RepositoryAlreadyTombstoned:
+		// Nothing was deleted, so 204 would be a lie.
+		log.Trace("Repository left as a tombstone, forks still depend on it: %s/%s", owner.Name, repo.Name)
+		ctx.APIError(http.StatusConflict, errors.New("the repository is already a tombstone and forks still depend on its history"))
+		return
+	default:
+		log.Trace("Repository deleted: %s/%s", owner.Name, repo.Name)
+	}
 	ctx.Status(http.StatusNoContent)
 }
 

@@ -170,6 +170,74 @@ describe('documents nobody edited in Visual mode', () => {
     expect(textarea.value).toBe(edited);
   });
 
+  // Issue #320: Toast UI stores a mode-switch caret position measured against the serialized
+  // document. When the source runs blocks together with no blank lines, the serialization has
+  // MORE lines than the pristine source, so after the tracker's writeback restores the shorter
+  // pristine text that stored position points past the last line. Toast UI only re-derives a
+  // fresh position when the conversion finds a top-level match for its focusedNode — here the
+  // caret parked via a WYSIWYG transaction leaves a stale WYSIWYG node that never matches the
+  // markdown tree, so on the next switch to Visual mode it applies the stale stored position:
+  // doc.child(line - 1) then threw
+  // "RangeError: Index N out of range for <paragraph(...)". The tracker now clamps the stored
+  // position whenever it replaces the document.
+  test('Source -> Visual switch does not throw when the serialization has more lines (issue #320)', async () => {
+    const article = [
+      '**Markdown** is a lightweight markup language for creating rich- or formatted_text.',
+      '- item_one',
+      '- item_two',
+      '# Heading_here',
+      'Closing paragraph_text.',
+      '',
+    ].join('\n');
+    const {editor, textarea} = createEditor(article);
+    // A user reading the article leaves the caret at the end of the document.
+    (editor as any).wwEditor.moveCursorToEnd(true);
+    await flush();
+    editor.changeMode('markdown');
+    await flush();
+    expect(() => editor.changeMode('wysiwyg')).not.toThrow();
+    await flush();
+    expect(editor.getMarkdown()).toBe(article);
+    expect(textarea.value).toBe(article);
+    // And the round trip keeps working afterwards.
+    editor.changeMode('markdown');
+    await flush();
+    expect(() => editor.changeMode('wysiwyg')).not.toThrow();
+    await flush();
+    expect(editor.getMarkdown()).toBe(article);
+  });
+
+  // Issue #320, user-edit path: the writeback is not the only way the markdown document can
+  // shrink below the convertor's stored mode-switch line — an ordinary user edit in Source
+  // mode (deleting lines) does the same, and it goes through the change handler rather than
+  // the tracker's setMarkdown override. The change handler must keep the stored position
+  // clamped too, or the identical RangeError comes back on the next switch to Visual.
+  test('deleting lines in Source mode then switching to Visual does not throw (issue #320)', async () => {
+    const article = [
+      '**Markdown** is a lightweight markup language for creating rich- or formatted_text.',
+      '- item_one',
+      '- item_two',
+      '# Heading_here',
+      'Closing paragraph_text.',
+      '',
+    ].join('\n');
+    const {editor} = createEditor(article);
+    (editor as any).wwEditor.moveCursorToEnd(true);
+    await flush();
+    editor.changeMode('markdown');
+    await flush();
+    // A user edit shrinks the document below the stored mode-switch line. Dispatching the
+    // deletion straight at the markdown ProseMirror view is what a keystroke ends up doing:
+    // it bypasses the tracker's setMarkdown override (the already-clamped programmatic path)
+    // and — unlike mdEditor.setMarkdown, which refreshes the stored position itself — leaves
+    // the convertor's stored mode-switch position stale, like a select-all + delete.
+    const view = (editor as any).mdEditor.view;
+    view.dispatch(view.state.tr.delete(1, view.state.doc.content.size - 1));
+    await flush();
+    expect(() => editor.changeMode('wysiwyg')).not.toThrow();
+    await flush();
+  });
+
   test('the editor starts in Source mode losslessly too', async () => {
     const {editor, textarea} = createEditor(SAMPLE, 'markdown');
     expect(editor.getMarkdown()).toBe(SAMPLE);
@@ -237,16 +305,47 @@ describe('Visual edits are merged back onto the pristine source', () => {
     expectSamplePreserved(output);
   });
 
-  // The one line the user actually touched legitimately gets the serializer's spelling —
-  // its reference link is collateral damage of editing that very sentence. Everything else,
-  // including the link *definition* that makes it resolve, must survive.
+  // #367: an author who types a ```mermaid fence as plain text in Visual mode must get a
+  // real, renderable fence — the raw serializer escapes the leading backtick(s), which used
+  // to be committed as literal text.
+  test('a mermaid fence typed as text in Visual mode is committed as a real fence', async () => {
+    const {editor, textarea} = createEditor(SAMPLE);
+    for (const line of ['```mermaid', 'flowchart TD', 'Start_node --> Stop_node', '```']) {
+      appendParagraphInVisual(editor, line);
+    }
+    await flush();
+    const output: string = editor.getMarkdown();
+    expect(output).toContain('```mermaid');
+    expect(output).not.toContain('\\`');
+    // The body was serialized as escaped paragraphs; its escapes must be removed too, or
+    // the diagram source would contain literal `\_` (the second half of #322/#367).
+    expect(output).toContain('Start_node --> Stop_node');
+    expect(output).not.toContain('\\_node');
+    expect(textarea.value).toBe(output);
+    expectSamplePreserved(output);
+  });
+
+  // #322: markdown typed as text in Visual mode (heading + emphasis) stays markdown.
+  test('markdown typed as text in Visual mode is committed unescaped', async () => {
+    const {editor} = createEditor(SAMPLE);
+    appendParagraphInVisual(editor, '## Typed heading with **bold** text');
+    await flush();
+    const output: string = editor.getMarkdown();
+    expect(output).toContain('## Typed heading with **bold** text');
+    expectSamplePreserved(output);
+  });
+
+  // The one line the user actually touched gets the serializer's spelling with the escapes
+  // removed again (#322), so its reference link keeps rendering. Everything else, including
+  // the link *definition* that makes it resolve, must survive byte-for-byte.
   test('editing the paragraph that holds the reference link only re-serializes that line', async () => {
     const {editor} = createEditor(SAMPLE);
     editInVisual(editor, 'and snake_case_word.', 'and snake_case_word, extended.');
     await flush();
     const output: string = editor.getMarkdown();
-    expect(output).toContain('\\[the program\\]\\[1\\]'); // that line, re-serialized
-    expect(output).toContain(DEFINITION_LINE); // but the definition is intact
+    expect(output).toContain('[the program][1]'); // that line, re-serialized and unescaped
+    expect(output).not.toContain('\\[the program\\]'); // never the escaped literal spelling
+    expect(output).toContain(DEFINITION_LINE); // and the definition is intact
     expectSamplePreserved(output, LINK_LINE);
   });
 
@@ -563,7 +662,9 @@ describe('Visual edits are merged back onto the pristine source', () => {
     await flush();
     const output: string = editor.getMarkdown();
     expect(output).not.toContain('Research program');
-    expect(output).toContain('Everything\\_replaced');
+    // Fallback output is the serialization with the escapes removed (#322).
+    expect(output).toContain('Everything_replaced.');
+    expect(output).not.toContain('Everything\\_replaced');
     expect(textarea.value).toBe(output);
   });
 });

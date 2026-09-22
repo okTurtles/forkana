@@ -193,6 +193,11 @@ type Repository struct {
 	IsArchived bool `xorm:"INDEX"`
 	IsMirror   bool `xorm:"INDEX"`
 
+	// IsTombstoned marks an article that its author deleted while forks still existed.
+	// The database row and the on-disk git data are kept so that the surviving forks
+	// keep a valid ancestor, but the content is no longer served.
+	IsTombstoned bool `xorm:"INDEX NOT NULL DEFAULT false"`
+
 	Status RepositoryStatus `xorm:"NOT NULL DEFAULT 0"`
 
 	commonRenderingMetas map[string]string `xorm:"-"`
@@ -221,9 +226,10 @@ type Repository struct {
 	// Avatar: ID(10-20)-md5(32) - must fit into 64 symbols
 	Avatar string `xorm:"VARCHAR(64)"`
 
-	CreatedUnix  timeutil.TimeStamp `xorm:"INDEX created"`
-	UpdatedUnix  timeutil.TimeStamp `xorm:"INDEX updated"`
-	ArchivedUnix timeutil.TimeStamp `xorm:"DEFAULT 0"`
+	CreatedUnix    timeutil.TimeStamp `xorm:"INDEX created"`
+	UpdatedUnix    timeutil.TimeStamp `xorm:"INDEX updated"`
+	ArchivedUnix   timeutil.TimeStamp `xorm:"DEFAULT 0"`
+	TombstonedUnix timeutil.TimeStamp `xorm:"DEFAULT 0"`
 }
 
 func init() {
@@ -321,6 +327,14 @@ func (repo *Repository) IsBeingCreated() bool {
 // IsBroken indicates that repository is broken
 func (repo *Repository) IsBroken() bool {
 	return repo.Status == RepositoryBroken
+}
+
+// IsTombstone indicates that the article was deleted by its author but is kept
+// as a tombstone because other articles were forked from it. It reads the
+// IsTombstoned field through a nil-safe receiver; the names differ because Go
+// forbids a method and a field of the same name on one type.
+func (repo *Repository) IsTombstone() bool {
+	return repo != nil && repo.IsTombstoned
 }
 
 // MarkAsBrokenEmpty marks the repo as broken and empty
@@ -677,12 +691,12 @@ func (repo *Repository) RepoPath() string {
 }
 
 // Link returns the repository relative url for viewing articles.
-// An archived article with a subject uses OperationsLink instead, because the subject
-// vanity url resolves to the active repository of that subject. Any other repository
-// yields /article/{owner}/{subject}, using the repository name in place of the subject
-// when none is assigned.
+// An archived article with a subject, and a tombstone, use OperationsLink instead,
+// because the subject vanity url resolves to the active repository of that subject,
+// which is a different article. Any other repository yields /article/{owner}/{subject},
+// using the repository name in place of the subject when none is assigned.
 func (repo *Repository) Link() string {
-	if repo.IsArchived && repo.SubjectID > 0 {
+	if repo.IsTombstone() || (repo.IsArchived && repo.SubjectID > 0) {
 		return repo.OperationsLink()
 	}
 	return repo.articleLink()
@@ -973,14 +987,15 @@ func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Rep
 
 	// Find the first public repository with this subject_id
 	// Priority order:
-	// 1. Non-empty repos (is_empty=false)
-	// 2. Root repos (is_fork=false)
-	// 3. Most recently updated
+	// 1. Live repos (is_tombstoned=false), so a tombstone never stands in for the subject
+	// 2. Non-empty repos (is_empty=false)
+	// 3. Root repos (is_fork=false)
+	// 4. Most recently updated
 	var repo Repository
 	has, err := db.GetEngine(ctx).
 		Where("`subject_id`=?", subject.ID).
 		And("`is_private`=?", false).
-		OrderBy("`is_empty` ASC, `is_fork` ASC, `updated_unix` DESC").
+		OrderBy("`is_tombstoned` ASC, `is_empty` ASC, `is_fork` ASC, `updated_unix` DESC").
 		NoAutoCondition().
 		Get(&repo)
 
@@ -1232,6 +1247,9 @@ func (err ErrUserOwnRepos) Error() string {
 type CountRepositoryOptions struct {
 	OwnerID int64
 	Private optional.Option[bool]
+	// Tombstoned counts only tombstoned repositories when true and only live ones
+	// when false. Unset counts both.
+	Tombstoned optional.Option[bool]
 }
 
 // CountRepositories returns number of repositories.
@@ -1245,6 +1263,9 @@ func CountRepositories(ctx context.Context, opts CountRepositoryOptions) (int64,
 	}
 	if opts.Private.Has() {
 		sess.And("is_private=?", opts.Private.Value())
+	}
+	if opts.Tombstoned.Has() {
+		sess.And("is_tombstoned=?", opts.Tombstoned.Value())
 	}
 
 	count, err := sess.Count(new(Repository))
