@@ -42,6 +42,18 @@ func TestArticlePermanentRoute(t *testing.T) {
 		assert.Equal(t, 1, htmlDoc.Find(`.history-view-section--article`).Length())
 	})
 
+	// The back-link is written once above the tombstone/error/article branches, so it must
+	// not reappear per branch.
+	t.Run("BackLinkRenderedOnce", func(t *testing.T) {
+		req := NewRequest(t, "GET", repoURL)
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		backLink := htmlDoc.Find(`.history-view-section--article a[href*="view=bubble"]`)
+		require.Equal(t, 1, backLink.Length())
+		assert.Contains(t, backLink.AttrOr("href", ""), "/subject/"+subjectName)
+	})
+
 	t.Run("TabsKeepPermanentURL", func(t *testing.T) {
 		req := NewRequest(t, "GET", repoURL)
 		resp := session.MakeRequest(t, req, http.StatusOK)

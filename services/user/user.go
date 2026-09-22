@@ -18,6 +18,7 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/eventsource"
 	"code.gitea.io/gitea/modules/log"
+	"code.gitea.io/gitea/modules/optional"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/structs"
@@ -210,17 +211,36 @@ func DeleteUser(ctx context.Context, u *user_model.User, purge bool) error {
 		}
 	}
 
+	oldUserName := u.Name
+	oldAvatarPath := ""
+	if u.Avatar != "" {
+		oldAvatarPath = u.CustomAvatarRelativePath()
+	}
+
+	// Tombstones outlive their author: the account row stays as their owner and is
+	// anonymized instead of removed, see repo_service.AnonymizeTombstoneOwner.
+	anonymize := false
+
 	if err := db.WithTx(ctx, func(ctx context.Context) error {
 		// Note: A user owns any repository or belongs to any organization
 		//	cannot perform delete operation. This causes a race with the purge above
 		//  however consistency requires that we ensure that this is the case
 
-		// Check ownership of repository.
-		count, err := repo_model.CountRepositories(ctx, repo_model.CountRepositoryOptions{OwnerID: u.ID})
+		// Check ownership of repository. Tombstones are excluded: they are kept on
+		// purpose and must not block the deletion of the account that owns them.
+		count, err := repo_model.CountRepositories(ctx, repo_model.CountRepositoryOptions{
+			OwnerID:    u.ID,
+			Tombstoned: optional.Some(false),
+		})
 		if err != nil {
 			return fmt.Errorf("GetRepositoryCount: %w", err)
 		} else if count > 0 {
 			return repo_model.ErrUserOwnRepos{UID: u.ID}
+		}
+
+		anonymize, err = repo_service.OwnsTombstones(ctx, u.ID)
+		if err != nil {
+			return err
 		}
 
 		// Check membership of organization.
@@ -238,7 +258,7 @@ func DeleteUser(ctx context.Context, u *user_model.User, purge bool) error {
 			return packages_model.ErrUserOwnPackages{UID: u.ID}
 		}
 
-		if err := deleteUser(ctx, u, purge); err != nil {
+		if err := deleteUser(ctx, u, purge, anonymize); err != nil {
 			return fmt.Errorf("DeleteUser: %w", err)
 		}
 		return nil
@@ -254,17 +274,23 @@ func DeleteUser(ctx context.Context, u *user_model.User, purge bool) error {
 	}
 
 	// Note: There are something just cannot be roll back, so just keep error logs of those operations.
-	path := user_model.UserPath(u.Name)
-	if err := util.RemoveAll(path); err != nil {
-		err = fmt.Errorf("failed to RemoveAll %s: %w", path, err)
-		_ = system_model.CreateNotice(ctx, system_model.NoticeTask, fmt.Sprintf("delete user '%s': %v", u.Name, err))
+	oldPath := user_model.UserPath(oldUserName)
+	if anonymize {
+		// The remaining git data belongs to the tombstones, which are now owned by
+		// the anonymized account, so the directory moves instead of being removed.
+		if err := util.Rename(oldPath, user_model.UserPath(u.Name)); err != nil && !os.IsNotExist(err) {
+			err = fmt.Errorf("failed to rename %s: %w", oldPath, err)
+			_ = system_model.CreateNotice(ctx, system_model.NoticeTask, fmt.Sprintf("delete user '%s': %v", oldUserName, err))
+		}
+	} else if err := util.RemoveAll(oldPath); err != nil {
+		err = fmt.Errorf("failed to RemoveAll %s: %w", oldPath, err)
+		_ = system_model.CreateNotice(ctx, system_model.NoticeTask, fmt.Sprintf("delete user '%s': %v", oldUserName, err))
 	}
 
-	if u.Avatar != "" {
-		avatarPath := u.CustomAvatarRelativePath()
-		if err := storage.Avatars.Delete(avatarPath); err != nil {
-			err = fmt.Errorf("failed to remove %s: %w", avatarPath, err)
-			_ = system_model.CreateNotice(ctx, system_model.NoticeTask, fmt.Sprintf("delete user '%s': %v", u.Name, err))
+	if oldAvatarPath != "" {
+		if err := storage.Avatars.Delete(oldAvatarPath); err != nil {
+			err = fmt.Errorf("failed to remove %s: %w", oldAvatarPath, err)
+			_ = system_model.CreateNotice(ctx, system_model.NoticeTask, fmt.Sprintf("delete user '%s': %v", oldUserName, err))
 		}
 	}
 

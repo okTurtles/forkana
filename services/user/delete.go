@@ -23,12 +23,14 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/setting"
+	repo_service "code.gitea.io/gitea/services/repository"
 
 	"xorm.io/builder"
 )
 
-// deleteUser deletes models associated to an user.
-func deleteUser(ctx context.Context, u *user_model.User, purge bool) (err error) {
+// deleteUser deletes models associated to an user. When anonymize is set the user
+// row itself is kept, stripped of its identity, because it still owns tombstones.
+func deleteUser(ctx context.Context, u *user_model.User, purge, anonymize bool) (err error) {
 	e := db.GetEngine(ctx)
 
 	// ***** START: Watch *****
@@ -191,6 +193,10 @@ func deleteUser(ctx context.Context, u *user_model.User, purge bool) (err error)
 
 	if err := auth_model.DeleteAuthTokensByUserID(ctx, u.ID); err != nil {
 		return fmt.Errorf("DeleteAuthTokensByUserID: %w", err)
+	}
+
+	if anonymize {
+		return repo_service.AnonymizeTombstoneOwner(ctx, u)
 	}
 
 	if _, err = db.DeleteByID[user_model.User](ctx, u.ID); err != nil {

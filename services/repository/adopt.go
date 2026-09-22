@@ -268,6 +268,9 @@ func checkUnadoptedRepositories(ctx context.Context, userName string, repoNamesT
 	repos, _, err := repo_model.GetUserRepositories(ctx, repo_model.SearchRepoOptions{
 		Actor:   ctxUser,
 		Private: true,
+		// A tombstone still owns its directory: its row references the git data that
+		// the surviving forks need. Without this it would be listed as unadopted.
+		IncludeTombstoned: true,
 		ListOptions: db.ListOptions{
 			Page:     1,
 			PageSize: len(repoNamesToCheck),

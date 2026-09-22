@@ -122,6 +122,10 @@
         </div>
         <p class="tw-mt-8">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_desc"}}</p>
         <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
+            {{/* Chrome ignores autocomplete="off" for name-like fields; the invisible dummy
+            inputs in "base/disable_form_autofill" absorb the browser's autofill so the
+            new-owner value is always picked through the backend-validated search dropdown. */}}
+            {{template "base/disable_form_autofill"}}
             {{.CsrfTokenHtml}}
             <input type="hidden" name="action" value="transfer">
             <input type="hidden" name="redirect_to_article" value="true">
@@ -178,6 +182,7 @@
             <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
         </p>
         <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
+            {{template "base/disable_form_autofill"}}
             {{.CsrfTokenHtml}}
             <input type="hidden" name="action" value="archive">
             <input type="hidden" name="redirect_to_article" value="true">
@@ -204,7 +209,11 @@
             {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
             <ul class="tw-m-0 tw-pl-4">
                 <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_1"}}</li>
+                {{if .RepoWillBeTombstoned}}
+                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_tombstone"}}</li>
+                {{else}}
                 <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_2" (printf "%s/%s" .Repository.OwnerName (HTMLFormat "%s" $subjectName))}}</li>
+                {{end}}
             </ul>
         </div>
         <p class="tw-mt-8 tw-mb-5">
@@ -212,6 +221,7 @@
             <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
         </p>
         <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
+            {{template "base/disable_form_autofill"}}
             {{.CsrfTokenHtml}}
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="redirect_to_article" value="true">
