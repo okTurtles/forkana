@@ -586,14 +586,18 @@ func TestForkedArticleAttachmentSurvivesSourceDeletion(t *testing.T) {
 		MakeRequest(t, NewRequest(t, "GET", "/attachments/"+uuid), http.StatusOK)
 		MakeRequest(t, NewRequest(t, "GET", "/"+fork.FullName()+"/attachments/"+uuid), http.StatusOK)
 
+		// created_unix has second granularity and the cutoff is strict, so a cutoff of
+		// exactly now would skip an attachment uploaded within the same second.
+		cutoff := time.Now().Add(time.Second)
+
 		// the collector leaves a referenced attachment alone whatever its age
-		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: time.Now()})
+		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff})
 		require.NoError(t, err)
 		unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: attach.ID})
 
 		// once the last repository referencing it is gone, it becomes collectable
 		require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), fork.ID))
-		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: time.Now()})
+		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff})
 		require.NoError(t, err)
 		unittest.AssertNotExistsBean(t, &repo_model.Attachment{ID: attach.ID})
 		MakeRequest(t, NewRequest(t, "GET", "/attachments/"+uuid), http.StatusNotFound)
