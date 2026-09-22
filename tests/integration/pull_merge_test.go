@@ -207,53 +207,63 @@ func TestPullSquash(t *testing.T) {
 	})
 }
 
+// createSameRepoArticlePR creates a repo owned by user with an "article.md" committed to an
+// "edit" branch and an open pull request from "edit" into "main". It returns the repository
+// and the PR's issue (with Index set).
+func createSameRepoArticlePR(t *testing.T, user *user_model.User, repoName, prTitle string) (*repo_model.Repository, *issues_model.Issue) {
+	t.Helper()
+
+	baseRepo, err := repo_service.CreateRepository(t.Context(), user, user, repo_service.CreateRepoOptions{
+		Name:          repoName,
+		AutoInit:      true,
+		Readme:        "Default",
+		DefaultBranch: "main",
+	})
+	require.NoError(t, err)
+
+	_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
+		Files: []*files_service.ChangeRepoFile{
+			{
+				Operation:     "create",
+				TreePath:      "article.md",
+				ContentReader: strings.NewReader("Some content\n"),
+			},
+		},
+		Message:   "Add an article",
+		OldBranch: "main",
+		NewBranch: "edit",
+	})
+	require.NoError(t, err)
+
+	pullIssue := &issues_model.Issue{
+		RepoID:   baseRepo.ID,
+		Title:    prTitle,
+		PosterID: user.ID,
+		Poster:   user,
+		IsPull:   true,
+	}
+	pullRequest := &issues_model.PullRequest{
+		HeadRepoID: baseRepo.ID,
+		BaseRepoID: baseRepo.ID,
+		HeadBranch: "edit",
+		BaseBranch: "main",
+		HeadRepo:   baseRepo,
+		BaseRepo:   baseRepo,
+		Type:       issues_model.PullRequestGitea,
+	}
+	require.NoError(t, pull_service.NewPullRequest(t.Context(), &pull_service.NewPullRequestOptions{
+		Repo: baseRepo, Issue: pullIssue, PullRequest: pullRequest,
+	}))
+
+	return baseRepo, pullIssue
+}
+
 // Forkana: the merge button merges in a single step, posting only "_csrf" and "do".
 // The server must then generate the full merge commit message, trailers included.
 func TestPullMergeSingleStepGeneratesMergeMessage(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
 		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-
-		baseRepo, err := repo_service.CreateRepository(t.Context(), user, user, repo_service.CreateRepoOptions{
-			Name:          "single-step-merge",
-			AutoInit:      true,
-			Readme:        "Default",
-			DefaultBranch: "main",
-		})
-		require.NoError(t, err)
-
-		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
-			Files: []*files_service.ChangeRepoFile{
-				{
-					Operation:     "create",
-					TreePath:      "article.md",
-					ContentReader: strings.NewReader("Some content\n"),
-				},
-			},
-			Message:   "Add an article",
-			OldBranch: "main",
-			NewBranch: "edit",
-		})
-		require.NoError(t, err)
-
-		pullIssue := &issues_model.Issue{
-			RepoID:   baseRepo.ID,
-			Title:    "Single step merge",
-			PosterID: user.ID,
-			Poster:   user,
-			IsPull:   true,
-		}
-		pullRequest := &issues_model.PullRequest{
-			HeadRepoID: baseRepo.ID,
-			BaseRepoID: baseRepo.ID,
-			HeadBranch: "edit",
-			BaseBranch: "main",
-			HeadRepo:   baseRepo,
-			BaseRepo:   baseRepo,
-			Type:       issues_model.PullRequestGitea,
-		}
-		require.NoError(t, pull_service.NewPullRequest(t.Context(), &pull_service.NewPullRequestOptions{
-			Repo: baseRepo, Issue: pullIssue, PullRequest: pullRequest,
-		}))
+		baseRepo, pullIssue := createSameRepoArticlePR(t, user, "single-step-merge", "Single step merge")
 
 		session := loginUser(t, user.Name)
 		link := path.Join(user.Name, baseRepo.Name, "pulls", strconv.FormatInt(pullIssue.Index, 10), "merge")
