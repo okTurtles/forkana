@@ -899,7 +899,24 @@ function restingContentHeight(): number {
    beyond the legend height, and stable during a hover by construction (the
    resting layout does not move). */
 function syncCanvasHeight() {
-  svgHeight.value = Math.max(graphViewportHeight(), Math.ceil(restingContentHeight()));
+  const legendH = legendRef.value?.offsetHeight ?? 0;
+  const contentH = Math.ceil(restingContentHeight());
+  svgHeight.value = Math.max(graphViewportHeight(), contentH);
+  /* Publish the height the graph NEEDS as a min-height floor on the page box
+     (.history-bubble-root). The box itself stays free-space sized (basis 0),
+     so a small graph releases the space again — without this split, a
+     once-tall canvas held the box tall forever and a one-bubble page kept its
+     footer below the fold. Same-value writes are skipped: this runs per frame
+     during the hover tween, and the resting layout it derives from does not
+     move then. */
+  const root = containerRef.value?.closest<HTMLElement>('.history-bubble-root') ?? containerRef.value;
+  if (root) {
+    const min = contentH > 0 ? `${contentH + legendH}px` : '';
+    if (root.style.getPropertyValue('--bubble-canvas-min') !== min) {
+      if (min) root.style.setProperty('--bubble-canvas-min', min);
+      else root.style.removeProperty('--bubble-canvas-min');
+    }
+  }
 }
 
 /** Read the container box and adopt it. Returns true when the numbers the
@@ -2366,19 +2383,17 @@ function goToComparison() {
 <style scoped>
 .f-fishbone-graph {
   width: 100%;
-  /* Fill the free space .history-bubble-root is given by the page's flex
-     layout (see web_src/css/features/bubble-graph.css) — but GROW past it
-     when the canvas needs more. The canvas is content-sized now
-     (syncCanvasHeight in the script above, #386 items 13/14/15): a graph that
-     fits is centred in the free space, and a taller one makes this box, and
-     with it the page, taller — the page's single scrollbar scrolls the graph.
-     "flex-basis: auto" (not 0) is what lets the content height win; the
-     circularity the old "1 1 0 / min-height: 0 / overflow: hidden" trio
-     guarded against is gone because the canvas is sized from the RESTING
-     layout plus the measured free space, never from this box's own content,
-     and height-only remeasures no longer re-run the layout
-     (scheduleRemeasure). */
-  flex: 1 0 auto;
+  /* Fill the box .history-bubble-root is given (see
+     web_src/css/features/bubble-graph.css): basis 0 so the box's height comes
+     from the free space, never from this component's own canvas — that
+     feedback ratchet is what once held a one-bubble page tall enough to push
+     the footer off screen. A graph needing MORE than the free space grows the
+     page through the --bubble-canvas-min floor syncCanvasHeight() publishes
+     on the root, not through this element's own size. No overflow: hidden —
+     the canvas fits its box by construction (#386 items 13/14/15), and the
+     page's single scrollbar scrolls a tall graph. */
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .f-fishbone-graph svg:focus {
