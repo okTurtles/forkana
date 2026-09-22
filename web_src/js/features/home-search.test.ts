@@ -13,7 +13,9 @@ test('highlightKeyword', () => {
   expect(highlightKeyword('<script>', 'scr')).toEqual('&lt;<b>scr</b>ipt&gt;');
 });
 
-test('search button appears only while the field holds text', () => {
+// One DOM per test: setting the value BEFORE init is how a browser restoring a
+// keyword on back-navigation presents the page to the script.
+function initHomeSearchDom(keyword = ''): void {
   document.body.innerHTML = `
     <form id="home-search-form">
       <input id="home-search-input" name="q" type="text"/>
@@ -21,7 +23,12 @@ test('search button appears only while the field holds text', () => {
     </form>
     <div id="home-search-suggestions" class="tw-hidden"></div>
   `;
+  document.querySelector<HTMLInputElement>('#home-search-input').value = keyword;
   initHomeSearch();
+}
+
+test('search button appears only while the field holds text', () => {
+  initHomeSearchDom();
   const input = document.querySelector<HTMLInputElement>('#home-search-input');
   const button = document.querySelector<HTMLElement>('#home-search-button');
 
@@ -38,14 +45,6 @@ test('search button appears only while the field holds text', () => {
 });
 
 test('search button is shown right away when the browser restored a keyword', () => {
-  document.body.innerHTML = `
-    <form id="home-search-form">
-      <input id="home-search-input" name="q" type="text"/>
-      <button id="home-search-button" class="tw-hidden">Search</button>
-    </form>
-    <div id="home-search-suggestions" class="tw-hidden"></div>
-  `;
-  document.querySelector<HTMLInputElement>('#home-search-input').value = 'mars';
-  initHomeSearch();
+  initHomeSearchDom('mars');
   expect(document.querySelector('#home-search-button').classList.contains('tw-hidden')).toBe(false);
 });

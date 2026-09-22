@@ -10,6 +10,10 @@ const {appSubUrl} = window.config;
 const inputSelector = '#home-search-input';
 const suggestionsSelector = '#home-search-suggestions';
 const buttonSelector = '#home-search-button';
+// The button's "right: 8px" offset (web_src/css/home.css) plus a 16px text gap,
+// so the typed keyword never runs underneath the button. Change the CSS offset
+// and this together.
+const buttonInsetGapPx = 24;
 
 // How long the typing has to pause before the suggestions are fetched.
 const debounceMs = 200;
@@ -81,7 +85,7 @@ class HomeSearch {
     // sized off the rendered button so a longer translated label still fits. The button must be
     // visible (not display:none) for offsetWidth, so measure after showing it.
     this.input.classList.toggle('home-search-input-with-button', hasKeyword);
-    if (hasKeyword) this.input.style.setProperty('--home-search-button-inset', `${this.button.offsetWidth + 24}px`);
+    if (hasKeyword) this.input.style.setProperty('--home-search-button-inset', `${this.button.offsetWidth + buttonInsetGapPx}px`);
   }
 
   private scheduleSearch(): void {
@@ -113,7 +117,7 @@ class HomeSearch {
       return;
     }
     // The keyword may have changed again while the request was in flight.
-    if (keyword !== this.input.value.trim()) return;
+    if (keyword !== this.keyword) return;
     this.render(names, keyword);
   }
 

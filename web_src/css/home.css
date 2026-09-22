@@ -135,11 +135,13 @@
 /* Overrides the "tw-pr-4" utility of the field while the button is shown, so a long keyword
    scrolls instead of running underneath the button. The inset is set from the rendered button's
    width (updateButton in web_src/js/features/home-search.ts), so a longer translated label still
-   fits; 90px is the fallback for the English "Search". "!important" is required no matter the
+   fits; the fallback only exists as a safety net (the class and the variable are set in the same
+   synchronous block, so it never applies in practice) and is sized for the rendered English
+   "Search" (~75px) plus the 24px gap. "!important" is required no matter the
    specificity: tailwind runs with `important: true` (tailwind.config.ts), so every tw- utility
    on the input is itself !important. */
 #home-search-form input[name="q"].home-search-input-with-button {
-  padding-right: var(--home-search-button-inset, 90px) !important;
+  padding-right: var(--home-search-button-inset, 100px) !important;
 }
 
 /* ===== Homepage search validation ===== */
