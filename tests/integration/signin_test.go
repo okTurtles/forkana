@@ -22,6 +22,7 @@ import (
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/markbates/goth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,27 +102,22 @@ func TestSigninWithRememberMe(t *testing.T) {
 	session.MakeRequest(t, req, http.StatusOK)
 }
 
-func TestSigninIgnoresStaleRedirectCookie(t *testing.T) {
+func TestAnonymousNavbarSignInLinkHasNoRedirect(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-	baseURL, _ := url.Parse(setting.AppURL)
+	// The navbar sign-in link must not record the currently viewed page (issue #382):
+	// signing in should always land on the user's home page unless a redirect was
+	// explicitly requested (e.g. by an invite link).
+	req := NewRequest(t, "GET", "/explore/subjects")
+	resp := MakeRequest(t, req, http.StatusOK)
 
-	// Simulate a "last viewed page" left over from browsing while signed out (issue #382)
-	session := emptyTestSession(t)
-	session.jar.SetCookies(baseURL, []*http.Cookie{{Name: "redirect_to", Value: url.QueryEscape("/explore/subjects")}})
-
-	// Opening the sign-in page without an explicit redirect_to must clear the stale cookie
-	req := NewRequest(t, "GET", "/user/login")
-	session.MakeRequest(t, req, http.StatusOK)
-
-	// Signing in must land on the home page, not the stale page
-	req = NewRequestWithValues(t, "POST", "/user/login", map[string]string{
-		"user_name": user.Name,
-		"password":  userPassword,
+	doc := NewHTMLParser(t, resp.Body)
+	links := doc.doc.Find(`a[href^="` + setting.AppSubURL + `/user/login"]`)
+	assert.Positive(t, links.Length(), "expected a sign-in link in the navbar")
+	links.Each(func(_ int, s *goquery.Selection) {
+		href, _ := s.Attr("href")
+		assert.NotContains(t, href, "redirect_to", "navbar sign-in link must not carry redirect_to")
 	})
-	resp := session.MakeRequest(t, req, http.StatusSeeOther)
-	assert.Equal(t, "/", test.RedirectURL(resp))
 }
 
 func TestSigninHonorsExplicitRedirectParam(t *testing.T) {
