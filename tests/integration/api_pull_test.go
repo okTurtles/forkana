@@ -220,7 +220,10 @@ func TestAPIMergePullGeneratesMergeMessage(t *testing.T) {
 			message := mergeCommitMessage(baseRepo)
 			assert.Contains(t, message, fmt.Sprintf("Merge pull request 'API merge message' (#%d) from edit into main", pullIssue.Index))
 			pullIssue.Repo = baseRepo
-			assert.Contains(t, message, "Reviewed-on: "+strings.TrimSuffix(giteaURL.String(), "/")+pullIssue.Link())
+			// The trailer is built from the configured AppURL (services/pull),
+			// which spells the host "localhost" while giteaURL dials 127.0.0.1 —
+			// same server, different spelling, so compare against AppURL.
+			assert.Contains(t, message, "Reviewed-on: "+strings.TrimSuffix(setting.AppURL, "/")+pullIssue.Link())
 		})
 
 		t.Run("ExplicitMessageReplacesDefaultBody", func(t *testing.T) {
