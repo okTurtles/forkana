@@ -27,7 +27,6 @@ import (
 	"code.gitea.io/gitea/services/gitdiff"
 	issue_service "code.gitea.io/gitea/services/issue"
 	pull_service "code.gitea.io/gitea/services/pull"
-	repo_service "code.gitea.io/gitea/services/repository"
 	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
 
@@ -191,72 +190,53 @@ func TestAPIMergePullWIP(t *testing.T) {
 }
 
 // Forkana (#371): an API merge without an explicit MergeMessageField must keep the
-// server-generated merge commit body, i.e. the Reviewed-on/Reviewed-by trailers.
+// server-generated merge commit body, i.e. the Reviewed-on/Reviewed-by trailers,
+// while an explicit MergeMessageField must replace that generated body.
 func TestAPIMergePullGeneratesMergeMessage(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
 		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
-
-		baseRepo, err := repo_service.CreateRepository(t.Context(), user, user, repo_service.CreateRepoOptions{
-			Name:          "api-merge-message",
-			AutoInit:      true,
-			Readme:        "Default",
-			DefaultBranch: "main",
-		})
-		require.NoError(t, err)
-
-		_, err = files_service.ChangeRepoFiles(t.Context(), baseRepo, user, &files_service.ChangeRepoFilesOptions{
-			Files: []*files_service.ChangeRepoFile{
-				{
-					Operation:     "create",
-					TreePath:      "article.md",
-					ContentReader: strings.NewReader("Some content\n"),
-				},
-			},
-			Message:   "Add an article",
-			OldBranch: "main",
-			NewBranch: "edit",
-		})
-		require.NoError(t, err)
-
-		pullIssue := &issues_model.Issue{
-			RepoID:   baseRepo.ID,
-			Title:    "API merge message",
-			PosterID: user.ID,
-			Poster:   user,
-			IsPull:   true,
-		}
-		pullRequest := &issues_model.PullRequest{
-			HeadRepoID: baseRepo.ID,
-			BaseRepoID: baseRepo.ID,
-			HeadBranch: "edit",
-			BaseBranch: "main",
-			HeadRepo:   baseRepo,
-			BaseRepo:   baseRepo,
-			Type:       issues_model.PullRequestGitea,
-		}
-		require.NoError(t, pull_service.NewPullRequest(t.Context(), &pull_service.NewPullRequestOptions{
-			Repo: baseRepo, Issue: pullIssue, PullRequest: pullRequest,
-		}))
-
 		session := loginUser(t, user.Name)
 		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
 
-		// no MergeTitleField and no MergeMessageField: the server must generate both
-		req := NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/merge", user.Name, baseRepo.Name, pullIssue.Index), &forms.MergePullRequestForm{
-			Do: string(repo_model.MergeStyleMerge),
-		}).AddTokenAuth(token)
-		MakeRequest(t, req, http.StatusOK)
+		mergeCommitMessage := func(repo *repo_model.Repository) string {
+			gitRepo, err := gitrepo.OpenRepository(t.Context(), repo)
+			require.NoError(t, err)
+			defer gitRepo.Close()
 
-		gitRepo, err := gitrepo.OpenRepository(t.Context(), baseRepo)
-		require.NoError(t, err)
-		defer gitRepo.Close()
+			commit, err := gitRepo.GetBranchCommit("main")
+			require.NoError(t, err)
+			return commit.CommitMessage
+		}
 
-		commit, err := gitRepo.GetBranchCommit("main")
-		require.NoError(t, err)
+		t.Run("DefaultMessageKeepsTrailers", func(t *testing.T) {
+			baseRepo, pullIssue := createSameRepoArticlePR(t, user, "api-merge-message", "API merge message")
 
-		message := commit.CommitMessage
-		assert.Contains(t, message, fmt.Sprintf("Merge pull request 'API merge message' (#%d)", pullIssue.Index))
-		assert.Contains(t, message, "Reviewed-on: ")
+			// no MergeTitleField and no MergeMessageField: the server must generate both
+			req := NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/merge", user.Name, baseRepo.Name, pullIssue.Index), &forms.MergePullRequestForm{
+				Do: string(repo_model.MergeStyleMerge),
+			}).AddTokenAuth(token)
+			MakeRequest(t, req, http.StatusOK)
+
+			message := mergeCommitMessage(baseRepo)
+			assert.Contains(t, message, fmt.Sprintf("Merge pull request 'API merge message' (#%d) from edit into main", pullIssue.Index))
+			pullIssue.Repo = baseRepo
+			assert.Contains(t, message, "Reviewed-on: "+strings.TrimSuffix(giteaURL.String(), "/")+pullIssue.Link())
+		})
+
+		t.Run("ExplicitMessageReplacesDefaultBody", func(t *testing.T) {
+			baseRepo, pullIssue := createSameRepoArticlePR(t, user, "api-merge-custom-message", "API merge custom message")
+
+			req := NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/merge", user.Name, baseRepo.Name, pullIssue.Index), &forms.MergePullRequestForm{
+				Do:                string(repo_model.MergeStyleMerge),
+				MergeMessageField: "custom body",
+			}).AddTokenAuth(token)
+			MakeRequest(t, req, http.StatusOK)
+
+			message := mergeCommitMessage(baseRepo)
+			assert.Contains(t, message, fmt.Sprintf("Merge pull request 'API merge custom message' (#%d) from edit into main", pullIssue.Index))
+			assert.Contains(t, message, "custom body")
+			assert.NotContains(t, message, "Reviewed-on:")
+		})
 	})
 }
 

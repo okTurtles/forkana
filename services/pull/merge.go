@@ -162,6 +162,27 @@ func GetDefaultMergeMessage(ctx context.Context, baseGitRepo *git.Repository, pr
 	return getMergeMessage(ctx, baseGitRepo, pr, mergeStyle, nil)
 }
 
+// ComposeMergeCommitMessage builds the merge commit message from what the client sent and
+// the server-generated defaults.
+//
+// When the client sends no merge title (the single-click merge UI never does), the generated
+// title is used and, if the client also sent no body, the generated body is kept: it carries
+// the "Reviewed-on:"/"Reviewed-by:" trailers. A client which explicitly supplies a title but
+// no body still gets a bare merge commit message.
+func ComposeMergeCommitMessage(formTitle, formBody, defaultTitle, defaultBody string) string {
+	title, body := strings.TrimSpace(formTitle), strings.TrimSpace(formBody)
+	if title == "" {
+		title = defaultTitle
+		if body == "" {
+			body = strings.TrimSpace(defaultBody)
+		}
+	}
+	if body == "" {
+		return title
+	}
+	return title + "\n\n" + body
+}
+
 func AddCommitMessageTailer(message, tailerKey, tailerValue string) string {
 	tailerLine := tailerKey + ": " + tailerValue
 	message = strings.ReplaceAll(message, "\r\n", "\n")
