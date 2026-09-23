@@ -1,5 +1,5 @@
 import {GET} from '../modules/fetch.ts';
-import {createElementFromHTML, hideElem, showElem} from '../utils/dom.ts';
+import {createElementFromHTML, hideElem, showElem, toggleElem} from '../utils/dom.ts';
 import {html, htmlEscape, htmlRaw} from '../utils/html.ts';
 import {pathEscapeSegments} from '../utils/url.ts';
 
@@ -9,6 +9,11 @@ const {appSubUrl} = window.config;
 // has been typed so far, so that an existing subject can be opened without a full search first.
 const inputSelector = '#home-search-input';
 const suggestionsSelector = '#home-search-suggestions';
+const buttonSelector = '#home-search-button';
+// The button's "right: 8px" offset (web_src/css/home.css) plus a 16px text gap,
+// so the typed keyword never runs underneath the button. Change the CSS offset
+// and this together.
+const buttonInsetGapPx = 24;
 
 // How long the typing has to pause before the suggestions are fetched.
 const debounceMs = 200;
@@ -25,18 +30,26 @@ export function highlightKeyword(name: string, keyword: string): string {
 class HomeSearch {
   private readonly input: HTMLInputElement;
   private readonly suggestions: HTMLElement;
+  private readonly button: HTMLButtonElement | null;
   private debounceTimer: number | null = null;
   private abortController: AbortController | null = null;
   // Index of the suggestion the keyboard is on, -1 while the typed keyword itself is "selected".
   private activeIndex: number = -1;
 
-  constructor(input: HTMLInputElement, suggestions: HTMLElement) {
+  constructor(input: HTMLInputElement, suggestions: HTMLElement, button: HTMLButtonElement | null = null) {
     this.input = input;
     this.suggestions = suggestions;
+    this.button = button;
   }
 
   init(): void {
-    this.input.addEventListener('input', () => this.scheduleSearch());
+    this.input.addEventListener('input', () => {
+      this.updateButton();
+      this.scheduleSearch();
+    });
+    // The browser may restore a keyword when navigating back to the page, in which case the
+    // button has to be there right away.
+    this.updateButton();
     // Coming back to a field that still holds a keyword should offer the suggestions again.
     this.input.addEventListener('focus', () => this.scheduleSearch());
     this.input.addEventListener('keydown', (e: KeyboardEvent) => this.onKeyDown(e));
@@ -57,9 +70,27 @@ class HomeSearch {
     });
   }
 
+  // What has been typed so far, the single definition of "the field holds a keyword".
+  private get keyword(): string {
+    return this.input.value.trim();
+  }
+
+  // The Search button (custom/templates/home.tmpl) only appears while the field holds text,
+  // like the Figma design shows -- there is nothing to submit otherwise.
+  private updateButton(): void {
+    if (!this.button) return;
+    const hasKeyword = this.keyword !== '';
+    toggleElem(this.button, hasKeyword);
+    // Make room for the button inside the field so a long keyword doesn't run underneath it,
+    // sized off the rendered button so a longer translated label still fits. The button must be
+    // visible (not display:none) for offsetWidth, so measure after showing it.
+    this.input.classList.toggle('home-search-input-with-button', hasKeyword);
+    if (hasKeyword) this.input.style.setProperty('--home-search-button-inset', `${this.button.offsetWidth + buttonInsetGapPx}px`);
+  }
+
   private scheduleSearch(): void {
     if (this.debounceTimer !== null) clearTimeout(this.debounceTimer);
-    const keyword = this.input.value.trim();
+    const keyword = this.keyword;
     if (!keyword) {
       this.close();
       return;
@@ -86,7 +117,7 @@ class HomeSearch {
       return;
     }
     // The keyword may have changed again while the request was in flight.
-    if (keyword !== this.input.value.trim()) return;
+    if (keyword !== this.keyword) return;
     this.render(names, keyword);
   }
 
@@ -155,5 +186,5 @@ export function initHomeSearch(): void {
   const input = document.querySelector<HTMLInputElement>(inputSelector);
   const suggestions = document.querySelector<HTMLElement>(suggestionsSelector);
   if (!input || !suggestions) return;
-  new HomeSearch(input, suggestions).init();
+  new HomeSearch(input, suggestions, document.querySelector<HTMLButtonElement>(buttonSelector)).init();
 }
