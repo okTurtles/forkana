@@ -12,17 +12,29 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
+	system_model "code.gitea.io/gitea/models/system"
 	"code.gitea.io/gitea/models/unittest"
+	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/git"
+	"code.gitea.io/gitea/modules/queue"
+	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/setting/config"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/test"
+	repo_service "code.gitea.io/gitea/services/repository"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // notExistingAttachmentUUID is a well-formed UUID that no attachment fixture uses.
@@ -69,32 +81,62 @@ func createEditorAttachment(t *testing.T, session *TestSession, csrf, repoURL, f
 	return uploadAttachmentTo(t, session, csrf, repoURL+"/editor-attachments", filename, buff, expectedStatus)
 }
 
-// TestEditorAttachmentServedToRepoReaders verifies that an attachment uploaded via the
-// article/file editor (linked only by RepoID, never to an issue/release) is served to anyone
-// with repo read permission — not just the uploader — so embedded article images are visible
-// to readers, while remaining hidden from users without read access to a private repo.
+// TestEditorAttachmentServedToRepoReaders covers the serving rule for attachments that are not
+// linked to an issue or release: access follows the article associations, so a pending editor
+// upload stays private to its uploader, while a committed one is served to the readers of every
+// repository that keeps it alive — and to nobody else.
 func TestEditorAttachmentServedToRepoReaders(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	owner := loginUser(t, "user2")
 	user8 := loginUser(t, "user8")
+	csrf := GetUserCSRFToken(t, owner)
 
 	// A fresh request per call: session.MakeRequest stamps the session cookie onto the
 	// request, so reusing one *http.Request across sessions would leak the first cookie.
 	attachReq := func(uuid string) *RequestWrapper { return NewRequest(t, "GET", "/attachments/"+uuid) }
+	associate := func(t *testing.T, uuid string, repoID int64) {
+		t.Helper()
+		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repoID, []int64{attach.ID}))
+	}
 
-	// Public repo: readable by the uploader and by any other reader (incl. anonymous). Serving
-	// to non-uploaders is the new behavior — previously an unlinked attachment was uploader-only.
-	pubUUID := createEditorAttachment(t, owner, GetUserCSRFToken(t, owner), "user2/repo1", "image.png", generateImg(), http.StatusOK)
-	owner.MakeRequest(t, attachReq(pubUUID), http.StatusOK)
-	user8.MakeRequest(t, attachReq(pubUUID), http.StatusOK)
-	MakeRequest(t, attachReq(pubUUID), http.StatusOK) // anonymous
+	// A pending upload is still being previewed by its author and is referenced by no article.
+	t.Run("PendingUploadIsUploaderOnly", func(t *testing.T) {
+		uuid := createEditorAttachment(t, owner, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
 
-	// Private repo: readable by the owner, blocked for users without read access.
-	privUUID := createEditorAttachment(t, owner, GetUserCSRFToken(t, owner), "user2/repo2", "image.png", generateImg(), http.StatusOK)
-	owner.MakeRequest(t, attachReq(privUUID), http.StatusOK)
-	user8.MakeRequest(t, attachReq(privUUID), http.StatusNotFound)
-	MakeRequest(t, attachReq(privUUID), http.StatusNotFound) // anonymous
+		owner.MakeRequest(t, attachReq(uuid), http.StatusOK)
+		user8.MakeRequest(t, attachReq(uuid), http.StatusNotFound)
+		MakeRequest(t, attachReq(uuid), http.StatusNotFound) // anonymous
+	})
+
+	t.Run("AssociatedWithAPublicRepository", func(t *testing.T) {
+		uuid := createEditorAttachment(t, owner, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		associate(t, uuid, 1) // user2/repo1 is public
+
+		owner.MakeRequest(t, attachReq(uuid), http.StatusOK)
+		user8.MakeRequest(t, attachReq(uuid), http.StatusOK)
+		MakeRequest(t, attachReq(uuid), http.StatusOK) // anonymous
+	})
+
+	t.Run("AssociatedWithAPrivateRepository", func(t *testing.T) {
+		uuid := createEditorAttachment(t, owner, csrf, "user2/repo2", "image.png", generateImg(), http.StatusOK)
+		associate(t, uuid, 2) // user2/repo2 is private
+
+		owner.MakeRequest(t, attachReq(uuid), http.StatusOK)
+		user8.MakeRequest(t, attachReq(uuid), http.StatusNotFound)
+		MakeRequest(t, attachReq(uuid), http.StatusNotFound) // anonymous
+	})
+
+	// A repository the attachment is not associated with must not serve it, even when the
+	// caller may read that repository: the URL scope only narrows.
+	t.Run("ScopeMustHoldTheAssociation", func(t *testing.T) {
+		uuid := createEditorAttachment(t, owner, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		associate(t, uuid, 1)
+
+		user8.MakeRequest(t, NewRequest(t, "GET", "/user2/repo1/attachments/"+uuid), http.StatusOK)
+		user8.MakeRequest(t, NewRequest(t, "GET", "/user5/repo4/attachments/"+uuid), http.StatusNotFound)
+	})
 }
 
 // thumbnailAlts returns the alt attributes of the images rendered by the attachment list, i.e. the
@@ -347,4 +389,303 @@ func TestGetAttachment(t *testing.T) {
 			tc.session.MakeRequest(t, req, tc.want)
 		})
 	}
+}
+
+// TestEditorAttachmentRecordsArticlePurpose verifies that the editor upload endpoint records the
+// article purpose while the issue endpoint keeps the unspecified one, which is what keeps the
+// article-attachment garbage collector away from unfinished issue and release drafts.
+func TestEditorAttachmentRecordsArticlePurpose(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	session := loginUser(t, "user2")
+	csrf := GetUserCSRFToken(t, session)
+
+	editorUUID := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+	editorAttach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: editorUUID})
+	assert.Equal(t, repo_model.AttachmentPurposeArticle, editorAttach.Purpose)
+
+	issueUUID := createAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+	issueAttach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: issueUUID})
+	assert.Equal(t, repo_model.AttachmentPurposeUnspecified, issueAttach.Purpose)
+}
+
+// TestDeleteAttachmentRefusesAssociated covers the shared-lifetime rule: once an attachment is
+// referenced by committed article content, its uploader may no longer remove it directly, because
+// other repositories — forks included — reference the same blob. A pending upload stays removable.
+func TestDeleteAttachmentRefusesAssociated(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	const removeURL = "user2/repo1/issues/attachments/remove"
+	session := loginUser(t, "user2")
+	csrf := GetUserCSRFToken(t, session)
+
+	removeReq := func(uuid string) *RequestWrapper {
+		return NewRequestWithValues(t, "POST", removeURL, map[string]string{"_csrf": csrf, "file": uuid})
+	}
+
+	t.Run("PendingUploadIsRemovable", func(t *testing.T) {
+		uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		session.MakeRequest(t, removeReq(uuid), http.StatusOK)
+		unittest.AssertNotExistsBean(t, &repo_model.Attachment{UUID: uuid})
+	})
+
+	t.Run("AssociatedAttachmentIsRefused", func(t *testing.T) {
+		uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), attach.RepoID, []int64{attach.ID}))
+
+		session.MakeRequest(t, removeReq(uuid), http.StatusConflict)
+		unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+	})
+
+	// A linked issue attachment carries no association, so its removal path is unchanged.
+	t.Run("IssueAttachmentIsUnaffected", func(t *testing.T) {
+		uuid := createAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		session.MakeRequest(t, removeReq(uuid), http.StatusOK)
+		unittest.AssertNotExistsBean(t, &repo_model.Attachment{UUID: uuid})
+	})
+}
+
+// TestArticleCommitAssociatesAttachments exercises the web/API commit hook end to end: the
+// association is derived from the blob as it was actually committed, so it only exists once the
+// ref has moved. It needs a running instance because the commit goes through the push hooks.
+func TestArticleCommitAssociatesAttachments(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		session := loginUser(t, "user2")
+		csrf := GetUserCSRFToken(t, session)
+		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		articleContent := func(uuid string) string {
+			return fmt.Sprintf("# Article\n\n![img](/attachments/%s)\n", uuid)
+		}
+		associated := func(t *testing.T, repoID, attachmentID int64) bool {
+			t.Helper()
+			has, err := repo_model.HasArticleAttachment(t.Context(), repoID, attachmentID)
+			require.NoError(t, err)
+			return has
+		}
+
+		t.Run("ReferenceFromUploadRepo", func(t *testing.T) {
+			uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+			attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+
+			_, err := createFileInBranch(user2, repo1, "article-associated.md", repo1.DefaultBranch, articleContent(uuid))
+			require.NoError(t, err)
+			assert.True(t, associated(t, repo1.ID, attach.ID))
+		})
+
+		t.Run("CommitWithoutReferenceAssociatesNothing", func(t *testing.T) {
+			uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+			attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+
+			_, err := createFileInBranch(user2, repo1, "article-plain.md", repo1.DefaultBranch, "# Article\n")
+			require.NoError(t, err)
+			assert.False(t, associated(t, repo1.ID, attach.ID))
+		})
+
+		// Attachment 2 belongs to another repository and to an issue there. Referencing it must
+		// neither fail the commit nor grant repo1's readers access.
+		t.Run("UnauthorizedReferenceIsSkipped", func(t *testing.T) {
+			attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: 2})
+
+			_, err := createFileInBranch(user2, repo1, "article-borrowed.md", repo1.DefaultBranch, articleContent(attach.UUID))
+			require.NoError(t, err)
+			assert.False(t, associated(t, repo1.ID, attach.ID))
+		})
+	})
+}
+
+// TestArticlePushAssociatesAttachments covers the central post-ref-update hook: article content
+// that arrives by plain Git push, without ever passing through the editor, is discovered too.
+func TestArticlePushAssociatesAttachments(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, u *url.URL) {
+		session := loginUser(t, "user2")
+		csrf := GetUserCSRFToken(t, session)
+		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+
+		oldPath, oldUser := u.Path, u.User
+		defer func() { u.Path, u.User = oldPath, oldUser }()
+		u.Path = repo1.FullName() + ".git"
+		u.User = url.UserPassword("user2", userPassword)
+
+		dstPath := t.TempDir()
+		doGitClone(dstPath, u)(t)
+
+		content := fmt.Sprintf("# Article\n\n![img](/attachments/%s)\n", uuid)
+		require.NoError(t, os.WriteFile(filepath.Join(dstPath, "README.md"), []byte(content), 0o644))
+		require.NoError(t, git.AddChanges(t.Context(), dstPath, true))
+		signature := git.Signature{Email: "user2@example.com", Name: "user2"}
+		require.NoError(t, git.CommitChanges(t.Context(), dstPath, git.CommitChangesOptions{
+			Committer: &signature,
+			Author:    &signature,
+			Message:   "embed an attachment",
+		}))
+		doGitPushTestRepository(dstPath, "origin", "master")(t)
+
+		// pushUpdates runs on the push queue, so the association is not visible synchronously.
+		require.NoError(t, queue.GetManager().FlushAll(t.Context(), 30*time.Second))
+
+		has, err := repo_model.HasArticleAttachment(t.Context(), repo1.ID, attach.ID)
+		require.NoError(t, err)
+		assert.True(t, has)
+	})
+}
+
+// articleAttachmentContent embeds an attachment the way the editor writes it.
+func articleAttachmentContent(uuid string) string {
+	return fmt.Sprintf("# Article\n\n![img](/attachments/%s)\n", uuid)
+}
+
+// hasArticleAttachment reports whether a repository keeps an attachment alive.
+func hasArticleAttachment(t *testing.T, repoID, attachmentID int64) bool {
+	t.Helper()
+	has, err := repo_model.HasArticleAttachment(t.Context(), repoID, attachmentID)
+	require.NoError(t, err)
+	return has
+}
+
+// TestForkedArticleAttachmentSurvivesSourceDeletion is the scenario this task exists for, end to
+// end: an attachment embedded in an article, inherited by a fork, used to be deleted together
+// with the source repository, which left the fork's article pointing at missing bytes. The
+// attachment now outlives the source and is reclaimed only once the last repository referencing
+// it is gone.
+func TestForkedArticleAttachmentSurvivesSourceDeletion(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		session := loginUser(t, "user2")
+		csrf := GetUserCSRFToken(t, session)
+		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		user5 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+
+		_, err := createFileInBranch(user2, repo1, "article-forked.md", repo1.DefaultBranch, articleAttachmentContent(uuid))
+		require.NoError(t, err)
+		require.True(t, hasArticleAttachment(t, repo1.ID, attach.ID))
+
+		fork, err := repo_service.ForkRepository(t.Context(), user5, user5, repo_service.ForkRepoOptions{
+			BaseRepo:     repo1,
+			Name:         "repo1-article-fork",
+			SingleBranch: repo1.DefaultBranch,
+		})
+		require.NoError(t, err)
+		assert.True(t, hasArticleAttachment(t, fork.ID, attach.ID), "a fork inherits the associations of its base")
+
+		require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), repo1.ID))
+
+		unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: attach.ID})
+		assert.False(t, hasArticleAttachment(t, repo1.ID, attach.ID), "the deleted repository keeps no association")
+		assert.True(t, hasArticleAttachment(t, fork.ID, attach.ID))
+
+		// the fork's readers still get the bytes, through the global and the scoped route alike
+		MakeRequest(t, NewRequest(t, "GET", "/attachments/"+uuid), http.StatusOK)
+		MakeRequest(t, NewRequest(t, "GET", "/"+fork.FullName()+"/attachments/"+uuid), http.StatusOK)
+
+		// created_unix has second granularity and the cutoff is strict, so a cutoff of
+		// exactly now would skip an attachment uploaded within the same second.
+		cutoff := time.Now().Add(time.Second)
+
+		// the collector leaves a referenced attachment alone whatever its age
+		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff})
+		require.NoError(t, err)
+		unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: attach.ID})
+
+		// once the last repository referencing it is gone, it becomes collectable
+		require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), fork.ID))
+		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff})
+		require.NoError(t, err)
+		unittest.AssertNotExistsBean(t, &repo_model.Attachment{ID: attach.ID})
+		MakeRequest(t, NewRequest(t, "GET", "/attachments/"+uuid), http.StatusNotFound)
+	})
+}
+
+// TestArticleAttachmentUUIDKnowledgeIsNotAuthorization covers the security rule that the whole
+// association design rests on: a reference is an observation, not a grant. Pasting the UUID of a
+// private article's attachment into a public article must neither associate it nor hand its bytes
+// to the public article's readers.
+func TestArticleAttachmentUUIDKnowledgeIsNotAuthorization(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		session := loginUser(t, "user2")
+		csrf := GetUserCSRFToken(t, session)
+		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1}) // public
+		repo2 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2}) // private
+
+		uuid := createEditorAttachment(t, session, csrf, "user2/repo2", "image.png", generateImg(), http.StatusOK)
+		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
+
+		_, err := createFileInBranch(user2, repo2, "article-private.md", repo2.DefaultBranch, articleAttachmentContent(uuid))
+		require.NoError(t, err)
+		require.True(t, hasArticleAttachment(t, repo2.ID, attach.ID))
+
+		// the same user, who may write to both, pastes the reference into their public article
+		_, err = createFileInBranch(user2, repo1, "article-leak.md", repo1.DefaultBranch, articleAttachmentContent(uuid))
+		require.NoError(t, err)
+		assert.False(t, hasArticleAttachment(t, repo1.ID, attach.ID),
+			"an unrelated repository must not claim another article's attachment")
+
+		// so the public article cannot be used as a cover for the private bytes
+		user8 := loginUser(t, "user8")
+		user8.MakeRequest(t, NewRequest(t, "GET", "/attachments/"+uuid), http.StatusNotFound)
+		user8.MakeRequest(t, NewRequest(t, "GET", "/user2/repo1/attachments/"+uuid), http.StatusNotFound)
+		MakeRequest(t, NewRequest(t, "GET", "/attachments/"+uuid), http.StatusNotFound) // anonymous
+
+		// guessing a well-formed UUID leaks nothing either
+		MakeRequest(t, NewRequest(t, "GET", "/user2/repo1/attachments/"+notExistingAttachmentUUID), http.StatusNotFound)
+	})
+}
+
+// TestLegacyAttachmentFallbackRetires covers the transitional read path for rows predating the
+// association table. Until the backfill is finalized they are served by the read permission of
+// the repository they were uploaded to; afterwards only associations authorize, so an unassociated
+// legacy row becomes uploader-only while an associated one is unaffected.
+func TestLegacyAttachmentFallbackRetires(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	fallbackKey := setting.Config().Attachment.LegacyArticleFallback.DynKey()
+	setFallback := func(t *testing.T, enabled string) {
+		t.Helper()
+		require.NoError(t, system_model.SetSettings(t.Context(), map[string]string{fallbackKey: enabled}))
+		// the value is cached by revision, and the revision itself for a second
+		config.GetDynGetter().InvalidateCache()
+	}
+	t.Cleanup(func() { setFallback(t, "true") })
+
+	legacy := func(t *testing.T, uuid string) *repo_model.Attachment {
+		t.Helper()
+		attach := &repo_model.Attachment{
+			UUID:       uuid,
+			RepoID:     1, // public repo1
+			UploaderID: 2,
+			Purpose:    repo_model.AttachmentPurposeUnspecified,
+			Name:       "legacy.png",
+		}
+		require.NoError(t, db.Insert(t.Context(), attach))
+		_, err := storage.Attachments.Save(attach.RelativePath(), strings.NewReader("hello world"), -1)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = storage.Attachments.Delete(attach.RelativePath()) })
+		return attach
+	}
+
+	unassociated := legacy(t, "4d1f0a7e-0000-4000-8000-00000000e001")
+	associated := legacy(t, "4d1f0a7e-0000-4000-8000-00000000e002")
+	require.NoError(t, repo_model.AddArticleAttachments(t.Context(), 1, []int64{associated.ID}))
+
+	uploader := loginUser(t, "user2")
+	reader := loginUser(t, "user8")
+	get := func(uuid string) *RequestWrapper { return NewRequest(t, "GET", "/attachments/"+uuid) }
+
+	setFallback(t, "true")
+	reader.MakeRequest(t, get(unassociated.UUID), http.StatusOK)
+	reader.MakeRequest(t, get(associated.UUID), http.StatusOK)
+
+	setFallback(t, "false")
+	reader.MakeRequest(t, get(unassociated.UUID), http.StatusNotFound)
+	uploader.MakeRequest(t, get(unassociated.UUID), http.StatusOK)
+	reader.MakeRequest(t, get(associated.UUID), http.StatusOK)
 }

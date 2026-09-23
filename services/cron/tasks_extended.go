@@ -15,6 +15,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/updatechecker"
 	asymkey_service "code.gitea.io/gitea/services/asymkey"
+	attachment_service "code.gitea.io/gitea/services/attachment"
 	repo_service "code.gitea.io/gitea/services/repository"
 	archiver_service "code.gitea.io/gitea/services/repository/archiver"
 	user_service "code.gitea.io/gitea/services/user"
@@ -214,6 +215,65 @@ func registerGCLFS() {
 	})
 }
 
+type GCArticleAttachmentsConfig struct {
+	BaseConfig
+	OlderThan time.Duration
+	BatchSize int
+}
+
+func registerGCArticleAttachments() {
+	RegisterTaskFatal("gc_article_attachments", &GCArticleAttachmentsConfig{
+		BaseConfig: BaseConfig{
+			// Disabled by default: an association is written after the push that
+			// references the attachment, and legacy associations only exist once the
+			// backfill has run. Enable this only after backfill verification and a
+			// clean reconciliation run.
+			Enabled:    false,
+			RunAtStart: false,
+			Schedule:   "@every 24h",
+		},
+		// An article upload precedes the commit that references it, so an attachment
+		// is legitimately unreferenced for a while. A week is ample for that window
+		// and short enough to keep abandoned uploads from accumulating.
+		OlderThan: 24 * time.Hour * 7,
+
+		// Bound the first run on an instance with a long backlog.
+		BatchSize: 1000,
+	}, func(ctx context.Context, _ *user_model.User, config Config) error {
+		gcConfig := config.(*GCArticleAttachmentsConfig)
+		_, err := repo_service.GarbageCollectArticleAttachments(ctx, repo_service.GarbageCollectArticleAttachmentsOptions{
+			OlderThan: time.Now().Add(-gcConfig.OlderThan),
+			Limit:     gcConfig.BatchSize,
+		})
+		return err
+	})
+}
+
+type ReconcileArticleAttachmentsConfig struct {
+	BaseConfig
+	BatchSize int
+}
+
+func registerReconcileArticleAttachments() {
+	RegisterTaskFatal("reconcile_article_attachments", &ReconcileArticleAttachmentsConfig{
+		BaseConfig: BaseConfig{
+			// Disabled by default: the run walks the article history of every
+			// repository, which an instance should schedule deliberately.
+			Enabled:    false,
+			RunAtStart: false,
+			Schedule:   "@every 24h",
+		},
+		// How many repositories are loaded per page, not a cap on the run.
+		BatchSize: attachment_service.DefaultBackfillBatchSize,
+	}, func(ctx context.Context, _ *user_model.User, config Config) error {
+		reconcileConfig := config.(*ReconcileArticleAttachmentsConfig)
+		_, err := attachment_service.ReconcileArticleAttachments(ctx, attachment_service.ReconcileOptions{
+			BatchSize: reconcileConfig.BatchSize,
+		})
+		return err
+	})
+}
+
 func registerRebuildIssueIndexer() {
 	RegisterTaskFatal("rebuild_issue_indexer", &BaseConfig{
 		Enabled:    false,
@@ -238,5 +298,7 @@ func initExtendedTasks() {
 	registerUpdateGiteaChecker()
 	registerDeleteOldSystemNotices()
 	registerGCLFS()
+	registerGCArticleAttachments()
+	registerReconcileArticleAttachments()
 	registerRebuildIssueIndexer()
 }
