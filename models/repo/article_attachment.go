@@ -5,6 +5,7 @@ package repo
 
 import (
 	"context"
+	"fmt"
 
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/models/unit"
@@ -173,7 +174,12 @@ func unreferencedArticleAttachmentCond() builder.Cond {
 //
 // The age condition is the grace period: an attachment is created before the
 // commit that associates it, and the association may still be on its way.
+//
+// A limit of 0 means no limit; a negative limit is a configuration error.
 func FindUnreferencedArticleAttachments(ctx context.Context, olderThan timeutil.TimeStamp, limit int) ([]*Attachment, error) {
+	if limit < 0 {
+		return nil, fmt.Errorf("limit must not be negative: %d", limit)
+	}
 	attachments := make([]*Attachment, 0, min(limit, 64))
 	sess := db.GetEngine(ctx).Table("attachment").
 		Where(unreferencedArticleAttachmentCond()).

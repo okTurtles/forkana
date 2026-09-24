@@ -149,6 +149,11 @@ func TestFindUnreferencedArticleAttachments(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, found, 2)
 	assert.Equal(t, orphan2.ID, found[1].ID)
+
+	// a misconfigured negative limit is an error, not a panic
+	found, err = repo_model.FindUnreferencedArticleAttachments(t.Context(), cutoff, -1)
+	assert.Error(t, err)
+	assert.Nil(t, found)
 }
 
 func TestDeleteUnreferencedArticleAttachment(t *testing.T) {
