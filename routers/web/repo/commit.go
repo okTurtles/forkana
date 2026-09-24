@@ -472,14 +472,19 @@ func processGitCommits(ctx *context.Context, gitCommits []*git.Commit) ([]*git_m
 	return commits, nil
 }
 
-// ArticleView handles the /article/{username}/{subjectname} route
+// ArticleView handles the /subject/{subjectname}/{username}[/{articleindex}] route
 // If a "version" query parameter is present, it shows the commit view
 // Otherwise, it shows the article view with read/edit/history modes
 func ArticleView(ctx *context.Context) {
 	// Keep in-page links on the subject the article was requested through. The route
-	// captures the segment, so it is always the name the repository was resolved by.
+	// captures the segments, so they always name the repository that was resolved,
+	// including the article index when the owner holds several articles for the subject.
 	subject := ctx.PathParam("subjectname")
-	ctx.Data["ArticleLink"] = setting.AppSubURL + "/article/" + url.PathEscape(ctx.Repo.Owner.Name) + "/" + url.PathEscape(subject)
+	articleLink := setting.AppSubURL + "/subject/" + url.PathEscape(subject) + "/" + url.PathEscape(ctx.Repo.Owner.Name)
+	if index := ctx.PathParam("articleindex"); index != "" {
+		articleLink += "/" + url.PathEscape(index)
+	}
+	ctx.Data["ArticleLink"] = articleLink
 
 	renderArticleView(ctx)
 }
@@ -506,7 +511,7 @@ func renderArticleView(ctx *context.Context) {
 	ctx.Data["PageIsRepoHistory"] = true
 	ctx.Data["IsRepoHistoryView"] = true
 
-	// Force article view mode (this is the /article/ route, not /subject/)
+	// Force article view mode (this is an article route, not the subject view)
 	ctx.Data["HistoryView"] = "article"
 	ctx.Data["IsBubbleView"] = false
 	ctx.Data["IsTableView"] = false
@@ -517,7 +522,7 @@ func renderArticleView(ctx *context.Context) {
 }
 
 // articleCommitView renders the article view at a specific commit
-// for the /article/{username}/{subjectname}?version={commit-hash} route.
+// for the /subject/{subjectname}/{username}?version={commit-hash} route.
 // The commitHash parameter must be non-empty and is passed from ArticleView.
 func articleCommitView(ctx *context.Context, commitHash string) {
 	// Validate that the commit hash looks like a valid git commit ID
