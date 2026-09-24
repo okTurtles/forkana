@@ -263,15 +263,14 @@ func registerRepoFileEditorRoutes(m *web.Router, reqRepoCodeWriter func(*context
 			m.Post("/upload-remove", repo.RemoveUploadFileFromServer)
 		}, repo.MustBeAbleToUpload, reqRepoCodeWriter)
 		// Stores images pasted/dropped in the article/file editor as repo attachments
-		// (referenced by /attachments/{uuid}) instead of inline base64. The resulting
-		// attachment is never linked to an issue/release, only referenced from the committed
-		// Markdown by RepoID, and ServeAttachment authorizes such attachments by repository
-		// read permission so embedded article images are visible to readers. Only "code
-		// reader" is required so the "fork and edit" flow can upload before the fork is
-		// created; the enclosing groups already enforce sign-in and repo read access.
-		// The upload is recorded with the article purpose, which is what lets an abandoned
-		// editor upload be collected without touching issue/release draft semantics; any
-		// signed-in reader can still create one.
+		// (referenced by /attachments/{uuid}) instead of inline base64. The upload is
+		// recorded with the article purpose, and once committed it is associated with the
+		// repository; ServeAttachment then authorizes it by that association, so embedded
+		// article images are visible to the readers of every repository keeping them alive.
+		// Only "code reader" is required so the "fork and edit" flow can upload before the
+		// fork is created; the enclosing groups already enforce sign-in and repo read access.
+		// Any signed-in reader can still create an abandoned upload; the article-attachment
+		// garbage collector eventually reclaims it.
 		m.Post("/editor-attachments", repo.UploadEditorAttachment)
 	}, repo.MustBeEditable, context.RepoMustNotBeArchived())
 }
