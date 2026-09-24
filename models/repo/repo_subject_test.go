@@ -393,7 +393,7 @@ func TestGetRepositoriesBySubjectIDAndOwners_EmptyOwnerList(t *testing.T) {
 	assert.Empty(t, repos)
 }
 
-func TestRepositoryLinkArchivedUsesPermanentURL(t *testing.T) {
+func TestRepositoryLinkArchivedUsesArticleIndex(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
@@ -405,13 +405,23 @@ func TestRepositoryLinkArchivedUsesPermanentURL(t *testing.T) {
 	repo.SubjectID = subject.ID
 	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id"))
 
-	// active articles keep the subject vanity url
-	assert.Equal(t, setting.AppSubURL+"/article/"+repo.OwnerName+"/Link%20Routing%20Subject", repo.Link())
+	base := setting.AppSubURL + "/subject/Link%20Routing%20Subject/" + repo.OwnerName
 
-	// archived articles use the permanent repository url, which always resolves to
-	// that exact repository
-	repo.IsArchived = true
-	assert.Equal(t, repo.OperationsLink(), repo.Link())
+	// the owner's only article for the subject carries no index
+	assert.Equal(t, base, repo.Link())
+
+	// archiving it while the same owner holds an active article for the subject moves
+	// it past the first position, which the url spells out
+	other, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.OwnerID, other.OwnerID)
+	other.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, other, "subject_id"))
+
+	assert.NoError(t, repo_model.SetArchiveRepoState(ctx, repo, true))
+	assert.Equal(t, base+"/2", repo.Link())
+	assert.Equal(t, 2, repo.ArticleIndex(ctx))
+	assert.Equal(t, 1, other.ArticleIndex(ctx))
 }
 
 // TestSubjectLookupPrefersActiveRepository documents that the vanity url of a subject
@@ -444,8 +454,8 @@ func TestSubjectLookupPrefersActiveRepository(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, active.ID, found.ID)
 
-	// the archived article is never linked through the article namespace, so its link
-	// cannot be captured by the active repository of the subject
-	assert.Equal(t, archived.OperationsLink(), archived.Link())
+	// the archived article sits behind the active one in the subject hierarchy, so its
+	// link carries the index that tells the two apart
+	assert.Equal(t, found.Link()+"/2", archived.Link())
 	assert.NotEqual(t, found.Link(), archived.Link())
 }

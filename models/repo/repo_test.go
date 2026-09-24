@@ -72,7 +72,7 @@ func TestCommitLink(t *testing.T) {
 		SubjectID:       1,
 		SubjectRelation: &Subject{ID: 1, Name: "Some Subject", Slug: "some-subject"},
 	}
-	assert.Equal(t, setting.AppSubURL+"/article/user13/Some%20Subject?version="+sha, article.CommitLink(sha))
+	assert.Equal(t, setting.AppSubURL+"/subject/Some%20Subject/user13?version="+sha, article.CommitLink(sha))
 
 	// an archived article is still served from the article view, so its commit link
 	// keeps the "version" query parameter
@@ -83,7 +83,7 @@ func TestCommitLink(t *testing.T) {
 		SubjectID:       1,
 		SubjectRelation: &Subject{ID: 1, Name: "Some Subject", Slug: "some-subject"},
 	}
-	assert.Equal(t, setting.AppSubURL+"/article/user13/Some%20Subject?version="+sha, archived.CommitLink(sha))
+	assert.Equal(t, setting.AppSubURL+"/subject/Some%20Subject/user13?version="+sha, archived.CommitLink(sha))
 
 	assert.Empty(t, article.CommitLink("0000000000000000000000000000000000000000"))
 }

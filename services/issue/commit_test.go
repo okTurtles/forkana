@@ -317,7 +317,7 @@ func TestUpdateIssuesCommitRefCommentLink(t *testing.T) {
 		{
 			name:     "Article",
 			sha:      "aaaaaa1",
-			expected: `<a href="/article/user2/example-subject?version=aaaaaa1">ref link</a>`,
+			expected: `<a href="/subject/example-subject/user2?version=aaaaaa1">ref link</a>`,
 		},
 		{
 			// a subject is a display name, so its escaped form has to appear in the link
@@ -326,7 +326,7 @@ func TestUpdateIssuesCommitRefCommentLink(t *testing.T) {
 			prepare: func(repo *repo_model.Repository) {
 				repo.SubjectRelation = &repo_model.Subject{ID: repo.SubjectID, Name: "Mermaid Graphs Example"}
 			},
-			expected: `<a href="/article/user2/Mermaid%20Graphs%20Example?version=aaaaaa2">ref link</a>`,
+			expected: `<a href="/subject/Mermaid%20Graphs%20Example/user2?version=aaaaaa2">ref link</a>`,
 		},
 		{
 			// an archived article is still served from the article view
@@ -335,7 +335,7 @@ func TestUpdateIssuesCommitRefCommentLink(t *testing.T) {
 			prepare: func(repo *repo_model.Repository) {
 				repo.IsArchived = true
 			},
-			expected: `<a href="/article/user2/example-subject?version=aaaaaa3">ref link</a>`,
+			expected: `<a href="/subject/example-subject/user2?version=aaaaaa3">ref link</a>`,
 		},
 	}
 

@@ -18,7 +18,7 @@ test.describe('Submit Change Request Workflow', () => {
       const page = await context.newPage();
 
       // Navigate to article edit page
-      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.goto('/subject/example-subject/user2?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
       // Wait for the article content to be present
@@ -43,7 +43,7 @@ test.describe('Submit Change Request Workflow', () => {
       const context = await load_logged_in_context(browser, workerInfo, 'user2');
       const page = await context.newPage();
 
-      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.goto('/subject/example-subject/user2?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
       // Wait for the article content to be present
@@ -70,7 +70,7 @@ test.describe('Submit Change Request Workflow', () => {
       const context = await load_logged_in_context(browser, workerInfo, 'user4');
       const page = await context.newPage();
 
-      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.goto('/subject/example-subject/user2?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
       // Wait for the article view to be ready
@@ -110,7 +110,7 @@ test.describe('Submit Change Request Workflow', () => {
       const context = await load_logged_in_context(browser, workerInfo, 'user4');
       const page = await context.newPage();
 
-      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.goto('/subject/example-subject/user2?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
       await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
@@ -157,7 +157,7 @@ test.describe('Submit Change Request Workflow', () => {
       const context = await load_logged_in_context(browser, workerInfo, 'user4');
       const page = await context.newPage();
 
-      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.goto('/subject/example-subject/user2?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
       await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
@@ -181,7 +181,7 @@ test.describe('Submit Change Request Workflow', () => {
       const context = await load_logged_in_context(browser, workerInfo, 'user4');
       const page = await context.newPage();
 
-      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.goto('/subject/example-subject/user2?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
       await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
@@ -216,7 +216,7 @@ test.describe('Submit Change Request Workflow', () => {
       const context = await load_logged_in_context(browser, workerInfo, 'user4');
       const page = await context.newPage();
 
-      await page.goto('/article/user2/example-subject?mode=edit');
+      await page.goto('/subject/example-subject/user2?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
       const submitCRButton = page.locator('#pre-submit-changes-button');
@@ -232,7 +232,7 @@ test.describe('Submit Change Request Workflow', () => {
 
 test.describe('Submit Change Request - Unauthenticated User', () => {
   test('unauthenticated user sees sign-in prompt instead of Submit Change Request', async ({page}) => {
-    await page.goto('/article/user2/example-subject?mode=edit');
+    await page.goto('/subject/example-subject/user2?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 
     // Wait for the article view to be present
@@ -262,7 +262,7 @@ test.describe('Submit Change Request vs Fork Button', () => {
     const context = await load_logged_in_context(browser, workerInfo, 'user4');
     const page = await context.newPage();
 
-    await page.goto('/article/user2/example-subject?mode=edit');
+    await page.goto('/subject/example-subject/user2?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 
     await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});

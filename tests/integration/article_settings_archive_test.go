@@ -56,7 +56,7 @@ func TestArticleSettingsArchiveSuccess(t *testing.T) {
 	settingsURL := fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name)
 
 	// the archived notice is rendered but hidden while the article is not archived
-	req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s?view=article", owner.Name, subjectName))
+	req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s?view=article", subjectName, owner.Name))
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	notice := NewHTMLParser(t, resp.Body).Find("#article-archived-notice")
 	require.Equal(t, 1, notice.Length())
@@ -67,7 +67,7 @@ func TestArticleSettingsArchiveSuccess(t *testing.T) {
 		archiveForm(GetUserCSRFToken(t, session), owner.Name, subjectName))
 	resp = session.MakeRequest(t, req, http.StatusSeeOther)
 
-	articleSettingsURL := fmt.Sprintf("/article/%s/%s?view=article&mode=settings", owner.Name, subjectName)
+	articleSettingsURL := fmt.Sprintf("/subject/%s/%s?view=article&mode=settings", subjectName, owner.Name)
 	assert.Equal(t, articleSettingsURL, test.RedirectURL(resp))
 
 	// the flash message is carried over in a cookie, so it renders on the next page
@@ -90,7 +90,7 @@ func TestArticleArchivedReadOnly(t *testing.T) {
 	require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, true))
 
 	session := loginUser(t, owner.Name)
-	articleURL := fmt.Sprintf("/article/%s/%s?view=article", owner.Name, subjectName)
+	articleURL := fmt.Sprintf("/subject/%s/%s?view=article", subjectName, owner.Name)
 
 	// the notice sits above the article section, so it renders on every mode
 	for _, mode := range []string{"read", "history", "settings"} {
@@ -140,7 +140,7 @@ func TestArticleArchivedReadOnly(t *testing.T) {
 	// archived write endpoints stay hidden behind a 404, as everywhere else in Gitea
 	t.Run("EditorRoutesNotFound", func(t *testing.T) {
 		csrf := GetUserCSRFToken(t, session)
-		editorPath := fmt.Sprintf("/article/%s/%s", owner.Name, subjectName)
+		editorPath := fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name)
 
 		for _, tc := range []struct {
 			name   string

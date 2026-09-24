@@ -92,7 +92,7 @@ func TestWiki(t *testing.T) {
 	Wiki(ctx)
 	assert.Equal(t, http.StatusSeeOther, ctx.Resp.WrittenStatus())
 	// Repository 1 has subject_id 1, which is "example-subject"
-	assert.Equal(t, "/article/user2/example-subject/wiki/raw/jpeg.jpg", ctx.Resp.Header().Get("Location"))
+	assert.Equal(t, "/subject/example-subject/user2/wiki/raw/jpeg.jpg", ctx.Resp.Header().Get("Location"))
 }
 
 func TestWikiPages(t *testing.T) {

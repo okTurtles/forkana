@@ -79,7 +79,7 @@ test.describe('Mermaid rendering', () => {
       // editor's textarea sync dispatches, which is also what enables it for a real user
       await expect(page.locator('#commit-button')).toBeEnabled({timeout: 10000});
       await page.locator('#commit-button').click();
-      await page.waitForURL(`**/article/user2/${subject}**`, {timeout: 30000});
+      await page.waitForURL(`**/subject/${subject}/user2**`, {timeout: 30000});
 
       await expectMermaidFrame(page, 0, /ArticleAlpha[\s\S]*ArticleBeta/);
 

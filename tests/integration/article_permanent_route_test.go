@@ -67,7 +67,7 @@ func TestArticlePermanentRoute(t *testing.T) {
 	})
 
 	t.Run("VanityURLStillRendersArticleView", func(t *testing.T) {
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", owner.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
 
@@ -117,9 +117,10 @@ func TestArticlePermanentRoute(t *testing.T) {
 
 		app := htmlDoc.Find("#repo-history-app")
 		require.Equal(t, 1, app.Length())
-		// the links of an archived article are built from its permanent repository URL
+		// the owner has no other article for the subject, so the archived one is still
+		// the first article of the subject hierarchy and carries no index
 		assert.Equal(t, "true", app.AttrOr("data-initial-archived", ""))
-		assert.Equal(t, repoURL, repo.Link())
+		assert.Equal(t, fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name), repo.Link())
 		notice := htmlDoc.Find("#article-archived-notice")
 		require.Equal(t, 1, notice.Length())
 		assert.False(t, notice.HasClass("tw-hidden"))
@@ -133,21 +134,32 @@ func TestArticlePermanentRoute(t *testing.T) {
 	t.Run("ArticleURLByRepositoryNameIsNotFound", func(t *testing.T) {
 		// the article namespace only resolves subject names, so a repository name that
 		// is not a subject name cannot address the article
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", owner.Name, repo.Name))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", repo.Name, owner.Name))
 		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 
 	t.Run("ArticleURLByUnknownRefIsNotFound", func(t *testing.T) {
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", owner.Name, "no-such-article"))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", "no-such-article", owner.Name))
 		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 
-	// ArticleView builds the article link straight from "subjectname" without a fallback,
-	// which holds because the route cannot match an empty segment.
-	t.Run("ArticleURLWithoutSubjectDoesNotReachTheArticleView", func(t *testing.T) {
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/", owner.Name))
-		resp := session.MakeRequest(t, req, NoExpectedStatus)
-		assert.NotEqual(t, http.StatusOK, resp.Code)
+	// ArticleView builds the article link straight from "subjectname" and "username"
+	// without a fallback, which holds because the route cannot match an empty segment.
+	t.Run("ArticleURLWithoutOwnerDoesNotReachTheArticleView", func(t *testing.T) {
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/", subjectName))
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		assert.NotEqual(t, "article", htmlDoc.Find("#repo-history-app").AttrOr("data-initial-view", ""))
+	})
+
+	// The article index is 1-based and only addresses articles the owner actually holds
+	// for the subject.
+	t.Run("ArticleIndexOutOfRangeIsNotFound", func(t *testing.T) {
+		for _, index := range []string{"0", "2"} {
+			req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/%s", subjectName, owner.Name, index))
+			session.MakeRequest(t, req, http.StatusNotFound)
+		}
 	})
 
 	// The repository name of an article is the slug of its subject, so an archived
@@ -167,9 +179,9 @@ func TestArticlePermanentRoute(t *testing.T) {
 			_ = repo_model.SetArchiveRepoState(t.Context(), repo, false)
 		})
 
-		// the archived article is addressed by its permanent URL, which cannot be
-		// captured by the subject of the owner's active article
-		assert.Equal(t, repoURL, repo.Link())
+		// the archived article is the owner's only one for its subject, so the subject
+		// hierarchy still addresses it without an index
+		assert.Equal(t, fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name), repo.Link())
 
 		req := NewRequest(t, "GET", repoURL)
 		resp := session.MakeRequest(t, req, http.StatusOK)

@@ -278,8 +278,8 @@ func TestPullMergeSingleStepGeneratesMergeMessage(t *testing.T) {
 			Redirect string
 		}{}
 		DecodeJSON(t, resp, &respJSON)
-		// Forkana serves articles under an "/article" prefix
-		assert.Regexp(t, fmt.Sprintf(`/%s/%s/pulls/%d$`, user.Name, baseRepo.Name, pullIssue.Index), respJSON.Redirect)
+		// Forkana serves articles under "/subject/{subject}/{owner}"
+		assert.Regexp(t, fmt.Sprintf(`/%s/%s/pulls/%d$`, baseRepo.Name, user.Name, pullIssue.Index), respJSON.Redirect)
 
 		gitRepo, err := gitrepo.OpenRepository(t.Context(), baseRepo)
 		require.NoError(t, err)
