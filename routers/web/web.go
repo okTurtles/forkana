@@ -227,6 +227,31 @@ func ctxDataSet(args ...any) func(ctx *context.Context) {
 	}
 }
 
+// articleRoutePrefixes are the two shapes an article url can take: the owner's current
+// article for a subject, and the article index when the owner holds several articles for
+// that subject. Every article route is registered under both, so a versioned article
+// offers the same functionality as the current one.
+// The index is numeric only, which is what keeps it apart from the sub-paths ("issues",
+// "pulls", "_edit", ...) that follow the same segment.
+var articleRoutePrefixes = []string{
+	"/subject/{subjectname}/{username}",
+	"/subject/{subjectname}/{username}/{articleindex:[0-9]+}",
+}
+
+// addArticleRoute registers the same GET route under every article url shape.
+func addArticleRoute(m *web.Router, pattern string, h ...any) {
+	for _, prefix := range articleRoutePrefixes {
+		m.Get(prefix+pattern, h...)
+	}
+}
+
+// addArticleGroup registers the same route group under every article url shape.
+func addArticleGroup(m *web.Router, pattern string, fn func(), middlewares ...any) {
+	for _, prefix := range articleRoutePrefixes {
+		m.Group(prefix+pattern, fn, middlewares...)
+	}
+}
+
 // registerRepoFileEditorRoutes registers common file editor routes for both repositories and article-based file operations.
 // This includes routes for editing, creating, deleting, uploading files, applying patches, and cherry-picking commits.
 func registerRepoFileEditorRoutes(m *web.Router, reqRepoCodeWriter func(*context.Context)) {
@@ -1235,21 +1260,20 @@ func registerWebRoutes(m *web.Router) {
 	)
 	// end "/{username}/{reponame}/settings"
 
-	m.Get("/article/repo/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, explore.RepoHistory)
 	// Article route - shows commit view if version parameter is present, otherwise shows home
-	m.Get("/article/{username}/{subjectname}", optSignIn, context.RepoAssignmentByOwnerAndSubject, repo.ArticleView)
+	addArticleRoute(m, "", optSignIn, context.RepoAssignmentByOwnerAndSubject, repo.ArticleView)
 
 	// Article-based file operation routes - mirror the repository-based routes but use subject name
-	m.Group("/article/{username}/{subjectname}", func() {
+	addArticleGroup(m, "", func() {
 		registerRepoFileEditorRoutes(m, reqRepoCodeWriter)
 	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
-	// end "/article/{username}/{subjectname}": article-based file operations
+	// end "/subject/{subjectname}/{username}": article-based file operations
 
 	// Article settings helpers, the article settings UI lives on the article view itself
-	m.Get("/article/{username}/{subjectname}/settings/transfer_candidates", reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqRepoAdmin, repo_setting.ArticleTransferCandidates)
+	addArticleRoute(m, "/settings/transfer_candidates", reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqRepoAdmin, repo_setting.ArticleTransferCandidates)
 
 	// Article-based pull request routes - mirror the repository-based routes but use subject name
-	m.Group("/article/{username}/{subjectname}", func() {
+	addArticleGroup(m, "", func() {
 		m.Get("/{type:pulls}", repo.Issues)
 		m.Group("/{type:pulls}/{index}", func() {
 			m.Get("", repo.SetWhitespaceBehavior, repo.GetPullDiffStats, repo.ViewIssue)
@@ -1282,7 +1306,7 @@ func registerWebRoutes(m *web.Router) {
 			})
 		})
 	}, optSignIn, context.RepoAssignmentByOwnerAndSubject, repo.MustAllowPulls, reqUnitPullsReader)
-	// end "/article/{username}/{subjectname}/pulls/{index}": article pull request
+	// end "/subject/{subjectname}/{username}/pulls/{index}": article pull request
 
 	// user/org home, including rss feeds like "/{username}/{reponame}.rss"
 	m.Get("/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByType(git.RefTypeBranch), repo.SetEditorconfigIfExists, repo.Home)
@@ -1345,7 +1369,7 @@ func registerWebRoutes(m *web.Router) {
 
 	addIssuesPullsUpdateRoutes := func() {
 		// for "/{username}/{reponame}/issues", "/{username}/{reponame}/pulls",
-		// or "/article/{username}/{subjectname}/pulls"
+		// or "/subject/{subjectname}/{username}/pulls"
 		m.Group("/{index}", func() {
 			m.Post("/title", repo.UpdateIssueTitle)
 			m.Post("/content", repo.UpdateIssueContent)
@@ -1436,7 +1460,7 @@ func registerWebRoutes(m *web.Router) {
 	// end "/{username}/{reponame}": create or edit issues, pulls, labels, milestones
 
 	// Article-based pull request view routes (info, attachments, content-history)
-	m.Group("/article/{username}/{subjectname}/{type:pulls}", addIssuesPullsViewRoutes, optSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitPullsReader)
+	addArticleGroup(m, "/{type:pulls}", addIssuesPullsViewRoutes, optSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitPullsReader)
 
 	// The same view routes under "{type:issues}", plus the comment attachment listing. The
 	// edit-in-place dropzone builds its listing URL from $.RepoLink, which is the article link,
@@ -1445,13 +1469,13 @@ func registerWebRoutes(m *web.Router) {
 	// Without these routes the listing 404s, the dropzone comes up empty and saving the edit
 	// submits an empty "files[]" — which makes updateAttachments delete every attachment the
 	// issue or comment had.
-	m.Group("/article/{username}/{subjectname}/{type:issues}", addIssuesPullsViewRoutes, optSignIn, context.RepoAssignmentByOwnerAndSubject, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests))
-	m.Group("/article/{username}/{subjectname}", func() {
+	addArticleGroup(m, "/{type:issues}", addIssuesPullsViewRoutes, optSignIn, context.RepoAssignmentByOwnerAndSubject, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests))
+	addArticleGroup(m, "", func() {
 		m.Get("/comments/{id}/attachments", repo.GetCommentAttachments)
 	}, optSignIn, context.RepoAssignmentByOwnerAndSubject, reqRepoIssuesOrPullsReader)
 
 	// Article-based pull request update routes (comments, reactions, title, content, etc.)
-	m.Group("/article/{username}/{subjectname}", func() {
+	addArticleGroup(m, "", func() {
 		m.Group("/{type:issues}", addIssuesPullsUpdateRoutes, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests))
 		m.Group("/{type:pulls}", addIssuesPullsUpdateRoutes, reqUnitPullsReader)
 
@@ -1468,7 +1492,7 @@ func registerWebRoutes(m *web.Router) {
 			m.Post("/resolve_conversation", repo.SetShowOutdatedComments, repo.UpdateResolveConversation)
 		}, reqUnitPullsReader)
 	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, context.RepoMustNotBeArchived())
-	// end "/article/{username}/{subjectname}": article pull request updates
+	// end "/subject/{subjectname}/{username}": article pull request updates
 
 	m.Group("/{username}/{reponame}", func() { // repo code (at least "code reader")
 		registerRepoFileEditorRoutes(m, reqRepoCodeWriter)
@@ -1531,8 +1555,8 @@ func registerWebRoutes(m *web.Router) {
 
 	// Markdown written by the comment/issue editor embeds attachments as "/attachments/{uuid}"
 	// (or the relative "attachments/{uuid}"). The markup renderer resolves both against
-	// Repository.Link(), which in Forkana is "/article/{owner}/{subject}" rather than
-	// "/{owner}/{repo}", so rendered images point at "/article/{owner}/{subject}/attachments/{uuid}".
+	// Repository.Link(), which in Forkana is "/subject/{subject}/{owner}" rather than
+	// "/{owner}/{repo}", so rendered images point at "/subject/{subject}/{owner}/attachments/{uuid}".
 	// Serve that path too, otherwise every embedded image in a comment 404s.
 	//
 	// Registered with "optSignIn" alone, like the top-level "/attachments/{uuid}" route: the
@@ -1541,10 +1565,10 @@ func registerWebRoutes(m *web.Router) {
 	// would open the git repository and compute branch/tag/release counts for every embedded
 	// image, and would make images unservable whenever the owner/subject segments cannot be
 	// resolved (a repository without a subject, whose Link() falls back to the repo name).
-	m.Group("/article/{username}/{subjectname}", func() {
+	addArticleGroup(m, "", func() {
 		m.Get("/attachments/{uuid}", repo.GetAttachment)
 	}, optSignIn)
-	// end "/article/{username}/{subjectname}": attachments embedded in rendered markdown
+	// end "/subject/{subjectname}/{username}": attachments embedded in rendered markdown
 
 	m.Group("/{username}/{reponame}", func() {
 		m.Post("/topics", repo.TopicsPost)

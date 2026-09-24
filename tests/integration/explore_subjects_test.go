@@ -214,7 +214,7 @@ func TestExploreSubjectsSitemap(t *testing.T) {
 
 	body := resp.Body.String()
 	assert.Contains(t, body, "<urlset")
-	assert.Contains(t, body, "<loc>"+setting.AppURL+"article/user2/example-subject</loc>")
+	assert.Contains(t, body, "<loc>"+setting.AppURL+"subject/example-subject/user2</loc>")
 
 	// The sitemap index advertises the subjects path, not the removed articles one.
 	index := MakeRequest(t, NewRequest(t, "GET", "/sitemap.xml"), http.StatusOK).Body.String()
@@ -322,6 +322,10 @@ func TestExploreSubjectsExactMatchNotHiddenByFilters(t *testing.T) {
 		hrefs := make([]string, 0)
 		h.Find(`a[href^="` + setting.AppSubURL + `/subject/"]`).Each(func(_ int, s *goquery.Selection) {
 			href, _ := s.Attr("href")
+			// the subject namespace also holds the article urls, which are not subject links
+			if strings.Contains(strings.TrimPrefix(href, setting.AppSubURL+"/subject/"), "/") {
+				return
+			}
 			hrefs = append(hrefs, href)
 		})
 		return hrefs

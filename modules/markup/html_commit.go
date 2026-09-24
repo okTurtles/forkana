@@ -19,7 +19,7 @@ import (
 // commit. The article routes have no "/commit/{sha}" path: a version is selected
 // through the "version" query parameter, see routers/web/repo.ArticleView.
 func articleCommitLink(owner, name, commitID string) string {
-	return LinkTypeRoot + "/article/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "?version=" + url.QueryEscape(commitID)
+	return LinkTypeRoot + "/subject/" + url.PathEscape(name) + "/" + url.PathEscape(owner) + "?version=" + url.QueryEscape(commitID)
 }
 
 type anyHashPatternResult struct {

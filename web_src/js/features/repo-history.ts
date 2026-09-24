@@ -15,6 +15,7 @@ type HistoryState = {
   subject?: string | null;
   repo?: string | null;
   archived?: boolean;
+  link?: string | null;
 };
 
 function buildSubjectUrl(base: string, view?: ViewKey): string {
@@ -34,13 +35,12 @@ function buildSubjectUrlWithMode(base: string, view: ViewKey, mode?: string) {
   return url.pathname + url.search;
 }
 
-function buildArticleUrl(appSubUrl: string, articleBase: string, selection: RepoSelection, mode?: string) {
-  const owner = encodeURIComponent(selection.owner);
-  // The subject vanity url resolves to the active repository of the subject, so an
-  // archived article is addressed by its permanent repository url instead.
-  const path = selection.archived ?
-    `${appSubUrl.replace(/\/+$/, '')}/${owner}/${encodeURIComponent(selection.repo)}` :
-    `${articleBase.replace(/\/+$/, '')}/${owner}/${encodeURIComponent(selection.subject || selection.repo)}`;
+function buildArticleUrl(articleBase: string, selection: RepoSelection, mode?: string) {
+  // The server-built link already carries the article index when the owner holds several
+  // articles for the subject, so it is preferred over the plain subject url, which always
+  // resolves to the owner's current article.
+  const path = selection.link ||
+    `${articleBase.replace(/\/+$/, '')}/${encodeURIComponent(selection.subject || selection.repo)}/${encodeURIComponent(selection.owner)}`;
   const url = new URL(path, window.location.origin);
   url.searchParams.set('view', 'article');
   if (mode && mode !== 'read') url.searchParams.set('mode', mode);
@@ -58,18 +58,12 @@ function parseLocation(appSubUrl: string | undefined): HistoryState {
   const trimmedPath = pathname.startsWith(basePrefix) ? pathname.slice(basePrefix.length) : pathname;
   const segments = trimmedPath.replace(/^\/+/, '').split('/');
 
-  if (segments[0] === 'article') {
-    if (segments[1] === 'repo' && segments.length >= 4) {
-      const owner = decodeURIComponent(segments[2]);
-      const repo = decodeURIComponent(segments[3]);
-      const subject = params.get('subject');
-      return {view: 'article', mode, owner, repo, subject};
-    }
-    if (segments.length >= 3) {
-      const owner = decodeURIComponent(segments[1]);
-      const subject = decodeURIComponent(segments[2]);
-      return {view: 'article', mode, owner, subject, repo: subject};
-    }
+  // "/subject/{subject}/{owner}" and "/subject/{subject}/{owner}/{index}" are article
+  // urls; "/subject/{subject}" alone is the subject view and is left to the default.
+  if (segments[0] === 'subject' && segments.length >= 3) {
+    const subject = decodeURIComponent(segments[1]);
+    const owner = decodeURIComponent(segments[2]);
+    return {view: 'article', mode, owner, subject, repo: subject, link: pathname};
   }
 
   return {view, mode};
@@ -90,7 +84,7 @@ export function initRepoHistory() {
   const subjectUrl = root.getAttribute('data-subject-url') || window.location.pathname;
   const bubbleUrl = root.getAttribute('data-bubble-url') || buildSubjectUrl(subjectUrl, 'bubble');
   const tableUrl = root.getAttribute('data-table-url') || buildSubjectUrl(subjectUrl, 'table');
-  const articleBase = root.getAttribute('data-article-base') || `${appSubUrl}/article`;
+  const articleBase = root.getAttribute('data-article-base') || `${appSubUrl}/subject`;
   const articleCanonical = root.getAttribute('data-article-canonical') || '';
 
   const bubbleSection = root.querySelector<HTMLElement>('[data-view="bubble"]');
@@ -107,6 +101,7 @@ export function initRepoHistory() {
   const initialSubject = root.getAttribute('data-initial-subject');
   const initialMode = root.getAttribute('data-initial-mode');
   const initialArchived = root.getAttribute('data-initial-archived') === 'true';
+  const initialLink = root.getAttribute('data-initial-link') || '';
 
   // Read stored selection and validate it matches the current page's subject
   const storedSelection = readStoredSelection();
@@ -121,6 +116,7 @@ export function initRepoHistory() {
       repo: initialRepo || initialSubject,
       subject: initialSubject,
       archived: initialArchived,
+      link: initialLink || null,
     };
     if (!matchesSelection(storedSelection, initialSelection)) {
       writeStoredSelection(initialSelection);
@@ -140,7 +136,7 @@ export function initRepoHistory() {
   // between modes never falls back to the vanity URL of another repository of the subject.
   function articleUrlFor(selection: RepoSelection, mode?: string) {
     if (!articleCanonical || !matchesSelection(initialSelection, selection)) {
-      return buildArticleUrl(appSubUrl, articleBase, selection, mode);
+      return buildArticleUrl(articleBase, selection, mode);
     }
     const url = new URL(articleCanonical, window.location.origin);
     url.searchParams.set('view', 'article');
@@ -276,6 +272,7 @@ export function initRepoHistory() {
       subject: selection?.subject ?? null,
       repo: selection?.repo ?? null,
       archived: selection?.archived === true,
+      link: selection?.link ?? null,
     };
 
     let url: string;
@@ -334,6 +331,7 @@ export function initRepoHistory() {
       repo,
       subject: selection.subject ?? selection.repo ?? null,
       archived: selection.archived === true,
+      link: selection.link ?? null,
     };
   }
 
@@ -426,10 +424,11 @@ export function initRepoHistory() {
         const subject = btn.getAttribute('data-subject') || '';
         const repo = btn.getAttribute('data-repo') || subject;
         const archived = btn.getAttribute('data-archived') === 'true';
+        const link = btn.getAttribute('data-article-link') || null;
         if (!owner || !repo) return;
         event.preventDefault();
         switchView('article', {
-          selection: {owner, subject, repo, archived},
+          selection: {owner, subject, repo, archived, link},
           mode: 'read',
           pushState: true,
         });
@@ -444,9 +443,10 @@ export function initRepoHistory() {
       const subject = row.getAttribute('data-subject') || '';
       const repo = row.getAttribute('data-repo') || subject;
       const archived = row.getAttribute('data-archived') === 'true';
+      const link = row.getAttribute('data-article-link') || null;
       if (!owner || !repo) return;
       switchView('article', {
-        selection: {owner, subject, repo, archived},
+        selection: {owner, subject, repo, archived, link},
         mode: 'read',
         pushState: true,
       });
@@ -461,13 +461,14 @@ export function initRepoHistory() {
       const subject = row.getAttribute('data-subject') || '';
       const repo = row.getAttribute('data-repo') || subject;
       const archived = row.getAttribute('data-archived') === 'true';
+      const link = row.getAttribute('data-article-link') || null;
       if (!owner || !repo) return;
       if (target.checked) {
         for (const checkbox of table.querySelectorAll<HTMLInputElement>('tbody .row-check')) {
           if (checkbox !== target) checkbox.checked = false;
         }
-        persistSelection({owner, subject, repo, archived});
-      } else if (matchesSelection(selectedRepo.value, {owner, subject, repo, archived})) {
+        persistSelection({owner, subject, repo, archived, link});
+      } else if (matchesSelection(selectedRepo.value, {owner, subject, repo, archived, link})) {
         persistSelection(null);
       }
     });
@@ -623,9 +624,9 @@ export function initRepoHistory() {
     switchView(view, {pushState: true});
   }
 
-  // The URL the article was rendered from does not always carry the subject or the archived
-  // flag (permanent repository URL, article URL by repository name), so the state of the
-  // entry page is rebuilt from what the server rendered instead of from the location.
+  // The URL the article was rendered from does not always carry the archived flag or the
+  // repository name (the subject url resolves those server-side), so the state of the entry
+  // page is rebuilt from what the server rendered instead of from the location.
   function stateFromLocation(): HistoryState {
     const canonicalPath = articleCanonical ? new URL(articleCanonical, window.location.origin).pathname : '';
     if (!canonicalPath || canonicalPath !== window.location.pathname) {
@@ -639,6 +640,7 @@ export function initRepoHistory() {
       subject: initialSelection?.subject ?? null,
       repo: initialSelection?.repo ?? null,
       archived: initialSelection?.archived === true,
+      link: initialSelection?.link ?? null,
     };
   }
 
@@ -650,6 +652,7 @@ export function initRepoHistory() {
         repo: state.repo || state.subject,
         subject: state.subject ?? state.repo ?? null,
         archived: state.archived === true,
+        link: state.link ?? null,
       } :
       null;
     if (!matchesSelection(selectedRepo.value, sel)) {
@@ -692,6 +695,7 @@ export function initRepoHistory() {
     subject: selectedRepo.value?.subject ?? null,
     repo: selectedRepo.value?.repo ?? null,
     archived: selectedRepo.value?.archived === true,
+    link: selectedRepo.value?.link ?? null,
   };
   window.history.replaceState(initialState, '', window.location.pathname + window.location.search);
 

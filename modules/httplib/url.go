@@ -153,6 +153,18 @@ func IsCurrentGiteaSiteURL(ctx context.Context, s string) bool {
 	return ut != urlTypeUnknown
 }
 
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 type GiteaSiteURL struct {
 	RoutePath   string
 	OwnerName   string
@@ -168,8 +180,26 @@ func ParseGiteaSiteURL(ctx context.Context, s string) *GiteaSiteURL {
 	ret := &GiteaSiteURL{RoutePath: routePath}
 	pathWithoutPrefix := strings.TrimPrefix(ret.RoutePath, "/")
 
-	// Handle /article/ prefix for subject-based URLs
-	pathWithoutPrefix = strings.TrimPrefix(pathWithoutPrefix, "article/")
+	// Article URLs are subject-first, "/subject/{subject}/{owner}[/{index}]", and the
+	// subject stands in for the repository name, which they never spell out.
+	if rest, ok := strings.CutPrefix(pathWithoutPrefix, "subject/"); ok {
+		fields := strings.SplitN(rest, "/", 3)
+		if len(fields) < 2 {
+			return ret
+		}
+		ret.OwnerName, ret.RepoName = fields[1], fields[0]
+		if len(fields) == 3 {
+			subPath := fields[2]
+			// the optional article index sits between the owner and the sub path
+			if head, tail, _ := strings.Cut(subPath, "/"); isAllDigits(head) {
+				subPath = tail
+			}
+			if subPath != "" {
+				ret.RepoSubPath = "/" + subPath
+			}
+		}
+		return ret
+	}
 
 	fields := strings.SplitN(pathWithoutPrefix, "/", 3)
 

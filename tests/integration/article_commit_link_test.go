@@ -38,7 +38,7 @@ func TestArticleCommitLink(t *testing.T) {
 	sha, err := gitRepo.GetBranchCommitID(repo.DefaultBranch)
 	require.NoError(t, err)
 
-	articleURL := fmt.Sprintf("/article/%s/%s", url.PathEscape(owner.Name), url.PathEscape(subjectName))
+	articleURL := fmt.Sprintf("/subject/%s/%s", url.PathEscape(subjectName), url.PathEscape(owner.Name))
 
 	t.Run("CommitLinkRendersArticleContent", func(t *testing.T) {
 		link := repo.CommitLink(sha)
@@ -116,7 +116,7 @@ func TestArticleCommitLink(t *testing.T) {
 		require.NoError(t, reloaded.LoadSubject(t.Context()))
 
 		link := reloaded.CommitLink(sha)
-		require.Equal(t, fmt.Sprintf("/article/%s/%s?version=%s", url.PathEscape(owner.Name), url.PathEscape(subject.Name), sha), link)
+		require.Equal(t, fmt.Sprintf("/subject/%s/%s?version=%s", url.PathEscape(subject.Name), url.PathEscape(owner.Name), sha), link)
 
 		req := NewRequest(t, "GET", link)
 		resp := session.MakeRequest(t, req, http.StatusOK)
@@ -136,7 +136,7 @@ func TestArticleCommitLink(t *testing.T) {
 		require.NoError(t, reloaded.LoadSubject(t.Context()))
 
 		link := reloaded.CommitLink(sha)
-		require.Equal(t, fmt.Sprintf("/article/%s/%s?version=%s", url.PathEscape(owner.Name), url.PathEscape(reloaded.GetSubject(t.Context())), sha), link)
+		require.Equal(t, fmt.Sprintf("/subject/%s/%s?version=%s", url.PathEscape(reloaded.GetSubject(t.Context())), url.PathEscape(owner.Name), sha), link)
 
 		req := NewRequest(t, "GET", link)
 		session.MakeRequest(t, req, http.StatusOK)

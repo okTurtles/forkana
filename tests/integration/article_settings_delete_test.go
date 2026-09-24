@@ -50,7 +50,7 @@ func TestArticleSettingsDeleteModalNotices(t *testing.T) {
 
 	owner, repo, subjectName := loadArticleRepo(t, 1)
 	session := loginUser(t, owner.Name)
-	articleSettingsURL := fmt.Sprintf("/article/%s/%s?view=article&mode=settings", owner.Name, subjectName)
+	articleSettingsURL := fmt.Sprintf("/subject/%s/%s?view=article&mode=settings", subjectName, owner.Name)
 
 	t.Run("WithoutForks", func(t *testing.T) {
 		req := NewRequest(t, "GET", articleSettingsURL)
@@ -138,7 +138,7 @@ func TestTombstonedArticleWeb(t *testing.T) {
 
 	t.Run("OtherRoutesRedirectToPermanentURL", func(t *testing.T) {
 		for _, path := range []string{
-			fmt.Sprintf("/article/%s/%s", owner.Name, subjectName),
+			fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name),
 			repoURL + "/src/branch/" + repo.DefaultBranch,
 			repoURL + "/raw/branch/" + repo.DefaultBranch + "/README.md",
 			repoURL + "/commits/branch/" + repo.DefaultBranch,

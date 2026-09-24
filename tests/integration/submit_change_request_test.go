@@ -432,7 +432,7 @@ func TestSubmitChangeRequestPRCreationFailureCleanup(t *testing.T) {
 
 // TestArticleIssueTitleUpdate tests that the article-scoped issue title update endpoint
 // works correctly for pull requests created via submit-change-request.
-// This verifies the route /article/{username}/{subjectname}/issues/{index}/title is registered.
+// This verifies the route /subject/{subjectname}/{username}/issues/{index}/title is registered.
 func TestArticleIssueTitleUpdate(t *testing.T) {
 	onGiteaRun(t, func(t *testing.T, u *url.URL) {
 		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
@@ -472,11 +472,11 @@ func TestArticleIssueTitleUpdate(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, pr)
 
-		articleTitleURL := fmt.Sprintf("/article/%s/%s/issues/%d/title", owner.Name, subject.Name, prIndex)
+		articleTitleURL := fmt.Sprintf("/subject/%s/%s/issues/%d/title", subject.Name, owner.Name, prIndex)
 
 		t.Run("PRAuthorCanUpdateTitle", func(t *testing.T) {
 			// GET the article-scoped PR view page to extract CSRF token
-			articlePRURL := fmt.Sprintf("/article/%s/%s/pulls/%d", owner.Name, subject.Name, prIndex)
+			articlePRURL := fmt.Sprintf("/subject/%s/%s/pulls/%d", subject.Name, owner.Name, prIndex)
 			req := NewRequest(t, "GET", articlePRURL)
 			resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
 			htmlDoc := NewHTMLParser(t, resp.Body)
@@ -504,7 +504,7 @@ func TestArticleIssueTitleUpdate(t *testing.T) {
 			// We therefore obtain a valid CSRF token via a public GET (the PR view route uses
 			// optSignIn and is accessible without authentication), then POST with that token
 			// but no session cookie. This lets reqSignIn fire and redirect to login.
-			articlePRURL := fmt.Sprintf("/article/%s/%s/pulls/%d", owner.Name, subject.Name, prIndex)
+			articlePRURL := fmt.Sprintf("/subject/%s/%s/pulls/%d", subject.Name, owner.Name, prIndex)
 			getReq := NewRequest(t, "GET", articlePRURL)
 			getResp := MakeRequest(t, getReq, http.StatusOK)
 			csrf := NewHTMLParser(t, getResp.Body).GetCSRF()
@@ -524,7 +524,7 @@ func TestArticleIssueTitleUpdate(t *testing.T) {
 			sessionOther := loginUser(t, otherUser.Name)
 
 			// GET the PR page to extract CSRF token
-			articlePRURL := fmt.Sprintf("/article/%s/%s/pulls/%d", owner.Name, subject.Name, prIndex)
+			articlePRURL := fmt.Sprintf("/subject/%s/%s/pulls/%d", subject.Name, owner.Name, prIndex)
 			req := NewRequest(t, "GET", articlePRURL)
 			resp := sessionOther.MakeRequest(t, req, http.StatusOK)
 			htmlDoc := NewHTMLParser(t, resp.Body)
@@ -658,13 +658,13 @@ func TestSubmitChangeRequestConcurrentBranchCollision(t *testing.T) {
 			"User5's PR base repo should be the target repo (same-repo PR)")
 
 		// Verify that the redirect URLs point to PRs in the target repository
-		// Since repo1 has a subject (example-subject), the URL will be /article/user2/example-subject/pulls/N
+		// Since repo1 has a subject (example-subject), the URL will be /subject/example-subject/user2/pulls/N
 		user4Redirect := results[user4.Name].redirectURL
 		user5Redirect := results[user5.Name].redirectURL
 
 		// Load the subject to get the expected URL format
 		subject := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{ID: repo.SubjectID})
-		expectedURLPrefix := "/article/" + owner.Name + "/" + subject.Name + "/pulls/"
+		expectedURLPrefix := "/subject/" + subject.Name + "/" + owner.Name + "/pulls/"
 
 		assert.Contains(t, user4Redirect, expectedURLPrefix,
 			"User4 should be redirected to a PR in the target repository")

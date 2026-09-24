@@ -39,7 +39,7 @@ func TestAction_GetRepoLink(t *testing.T) {
 	defer test.MockVariableValue(&setting.AppURL, "https://try.gitea.io/suburl/")()
 	defer test.MockVariableValue(&setting.AppSubURL, "/suburl")()
 	// Repository 1 has subject_id 1, which is "example-subject"
-	expected := path.Join(setting.AppSubURL, "article", owner.Name, "example-subject")
+	expected := path.Join(setting.AppSubURL, "subject", "example-subject", owner.Name)
 	assert.Equal(t, expected, action.GetRepoLink(t.Context()))
 	assert.Equal(t, repo.HTMLURL(), action.GetRepoAbsoluteLink(t.Context()))
 	assert.Equal(t, comment.HTMLURL(t.Context()), action.GetCommentHTMLURL(t.Context()))
