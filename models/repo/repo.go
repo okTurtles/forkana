@@ -444,8 +444,8 @@ func (repo *Repository) CommitLink(commitID string) string {
 	}
 	// The article view has no "/commit/{sha}" route: it selects a version through the
 	// "version" query parameter. The article path is built here rather than from
-	// Link(), because Link() sends an archived article to its repository route, which
-	// does not resolve a version of this repository.
+	// Link(), because Link() sends a tombstone to its repository route, which does not
+	// resolve a version of this repository.
 	return repo.articleLink() + "?version=" + url.QueryEscape(commitID)
 }
 
@@ -691,22 +691,31 @@ func (repo *Repository) RepoPath() string {
 }
 
 // Link returns the repository relative url for viewing articles.
-// An archived article with a subject, and a tombstone, use OperationsLink instead,
-// because the subject vanity url resolves to the active repository of that subject,
-// which is a different article. Any other repository yields /article/{owner}/{subject},
-// using the repository name in place of the subject when none is assigned.
+// A tombstone uses OperationsLink instead, because it must never be reachable through
+// the subject hierarchy. Any other repository yields /subject/{subject}/{owner}, using
+// the repository name in place of the subject when none is assigned.
 func (repo *Repository) Link() string {
-	if repo.IsTombstone() || (repo.IsArchived && repo.SubjectID > 0) {
+	if repo.IsTombstone() {
 		return repo.OperationsLink()
 	}
 	return repo.articleLink()
 }
 
-// articleLink returns the article view url of this repository, /article/{owner}/{subject},
-// using the repository name in place of the subject when none is assigned.
+// articleLink returns the article view url of this repository,
+// /subject/{subject}/{owner}, using the repository name in place of the subject when
+// none is assigned. When the owner holds several articles for the subject, the ones
+// past the first are addressed by appending their article index.
 func (repo *Repository) articleLink() string {
 	subject := repo.GetSubject(context.Background())
-	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(subject)
+	link := setting.AppSubURL + "/subject/" + url.PathEscape(subject) + "/" + url.PathEscape(repo.OwnerName)
+	// An owner holds at most one active article per subject and active ones are ordered
+	// first, so only an archived article can sit past index 1 and need the suffix.
+	if repo.IsArchived && repo.SubjectID > 0 {
+		if index := repo.ArticleIndex(context.Background()); index > 1 {
+			link += "/" + strconv.Itoa(index)
+		}
+	}
+	return link
 }
 
 // OperationsLink returns the repository relative url for repository operations
@@ -1048,6 +1057,29 @@ func GetSubjectRootRepositoryExcluding(ctx context.Context, subjectID, excludeRe
 	return &repo, nil
 }
 
+// articleOrderBy is the order in which an owner's repositories for one subject are
+// numbered. The first one is what the subject vanity url "/subject/{subject}/{owner}"
+// resolves to, so it carries article index 1, and every further one is addressed by
+// appending its index to that url.
+const articleOrderBy = "repository.is_archived ASC, repository.updated_unix DESC, repository.id DESC"
+
+// findArticlesByOwnerAndSubjectID returns every repository the owner holds for the
+// subject, in article index order.
+func findArticlesByOwnerAndSubjectID(ctx context.Context, ownerName string, subjectID int64) ([]*Repository, error) {
+	var repos []*Repository
+	err := db.GetEngine(ctx).Table("repository").Select("repository.*").
+		Join("INNER", "`user`", "`user`.id = repository.owner_id").
+		Where("repository.subject_id = ?", subjectID).
+		And("`user`.lower_name = ?", strings.ToLower(ownerName)).
+		OrderBy(articleOrderBy).
+		NoAutoCondition().
+		Find(&repos)
+	if err != nil {
+		return nil, err
+	}
+	return repos, nil
+}
+
 // GetRepositoryByOwnerAndSubject returns a repository by owner name and subject name.
 // This function returns the specific user's repository (whether it's a root or fork).
 // An owner can hold several repositories for the same subject once older ones are
@@ -1066,7 +1098,7 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 		Join("INNER", "`user`", "`user`.id = repository.owner_id").
 		Where("repository.subject_id = ?", subject.ID).
 		And("`user`.lower_name = ?", strings.ToLower(ownerName)).
-		OrderBy("repository.is_archived ASC, repository.updated_unix DESC, repository.id DESC").
+		OrderBy(articleOrderBy).
 		NoAutoCondition().
 		Get(&repo)
 
@@ -1080,6 +1112,51 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 	repo.SubjectRelation = subject
 
 	return &repo, nil
+}
+
+// GetRepositoryByOwnerSubjectAndIndex returns the index-th (1-based) repository the owner
+// holds for the subject. Index 1 is the same repository GetRepositoryByOwnerAndSubject
+// returns, so higher indexes address the owner's remaining, normally archived, articles.
+func GetRepositoryByOwnerSubjectAndIndex(ctx context.Context, ownerName, subjectName string, index int) (*Repository, error) {
+	subject, err := GetSubjectByName(ctx, subjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	repos, err := findArticlesByOwnerAndSubjectID(ctx, ownerName, subject.ID)
+	if err != nil {
+		return nil, err
+	}
+	if index < 1 || index > len(repos) {
+		return nil, ErrRepoNotExist{ID: 0, UID: 0, OwnerName: ownerName, Name: subjectName}
+	}
+
+	repo := repos[index-1]
+	repo.SubjectRelation = subject
+
+	return repo, nil
+}
+
+// ArticleIndex returns the 1-based position of this repository among its owner's
+// repositories for its subject, which is the trailing segment of its article url.
+// It is 1 for the article the subject vanity url resolves to, which carries no
+// trailing segment.
+func (repo *Repository) ArticleIndex(ctx context.Context) int {
+	if repo.SubjectID == 0 {
+		return 1
+	}
+
+	repos, err := findArticlesByOwnerAndSubjectID(ctx, repo.OwnerName, repo.SubjectID)
+	if err != nil {
+		log.Error("Failed to load articles of %s for subject %d: %v", repo.OwnerName, repo.SubjectID, err)
+		return 1
+	}
+	for i, r := range repos {
+		if r.ID == repo.ID {
+			return i + 1
+		}
+	}
+	return 1
 }
 
 // GetActiveRepositoryByOwnerIDAndSubjectID returns the owner's active (non-archived)
