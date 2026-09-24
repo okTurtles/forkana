@@ -153,3 +153,45 @@
   download_count: 0
   size: 0
   created_unix: 946684800
+
+-
+  id: 13
+  uuid: a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a23
+  repo_id: 1 # article upload shared with the fork in repo 2
+  issue_id: 0
+  release_id: 0
+  uploader_id: 2
+  comment_id: 0
+  purpose: 1
+  name: article1.png
+  download_count: 0
+  size: 0
+  created_unix: 946684800
+
+-
+  id: 14
+  uuid: a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a24
+  repo_id: 1
+  issue_id: 0
+  release_id: 0
+  uploader_id: 2
+  comment_id: 0
+  purpose: 1
+  name: article2.png
+  download_count: 0
+  size: 0
+  created_unix: 946684800
+
+-
+  id: 15
+  uuid: a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a25
+  repo_id: 2 # article upload no repository associates yet
+  issue_id: 0
+  release_id: 0
+  uploader_id: 2
+  comment_id: 0
+  purpose: 1
+  name: article3.png
+  download_count: 0
+  size: 0
+  created_unix: 946684800

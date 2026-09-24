@@ -30,30 +30,30 @@ func TestAddArticleAttachments(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
 	// a new association plus one that already exists, and a duplicate input
-	assert.NoError(t, repo_model.AddArticleAttachments(t.Context(), 1, []int64{1, 2, 2}))
+	assert.NoError(t, repo_model.AddArticleAttachments(t.Context(), 1, []int64{13, 15, 15}))
 
-	unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleAttachment{RepoID: 1, AttachmentID: 2})
-	unittest.AssertCount(t, &repo_model.ArticleAttachment{RepoID: 1, AttachmentID: 2}, 1)
-	unittest.AssertCount(t, &repo_model.ArticleAttachment{RepoID: 1, AttachmentID: 1}, 1)
+	unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleAttachment{RepoID: 1, AttachmentID: 15})
+	unittest.AssertCount(t, &repo_model.ArticleAttachment{RepoID: 1, AttachmentID: 15}, 1)
+	unittest.AssertCount(t, &repo_model.ArticleAttachment{RepoID: 1, AttachmentID: 13}, 1)
 
 	// re-adding the very same set must stay idempotent
-	assert.NoError(t, repo_model.AddArticleAttachments(t.Context(), 1, []int64{1, 2}))
+	assert.NoError(t, repo_model.AddArticleAttachments(t.Context(), 1, []int64{13, 15}))
 	unittest.AssertCount(t, &repo_model.ArticleAttachment{RepoID: 1}, 3)
 
 	// nothing to do
 	assert.NoError(t, repo_model.AddArticleAttachments(t.Context(), 1, nil))
-	assert.NoError(t, repo_model.AddArticleAttachments(t.Context(), 0, []int64{1}))
+	assert.NoError(t, repo_model.AddArticleAttachments(t.Context(), 0, []int64{13}))
 	unittest.AssertCount(t, &repo_model.ArticleAttachment{RepoID: 1}, 3)
 }
 
 func TestHasArticleAttachment(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
-	has, err := repo_model.HasArticleAttachment(t.Context(), 1, 1)
+	has, err := repo_model.HasArticleAttachment(t.Context(), 1, 13)
 	assert.NoError(t, err)
 	assert.True(t, has)
 
-	has, err = repo_model.HasArticleAttachment(t.Context(), 3, 1)
+	has, err = repo_model.HasArticleAttachment(t.Context(), 3, 13)
 	assert.NoError(t, err)
 	assert.False(t, has)
 
@@ -65,21 +65,21 @@ func TestHasArticleAttachment(t *testing.T) {
 func TestArticleAttachmentReferences(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
-	repoIDs, err := repo_model.GetArticleAttachmentRepoIDs(t.Context(), 1)
+	repoIDs, err := repo_model.GetArticleAttachmentRepoIDs(t.Context(), 13)
 	assert.NoError(t, err)
 	assert.ElementsMatch(t, []int64{1, 2}, repoIDs)
 
-	count, err := repo_model.CountArticleAttachmentRepos(t.Context(), 1)
+	count, err := repo_model.CountArticleAttachmentRepos(t.Context(), 13)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 2, count)
 
-	count, err = repo_model.CountArticleAttachmentRepos(t.Context(), 2)
+	count, err = repo_model.CountArticleAttachmentRepos(t.Context(), 15)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 0, count)
 
 	attachmentIDs, err := repo_model.GetRepoArticleAttachmentIDs(t.Context(), 1)
 	assert.NoError(t, err)
-	assert.ElementsMatch(t, []int64{1, 3}, attachmentIDs)
+	assert.ElementsMatch(t, []int64{13, 14}, attachmentIDs)
 }
 
 func TestCopyArticleAttachments(t *testing.T) {
@@ -90,9 +90,9 @@ func TestCopyArticleAttachments(t *testing.T) {
 
 	attachmentIDs, err := repo_model.GetRepoArticleAttachmentIDs(t.Context(), 3)
 	assert.NoError(t, err)
-	assert.ElementsMatch(t, []int64{1, 3}, attachmentIDs)
+	assert.ElementsMatch(t, []int64{13, 14}, attachmentIDs)
 
-	count, err := repo_model.CountArticleAttachmentRepos(t.Context(), 1)
+	count, err := repo_model.CountArticleAttachmentRepos(t.Context(), 13)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 3, count)
 
@@ -108,8 +108,8 @@ func TestDeleteArticleAttachmentsByRepoID(t *testing.T) {
 	unittest.AssertNotExistsBean(t, &repo_model.ArticleAttachment{RepoID: 1})
 
 	// the attachment row itself survives, the other repository still keeps it alive
-	unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: 1})
-	count, err := repo_model.CountArticleAttachmentRepos(t.Context(), 1)
+	unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: 13})
+	count, err := repo_model.CountArticleAttachmentRepos(t.Context(), 13)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 1, count)
 
@@ -241,8 +241,8 @@ func TestRetainedRepoAttachmentIDs(t *testing.T) {
 
 	ids, err := repo_model.RetainedRepoAttachmentIDs(t.Context(), 1)
 	assert.NoError(t, err)
-	// attachments 1 and 3 are associated by the fixtures
-	assert.ElementsMatch(t, []int64{1, 3, article.ID}, ids)
+	// attachments 13 and 14 are associated by the fixtures
+	assert.ElementsMatch(t, []int64{13, 14, article.ID}, ids)
 
 	ids, err = repo_model.RetainedRepoAttachmentIDs(t.Context(), 0)
 	assert.NoError(t, err)
