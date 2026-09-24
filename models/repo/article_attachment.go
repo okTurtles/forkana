@@ -11,6 +11,7 @@ import (
 	"code.gitea.io/gitea/models/unit"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/container"
+	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"xorm.io/builder"
@@ -36,11 +37,37 @@ func init() {
 // AddArticleAttachments associates the given attachments with a repository.
 // It is idempotent: already existing associations are left untouched, and
 // duplicates within attachmentIDs are collapsed.
+//
+// The read and the insert are not atomic against another writer — the push
+// queue and the web commit path can discover the same reference at once — so
+// the unique constraint may reject the insert. One retry then sees the other
+// writer's rows and inserts only what is still missing; a second rejection
+// means everything this call wanted is already there.
+//
+// Only a call that owns its transaction can retry: when the caller provides
+// one, the failed insert has already rolled it back, so the error belongs to
+// that caller.
 func AddArticleAttachments(ctx context.Context, repoID int64, attachmentIDs []int64) error {
 	if repoID == 0 || len(attachmentIDs) == 0 {
 		return nil
 	}
 
+	err := addArticleAttachments(ctx, repoID, attachmentIDs)
+	if err == nil || !db.IsErrDuplicateKey(err) || db.InTransaction(ctx) {
+		return err
+	}
+
+	log.Debug("AddArticleAttachments: concurrent association of %d attachments to repo %d, retrying", len(attachmentIDs), repoID)
+	err = addArticleAttachments(ctx, repoID, attachmentIDs)
+	if err != nil && db.IsErrDuplicateKey(err) {
+		// A concurrent writer associated the same pairs; the outcome is identical.
+		log.Debug("AddArticleAttachments: duplicate association of %d attachments to repo %d ignored", len(attachmentIDs), repoID)
+		return nil
+	}
+	return err
+}
+
+func addArticleAttachments(ctx context.Context, repoID int64, attachmentIDs []int64) error {
 	return db.WithTx(ctx, func(ctx context.Context) error {
 		var known []int64
 		if err := db.GetEngine(ctx).Table("article_attachment").
