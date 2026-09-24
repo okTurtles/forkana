@@ -95,3 +95,17 @@ func TestExtractAttachmentUUIDsScanCap(t *testing.T) {
 	beyond := strings.Repeat("x", MaxScanSize) + ref
 	assert.Empty(t, ExtractAttachmentUUIDs(beyond))
 }
+
+func TestExtractAttachmentUUIDsRefPrefixCap(t *testing.T) {
+	defer test.MockVariableValue(&setting.AppURL, "https://forkana.example/")()
+	defer test.MockVariableValue(&setting.AppSubURL, "")()
+
+	// A delimiter-free prefix within the cap is still walked back in full.
+	within := strings.Repeat("x", maxRefPrefix-64) + "/attachments/" + uuidA
+	assert.Equal(t, []string{uuidA}, ExtractAttachmentUUIDs(within))
+
+	// Beyond the cap the token cannot be resolved, so the reference is dropped
+	// instead of being judged on a prefix that no longer shows its host.
+	beyond := strings.Repeat("x", maxRefPrefix) + "/attachments/" + uuidA
+	assert.Empty(t, ExtractAttachmentUUIDs(beyond))
+}

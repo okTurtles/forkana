@@ -73,7 +73,10 @@ func ExtractAttachmentUUIDs(content string) []string {
 		if !ok {
 			continue
 		}
-		start := refStart(content, markerPos)
+		start, ok := refStart(content, markerPos)
+		if !ok {
+			continue
+		}
 		if !isLocalAttachmentRef(content[start:uuidPos+uuidLen], appHost) {
 			continue
 		}
@@ -100,14 +103,28 @@ func uuidAt(s string) (string, bool) {
 	return strings.ToLower(candidate), true
 }
 
+// maxRefPrefix bounds the backward scan for the start of a URL token. Without
+// it, content holding no delimiter at all — `/` is not one — makes every marker
+// walk back to the beginning of the blob, which is quadratic in the blob size
+// and runs on every push. Real prefixes are far shorter.
+const maxRefPrefix = 2048
+
 // refStart walks back to the beginning of the URL token containing the marker,
 // which is what tells a local path apart from an external lookalike.
-func refStart(content string, markerPos int) int {
+//
+// A token whose prefix exceeds maxRefPrefix is reported as unresolvable rather
+// than judged on its truncated form, which would hide the scheme and host of an
+// external lookalike. Dropping it only withholds a candidate association.
+func refStart(content string, markerPos int) (int, bool) {
+	limit := max(markerPos-maxRefPrefix, 0)
 	start := markerPos
-	for start > 0 && !isRefDelimiter(content[start-1]) {
+	for start > limit && !isRefDelimiter(content[start-1]) {
 		start--
 	}
-	return start
+	if start > 0 && !isRefDelimiter(content[start-1]) {
+		return 0, false
+	}
+	return start, true
 }
 
 func isLocalAttachmentRef(ref, appHost string) bool {
