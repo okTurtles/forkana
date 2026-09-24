@@ -72,9 +72,12 @@ type Node = {
      (api.Repository.Description), so no server-side change was needed. */
   description?: string;
   isEmpty?: boolean;
-  /* Archived articles are opened through their permanent repository url, because
-     the subject vanity url resolves to the active repository of that subject. */
   isArchived?: boolean;
+  /* The article url the server built for this repository (api.Repository.HTMLURL).
+     An owner can hold several articles for one subject and only the server knows the
+     index each one carries in "/subject/{subject}/{owner}/{n}", so the link travels
+     with the node instead of being rebuilt from the owner and subject. */
+  articleLink?: string;
   /* The author deleted this article. Its node stays in the graph — the forks
      below it need the ancestry — and stays interactive; the bubble is only
      drawn as a tombstone so the deletion is visible. */
@@ -437,7 +440,7 @@ function getSelectionDetailFromNode(n: Node): RepoSelectionDetail | null {
   const repo = repoCandidates[0] || subjectCandidates[0];
   if (!owner || !repo) return null;
   const subject = subjectCandidates[0] || null;
-  return { owner, repo, subject, archived: n.isArchived === true };
+  return { owner, repo, subject, archived: n.isArchived === true, link: n.articleLink ?? null };
 }
 
 function normalizeDetail(detail: RepoSelectionDetail | null): RepoSelectionDetail | null {
@@ -449,6 +452,7 @@ function normalizeDetail(detail: RepoSelectionDetail | null): RepoSelectionDetai
     repo,
     subject: detail.subject ?? detail.repo ?? null,
     archived: detail.archived === true,
+    link: detail.link ?? null,
   };
 }
 
@@ -661,6 +665,7 @@ function buildGraphFromApi(root: any): Graph {
     const fullName: string | null = repo?.full_name ?? (ownerName && repoName ? `${ownerName}/${repoName}` : null);
     const isEmpty: boolean = repo?.empty === true;
     const isArchived: boolean = repo?.archived === true;
+    const articleLink: string | null = typeof repo?.html_url === 'string' ? repo.html_url : null;
     const isTombstoned: boolean = n?.is_tombstoned === true;
     const description: string = typeof repo?.description === 'string' ? repo.description : '';
 
@@ -689,6 +694,7 @@ function buildGraphFromApi(root: any): Graph {
       description: description || undefined,
       isEmpty: isEmpty,
       isArchived,
+      articleLink: articleLink ?? undefined,
       isTombstoned,
       statsPending,
     };

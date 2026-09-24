@@ -24,7 +24,7 @@
 			<strong>
 				{{svg "octicon-repo-forked" 16}}
 				<a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> /
-				<a href="{{AppSubUrl}}/article/{{PathEscape $Repo1.Owner.Name}}/{{PathEscapeSegments $Subject.Name}}">{{$Subject.Name}}</a>
+				<a href="{{AppSubUrl}}/subject/{{PathEscapeSegments $Subject.Name}}/{{PathEscape $Repo1.Owner.Name}}">{{$Subject.Name}}</a>
 			</strong>
 			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}} · Last update: {{$Repo1.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
 		</div>
@@ -34,7 +34,7 @@
 			<strong>
 				{{svg "octicon-repo-forked" 16}}
 				<a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> /
-				<a href="{{AppSubUrl}}/article/{{PathEscape $Repo2.Owner.Name}}/{{PathEscapeSegments $Subject.Name}}">{{$Subject.Name}}</a>
+				<a href="{{AppSubUrl}}/subject/{{PathEscapeSegments $Subject.Name}}/{{PathEscape $Repo2.Owner.Name}}">{{$Subject.Name}}</a>
 			</strong>
 			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}} · Last update: {{$Repo2.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
 		</div>
