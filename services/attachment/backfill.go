@@ -47,7 +47,8 @@ type BackfillResult struct {
 	MissingAttachments   int
 	MissingFiles         int
 	// RepositoriesFailed counts the repositories whose article history could
-	// not be read at all, typically a broken or unreadable git directory.
+	// not be read at all, because the git directory is missing, broken or
+	// otherwise unreadable. Their references are unobserved, not absent.
 	RepositoriesFailed int
 	// Outstanding counts the references a read-only run would have
 	// associated. Finalizing the transition requires it to be zero.
@@ -111,7 +112,7 @@ func BackfillArticleAttachments(ctx context.Context, opts BackfillOptions) (*Bac
 
 // FinalizeLegacyFallback switches attachment authorization to associations
 // only, but refuses while a verification still finds references that would
-// lose their access.
+// lose their access, or while a repository it could not read might hold some.
 func FinalizeLegacyFallback(ctx context.Context, opts BackfillOptions) (*BackfillResult, error) {
 	opts.Verify, opts.DryRun, opts.StartRepoID = true, true, 0
 	result, err := BackfillArticleAttachments(ctx, opts)
@@ -120,6 +121,12 @@ func FinalizeLegacyFallback(ctx context.Context, opts BackfillOptions) (*Backfil
 	}
 	if result.Outstanding > 0 {
 		return result, fmt.Errorf("%d article attachment references are not associated yet, run the backfill before finalizing", result.Outstanding)
+	}
+	// Outstanding counts only observed references, so a repository the scan
+	// could not read proves nothing: finalizing on its silence would strand
+	// whatever its article history still references.
+	if result.RepositoriesFailed > 0 {
+		return result, fmt.Errorf("%d repositories could not be scanned, repair or remove them and verify again before finalizing", result.RepositoriesFailed)
 	}
 	if result.MissingAttachments > 0 {
 		log.Warn("finalizing with %d references to attachments that no longer exist; they were already broken", result.MissingAttachments)
@@ -144,6 +151,10 @@ func backfillRepository(ctx context.Context, repo *repo_model.Repository, readOn
 	if exists, err := gitrepo.IsRepositoryExist(ctx, repo); err != nil {
 		return fmt.Errorf("IsRepositoryExist: %w", err)
 	} else if !exists {
+		// Counted like a failed scan rather than skipped silently: its
+		// references are unobserved, which is exactly what must stop a
+		// finalize from switching the legacy fallback off.
+		result.RepositoriesFailed++
 		log.Warn("article attachment backfill: repository %s has no git directory, skipped", repo.FullName())
 		return nil
 	}

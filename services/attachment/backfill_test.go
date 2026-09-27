@@ -100,6 +100,27 @@ func newArticleRepo(t *testing.T, name string) *repo_model.Repository {
 	return repo
 }
 
+// ensureReadableRepos gives every fixture repository a readable git directory.
+// Several fixtures carry no git data on disk, and finalizing refuses while any
+// repository is unreadable. Initializing a bare repository adds the missing
+// directory without touching the ones that already hold objects.
+func ensureReadableRepos(t *testing.T) {
+	t.Helper()
+	repos := make([]*repo_model.Repository, 0, 64)
+	require.NoError(t, db.GetEngine(t.Context()).Find(&repos))
+	for _, repo := range repos {
+		if repo.IsEmpty {
+			continue
+		}
+		repoPath := repo.RepoPath()
+		if _, err := gitTry(t, repoPath, "", "rev-parse", "--git-dir"); err == nil {
+			continue
+		}
+		require.NoError(t, os.MkdirAll(repoPath, 0o755))
+		gitRun(t, repoPath, "", "init", "--bare", "--initial-branch=master")
+	}
+}
+
 func newLegacyAttachment(t *testing.T, uuid string, repoID int64) *repo_model.Attachment {
 	t.Helper()
 	attach := &repo_model.Attachment{
@@ -233,8 +254,18 @@ func TestFinalizeLegacyFallback(t *testing.T) {
 	_, err = BackfillArticleAttachments(t.Context(), BackfillOptions{StartRepoID: repo.ID})
 	require.NoError(t, err)
 
+	// a repository the run could not read may reference legacy attachments it
+	// never observed, so nothing outstanding is not enough on its own
 	result, err := FinalizeLegacyFallback(t.Context(), BackfillOptions{})
+	require.ErrorContains(t, err, "could not be scanned")
+	assert.Positive(t, result.RepositoriesFailed)
+	assert.NotEqual(t, "false", storedFallback(t))
+
+	ensureReadableRepos(t)
+
+	result, err = FinalizeLegacyFallback(t.Context(), BackfillOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Outstanding)
+	assert.Equal(t, 0, result.RepositoriesFailed)
 	assert.Equal(t, "false", storedFallback(t))
 }

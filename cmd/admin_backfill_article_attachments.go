@@ -22,7 +22,7 @@ var microcmdBackfillArticleAttachments = &cli.Command{
 
 The run is idempotent and restartable, so it is safe to run it again after a failure or an interruption; use --start-repo-id to resume where the previous run stopped.
 
-Once a --verify run reports nothing outstanding, --finalize switches attachment authorization to associations only. Enable the gc_article_attachments cron task afterwards, never before.`,
+Once a --verify run reports nothing outstanding and no unreadable repositories, --finalize switches attachment authorization to associations only. Enable the gc_article_attachments cron task afterwards, never before.`,
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
 			Name:  "dry-run",
@@ -34,7 +34,7 @@ Once a --verify run reports nothing outstanding, --finalize switches attachment 
 		},
 		&cli.BoolFlag{
 			Name:  "finalize",
-			Usage: "Verify readiness and then disable the legacy read fallback, or refuse and report what is outstanding",
+			Usage: "Verify readiness and then disable the legacy read fallback, or refuse and report what is outstanding or unreadable",
 		},
 		&cli.IntFlag{
 			Name:  "batch-size",
