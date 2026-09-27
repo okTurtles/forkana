@@ -65,13 +65,16 @@ func TestHasArticleAttachment(t *testing.T) {
 func TestArticleAttachmentReferences(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
-	repoIDs, err := repo_model.GetArticleAttachmentRepoIDs(t.Context(), 13)
-	assert.NoError(t, err)
-	assert.ElementsMatch(t, []int64{1, 2}, repoIDs)
-
 	count, err := repo_model.CountArticleAttachmentRepos(t.Context(), 13)
 	assert.NoError(t, err)
 	assert.EqualValues(t, 2, count)
+
+	// the two repositories keeping it alive are the base and its fork
+	for _, repoID := range []int64{1, 2} {
+		has, err := repo_model.HasArticleAttachment(t.Context(), repoID, 13)
+		assert.NoError(t, err)
+		assert.True(t, has)
+	}
 
 	count, err = repo_model.CountArticleAttachmentRepos(t.Context(), 15)
 	assert.NoError(t, err)

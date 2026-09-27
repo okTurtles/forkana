@@ -61,9 +61,10 @@ func TestAssociateArticleAttachments(t *testing.T) {
 		require.NoError(t, AssociateArticleAttachments(t.Context(), user2, repo1, content))
 		require.NoError(t, AssociateArticleAttachments(t.Context(), user2, repo1, content, content))
 
-		repoIDs, err := repo_model.GetArticleAttachmentRepoIDs(t.Context(), attach.ID)
+		count, err := repo_model.CountArticleAttachmentRepos(t.Context(), attach.ID)
 		require.NoError(t, err)
-		assert.Equal(t, []int64{repo1.ID}, repoIDs)
+		assert.EqualValues(t, 1, count)
+		assert.True(t, associated(t, repo1.ID, attach.ID))
 	})
 
 	// Pasting somebody else's UUID into an article must not hand the attachment over, and must

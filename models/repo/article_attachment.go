@@ -101,19 +101,6 @@ func HasArticleAttachment(ctx context.Context, repoID, attachmentID int64) (bool
 	return db.GetEngine(ctx).Exist(&ArticleAttachment{RepoID: repoID, AttachmentID: attachmentID})
 }
 
-// GetArticleAttachmentRepoIDs returns the IDs of every repository associated
-// with the attachment.
-func GetArticleAttachmentRepoIDs(ctx context.Context, attachmentID int64) ([]int64, error) {
-	repoIDs := make([]int64, 0, 4)
-	if attachmentID == 0 {
-		return repoIDs, nil
-	}
-	return repoIDs, db.GetEngine(ctx).Table("article_attachment").
-		Where(builder.Eq{"attachment_id": attachmentID}).
-		Cols("repo_id").
-		Find(&repoIDs)
-}
-
 // CountArticleAttachmentRepos returns how many repositories keep the attachment alive.
 func CountArticleAttachmentRepos(ctx context.Context, attachmentID int64) (int64, error) {
 	if attachmentID == 0 {
