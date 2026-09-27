@@ -48,14 +48,15 @@ func gitRun(t *testing.T, dir, stdin string, args ...string) string {
 	return out
 }
 
-// commitArticle adds one revision of the article content, plus a companion file
-// outside the article paths, so a scan has something it must ignore.
-func commitArticle(t *testing.T, repoPath, article, other string) {
+// blobEntry writes content as a blob and returns the tree line naming it.
+func blobEntry(t *testing.T, repoPath, treePath, content string) string {
 	t.Helper()
-	tree := fmt.Sprintf("100644 blob %s\tREADME.md\n", gitRun(t, repoPath, article, "hash-object", "-w", "--stdin"))
-	if other != "" {
-		tree += fmt.Sprintf("100644 blob %s\tnotes.md\n", gitRun(t, repoPath, other, "hash-object", "-w", "--stdin"))
-	}
+	return fmt.Sprintf("100644 blob %s\t%s\n", gitRun(t, repoPath, content, "hash-object", "-w", "--stdin"), treePath)
+}
+
+// commitTree commits the given tree listing on top of master.
+func commitTree(t *testing.T, repoPath, tree string) {
+	t.Helper()
 	treeSHA := gitRun(t, repoPath, tree, "mktree")
 
 	args := []string{"commit-tree", treeSHA}
@@ -65,6 +66,17 @@ func commitArticle(t *testing.T, repoPath, article, other string) {
 	}
 	commitSHA := gitRun(t, repoPath, "article", args...)
 	gitRun(t, repoPath, "", "update-ref", "refs/heads/master", commitSHA)
+}
+
+// commitArticle adds one revision of the article content, plus a companion file
+// outside the article paths, so a scan has something it must ignore.
+func commitArticle(t *testing.T, repoPath, article, other string) {
+	t.Helper()
+	tree := blobEntry(t, repoPath, "README.md", article)
+	if other != "" {
+		tree += blobEntry(t, repoPath, "notes.md", other)
+	}
+	commitTree(t, repoPath, tree)
 }
 
 // newArticleRepo creates a repository whose git directory this package may
@@ -119,6 +131,28 @@ func TestScanArticleHistoryUUIDs(t *testing.T) {
 	// the reference only an overwritten revision carries still counts: an
 	// association outlives the content that introduced it
 	assert.ElementsMatch(t, []string{firstUUID, secondUUID}, uuids)
+}
+
+func TestScanArticleHistoryUUIDsAlternateArticlePaths(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+
+	const (
+		changeRequestUUID = "7f2c9a31-0000-4000-8000-0000000b0011"
+		caseVariantUUID   = "7f2c9a31-0000-4000-8000-0000000b0012"
+		ignoredUUID       = "7f2c9a31-0000-4000-8000-0000000b0013"
+	)
+	repo := newArticleRepo(t, "scan-history-alt-paths")
+	// "@README.md" is the article path of a change-request head branch, and a
+	// case variant is what the reader renders when a repository carries one.
+	commitTree(t, repo.RepoPath(),
+		blobEntry(t, repo.RepoPath(), "@README.md", articleContent(changeRequestUUID))+
+			blobEntry(t, repo.RepoPath(), "Readme.md", articleContent(caseVariantUUID))+
+			blobEntry(t, repo.RepoPath(), "notes.md", articleContent(ignoredUUID)))
+
+	uuids, err := scanArticleHistoryUUIDs(t.Context(), repo.RepoPath())
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []string{changeRequestUUID, caseVariantUUID}, uuids)
 }
 
 func TestBackfillArticleAttachments(t *testing.T) {

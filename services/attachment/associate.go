@@ -17,9 +17,12 @@ import (
 )
 
 // ArticleContentPaths are the tree paths scanned for attachment references when
-// only the branch tip is known, as is the case for a direct Git push. It is the
-// path the article editor writes; richer discovery belongs to reconciliation.
-var ArticleContentPaths = []string{"README.md"}
+// only the branch tip is known, as is the case for a direct Git push. They are
+// the paths the article editor writes — "@README.md" on a change-request head
+// branch, "README.md" elsewhere; richer discovery belongs to reconciliation.
+//
+// Treat it as read-only: it is shared by every consumer of this package.
+var ArticleContentPaths = []string{"README.md", "@README.md"}
 
 // AssociateArticleAttachments records that repo keeps alive every attachment
 // referenced by the given article contents and allowed by CanAssociate. It must

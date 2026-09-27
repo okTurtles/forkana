@@ -149,6 +149,12 @@ func readBlobContent(rd *bufio.Reader, size int64) (string, error) {
 	return string(buf), nil
 }
 
+// isArticlePath reports whether a history path holds article content. The match
+// is case-insensitive because the reader renders whichever case variant a
+// repository happens to carry, so a scan that only accepted the canonical
+// spelling would miss references the article still displays.
 func isArticlePath(path string) bool {
-	return slices.Contains(ArticleContentPaths, path)
+	return slices.ContainsFunc(ArticleContentPaths, func(candidate string) bool {
+		return strings.EqualFold(candidate, path)
+	})
 }
