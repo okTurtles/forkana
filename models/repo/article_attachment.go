@@ -177,6 +177,20 @@ func DeleteArticleAttachmentsByRepoID(ctx context.Context, repoID int64) error {
 	return err
 }
 
+// unassociatedAttachmentCond matches attachments of the given purpose that no
+// repository keeps alive and that no issue, comment or release links to.
+func unassociatedAttachmentCond(purpose AttachmentPurpose) builder.Cond {
+	return builder.Eq{
+		"attachment.purpose":    purpose,
+		"attachment.issue_id":   0,
+		"attachment.comment_id": 0,
+		"attachment.release_id": 0,
+	}.And(builder.NotExists(
+		builder.Select("1").From("article_attachment").
+			Where(builder.Expr("article_attachment.attachment_id = attachment.id")),
+	))
+}
+
 // unreferencedArticleAttachmentCond matches attachments the garbage collector
 // may reclaim: article uploads that no repository keeps alive any more and that
 // no issue, comment or release links to.
@@ -185,15 +199,7 @@ func DeleteArticleAttachmentsByRepoID(ctx context.Context, repoID int64) error {
 // a legacy article attachment whose association has not been backfilled yet, so
 // collecting it would destroy a live article image.
 func unreferencedArticleAttachmentCond() builder.Cond {
-	return builder.Eq{
-		"attachment.purpose":    AttachmentPurposeArticle,
-		"attachment.issue_id":   0,
-		"attachment.comment_id": 0,
-		"attachment.release_id": 0,
-	}.And(builder.NotExists(
-		builder.Select("1").From("article_attachment").
-			Where(builder.Expr("article_attachment.attachment_id = attachment.id")),
-	))
+	return unassociatedAttachmentCond(AttachmentPurposeArticle)
 }
 
 // FindUnreferencedArticleAttachments returns at most limit attachments that are
@@ -260,16 +266,7 @@ func MarkAttachmentsArticlePurpose(ctx context.Context, attachmentIDs []int64) (
 // what a backfill verification reports as remaining exposure.
 func CountUnassociatedLegacyAttachments(ctx context.Context) (int64, error) {
 	return db.GetEngine(ctx).Table("attachment").
-		Where(builder.Eq{
-			"attachment.purpose":    AttachmentPurposeUnspecified,
-			"attachment.issue_id":   0,
-			"attachment.comment_id": 0,
-			"attachment.release_id": 0,
-		}).
-		And(builder.NotExists(
-			builder.Select("1").From("article_attachment").
-				Where(builder.Expr("article_attachment.attachment_id = attachment.id")),
-		)).
+		Where(unassociatedAttachmentCond(AttachmentPurposeUnspecified)).
 		Count(new(Attachment))
 }
 
