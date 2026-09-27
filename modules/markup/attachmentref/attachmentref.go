@@ -24,10 +24,11 @@ import (
 const MaxScanSize = 1 << 20 // 1 MiB
 
 const (
-	marker   = "attachments/"
+	// uuidPart is the path segment that precedes an attachment UUID.
+	uuidPart = "attachments"
+	marker   = uuidPart + "/"
 	uuidLen  = 36
 	minSegs  = 2
-	uuidPart = "attachments"
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
