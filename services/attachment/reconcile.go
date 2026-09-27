@@ -84,7 +84,7 @@ func reportReconcile(result *ReconcileResult, dryRun bool) {
 	// A dry run reports what a real run would repair, so it is worth a notice
 	// too: it is how an operator checks the instance before enabling the
 	// collector.
-	if err := system_model.CreateRepositoryNotice("Article attachment reconciliation found %d suspicious references, %d missing attachments, %d missing stored objects, %d dangling associations and %d unreadable repositories, and inserted %d missing associations (dry run: %t), see the log for details",
+	if err := system_model.CreateRepositoryNotice("Article attachment reconciliation found %d suspicious references, %d missing attachments, %d missing stored objects, %d dangling associations and %d unreadable repositories; inserted %d missing associations (dry run: %t), see the log for details",
 		result.SuspiciousSkipped, result.MissingAttachments, result.MissingFiles,
 		result.DanglingAssociations, result.RepositoriesFailed, result.AssociationsInserted, dryRun); err != nil {
 		log.Error("CreateRepositoryNotice: %v", err)
