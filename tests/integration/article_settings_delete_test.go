@@ -89,10 +89,9 @@ func TestArticleSettingsDeleteKeepsTombstone(t *testing.T) {
 	require.True(t, tombstoned.IsTombstoned)
 }
 
-// A tombstone is served through its permanent repository URL only: it is the one url
-// that keeps addressing the deleted article once the owner writes a new one on the same
-// subject. Every other route redirects there, and the page renders the deletion notice
-// instead of any content.
+// A tombstone is served through its article URL only, where the article used to be.
+// Every other route redirects there, and the page renders the deletion notice instead
+// of any content.
 func TestTombstonedArticleWeb(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -108,11 +107,12 @@ func TestTombstonedArticleWeb(t *testing.T) {
 	require.True(t, repo.IsTombstoned)
 
 	repoURL := fmt.Sprintf("/%s/%s", owner.Name, repo.Name)
-	require.Equal(t, repoURL, repo.Link())
+	articleURL := fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name)
+	require.Equal(t, articleURL, repo.Link())
 
 	assertNotice := func(t *testing.T) {
 		t.Helper()
-		req := NewRequest(t, "GET", repoURL)
+		req := NewRequest(t, "GET", articleURL)
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
 
@@ -122,12 +122,12 @@ func TestTombstonedArticleWeb(t *testing.T) {
 		assert.Equal(t, 0, htmlDoc.Find("#article-tabs").Length())
 	}
 
-	t.Run("PermanentURLRendersNotice", func(t *testing.T) {
+	t.Run("ArticleURLRendersNotice", func(t *testing.T) {
 		assertNotice(t)
 	})
 
-	// An archived article is deleted the same way, and its permanent URL is the only
-	// route it ever had, so nothing redirects to it: the handler has to render it.
+	// An archived article is deleted the same way, and its article url stays the same,
+	// since it is still the owner's only one for the subject.
 	t.Run("ArchivedTombstoneRendersNotice", func(t *testing.T) {
 		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, true))
 		t.Cleanup(func() {
@@ -136,16 +136,16 @@ func TestTombstonedArticleWeb(t *testing.T) {
 		assertNotice(t)
 	})
 
-	t.Run("OtherRoutesRedirectToPermanentURL", func(t *testing.T) {
+	t.Run("OtherRoutesRedirectToArticleURL", func(t *testing.T) {
 		for _, path := range []string{
-			fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name),
+			repoURL,
 			repoURL + "/src/branch/" + repo.DefaultBranch,
 			repoURL + "/raw/branch/" + repo.DefaultBranch + "/README.md",
 			repoURL + "/commits/branch/" + repo.DefaultBranch,
 		} {
 			req := NewRequest(t, "GET", path)
 			resp := session.MakeRequest(t, req, http.StatusSeeOther)
-			assert.Equal(t, repoURL, resp.Header().Get("Location"), "%s must redirect to the notice", path)
+			assert.Equal(t, articleURL, resp.Header().Get("Location"), "%s must redirect to the notice", path)
 		}
 	})
 

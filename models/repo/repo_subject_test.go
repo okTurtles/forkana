@@ -424,6 +424,48 @@ func TestRepositoryLinkArchivedUsesArticleIndex(t *testing.T) {
 	assert.Equal(t, 1, other.ArticleIndex(ctx))
 }
 
+// TestRepositoryLinkTombstoneUsesSubject documents that a deleted article keeps an
+// address inside the subject hierarchy, sorted behind every article the owner can
+// still show, so the deletion notice is served where the article used to be.
+func TestRepositoryLinkTombstoneUsesSubject(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Tombstone Routing Subject")
+	assert.NoError(t, err)
+
+	repo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	repo.SubjectID = subject.ID
+	repo.IsTombstoned = true
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id", "is_tombstoned"))
+
+	base := setting.AppSubURL + "/subject/Tombstone%20Routing%20Subject/" + repo.OwnerName
+
+	// the owner's only article for the subject carries no index, deleted or not
+	assert.Equal(t, base, repo.Link())
+
+	// a tombstone never stands in for an article the owner can still show, so an
+	// active one takes the first position and the tombstone spells out its index
+	other, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.OwnerID, other.OwnerID)
+	other.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, other, "subject_id"))
+
+	assert.Equal(t, base+"/2", repo.Link())
+	assert.Equal(t, 2, repo.ArticleIndex(ctx))
+	assert.Equal(t, 1, other.ArticleIndex(ctx))
+
+	found, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, repo.OwnerName, "Tombstone Routing Subject")
+	assert.NoError(t, err)
+	assert.Equal(t, other.ID, found.ID)
+
+	found, err = repo_model.GetRepositoryByOwnerSubjectAndIndex(ctx, repo.OwnerName, "Tombstone Routing Subject", 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.ID, found.ID)
+}
+
 // TestSubjectLookupPrefersActiveRepository documents that the vanity url of a subject
 // keeps pointing at the owner's active article, even when an archived repository of the
 // same owner is named exactly like the subject.

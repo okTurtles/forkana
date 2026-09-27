@@ -645,8 +645,9 @@ func RepoAssignment(ctx *Context) {
 		ctx.Link == ctx.Repo.RepoLink+"/-/migrate/status"
 
 	// A tombstone only keeps the git data around so that its forks retain a valid
-	// ancestor. Nothing but the placeholder home page may be served, and the git
-	// repository is deliberately left unopened so no content can leak.
+	// ancestor. Nothing but the deletion notice may be served, at the article url the
+	// repository link resolves to, and the git repository is deliberately left unopened
+	// so no content can leak.
 	if ctx.Repo.Repository.IsTombstone() {
 		if ctx.Link != ctx.Repo.RepoLink {
 			ctx.Redirect(ctx.Repo.RepoLink)
@@ -878,7 +879,7 @@ func RepoRefByType(detectRefType git.RefType) func(*Context) {
 		if ctx.Repo.Repository.IsTombstone() {
 			// The git repo is intentionally not opened for tombstones, so no ref can be
 			// resolved. The repository assignment has already redirected every other route
-			// to the home link, whose handler renders the deletion notice.
+			// to the repository link, whose handler renders the deletion notice.
 			return
 		}
 		// Empty repository does not have reference information.
@@ -1271,8 +1272,8 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	ctx.Data["Owner"] = ctx.Repo.Repository.Owner
 
 	// A tombstone only keeps the git data around so that its forks retain a valid
-	// ancestor. Nothing but the placeholder article page may be served, and the git
-	// repository is deliberately left unopened so no content can leak.
+	// ancestor. Nothing but the deletion notice may be served, and the git repository
+	// is deliberately left unopened so no content can leak.
 	if ctx.Repo.Repository.IsTombstone() {
 		if ctx.Link != ctx.Repo.RepoLink {
 			ctx.Redirect(ctx.Repo.RepoLink)

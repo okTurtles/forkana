@@ -691,11 +691,13 @@ func (repo *Repository) RepoPath() string {
 }
 
 // Link returns the repository relative url for viewing articles.
-// A tombstone uses OperationsLink instead, because it must never be reachable through
-// the subject hierarchy. Any other repository yields /subject/{subject}/{owner}, using
-// the repository name in place of the subject when none is assigned.
+// A tombstone keeps its article url, /subject/{subject}/{owner}, so the deletion notice
+// is served where the article used to be. Only a tombstone that never had a subject
+// falls back to OperationsLink, since it has no place in the subject hierarchy. Any
+// other repository yields /subject/{subject}/{owner}, using the repository name in
+// place of the subject when none is assigned.
 func (repo *Repository) Link() string {
-	if repo.IsTombstone() {
+	if repo.IsTombstone() && repo.SubjectID == 0 {
 		return repo.OperationsLink()
 	}
 	return repo.articleLink()
@@ -709,8 +711,9 @@ func (repo *Repository) articleLink() string {
 	subject := repo.GetSubject(context.Background())
 	link := setting.AppSubURL + "/subject/" + url.PathEscape(subject) + "/" + url.PathEscape(repo.OwnerName)
 	// An owner holds at most one active article per subject and active ones are ordered
-	// first, so only an archived article can sit past index 1 and need the suffix.
-	if repo.IsArchived && repo.SubjectID > 0 {
+	// first, so only an archived article or a tombstone can sit past index 1 and need
+	// the suffix.
+	if (repo.IsArchived || repo.IsTombstone()) && repo.SubjectID > 0 {
 		if index := repo.ArticleIndex(context.Background()); index > 1 {
 			link += "/" + strconv.Itoa(index)
 		}
@@ -1060,8 +1063,9 @@ func GetSubjectRootRepositoryExcluding(ctx context.Context, subjectID, excludeRe
 // articleOrderBy is the order in which an owner's repositories for one subject are
 // numbered. The first one is what the subject vanity url "/subject/{subject}/{owner}"
 // resolves to, so it carries article index 1, and every further one is addressed by
-// appending its index to that url.
-const articleOrderBy = "repository.is_archived ASC, repository.updated_unix DESC, repository.id DESC"
+// appending its index to that url. Tombstones sort last: a deleted article must never
+// stand in for one the owner can still show, but it keeps an address of its own.
+const articleOrderBy = "repository.is_tombstoned ASC, repository.is_archived ASC, repository.updated_unix DESC, repository.id DESC"
 
 // findArticlesByOwnerAndSubjectID returns every repository the owner holds for the
 // subject, in article index order.
