@@ -710,10 +710,11 @@ func (repo *Repository) Link() string {
 func (repo *Repository) articleLink() string {
 	subject := repo.GetSubject(context.Background())
 	link := setting.AppSubURL + "/subject/" + url.PathEscape(subject) + "/" + url.PathEscape(repo.OwnerName)
-	// An owner holds at most one active article per subject and active ones are ordered
-	// first, so only an archived article or a tombstone can sit past index 1 and need
-	// the suffix.
-	if (repo.IsArchived || repo.IsTombstone()) && repo.SubjectID > 0 {
+	// The suffix follows the position alone. Archived and deleted articles are the
+	// usual ones to sit past the first position, but nothing stops an owner from
+	// holding several active articles for a subject, and two of them sharing this url
+	// would leave one of them unreachable.
+	if repo.SubjectID > 0 {
 		if index := repo.ArticleIndex(context.Background()); index > 1 {
 			link += "/" + strconv.Itoa(index)
 		}
@@ -1145,6 +1146,9 @@ func GetRepositoryByOwnerSubjectAndIndex(ctx context.Context, ownerName, subject
 // repositories for its subject, which is the trailing segment of its article url.
 // It is 1 for the article the subject vanity url resolves to, which carries no
 // trailing segment.
+// The position depends on the owner's other articles for the subject, so it is read
+// back every time rather than cached on the repository: archiving or deleting any of
+// them renumbers the rest.
 func (repo *Repository) ArticleIndex(ctx context.Context) int {
 	if repo.SubjectID == 0 {
 		return 1

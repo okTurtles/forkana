@@ -162,6 +162,57 @@ func TestArticlePermanentRoute(t *testing.T) {
 		}
 	})
 
+	// Once the owner holds a second article for the subject, the indexed url is the
+	// only address the article past the first one has, so it must both resolve to that
+	// exact repository and carry the index into every in-page link.
+	t.Run("IndexedArticleURLResolvesAndIsCarried", func(t *testing.T) {
+		other := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+		require.Equal(t, repo.OwnerID, other.OwnerID)
+		other.SubjectID = repo.SubjectID
+		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), other, "subject_id"))
+		t.Cleanup(func() {
+			other.SubjectID = 0
+			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), other, "subject_id")
+		})
+
+		// archiving it puts the original article behind the owner's active one
+		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, true))
+		t.Cleanup(func() {
+			_ = repo_model.SetArchiveRepoState(t.Context(), repo, false)
+		})
+
+		indexedURL := fmt.Sprintf("/subject/%s/%s/2", subjectName, owner.Name)
+		assert.Equal(t, indexedURL, repo.Link())
+		assert.Equal(t, fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name), other.Link())
+
+		// the unsuffixed url addresses the owner's active article, not the archived one
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name))
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		assert.Equal(t, other.Name,
+			NewHTMLParser(t, resp.Body).Find("#repo-history-app").AttrOr("data-initial-repo", ""))
+
+		req = NewRequest(t, "GET", indexedURL)
+		resp = session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		app := htmlDoc.Find("#repo-history-app")
+		require.Equal(t, 1, app.Length())
+		assert.Equal(t, "article", app.AttrOr("data-initial-view", ""))
+		assert.Equal(t, repo.Name, app.AttrOr("data-initial-repo", ""))
+		assert.Equal(t, "true", app.AttrOr("data-initial-archived", ""))
+		// both the link handed to the client and the canonical route keep the index,
+		// so switching modes cannot fall back to the owner's active article
+		assert.Equal(t, indexedURL, app.AttrOr("data-initial-link", ""))
+		assert.Equal(t, indexedURL, app.AttrOr("data-article-canonical", ""))
+
+		for _, mode := range []string{"read", "history"} {
+			tab := htmlDoc.Find(fmt.Sprintf(`#article-tabs a[data-article-tab=%q]`, mode))
+			require.Equal(t, 1, tab.Length(), "tab %q must be rendered", mode)
+			assert.True(t, strings.HasPrefix(tab.AttrOr("href", ""), indexedURL+"?"),
+				"tab %q must stay on %q, got %q", mode, indexedURL, tab.AttrOr("href", ""))
+		}
+	})
+
 	// The repository name of an article is the slug of its subject, so an archived
 	// article can be named exactly like a subject the owner still has an active article
 	// for. Its permanent URL must keep resolving to the archived repository.
