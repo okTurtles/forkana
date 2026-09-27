@@ -546,7 +546,9 @@ func RepoAssignment(ctx *Context) {
 		return
 	}
 
-	ctx.Repo.RepoLink = repo.Link()
+	// the repository assignment runs before any handler writes, so the article index
+	// behind the link is resolved through the request cache
+	ctx.Repo.RepoLink = repo.LinkCtx(ctx)
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
@@ -1157,7 +1159,7 @@ func RepoAssignmentBySubject(ctx *Context) {
 	ctx.Data["CanWriteActions"] = ctx.Repo.CanWrite(unit_model.TypeActions)
 
 	// Set up repository link data
-	ctx.Repo.RepoLink = repo.Link()
+	ctx.Repo.RepoLink = repo.LinkCtx(ctx)
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
@@ -1260,7 +1262,7 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	}
 
 	// Set up repository link data
-	ctx.Repo.RepoLink = repo.Link()
+	ctx.Repo.RepoLink = repo.LinkCtx(ctx)
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink

@@ -42,7 +42,8 @@
                         {{if .HistoryForkEntries}}
                         {{range $idx, $entry := .HistoryForkEntries}}
                         {{$repo := $entry.Repo}}
-                        <tr class="article-row" data-row="{{$idx}}" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repo.Link}}">
+                        {{$repoLink := $repo.LinkCtx ctx}}
+                        <tr class="article-row" data-row="{{$idx}}" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repoLink}}">
                             <td>
                                 <div class="ui checkbox">
                                     <input type="checkbox" class="row-check">
@@ -80,7 +81,7 @@
                                             {{end}}
                                         </div>
                                     </div>
-                                    <button type="button" class="ui button go-to-article" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repo.Link}}">
+                                    <button type="button" class="ui button go-to-article" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repoLink}}">
                                         View article
                                     </button>
                                 </div>

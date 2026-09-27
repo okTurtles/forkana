@@ -129,5 +129,8 @@ func SetArchiveRepoState(ctx context.Context, repo *Repository, isArchived bool)
 	}
 
 	_, err = db.GetEngine(ctx).ID(repo.ID).Cols("is_archived", "archived_unix").NoAutoTime().Update(repo)
+	// archiving reorders the owner's articles for the subject, so their indexes have
+	// to be resolved again
+	dropArticleIndexesOfOwner(ctx, repo.OwnerName)
 	return err
 }

@@ -38,12 +38,14 @@ func UpdateRepositoryUpdatedTime(ctx context.Context, repoID int64, updateTime t
 // UpdateRepositoryColsWithAutoTime updates repository's columns and the timestamp fields automatically
 func UpdateRepositoryColsWithAutoTime(ctx context.Context, repo *Repository, colName string, moreColNames ...string) error {
 	_, err := db.GetEngine(ctx).ID(repo.ID).Cols(append([]string{colName}, moreColNames...)...).Update(repo)
+	dropArticleIndexesOfOwner(ctx, repo.OwnerName)
 	return err
 }
 
 // UpdateRepositoryColsNoAutoTime updates repository's columns, doesn't change timestamp field automatically
 func UpdateRepositoryColsNoAutoTime(ctx context.Context, repo *Repository, colName string, moreColNames ...string) error {
 	_, err := db.GetEngine(ctx).ID(repo.ID).Cols(append([]string{colName}, moreColNames...)...).NoAutoTime().Update(repo)
+	dropArticleIndexesOfOwner(ctx, repo.OwnerName)
 	return err
 }
 

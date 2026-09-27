@@ -8,6 +8,7 @@ import (
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
+	"code.gitea.io/gitea/modules/cache"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 
@@ -422,6 +423,51 @@ func TestRepositoryLinkArchivedUsesArticleIndex(t *testing.T) {
 	assert.Equal(t, base+"/2", repo.Link())
 	assert.Equal(t, 2, repo.ArticleIndex(ctx))
 	assert.Equal(t, 1, other.ArticleIndex(ctx))
+}
+
+// TestArticleIndexWithContextCache covers the request level cache the article indexes
+// of an owner are resolved through: a page rendering many links reads them once, and a
+// write that renumbers them drops the cached ones.
+func TestArticleIndexWithContextCache(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := cache.WithCacheContext(t.Context())
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Cached Index Subject")
+	assert.NoError(t, err)
+	otherSubject, err := repo_model.GetOrCreateSubject(ctx, "Cached Index Other Subject")
+	assert.NoError(t, err)
+
+	repo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	other, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.OwnerID, other.OwnerID)
+
+	repo.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id"))
+	other.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, other, "subject_id"))
+
+	// the indexes of one owner are numbered per subject, so the articles of a second
+	// subject start at 1 again
+	third, err := repo_model.GetRepositoryByID(ctx, 3)
+	assert.NoError(t, err)
+	third.SubjectID = otherSubject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, third, "subject_id"))
+	assert.Equal(t, 1, third.ArticleIndex(ctx))
+
+	first, second := other.ArticleIndex(ctx), repo.ArticleIndex(ctx)
+	assert.Equal(t, 1, first)
+	assert.Equal(t, 2, second)
+	// repeating the lookups is served from the cache and agrees with itself
+	assert.Equal(t, first, other.ArticleIndex(ctx))
+	assert.Equal(t, second, repo.ArticleIndex(ctx))
+
+	// archiving the article at the first position renumbers both, and the cached
+	// indexes must not survive that write
+	assert.NoError(t, repo_model.SetArchiveRepoState(ctx, other, true))
+	assert.Equal(t, 1, repo.ArticleIndex(ctx))
+	assert.Equal(t, 2, other.ArticleIndex(ctx))
 }
 
 // TestRepositoryLinkTombstoneUsesSubject documents that a deleted article keeps an
