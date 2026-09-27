@@ -215,10 +215,14 @@ func registerGCLFS() {
 	})
 }
 
+// GCArticleAttachmentsConfig configures the article attachment collector.
+//
+// MaxPerRun caps the whole run, unlike ReconcileArticleAttachmentsConfig.BatchSize,
+// which is only a page size.
 type GCArticleAttachmentsConfig struct {
 	BaseConfig
 	OlderThan time.Duration
-	BatchSize int
+	MaxPerRun int
 }
 
 func registerGCArticleAttachments() {
@@ -238,12 +242,12 @@ func registerGCArticleAttachments() {
 		OlderThan: 24 * time.Hour * 7,
 
 		// Bound the first run on an instance with a long backlog.
-		BatchSize: 1000,
+		MaxPerRun: 1000,
 	}, func(ctx context.Context, _ *user_model.User, config Config) error {
 		gcConfig := config.(*GCArticleAttachmentsConfig)
 		_, err := repo_service.GarbageCollectArticleAttachments(ctx, repo_service.GarbageCollectArticleAttachmentsOptions{
 			OlderThan: time.Now().Add(-gcConfig.OlderThan),
-			Limit:     gcConfig.BatchSize,
+			Limit:     gcConfig.MaxPerRun,
 		})
 		return err
 	})
