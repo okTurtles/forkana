@@ -105,8 +105,12 @@ const emit = defineEmits<{
   (e: "hover", id: string, on: boolean, pointerType: string): void;
 }>();
 
-/* Label fit model in *screen pixels* so it looks consistent across zoom.
-   We inverse-scale the label group by 1/k. */
+/* Label fit model in WORLD pixels (== screen px at zoom 1). The label group
+   used to be inverse-scaled by 1/k so its type held a constant screen size
+   across zoom, but #386 item 5 wants the content to grow and shrink WITH the
+   bubble — so the group lives in world units like the circle, and the zoom
+   scales both together. The fit is computed once, against the bubble's own
+   radius, and is therefore zoom-independent. */
 const fit = reactive({
   showLabel: false,
   showUpdated: false,
@@ -125,10 +129,10 @@ const formattedDate = computed(() => formatDateYMD(props.updatedAt));
    The count is not part of this decision: it is always drawn, at its rung's
    size, in the string it was given. */
 function recomputeFit() {
-  const k = props.k, r = props.r;
-  /* Everything here is in SCREEN px: the label group is inverse-scaled by 1/k,
-     so its type is drawn at a constant size whatever the zoom. */
-  const screenR = r * k;
+  const r = props.r;
+  /* Everything here is in WORLD px; the zoom scales the rendered result, so
+     what fits at zoom 1 fits at every zoom. */
+  const screenR = r;
   const pad = Math.max(LABEL_PADDING_MIN, Math.min(LABEL_PADDING_MAX, screenR * LABEL_PADDING_RATIO));
   const inner = Math.max(0, screenR - pad);             // usable radius for the block
 
@@ -269,7 +273,7 @@ function onKeyDown(ev: KeyboardEvent) {
     <!-- HTML Labels: using foreignObject for efficient text rendering -->
     <!-- Calculate the size needed for the foreignObject container -->
     <foreignObject
-      :x="-r" :y="-r" :width="r * 2" :height="r * 2" :transform="`scale(${1 / k})`"
+      :x="-r" :y="-r" :width="r * 2" :height="r * 2"
       style="overflow: visible; pointer-events: none;"
     >
       <!-- EXPANDED (202px): the whole card, laid out by CSS. -->
@@ -393,14 +397,12 @@ function onKeyDown(ev: KeyboardEvent) {
   height: 100%;
   width: 100%;
   /* Never wrap a label. The <foreignObject> this sits in is 2r WORLD units
-     wide, and it is inverse-scaled by 1/k, so its on-screen width is 2r px
-     whatever the zoom — while the circle around it is 2rk px. Zoomed in, the
-     box is therefore NARROWER than the circle it labels, and "Last updated"
-     or the date would break onto two lines inside a bubble with room to
-     spare. The lines are centred, so a nowrap line simply overflows the box
-     symmetrically; whether there is room for it in the CIRCLE is decided by
-     recomputeFit(), which measures single-line widths. Inherited by every
-     label line. */
+     wide and scales with the zoom like the circle, but a label can still be
+     legitimately wider than the box (recomputeFit measures against the
+     circle's CORNERS, not its bounding square). The lines are centred, so a
+     nowrap line simply overflows the box symmetrically; whether there is room
+     for it in the CIRCLE is decided by recomputeFit(), which measures
+     single-line widths. Inherited by every label line. */
   white-space: nowrap;
 }
 
