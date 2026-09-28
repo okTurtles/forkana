@@ -292,7 +292,10 @@ onBeforeUnmount(clearTimer);
     var(--bubble-grad-start, #fafbfc) 0%,
     var(--bubble-grad-mid, #eef2f7) 60%,
     var(--bubble-grad-end, #e6ebf2) 100%);
-  border: 1px solid var(--bubble-stroke, #dbe2ea);
+  /* No border here on purpose (#389): the Figma draws the opened circle with
+     the gradient and its soft shadow only — the small in-graph bubbles keep
+     their 1px stroke, but at 425px that stroke reads as a gray frame. */
+  border: none;
   box-shadow: 0 2px 6px rgb(100 116 139 / 18%);
 
   /* Transform only — the circle is never re-laid-out while it travels. */

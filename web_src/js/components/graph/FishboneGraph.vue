@@ -34,6 +34,7 @@ import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
+import { GET } from "../../modules/fetch.ts";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import {
   BUBBLE_HOVER_RADIUS, BUBBLE_UNKNOWN_RUNG, bubbleRungFor, countTextForRung,
@@ -71,6 +72,11 @@ type Node = {
      (202px) bubble. Already part of the fork-graph payload
      (api.Repository.Description), so no server-side change was needed. */
   description?: string;
+  /* The repository's default branch (api.Repository.DefaultBranch), needed to
+     fetch the article's README when the repository has no description to use
+     as the summary (#389) — the root's branch is a prop, but every fork can
+     have its own. */
+  defaultBranch?: string;
   isEmpty?: boolean;
   /* Archived articles are opened through their permanent repository url, because
      the subject vanity url resolves to the active repository of that subject. */
@@ -663,6 +669,7 @@ function buildGraphFromApi(root: any): Graph {
     const isArchived: boolean = repo?.archived === true;
     const isTombstoned: boolean = n?.is_tombstoned === true;
     const description: string = typeof repo?.description === 'string' ? repo.description : '';
+    const defaultBranch: string = typeof repo?.default_branch === 'string' ? repo.default_branch : '';
 
     /* A repository with content has at least one commit and therefore at least
        one contributor, so 0 on a NON-EMPTY repo never means "nobody": it means
@@ -687,6 +694,7 @@ function buildGraphFromApi(root: any): Graph {
       repoSubject: repoSubject ?? undefined,
       fullName: fullName ?? undefined,
       description: description || undefined,
+      defaultBranch: defaultBranch || undefined,
       isEmpty: isEmpty,
       isArchived,
       isTombstoned,
@@ -1656,6 +1664,82 @@ const openArticle = computed<Node | null>(
 /** True when the article view IS the page: nothing was clicked to get here, so
    there is nowhere to go Back to and nothing for Escape to dismiss. */
 const soloPinned = computed(() => detailNode.value === null && openArticle.value !== null);
+
+/* ── ARTICLE SUMMARY (#389) ───────────────────────────────────────────────
+   The opened circle shows the article's summary under the contributor count.
+   The fork-graph payload only carries api.Repository.Description, and most
+   articles have no repository description at all — so when a bubble opens
+   with nothing to show, the summary is taken from the article itself: its
+   README (the article IS its repository's single README, see AGENTS.md) is
+   fetched raw and its first paragraph used. Fetched lazily — only for the
+   article actually opened, never for the whole graph — and written back onto
+   the reactive node, so the paragraph appears in the already-open circle and
+   is never fetched twice. */
+const summaryRequested = new Set<NodeId>();
+
+/** First real paragraph of a Markdown article: front matter, headings, images,
+   tables, HTML and code fences skipped; inline markup stripped; clamped so a
+   pathological first paragraph cannot flood the circle (the CSS line-clamps
+   at 4 lines anyway). */
+function extractArticleSummary(markdown: string): string {
+  let text = markdown.replace(/^﻿/, '');
+  const frontMatter = /^---[^\S\n]*\r?\n[\s\S]*?\r?\n---[^\S\n]*(?:\r?\n|$)/.exec(text);
+  if (frontMatter) text = text.slice(frontMatter[0].length);
+  const paragraph: string[] = [];
+  let inFence = false;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (/^(```|~~~)/.test(line)) {
+      if (paragraph.length) break;
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    if (!line) {
+      if (paragraph.length) break;
+      continue;
+    }
+    if (/^(#{1,6}\s|!\[|\||<)/.test(line)) {
+      if (paragraph.length) break;
+      continue;
+    }
+    paragraph.push(line);
+  }
+  const summary = paragraph.join(' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')  // links and images -> their text
+    .replace(/[*_`]/g, '')                      // emphasis and code markers
+    .replace(/\s+/g, ' ')
+    .trim();
+  const maxLength = 400;
+  return summary.length > maxLength ? `${summary.slice(0, maxLength - 1).trimEnd()}…` : summary;
+}
+
+async function fetchArticleSummary(n: Node) {
+  if (summaryRequested.has(n.id)) return;
+  const owner = n.repoOwner ?? n.fullName?.split('/')[0] ?? '';
+  const repo = n.repoName ?? n.fullName?.split('/')[1] ?? '';
+  const branch = n.defaultBranch || props.defaultBranch;
+  if (!owner || !repo || !branch) return;
+  summaryRequested.add(n.id);
+  const suburl = window.config?.suburl || '';
+  const url = `${suburl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/raw/branch/${encodeURIComponent(branch)}/README.md`;
+  try {
+    const res = await GET(url);
+    if (!res.ok) return;
+    const summary = extractArticleSummary(await res.text());
+    const live = state.graph[n.id];
+    if (summary && live && !live.description) live.description = summary;
+  } catch {
+    /* Without a summary the circle simply keeps its current layout — same as
+       an article whose repository has no description. */
+  }
+}
+
+watch(openArticle, (n) => {
+  /* An empty repository has no README and a tombstoned one deliberately shows
+     no excerpt (see BubbleNode), so neither is fetched. */
+  if (n && !n.description && !n.isEmpty && !n.isTombstoned) void fetchArticleSummary(n);
+}, {immediate: true});
 
 /** The graph is not merely covered while an article is open: its bubbles and
    connectors are not rendered at all. It comes back the moment the close
