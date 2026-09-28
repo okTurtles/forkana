@@ -765,7 +765,11 @@ overflow-menu .overflow-menu-items {
 }
 
 overflow-menu .overflow-menu-items .item {
-  margin-bottom: 0 !important; /* reset fomantic's margin, because the active menu has special bottom border */
+  /* Reset fomantic's "margin: 0 0 -2px" (made for its 2px menu border) to match
+   * overflow-menu's 1px bottom border instead: the item's 2px underline overlaps
+   * the menu border by 1px, so the active tab's underline sits ON the row's
+   * border line instead of one pixel above it (#396). */
+  margin-bottom: -1px !important;
 }
 
 overflow-menu .overflow-menu-items .item-flex-space {
