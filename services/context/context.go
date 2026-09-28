@@ -193,6 +193,16 @@ func Contexter() func(next http.Handler) http.Handler {
 			}
 
 			httpcache.SetCacheControlInHeader(ctx.Resp.Header(), &httpcache.CacheControlOptions{NoTransform: true})
+
+			// The auth middlewares run after Contexter, so whether the viewer is signed
+			// in is only known once the response is about to be written. Signed-in pages
+			// must not be cached at all (see CacheControlOptions.NoStore), otherwise the
+			// browser can show them again after sign-out via history navigation.
+			ctx.Resp.Before(func(resp ResponseWriter) {
+				if ctx.IsSigned {
+					httpcache.SetCacheControlInHeader(resp.Header(), &httpcache.CacheControlOptions{NoStore: true, NoTransform: true})
+				}
+			})
 			ctx.Resp.Header().Set(`X-Frame-Options`, setting.CORSConfig.XFrameOptions)
 
 			ctx.Data["SystemConfig"] = setting.Config()

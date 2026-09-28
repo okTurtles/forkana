@@ -18,11 +18,26 @@ type CacheControlOptions struct {
 	IsPublic    bool
 	MaxAge      time.Duration
 	NoTransform bool
+	// NoStore forbids any caching, including the browser's back/forward and disk
+	// caches. History navigations are allowed to reuse stale cached pages even with
+	// "must-revalidate" (https://www.rfc-editor.org/rfc/rfc9111#section-4.2.1), so
+	// pages rendered for a signed-in user need "no-store" or a signed-out user can
+	// navigate back to a stale signed-in page.
+	NoStore bool
 }
 
 // SetCacheControlInHeader sets suitable cache-control headers in the response
 func SetCacheControlInHeader(h http.Header, opts *CacheControlOptions) {
 	directives := make([]string, 0, 4)
+
+	if opts.NoStore {
+		directives = append(directives, "no-store", "max-age=0", "private")
+		if opts.NoTransform {
+			directives = append(directives, "no-transform")
+		}
+		h.Set("Cache-Control", strings.Join(directives, ", "))
+		return
+	}
 
 	// "max-age=0 + must-revalidate" (aka "no-cache") is preferred instead of "no-store"
 	// because browsers may restore some input fields after navigate-back / reload a page.
