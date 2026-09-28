@@ -90,13 +90,6 @@
   font-weight: var(--font-weight-medium);
 }
 
-.navbar-view-modes {
-  color: var(--color-text-secondary);
-  font-weight: var(--font-weight-normal);
-  cursor: default;
-  padding-right: 4px !important;
-}
-
 /* #4 — Article reference pill in merge info */
 .article-ref-pill {
   display: inline-block;
