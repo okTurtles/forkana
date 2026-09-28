@@ -311,10 +311,6 @@
   color: var(--color-text);
 }
 
-.feeds-sort-btn {
-  background: var(--color-button);
-}
-
 .feeds-filter-btn:hover,
 .feeds-sort-btn:hover {
   background: var(--color-secondary);
