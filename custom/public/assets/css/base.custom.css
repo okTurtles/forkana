@@ -5,13 +5,15 @@
 
 	/* Bubble graph defaults (light) — single source of truth for gitea-light and gitea-auto
 	   in light OS mode; overridden for dark themes by colors-dark.custom.css */
-	--bubble-grad-start: #FAFBFC;
-	--bubble-grad-mid: #EEF2F7;
-	--bubble-grad-end: #E6EBF2;
-	--bubble-stroke: #DBE2EA;
-	--bubble-edge-stroke: #D7DFE8;
+	/* #386 items 4, 7: saturated per the figma — the near-gray originals read
+	   as dull; the legend swatches share these tokens, so they follow. */
+	--bubble-grad-start: #F6FAFF;
+	--bubble-grad-mid: #E1EBF8;
+	--bubble-grad-end: #D2E1F1;
+	--bubble-stroke: #C3D4E7;
+	--bubble-edge-stroke: #B8CCE2;
 	--bubble-joint-fill: #ffffff;
-	--bubble-joint-stroke: #C7D2DF;
+	--bubble-joint-stroke: #A5BFDA;
 	--bubble-shadow-color: #64748b;
 	--bubble-overlay-bg: rgba(255, 255, 255, 0.98);
 }

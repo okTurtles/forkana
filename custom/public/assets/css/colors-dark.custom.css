@@ -4,13 +4,15 @@
    prefers-color-scheme) so it's available both when a dark theme is explicitly selected and
    when gitea-auto matches dark OS mode below; the two consumers can never drift. */
 :root {
-  --bubble-dark-grad-start: #2e3640;
-  --bubble-dark-grad-mid: #232b35;
-  --bubble-dark-grad-end: #1d2530;
-  --bubble-dark-stroke: #3a4450;
-  --bubble-dark-edge-stroke: #2d3540;
+  /* #386 items 4, 7: saturated in step with the light palette in
+     base.custom.css — same hue family, more chroma. */
+  --bubble-dark-grad-start: #34404f;
+  --bubble-dark-grad-mid: #283443;
+  --bubble-dark-grad-end: #212c3b;
+  --bubble-dark-stroke: #435369;
+  --bubble-dark-edge-stroke: #3a4a5f;
   --bubble-dark-joint-fill: #1b1f23;
-  --bubble-dark-joint-stroke: #3d4a58;
+  --bubble-dark-joint-stroke: #4c617b;
   --bubble-dark-shadow-color: #000000;
   --bubble-dark-overlay-bg: rgba(27, 31, 35, 0.98);
 
