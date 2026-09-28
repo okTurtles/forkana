@@ -67,23 +67,26 @@
    class; styled by class so the rule keeps the same (0,1,0) specificity as the
    rest of this file and can be overridden by a utility class. */
 .history-bubble-root {
-  /* "flex-basis: 0" on purpose: the graph sizes its canvas from the box it is
-     given (FishboneGraph measures its container), so a content-based basis
-     would be circular. The box takes the free space, floored by min-height. */
+  /* "flex-basis: 0" on purpose: the box is sized by the FREE space, never by
+     its own content — a content basis would ratchet (the canvas is measured
+     from this box, so a once-tall canvas could hold the box tall forever,
+     pushing the footer off screen for a one-bubble graph). When the graph
+     needs MORE than the free space, FishboneGraph raises the
+     --bubble-canvas-min floor below instead (resting layout + legend), which
+     grows the box, and with it the page, by exactly the needed amount; the
+     floor only moves on discrete relayouts, so there is no feedback loop. */
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
   /* 320px is MIN_SVG_HEIGHT in web_src/js/components/graph/graph-viewport.ts:
-     the canvas never draws itself smaller than that, so a floor any higher
-     than it would make a viewport of ordinary height overflow -- exactly the
-     20-odd pixels that pushed the footer below the fold before. */
-  min-height: 320px;
-  /* No "overflow" here on purpose: the only child is "flex: 1 1 0;
-     min-height: 0", so it can never be taller than this box, and what it cannot
-     fit (the legend under a min-height canvas) scrolls inside
-     ".f-fishbone-graph". A scroll container here would only clip overlays. */
-  /* bleed over the container's horizontal padding, as before */
-  margin-top: -1rem;
+     the canvas never draws itself smaller than that, so a static floor any
+     higher would make a viewport of ordinary height overflow. */
+  min-height: max(320px, var(--bubble-canvas-min, 0px));
+  /* No "overflow" here on purpose: the child grows this box rather than
+     overflowing it, and a scroll container here would only clip overlays. */
+  /* bleed over the container's horizontal padding, as before. NO top bleed
+     (#386 item 11): a negative top margin pulled the canvas up under the view
+     tabs' divider, so panned bubbles were painted over the line from above. */
   margin-left: -1rem;
   margin-right: -1rem;
   width: calc(100% + 2rem);
