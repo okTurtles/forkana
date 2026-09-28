@@ -35,10 +35,11 @@ defineProps<{
 
 <style scoped>
 .legend-swatch--article {
-  background: radial-gradient(circle at 35% 30%,
-    var(--bubble-grad-start, #fafbfc) 0%,
-    var(--bubble-grad-mid, #eef2f7) 60%,
-    var(--bubble-grad-end, #e6ebf2) 100%);
+  /* The figma draws the swatch FLAT #D1D9E0 — the gradient's strong end, one
+     step deeper than the bubbles themselves — which --bubble-stroke carries
+     in both themes. A miniature of the bubble gradient read as dim (#386
+     item 4). */
+  background: var(--bubble-stroke, #d1d9e0);
   box-shadow: 0 1px 2px rgba(100, 116, 139, 0.25);
 }
 
