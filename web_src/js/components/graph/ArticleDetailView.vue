@@ -117,18 +117,6 @@ onMounted(() => {
      (:focus-visible), so this costs the mouse user nothing. No Back on a solo
      subject, and nothing to move focus to: the page starts here. */
   requestAnimationFrame(() => backRef.value?.focus());
-  /* The circle rests at the centre of the canvas box, and on a box taller than
-     the viewport that centre can sit below the fold — the reader clicks a
-     bubble and is left staring at the backdrop until they scroll. Measured
-     here, before the flight transform is applied, the rect IS the resting
-     place: when it is not fully visible, bring it to the middle of the
-     viewport, smoothly alongside the opening flight so the two read as one
-     move. Only for a clicked bubble (origin set): a solo subject loads
-     straight into this view and must not scroll the page it just opened on. */
-  const rest = bubbleRef.value?.getBoundingClientRect();
-  if (props.origin && rest && (rest.top < 0 || rest.bottom > window.innerHeight)) {
-    bubbleRef.value?.scrollIntoView({block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth'});
-  }
   if (prefersReducedMotion()) {
     entered.value = true;    // instant swap, no travel, no fade
     return;
@@ -193,24 +181,31 @@ onBeforeUnmount(clearTimer);
       Back
     </button>
 
-    <!-- `transform` on this element is owned by the open/close animation above
+    <!-- The circle centres in this wrapper, not in the layer: the wrapper is
+         the layer's height capped at one viewport and sticky, so on a canvas
+         box taller than the screen the circle rests in the VISIBLE part of
+         the box instead of at a centre below the fold. Sticky costs no
+         layout: the box (and the graph underneath) keeps its size. -->
+    <div class="detail-viewport">
+      <!-- `transform` on this element is owned by the open/close animation above
          and written straight to the node, so it must not appear in this
          binding — Vue would patch it away on the next render. -->
-    <div ref="bubbleRef" class="detail-bubble" :style="{'--detail-size': diameter + 'px'}">
-      <div class="detail-content">
-        <!-- Count and word on ONE line here, as in the design. -->
-        <p class="detail-count">{{ contributors }} {{ label }}</p>
+      <div ref="bubbleRef" class="detail-bubble" :style="{'--detail-size': diameter + 'px'}">
+        <div class="detail-content">
+          <!-- Count and word on ONE line here, as in the design. -->
+          <p class="detail-count">{{ contributors }} {{ label }}</p>
 
-        <!-- The article excerpt. This one WRAPS: it is a paragraph, not a label. -->
-        <p v-if="description" class="detail-description">{{ description }}</p>
+          <!-- The article excerpt. This one WRAPS: it is a paragraph, not a label. -->
+          <p v-if="description" class="detail-description">{{ description }}</p>
 
-        <button class="btn-neutral detail-read" @click="emit('read')">Read full article</button>
-        <button class="detail-history" @click="emit('history')">View history</button>
+          <button class="btn-neutral detail-read" @click="emit('read')">Read full article</button>
+          <button class="detail-history" @click="emit('history')">View history</button>
 
-        <p v-if="updatedAt" class="detail-updated">
-          <span>Last updated</span>
-          <span>{{ formattedDate }}</span>
-        </p>
+          <p v-if="updatedAt" class="detail-updated">
+            <span>Last updated</span>
+            <span>{{ formattedDate }}</span>
+          </p>
+        </div>
       </div>
     </div>
 
@@ -228,15 +223,6 @@ onBeforeUnmount(clearTimer);
   position: absolute;
   inset: 0;
   z-index: 10;
-  display: flex;
-  align-items: center;
-  /* Centred in the canvas box, horizontally and vertically. The mockup drew the
-     circle left of centre with the history card in the space it left on the
-     right, but a bubble that sits off-centre in an otherwise empty box reads as
-     a layout bug — so the circle owns the centre and the history card overlaps
-     its right edge instead (see ArticleHistoryPopup, which positions itself
-     from the same centre and clamps to this box's right edge). */
-  justify-content: center;
   /* Follow the canvas box's own rounded frame instead of squaring it off, and
      keep the circle and the history card clipped to it. */
   border-radius: inherit;
@@ -267,6 +253,24 @@ onBeforeUnmount(clearTimer);
 
 .detail-layer.is-open::before {
   opacity: 1;
+}
+
+/* The circle's stage: the layer's height capped at one viewport, kept in view
+   by position:sticky while the layer (and the canvas box behind it) keeps its
+   full height. On a box taller than the screen the circle therefore rests
+   centred in the VISIBLE part of the box — the mockup's centring, without
+   scrolling the page and without resizing the box (which would relayout the
+   whole graph on every open and close). The mockup drew the circle left of
+   centre with the history card beside it, but a bubble off-centre in an empty
+   box reads as a layout bug — so the circle owns the centre and the history
+   card overlaps its right edge instead (see ArticleHistoryPopup). */
+.detail-viewport {
+  position: sticky;
+  top: 0;
+  height: min(100%, 100dvh);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .detail-back {

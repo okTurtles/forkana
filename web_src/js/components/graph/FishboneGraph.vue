@@ -2083,11 +2083,21 @@ function updateHistoryAnchor() {
   const boxRect = box.getBoundingClientRect();
   let x: number, y: number;
   if (openArticle.value) {
-    /* The opened article is a circle centred in this box: the card hangs off
-       its right edge, exactly as the design draws it. */
-    const d = Math.min(detailSize.value, boxRect.width * 0.84);
-    x = boxRect.width / 2 + d / 2;
-    y = boxRect.height / 2;
+    /* The card hangs off the opened circle's right edge, exactly as the design
+       draws it. The circle is measured, not assumed at the box centre: on a
+       box taller than the viewport it rests in the visible part of the box
+       (ArticleDetailView's .detail-viewport). Fallback to the box centre for
+       the tick before the circle exists. */
+    const bubble = box.querySelector('.detail-bubble');
+    if (bubble) {
+      const r = bubble.getBoundingClientRect();
+      x = r.right - boxRect.left;
+      y = r.top + r.height / 2 - boxRect.top;
+    } else {
+      const d = Math.min(detailSize.value, boxRect.width * 0.84);
+      x = boxRect.width / 2 + d / 2;
+      y = boxRect.height / 2;
+    }
   } else {
     const svg = svgRef.value;
     const p = hoveredId.value !== null ? framePlacements.get(hoveredId.value) : null;
@@ -2098,7 +2108,13 @@ function updateHistoryAnchor() {
     y = (svgBox.top - boxRect.top) + t.applyY(p.y);
   }
   historyAnchor.x = Math.round(Math.max(0, Math.min(boxRect.width, x)));
-  historyAnchor.y = Math.round(Math.max(boxRect.height * 0.35, Math.min(boxRect.height * 0.65, y)));
+  /* The card extends up to ±35% of a viewport-ish box from its anchor; clamp
+     so it stays inside the box. Sized from the smaller of box and viewport:
+     on a box TALLER than the viewport, 35% of the box would push the card
+     away from a circle resting near the top (see .detail-viewport), while
+     35% of the viewport keeps the old guarantee and follows the circle. */
+  const halfCard = 0.35 * Math.min(boxRect.height, window.innerHeight);
+  historyAnchor.y = Math.round(Math.max(halfCard, Math.min(boxRect.height - halfCard, y)));
 }
 
 /* The circle is sized from the container, and on a solo subject nothing
