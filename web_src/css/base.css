@@ -765,7 +765,8 @@ overflow-menu .overflow-menu-items {
 }
 
 overflow-menu .overflow-menu-items .item {
-  /* Reset fomantic's "margin: 0 0 -2px" (made for its 2px menu border) to match
+  /* Reset the "margin: 0 0 -2px" from ".ui.secondary.pointing.menu .item"
+   * (web_src/css/modules/menu.css, made for a 2px menu border) to match
    * overflow-menu's 1px bottom border instead: the item's 2px underline overlaps
    * the menu border by 1px, so the active tab's underline sits ON the row's
    * border line instead of one pixel above it (#396). */
@@ -780,6 +781,9 @@ overflow-menu .overflow-menu-button {
   background: transparent;
   border: none;
   color: inherit;
+  /* overlap the 1px menu border like .item does, so the active underline sits
+   * on the row line; on the base rule so the button doesn't shift when active */
+  margin-bottom: -1px;
   text-align: center;
   width: 32px;
   padding: 0;
