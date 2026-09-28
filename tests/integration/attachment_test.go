@@ -457,23 +457,13 @@ func TestArticleCommitAssociatesAttachments(t *testing.T) {
 		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 
-		articleContent := func(uuid string) string {
-			return fmt.Sprintf("# Article\n\n![img](/attachments/%s)\n", uuid)
-		}
-		associated := func(t *testing.T, repoID, attachmentID int64) bool {
-			t.Helper()
-			has, err := repo_model.HasArticleAttachment(t.Context(), repoID, attachmentID)
-			require.NoError(t, err)
-			return has
-		}
-
 		t.Run("ReferenceFromUploadRepo", func(t *testing.T) {
 			uuid := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
 			attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{UUID: uuid})
 
-			_, err := createFileInBranch(user2, repo1, "article-associated.md", repo1.DefaultBranch, articleContent(uuid))
+			_, err := createFileInBranch(user2, repo1, "article-associated.md", repo1.DefaultBranch, articleAttachmentContent(uuid))
 			require.NoError(t, err)
-			assert.True(t, associated(t, repo1.ID, attach.ID))
+			assert.True(t, hasArticleAttachment(t, repo1.ID, attach.ID))
 		})
 
 		t.Run("CommitWithoutReferenceAssociatesNothing", func(t *testing.T) {
@@ -482,7 +472,7 @@ func TestArticleCommitAssociatesAttachments(t *testing.T) {
 
 			_, err := createFileInBranch(user2, repo1, "article-plain.md", repo1.DefaultBranch, "# Article\n")
 			require.NoError(t, err)
-			assert.False(t, associated(t, repo1.ID, attach.ID))
+			assert.False(t, hasArticleAttachment(t, repo1.ID, attach.ID))
 		})
 
 		// Attachment 2 belongs to another repository and to an issue there. Referencing it must
@@ -490,9 +480,9 @@ func TestArticleCommitAssociatesAttachments(t *testing.T) {
 		t.Run("UnauthorizedReferenceIsSkipped", func(t *testing.T) {
 			attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: 2})
 
-			_, err := createFileInBranch(user2, repo1, "article-borrowed.md", repo1.DefaultBranch, articleContent(attach.UUID))
+			_, err := createFileInBranch(user2, repo1, "article-borrowed.md", repo1.DefaultBranch, articleAttachmentContent(attach.UUID))
 			require.NoError(t, err)
-			assert.False(t, associated(t, repo1.ID, attach.ID))
+			assert.False(t, hasArticleAttachment(t, repo1.ID, attach.ID))
 		})
 	})
 }
@@ -516,8 +506,7 @@ func TestArticlePushAssociatesAttachments(t *testing.T) {
 		dstPath := t.TempDir()
 		doGitClone(dstPath, u)(t)
 
-		content := fmt.Sprintf("# Article\n\n![img](/attachments/%s)\n", uuid)
-		require.NoError(t, os.WriteFile(filepath.Join(dstPath, "README.md"), []byte(content), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dstPath, "README.md"), []byte(articleAttachmentContent(uuid)), 0o644))
 		require.NoError(t, git.AddChanges(t.Context(), dstPath, true))
 		signature := git.Signature{Email: "user2@example.com", Name: "user2"}
 		require.NoError(t, git.CommitChanges(t.Context(), dstPath, git.CommitChangesOptions{
@@ -530,9 +519,7 @@ func TestArticlePushAssociatesAttachments(t *testing.T) {
 		// pushUpdates runs on the push queue, so the association is not visible synchronously.
 		require.NoError(t, queue.GetManager().FlushAll(t.Context(), 30*time.Second))
 
-		has, err := repo_model.HasArticleAttachment(t.Context(), repo1.ID, attach.ID)
-		require.NoError(t, err)
-		assert.True(t, has)
+		assert.True(t, hasArticleAttachment(t, repo1.ID, attach.ID))
 	})
 }
 

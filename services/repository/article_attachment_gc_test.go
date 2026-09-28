@@ -30,8 +30,12 @@ func addStoredAttachment(t *testing.T, uuid string, createdUnix timeutil.TimeSta
 		Name:       "image.png",
 	}
 	require.NoError(t, db.Insert(t.Context(), attach))
-	_, err := db.GetEngine(t.Context()).Exec("UPDATE `attachment` SET created_unix = ? WHERE id = ?", createdUnix, attach.ID)
+	// xorm keeps `created` columns out of struct updates, so the age has to be
+	// written as a plain column assignment
+	_, err := db.GetEngine(t.Context()).Table("attachment").Where("id = ?", attach.ID).
+		Update(map[string]any{"created_unix": createdUnix})
 	require.NoError(t, err)
+	attach.CreatedUnix = createdUnix
 
 	content := "attachment content"
 	_, err = storage.Attachments.Save(attach.RelativePath(), strings.NewReader(content), int64(len(content)))

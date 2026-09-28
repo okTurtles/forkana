@@ -340,20 +340,32 @@ func repositoriesFrom(ctx context.Context, startID int64, limit int) ([]*repo_mo
 	return repos, db.GetEngine(ctx).Where("id >= ?", startID).OrderBy("id ASC").Limit(limit).Find(&repos)
 }
 
+// Summary renders the counters a backfill and a reconciliation have in common.
+// Both report through it, so their log lines and their system notices cannot
+// drift into different words for the same number; the labels are the ones the
+// admin command prints.
+func (r *BackfillResult) Summary() string {
+	return fmt.Sprintf("%d repositories scanned (%d unreadable, %d history capped), %d references found, %d associations inserted, %d legacy rows inferred, %d suspicious references skipped, %d missing attachments, %d missing stored objects",
+		r.ReposScanned, r.RepositoriesFailed, r.HistoryCapped, r.ReferencesFound, r.AssociationsInserted,
+		r.LegacyInferred, r.SuspiciousSkipped, r.MissingAttachments, r.MissingFiles)
+}
+
+// needsAttention counts what a run could not resolve by itself, which is what
+// decides whether it is worth an administrator's notice.
+func (r *BackfillResult) needsAttention() int {
+	return r.SuspiciousSkipped + r.MissingAttachments + r.MissingFiles + r.RepositoriesFailed + r.HistoryCapped
+}
+
 func reportBackfill(result *BackfillResult, readOnly bool) {
-	log.Info("article attachment backfill: %d repositories scanned (%d unreadable, %d history capped), %d references found, %d associations inserted, %d legacy rows inferred, %d suspicious skipped, %d missing attachments, %d missing files, %d outstanding, %d unassociated legacy attachments (read-only: %t)",
-		result.ReposScanned, result.RepositoriesFailed, result.HistoryCapped, result.ReferencesFound, result.AssociationsInserted,
-		result.LegacyInferred, result.SuspiciousSkipped, result.MissingAttachments, result.MissingFiles,
-		result.Outstanding, result.UnassociatedLegacy, readOnly)
+	log.Info("article attachment backfill: %s, %d outstanding, %d unassociated legacy attachments (read-only: %t)",
+		result.Summary(), result.Outstanding, result.UnassociatedLegacy, readOnly)
 
 	// One notice for the whole run: a notice per rejected reference would let a
 	// single bad paste fill the administrator's notice list.
-	reportable := result.SuspiciousSkipped + result.MissingAttachments + result.MissingFiles + result.RepositoriesFailed + result.HistoryCapped
-	if readOnly || reportable == 0 {
+	if readOnly || result.needsAttention() == 0 {
 		return
 	}
-	if err := system_model.CreateRepositoryNotice("Article attachment backfill finished with %d suspicious references skipped, %d missing attachments, %d missing files, %d unreadable repositories and %d repositories whose article history exceeded the scan cap, see the log for details",
-		result.SuspiciousSkipped, result.MissingAttachments, result.MissingFiles, result.RepositoriesFailed, result.HistoryCapped); err != nil {
+	if err := system_model.CreateRepositoryNotice("Article attachment backfill finished: %s; see the log for details", result.Summary()); err != nil {
 		log.Error("CreateRepositoryNotice: %v", err)
 	}
 }

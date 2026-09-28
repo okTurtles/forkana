@@ -77,7 +77,7 @@ func TestCanServe(t *testing.T) {
 
 	// An article upload records its purpose, so one without associations is a
 	// pending upload and the legacy fallback must not expose it.
-	t.Run("UnassociatedArticleUploadIsNotFallenBackOn", func(t *testing.T) {
+	t.Run("UnassociatedArticleUploadSkipsLegacyFallback", func(t *testing.T) {
 		attach := newTestAttachment(t, repo1.ID, user2.ID)
 
 		assert.False(t, canServe(t, user13, nil, attach))

@@ -5,10 +5,10 @@ package attachment
 
 import (
 	"context"
+	"slices"
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	user_model "code.gitea.io/gitea/models/user"
-	"code.gitea.io/gitea/modules/setting"
 )
 
 // DenyReason is the audit reason code reported when CanAssociate refuses a
@@ -108,51 +108,28 @@ func isPendingUploadOf(ctx context.Context, doer *user_model.User, attach *repo_
 	return count == 0, nil
 }
 
-// defaultForkAncestryDepth bounds the ancestry walk when MAX_FORK_TREE_NODES
-// carries no usable depth: a negative value disables the fork tree limit and
-// zero forbids forking altogether, so neither says how deep a chain may be.
-// It matches the fallback of repo_model.FindForkTreeRoot, the other walk over
-// the same ancestry.
-const defaultForkAncestryDepth = 300
-
-// inheritsThroughForkChain walks target's fork ancestry looking for an already
-// associated repository, or, when the attachment is article content, the origin
-// repository, which is what makes a fork's inherited content trustworthy. The
-// walk is bounded by the same setting that bounds fork trees, and stops at the
-// first repository it cannot load.
+// inheritsThroughForkChain reports whether target's fork ancestry holds the
+// attachment: an already associated ancestor, or, when the attachment is
+// article content, the origin repository, which is what makes a fork's
+// inherited content trustworthy.
+//
+// The ancestry comes from repo_model.ForkAncestorIDs, so this walk and the fork
+// tree walks share one depth bound, and both questions are then answered with a
+// single query each rather than one per ancestor.
 func inheritsThroughForkChain(ctx context.Context, target *repo_model.Repository, attach *repo_model.Attachment, isArticle bool) (bool, error) {
-	limit := setting.Repository.MaxForkTreeNodes
-	if limit <= 0 {
-		limit = defaultForkAncestryDepth
+	if !target.IsFork || target.ForkID == 0 {
+		return false, nil
 	}
 
-	visited := make(map[int64]bool, 4)
-	current := target
-	for range limit {
-		if !current.IsFork || current.ForkID == 0 || visited[current.ForkID] {
-			return false, nil
-		}
-		visited[current.ForkID] = true
-
-		if isArticle && current.ForkID == attach.RepoID {
-			return true, nil
-		}
-		associated, err := repo_model.HasArticleAttachment(ctx, current.ForkID, attach.ID)
-		if err != nil {
-			return false, err
-		}
-		if associated {
-			return true, nil
-		}
-
-		parent, err := repo_model.GetRepositoryByID(ctx, current.ForkID)
-		if err != nil {
-			if repo_model.IsErrRepoNotExist(err) {
-				return false, nil
-			}
-			return false, err
-		}
-		current = parent
+	ancestorIDs, err := repo_model.ForkAncestorIDs(ctx, target.ID)
+	if err != nil {
+		return false, err
 	}
-	return false, nil
+	if len(ancestorIDs) == 0 {
+		return false, nil
+	}
+	if isArticle && slices.Contains(ancestorIDs, attach.RepoID) {
+		return true, nil
+	}
+	return repo_model.AnyArticleAttachmentRepo(ctx, attach.ID, ancestorIDs)
 }

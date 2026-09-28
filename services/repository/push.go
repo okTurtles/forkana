@@ -193,7 +193,7 @@ func pushUpdates(optsList []*repo_module.PushUpdateOptions) error {
 				// path discovers references too. Only the branch tip is scanned: inserts are
 				// idempotent, so a commit that already went through the web path costs nothing,
 				// and walking arbitrary history belongs to reconciliation.
-				if err := attachment_service.AssociateArticleAttachmentsFromCommit(ctx, pusher, repo, newCommit, attachment_service.ArticleContentPaths); err != nil {
+				if err := attachment_service.AssociateArticleAttachmentsFromCommit(ctx, pusher, repo, newCommit, attachment_service.ArticleContentPaths()); err != nil {
 					attachment_service.ReportAssociationFailure(repo, branch, err)
 				}
 

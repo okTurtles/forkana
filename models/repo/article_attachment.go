@@ -101,6 +101,19 @@ func HasArticleAttachment(ctx context.Context, repoID, attachmentID int64) (bool
 	return db.GetEngine(ctx).Exist(&ArticleAttachment{RepoID: repoID, AttachmentID: attachmentID})
 }
 
+// AnyArticleAttachmentRepo reports whether any of the given repositories keeps
+// the attachment alive. It answers for a whole fork chain in one query, which
+// the association check walks per referenced attachment.
+func AnyArticleAttachmentRepo(ctx context.Context, attachmentID int64, repoIDs []int64) (bool, error) {
+	if attachmentID == 0 || len(repoIDs) == 0 {
+		return false, nil
+	}
+	return db.GetEngine(ctx).
+		Where(builder.Eq{"attachment_id": attachmentID}).
+		In("repo_id", repoIDs).
+		Exist(new(ArticleAttachment))
+}
+
 // CountArticleAttachmentRepos returns how many repositories keep the attachment alive.
 func CountArticleAttachmentRepos(ctx context.Context, attachmentID int64) (int64, error) {
 	if attachmentID == 0 {

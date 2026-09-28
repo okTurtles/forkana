@@ -6,6 +6,7 @@ package attachment
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	system_model "code.gitea.io/gitea/models/system"
@@ -16,13 +17,18 @@ import (
 	"code.gitea.io/gitea/modules/markup/attachmentref"
 )
 
-// ArticleContentPaths are the tree paths scanned for attachment references when
+// articleContentPaths are the tree paths scanned for attachment references when
 // only the branch tip is known, as is the case for a direct Git push. They are
 // the paths the article editor writes — "@README.md" on a change-request head
 // branch, "README.md" elsewhere; richer discovery belongs to reconciliation.
-//
-// Treat it as read-only: it is shared by every consumer of this package.
-var ArticleContentPaths = []string{"README.md", "@README.md"}
+var articleContentPaths = []string{"README.md", "@README.md"}
+
+// ArticleContentPaths returns the tree paths scanned for attachment references
+// when only the branch tip is known. The result is a copy, so a caller that
+// appends to or reorders it does not change what every other consumer scans.
+func ArticleContentPaths() []string {
+	return slices.Clone(articleContentPaths)
+}
 
 // AssociateArticleAttachments records that repo keeps alive every attachment
 // referenced by the given article contents and allowed by CanAssociate. It must

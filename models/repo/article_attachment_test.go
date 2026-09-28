@@ -20,7 +20,10 @@ import (
 func addAttachment(t *testing.T, attach *repo_model.Attachment, createdUnix timeutil.TimeStamp) *repo_model.Attachment {
 	t.Helper()
 	require.NoError(t, db.Insert(t.Context(), attach))
-	_, err := db.GetEngine(t.Context()).Exec("UPDATE `attachment` SET created_unix = ? WHERE id = ?", createdUnix, attach.ID)
+	// xorm keeps `created` columns out of struct updates, so the age has to be
+	// written as a plain column assignment
+	_, err := db.GetEngine(t.Context()).Table("attachment").Where("id = ?", attach.ID).
+		Update(map[string]any{"created_unix": createdUnix})
 	require.NoError(t, err)
 	attach.CreatedUnix = createdUnix
 	return attach
@@ -58,6 +61,27 @@ func TestHasArticleAttachment(t *testing.T) {
 	assert.False(t, has)
 
 	has, err = repo_model.HasArticleAttachment(t.Context(), 0, 0)
+	assert.NoError(t, err)
+	assert.False(t, has)
+}
+
+func TestAnyArticleAttachmentRepo(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// attachment 13 is kept alive by repositories 1 and 2
+	has, err := repo_model.AnyArticleAttachmentRepo(t.Context(), 13, []int64{3, 2})
+	assert.NoError(t, err)
+	assert.True(t, has)
+
+	has, err = repo_model.AnyArticleAttachmentRepo(t.Context(), 13, []int64{3, 4})
+	assert.NoError(t, err)
+	assert.False(t, has)
+
+	has, err = repo_model.AnyArticleAttachmentRepo(t.Context(), 13, nil)
+	assert.NoError(t, err)
+	assert.False(t, has)
+
+	has, err = repo_model.AnyArticleAttachmentRepo(t.Context(), 0, []int64{1})
 	assert.NoError(t, err)
 	assert.False(t, has)
 }

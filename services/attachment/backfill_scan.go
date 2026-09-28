@@ -166,7 +166,7 @@ func readBlobContent(rd *bufio.Reader, size int64) (string, error) {
 // repository happens to carry, so a scan that only accepted the canonical
 // spelling would miss references the article still displays.
 func isArticlePath(path string) bool {
-	return slices.ContainsFunc(ArticleContentPaths, func(candidate string) bool {
+	return slices.ContainsFunc(articleContentPaths, func(candidate string) bool {
 		return strings.EqualFold(candidate, path)
 	})
 }

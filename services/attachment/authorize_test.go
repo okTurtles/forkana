@@ -147,14 +147,21 @@ func TestCanAssociate(t *testing.T) {
 		assert.True(t, ok)
 	})
 
+	// An article upload a release has already claimed is no longer pending, so
+	// its uploader may not republish it as another repository's article content:
+	// that would expose an unpublished release draft to every article reader.
 	t.Run("UploaderCannotMoveALinkedAttachment", func(t *testing.T) {
-		// Fixture attachment 12 belongs to repo2 and is linked to a release.
-		attach := unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: 12})
-		require.Equal(t, user2.ID, attach.UploaderID)
+		attach := newTestAttachment(t, repo2.ID, user2.ID)
+		_, err := db.GetEngine(t.Context()).ID(attach.ID).
+			Cols("release_id").Update(&repo_model.Attachment{ReleaseID: 11})
+		require.NoError(t, err)
+		// the predicate reads the row it is handed, not the stored one
+		attach.ReleaseID = 11
 
-		ok, _, err := CanAssociate(t.Context(), user2, repo1, attach)
+		ok, reason, err := CanAssociate(t.Context(), user2, repo1, attach)
 		assert.NoError(t, err)
 		assert.False(t, ok)
+		assert.Equal(t, DenyUnrelatedRepository, reason)
 	})
 
 	t.Run("UploaderCannotReuseAnAlreadyAssociatedAttachment", func(t *testing.T) {
