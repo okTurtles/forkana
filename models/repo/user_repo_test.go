@@ -39,6 +39,53 @@ func TestRepoAssignees(t *testing.T) {
 	}
 }
 
+func TestGetStarredReposExcludesTombstones(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// user2 starred repo2 and repo4.
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(),
+		&repo_model.Repository{ID: 4, IsTombstoned: true}, "is_tombstoned"))
+
+	opts := &repo_model.StarredReposOptions{StarrerID: 2, IncludePrivate: true}
+	repos, err := repo_model.GetStarredRepos(t.Context(), opts)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []int64{2}, repoIDsOf(repos))
+
+	// The rows are still needed by the callers that clean them up.
+	opts.IncludeTombstoned = true
+	repos, err = repo_model.GetStarredRepos(t.Context(), opts)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []int64{2, 4}, repoIDsOf(repos))
+}
+
+func TestGetWatchedReposExcludesTombstones(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// user1 watches repo1 only.
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(),
+		&repo_model.Repository{ID: 1, IsTombstoned: true}, "is_tombstoned"))
+
+	opts := &repo_model.WatchedReposOptions{WatcherID: 1, IncludePrivate: true}
+	repos, count, err := repo_model.GetWatchedRepos(t.Context(), opts)
+	require.NoError(t, err)
+	assert.Zero(t, count)
+	assert.Empty(t, repos)
+
+	opts.IncludeTombstoned = true
+	repos, count, err = repo_model.GetWatchedRepos(t.Context(), opts)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+	assert.ElementsMatch(t, []int64{1}, repoIDsOf(repos))
+}
+
+func repoIDsOf(repos []*repo_model.Repository) []int64 {
+	ids := make([]int64, 0, len(repos))
+	for _, repo := range repos {
+		ids = append(ids, repo.ID)
+	}
+	return ids
+}
+
 func TestGetIssuePostersWithSearch(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 

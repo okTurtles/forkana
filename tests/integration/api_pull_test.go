@@ -19,6 +19,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/setting"
 	api "code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/services/convert"
@@ -30,6 +31,7 @@ import (
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAPIViewPulls(t *testing.T) {
@@ -185,6 +187,60 @@ func TestAPIMergePullWIP(t *testing.T) {
 	}).AddTokenAuth(token)
 
 	MakeRequest(t, req, http.StatusMethodNotAllowed)
+}
+
+// Forkana (#371): an API merge without an explicit MergeMessageField must keep the
+// server-generated merge commit body, i.e. the Reviewed-on/Reviewed-by trailers,
+// while an explicit MergeMessageField must replace that generated body.
+func TestAPIMergePullGeneratesMergeMessage(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, giteaURL *url.URL) {
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		session := loginUser(t, user.Name)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+
+		mergeCommitMessage := func(repo *repo_model.Repository) string {
+			gitRepo, err := gitrepo.OpenRepository(t.Context(), repo)
+			require.NoError(t, err)
+			defer gitRepo.Close()
+
+			commit, err := gitRepo.GetBranchCommit("main")
+			require.NoError(t, err)
+			return commit.CommitMessage
+		}
+
+		t.Run("DefaultMessageKeepsTrailers", func(t *testing.T) {
+			baseRepo, pullIssue := createSameRepoArticlePR(t, user, "api-merge-message", "API merge message")
+
+			// no MergeTitleField and no MergeMessageField: the server must generate both
+			req := NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/merge", user.Name, baseRepo.Name, pullIssue.Index), &forms.MergePullRequestForm{
+				Do: string(repo_model.MergeStyleMerge),
+			}).AddTokenAuth(token)
+			MakeRequest(t, req, http.StatusOK)
+
+			message := mergeCommitMessage(baseRepo)
+			assert.Contains(t, message, fmt.Sprintf("Merge pull request 'API merge message' (#%d) from edit into main", pullIssue.Index))
+			pullIssue.Repo = baseRepo
+			// The trailer is built from the configured AppURL (services/pull),
+			// which spells the host "localhost" while giteaURL dials 127.0.0.1 —
+			// same server, different spelling, so compare against AppURL.
+			assert.Contains(t, message, "Reviewed-on: "+strings.TrimSuffix(setting.AppURL, "/")+pullIssue.Link())
+		})
+
+		t.Run("ExplicitMessageReplacesDefaultBody", func(t *testing.T) {
+			baseRepo, pullIssue := createSameRepoArticlePR(t, user, "api-merge-custom-message", "API merge custom message")
+
+			req := NewRequestWithJSON(t, http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/merge", user.Name, baseRepo.Name, pullIssue.Index), &forms.MergePullRequestForm{
+				Do:                string(repo_model.MergeStyleMerge),
+				MergeMessageField: "custom body",
+			}).AddTokenAuth(token)
+			MakeRequest(t, req, http.StatusOK)
+
+			message := mergeCommitMessage(baseRepo)
+			assert.Contains(t, message, fmt.Sprintf("Merge pull request 'API merge custom message' (#%d) from edit into main", pullIssue.Index))
+			assert.Contains(t, message, "custom body")
+			assert.NotContains(t, message, "Reviewed-on:")
+		})
+	})
 }
 
 func TestAPICreatePullSuccess(t *testing.T) {

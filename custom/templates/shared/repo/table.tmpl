@@ -12,9 +12,9 @@
                         <span class="text tw-ml-1">Sort</span>
                         {{svg "octicon-triangle-down" 16 "tw-ml-1"}}
                         <div class="menu">
-                            <a class="item history-table-sort" data-sort="most_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments (.Repository.GetSubject ctx))) "view" "table" "sort" "most_contrib"}}">Most contributors</a>
-                            <a class="item history-table-sort" data-sort="least_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments (.Repository.GetSubject ctx))) "view" "table" "sort" "least_contrib"}}">Least contributors</a>
-                            <a class="item history-table-sort" data-sort="latest" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments (.Repository.GetSubject ctx))) "view" "table" "sort" "latest"}}">Latest edited</a>
+                            <a class="item history-table-sort" data-sort="most_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments .SubjectName)) "view" "table" "sort" "most_contrib"}}">Most contributors</a>
+                            <a class="item history-table-sort" data-sort="least_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments .SubjectName)) "view" "table" "sort" "least_contrib"}}">Least contributors</a>
+                            <a class="item history-table-sort" data-sort="latest" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscapeSegments .SubjectName)) "view" "table" "sort" "latest"}}">Latest edited</a>
                         </div>
                     </div>
                 </div>
@@ -53,7 +53,10 @@
                             <td>{{if $entry.Updated}}{{DateUtils.AbsoluteShort $entry.Updated}}{{else}}-{{end}}</td>
                             <td>
                                 <div class="tw-flex tw-flex-col tw-gap-1">
-                                    <span class="tw-font-semibold">{{$repo.OwnerName}}</span>
+                                    <span class="tw-font-semibold">
+                                        {{$repo.OwnerName}}
+                                        {{if $repo.IsTombstone}}<span class="ui basic label">{{ctx.Locale.Tr "repo.tombstone.label"}}</span>{{end}}
+                                    </span>
                                     <span class="tw-text-xs tw-text-gray-500">{{$repo.GetSubject ctx}}</span>
                                 </div>
                             </td>

@@ -258,6 +258,14 @@ func handleRepoEmptyOrBroken(ctx *context.Context) {
 	ctx.Redirect(link)
 }
 
+// handleRepoTombstone prepares a request for a deleted article. The git history is
+// still on disk for the forks, but none of it is exposed: the regular repository
+// frame is rendered and the templates redact the content based on "IsTombstonedRepo",
+// which the repository assignment middleware already set.
+func handleRepoTombstone(ctx *context.Context) {
+	ctx.Data["Title"] = ctx.Repo.Repository.FullName()
+}
+
 func isViewHomeOnlyContent(ctx *context.Context) bool {
 	return ctx.FormBool("only_content")
 }
@@ -371,6 +379,18 @@ func redirectFollowSymlink(ctx *context.Context, treePathEntry *git.TreeEntry) b
 
 // Home render repository home page
 func Home(ctx *context.Context) {
+	if ctx.Repo.Repository.IsTombstone() {
+		// A tombstone is only ever served here: every other route redirects to this one.
+		// An article renders the deletion notice in the article frame, like the vanity
+		// url did before the deletion; a repository without a subject has no such frame
+		// and falls back to the repository one, which redacts it the same way.
+		if handleRepoHomeArticle(ctx) {
+			return
+		}
+		handleRepoTombstone(ctx)
+		ctx.HTML(http.StatusOK, tplRepoHome)
+		return
+	}
 	if handleRepoHomeFeed(ctx) {
 		return
 	}

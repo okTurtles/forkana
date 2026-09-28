@@ -23,6 +23,14 @@ func GetRepositoriesByForkID(ctx context.Context, forkID int64) ([]*Repository, 
 		Find(&repos)
 }
 
+// HasForks reports whether any repository was forked from the given repository.
+func HasForks(ctx context.Context, repoID int64) (bool, error) {
+	return db.GetEngine(ctx).
+		Table("repository").
+		Where("fork_id=?", repoID).
+		Exist()
+}
+
 // GetForkedRepo checks if given user has already forked a repository with given ID.
 // Returns (nil, nil) if no fork exists, (repo, nil) if fork exists, or (nil, err) on database error.
 func GetForkedRepo(ctx context.Context, ownerID, repoID int64) (*Repository, error) {

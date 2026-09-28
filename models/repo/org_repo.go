@@ -15,7 +15,11 @@ import (
 	"xorm.io/builder"
 )
 
-// GetOrgRepositories get repos belonging to the given organization
+// GetOrgRepositories get repos belonging to the given organization.
+//
+// Tombstones are included on purpose: this is not a listing, it feeds team membership
+// maintenance, and a team that includes all repositories has to cover the tombstones
+// too, or the organization would lose its own access to them.
 func GetOrgRepositories(ctx context.Context, orgID int64) (RepositoryList, error) {
 	var orgRepos []*Repository
 	return orgRepos, db.GetEngine(ctx).Where("owner_id = ?", orgID).Find(&orgRepos)
@@ -24,6 +28,10 @@ func GetOrgRepositories(ctx context.Context, orgID int64) (RepositoryList, error
 type SearchTeamRepoOptions struct {
 	db.ListOptions
 	TeamID int64
+	// IncludeTombstoned keeps tombstones in the result. Listings must leave it unset;
+	// callers that maintain access, watches or team membership have to set it, or they
+	// would leave those rows behind on a tombstone.
+	IncludeTombstoned bool
 }
 
 // GetRepositories returns paginated repositories in team of organization.
@@ -35,6 +43,9 @@ func GetTeamRepositories(ctx context.Context, opts *SearchTeamRepoOptions) (Repo
 				From("team_repo").
 				Where(builder.Eq{"team_id": opts.TeamID}),
 		)
+	}
+	if !opts.IncludeTombstoned {
+		sess = sess.Where(notTombstonedCond())
 	}
 	if opts.PageSize > 0 {
 		sess.Limit(opts.PageSize, (opts.Page-1)*opts.PageSize)

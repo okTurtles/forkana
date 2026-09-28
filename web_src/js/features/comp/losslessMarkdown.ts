@@ -13,13 +13,18 @@
 //     actually touched: the serialization is three-way merged back onto the pristine source
 //     (see markdownThreeWayMerge.ts), so untouched paragraphs keep their original bytes and
 //     their reference links keep rendering. When that merge cannot be done confidently the
-//     whole serialization is used, which is the pre-merge behavior.
+//     whole serialization is used, which is the pre-merge behavior;
+//   - markdown typed or pasted into the Visual editor is interpreted as markdown: the
+//     serializer's backslash escapes are removed from the adopted lines (see
+//     unescapeTypedMarkdown.ts), so `# Heading` or a ```mermaid fence typed in Visual mode
+//     is committed as real markdown instead of escaped literal text (issues #322, #367).
 //
 // It installs itself by overriding `editor.getMarkdown`/`editor.setMarkdown` (the same
 // pattern as installBase64WidgetPatch, which must be installed first so widget-placeholder
 // stripping is applied uniformly to every comparison).
 
-import {mergeVisualEdit} from './markdownThreeWayMerge.ts';
+import {mergeVisualEdit, type MergeStats} from './markdownThreeWayMerge.ts';
+import {unescapeTypedMarkdown} from './unescapeTypedMarkdown.ts';
 
 // Minimal structural surface of Toast UI Editor used by the tracker, so the fast unit tests
 // in losslessMarkdown.test.ts can drive it with a fake editor. The real editor is exercised
@@ -35,10 +40,21 @@ export type LosslessEditor = {
   // these, and the caret restore is skipped when they are absent.
   getSelection?(): unknown;
   setSelection?(start: unknown, end: unknown): void;
+  // Optional: Toast UI's convertor keeps the stored mode-switch caret position that
+  // clampStaleMappedPos below keeps valid. The unit-test fakes omit it, and the clamp is
+  // skipped when it is absent.
+  convertor?: {getMappedPos?(): unknown, setMappedPos?(pos: unknown): void};
 };
 
 // A 1-based [line, ch] position in the markdown (Source) editor.
 type MarkdownPos = [number, number];
+
+// Clamps a 1-based markdown [line, ch] position into the given lines so it is always
+// structurally valid (an out-of-range position makes Toast UI throw).
+function clampMarkdownPos([line, ch]: MarkdownPos, lines: string[]): MarkdownPos {
+  const clampedLine = Math.min(Math.max(line, 1), lines.length);
+  return [clampedLine, Math.min(Math.max(ch, 1), lines[clampedLine - 1].length + 1)];
+}
 
 // Reads the markdown-mode caret/selection, or null if it is unavailable or not in the
 // markdown-mode shape (in WYSIWYG mode Toast UI returns two flat numbers instead).
@@ -64,22 +80,67 @@ function readMarkdownSelection(editor: LosslessEditor): [MarkdownPos, MarkdownPo
 function restoreMarkdownSelection(editor: LosslessEditor, selection: [MarkdownPos, MarkdownPos] | null, text: string): void {
   if (!selection || !editor.setSelection) return;
   const lines = text.split('\n');
-  const clamp = ([line, ch]: MarkdownPos): MarkdownPos => {
-    const clampedLine = Math.min(Math.max(line, 1), lines.length);
-    return [clampedLine, Math.min(Math.max(ch, 1), lines[clampedLine - 1].length + 1)];
-  };
   try {
-    editor.setSelection(clamp(selection[0]), clamp(selection[1]));
+    editor.setSelection(clampMarkdownPos(selection[0], lines), clampMarkdownPos(selection[1], lines));
   } catch {
     // Leave the caret where setMarkdown(cursorToEnd) put it rather than break the mode switch.
   }
 }
 
+// Toast UI's core keeps a "mapped position" from the last markdown<->WYSIWYG conversion
+// (convertor.mappedPosWhenConverting) and, on the next mode switch, applies it verbatim
+// whenever it cannot re-derive a fresh one — which happens whenever the conversion finds no
+// top-level match for its focusedNode: it is null before the first edit, or it is a node
+// that does not belong to the document being converted (e.g. the stale WYSIWYG node left
+// over from the other editor, or a text node when the caret sits inside a paragraph). That
+// stored position was measured against the *serialized* document. After the writeback below
+// replaces the markdown document with the pristine source — which can have fewer lines,
+// since the serializer inserts blank-line separators between blocks the source ran
+// together — a stale markdown [line, ch] position can point past the last line, and the
+// core's mdEditor.setSelection then does doc.child(line - 1) and throws "Index N out of
+// range for <paragraph(...)" on the next switch to Visual mode (issue #320). Clamping the
+// stored position into the new text keeps it structurally valid; it is only ever a caret
+// fallback, so precision does not matter.
+function clampStaleMappedPos(editor: LosslessEditor, text: string): void {
+  const convertor = editor.convertor;
+  if (typeof convertor?.getMappedPos !== 'function' || typeof convertor?.setMappedPos !== 'function') return;
+  const pos = convertor.getMappedPos();
+  if (!Array.isArray(pos) || pos.length !== 2 || typeof pos[0] !== 'number' || typeof pos[1] !== 'number') return;
+  const [line, ch] = clampMarkdownPos([pos[0], pos[1]], text.split('\n'));
+  if (line !== pos[0] || ch !== pos[1]) convertor.setMappedPos([line, ch]);
+}
+
 // Resolves the markdown to commit for a WYSIWYG serialization, merging the user's Visual
 // edit back onto the pristine source. `null` from mergeVisualEdit means "not confident",
 // and the serialization is used wholesale (the behavior before the merge existed).
+//
+// Either way, the lines the user's Visual edit actually produced are then unescaped
+// (issues #322/#367): the serializer backslash-escapes markdown punctuation in typed text,
+// which would commit `\# Heading` or `\```mermaid` as literal text. Only adopted lines are
+// touched — pristine lines substituted by the merge keep their exact bytes, including any
+// deliberate `\*` escapes the author wrote in Source mode.
 function resolveSerialization(pristine: string, baseline: string, serialized: string): string {
-  return mergeVisualEdit(pristine, baseline, serialized) ?? serialized;
+  // No effective Visual edit: nothing came from the user, so nothing may be unescaped.
+  // Both callers below already pre-check this, but a future caller that does not must get
+  // the pristine bytes back, never a full-document unescape.
+  if (serialized === baseline) return pristine;
+  const stats: MergeStats = {};
+  const merged = mergeVisualEdit(pristine, baseline, serialized, stats);
+  if (merged !== null) return unescapeTypedMarkdown(merged, stats.adoptedLines);
+  // Wholesale fallback: the merge refused, so the serialization is committed as-is — but
+  // only the lines the user actually changed or added may be unescaped. A serialization
+  // line byte-identical to an entry-baseline line is untouched serializer output (the same
+  // positive evidence the merge's SUBSTITUTION RULE uses), and the serializer reproduces an
+  // author's deliberate Source-mode escapes byte-for-byte, so unescaping those lines would
+  // turn a deliberate `\*` into real emphasis.
+  const unclaimed = new Map<string, number>();
+  for (const line of baseline.split('\n')) unclaimed.set(line, (unclaimed.get(line) ?? 0) + 1);
+  const adopted = serialized.split('\n').map((line) => {
+    const left = unclaimed.get(line) ?? 0;
+    if (left > 0) unclaimed.set(line, left - 1);
+    return left === 0;
+  });
+  return unescapeTypedMarkdown(serialized, adopted);
 }
 
 export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea: HTMLTextAreaElement): void {
@@ -126,6 +187,9 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
     sourceText = markdown;
     mdSnapshot = markdown;
     if (!editor.isMarkdownMode()) wysiwygBaseline = baseGetMarkdown();
+    // The document just changed under the core's stored mode-switch position; keep that
+    // position structurally valid for the new text (issue #320).
+    clampStaleMappedPos(editor, markdown);
     syncTextarea();
   };
 
@@ -133,7 +197,12 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
     if (suppressChange) return;
     // Markdown mode is lossless (the source is stored verbatim), so the editor content is authoritative.
     // WYSIWYG changes are only adopted lazily via getLosslessMarkdown's baseline check.
-    if (editor.isMarkdownMode()) sourceText = baseGetMarkdown();
+    if (editor.isMarkdownMode()) {
+      sourceText = baseGetMarkdown();
+      // Source-mode edits can shrink the document below the convertor's stored mode-switch
+      // line exactly like the writeback does; keep that position valid here too (issue #320).
+      clampStaleMappedPos(editor, sourceText);
+    }
     syncTextarea();
   });
 

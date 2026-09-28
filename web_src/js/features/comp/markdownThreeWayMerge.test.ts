@@ -305,3 +305,12 @@ describe('memoization', () => {
     }
   });
 });
+
+test('theirs === base reports an empty adoptedLines (no line came from the serializer)', () => {
+  const stats: MergeStats = {};
+  const base = serialize(ARTICLE);
+  expect(mergeVisualEdit(ARTICLE, base, base, stats)).toBe(ARTICLE);
+  // Explicitly empty, never undefined: unescapeTypedMarkdown treats absent adoptedLines as
+  // "unescape everything", which would corrupt the pristine document on this path.
+  expect(stats.adoptedLines).toEqual([]);
+});

@@ -453,3 +453,18 @@ func TestRepositorySubjectLoadedByName(t *testing.T) {
 	assert.Equal(t, subject.ID, repo.SubjectRelation.ID)
 	assert.Equal(t, "Test Subject for History View", repo.SubjectRelation.Name)
 }
+
+// The tombstone warning is informational, so resolving it must not be able to take
+// the settings page down.
+func TestSettingsCtxDataTombstoneFlag(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	ctx, _ := contexttest.MockContext(t, "user2/repo1/settings")
+	contexttest.LoadUser(t, ctx, 2)
+	contexttest.LoadRepo(t, ctx, 1)
+
+	SettingsCtxData(ctx)
+
+	assert.Zero(t, ctx.Resp.WrittenStatus())
+	assert.IsType(t, false, ctx.Data["RepoWillBeTombstoned"])
+}

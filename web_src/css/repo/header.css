@@ -39,6 +39,50 @@
   margin-top: 6px;
 }
 
+/* ── Subject view tabs row (#386) ─────────────────────────────────────────
+   Item 2: the tabs are centred in the CONTAINER, not in the space left over
+   next to the Compare button — the button is lifted out of the flow and pinned
+   to the right edge, so it no longer pushes the tabs left of centre. */
+/* Item 5 lives here too: the Compare button reads as a button — bold label, a
+   hover you can see, and (via the `primary` class copycontent.ts toggles) a
+   filled active state with white text. The ID alone outweighs Fomantic's
+   class-only button rules, so no !important is needed. */
+#compare-mode-button {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: var(--font-weight-semibold);
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+overflow-menu:has(> #compare-mode-button) {
+  position: relative;
+}
+
+/* The pinned button is out of the flow, so neither the centred tab row nor
+   overflow-menu's own child measurement knows it is there. Reserve its width
+   on BOTH sides (so the tabs stay centred) to keep mid-width viewports from
+   running the tabs underneath it. */
+overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
+  margin: 0 110px;
+}
+
+/* Item 4 (and 3): the view-tab icons follow the label's colour instead of the
+   static gray that .svg.octicon-file carries elsewhere in the app. */
+#subject-view-tabs .item .svg {
+  color: inherit;
+}
+
+#compare-mode-button:hover:not(.primary) {
+  background: var(--color-secondary);
+}
+
+#compare-mode-button.primary {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
 /* ── Mobile ───────────────────────────────────────────────────────────────
    767.98px is this app's mobile breakpoint — 41 of the 43 max-width queries in
    web_src/css use it, so this follows the house convention rather than the

@@ -17,9 +17,13 @@
 
 		{{template "repo/code/recently_pushed_new_branches" dict "RecentBranchesPromptData" .RecentBranchesPromptData}}
 
-        <div class="repo-home-filelist">
-            {{template "repo/view_content" .}}
-        </div>
+        {{if .IsTombstonedRepo}}
+            {{template "shared/repo/tombstone_notice" dict "Repository" .Repository "ExtraClass" "tw-text-center"}}
+        {{else}}
+            <div class="repo-home-filelist">
+                {{template "repo/view_content" .}}
+            </div>
+        {{end}}
 	</div>
 </div>
 {{template "base/footer" .}}

@@ -10,6 +10,9 @@ class FakeEditor implements LosslessEditor {
   mode: 'markdown' | 'wysiwyg';
   mdText = '';
   wwSource = '';
+  // Optional, like on the real editor: tests that pin the mode-switch position clamp
+  // (issue #320) attach one; everything else exercises the convertor-less skip path.
+  convertor?: {getMappedPos?(): unknown, setMappedPos?(pos: unknown): void};
   private handlers: Record<string, Array<(...args: unknown[]) => void>> = {};
 
   constructor(mode: 'markdown' | 'wysiwyg' = 'wysiwyg') {
@@ -126,17 +129,19 @@ test('edits made in Source mode are kept verbatim', async () => {
   expect(fake.mdText).toBe(edited);
 });
 
-test('a Visual edit that replaces everything adopts the serialized form', async () => {
+test('a Visual edit that replaces everything adopts the serialized form, unescaped', async () => {
   const {fake, textarea, editor} = setup();
   fake.typeWysiwyg('Hello [world]');
-  const serialized = fake.serialize('Hello [world]');
-  // Nothing of the original survives, so there is nothing for the merge to preserve.
-  expect(editor.getMarkdown()).toBe(serialized);
-  expect(textarea.value).toBe(serialized);
+  // Nothing of the original survives, so there is nothing for the merge to preserve; the
+  // serializer's escapes are removed so what the user typed stays markdown (#322).
+  const expected = 'Hello [world]';
+  expect(fake.serialize('Hello [world]')).not.toBe(expected); // sanity: the serializer escapes
+  expect(editor.getMarkdown()).toBe(expected);
+  expect(textarea.value).toBe(expected);
   fake.changeMode('markdown');
   await flush();
-  expect(editor.getMarkdown()).toBe(serialized);
-  expect(fake.mdText).toBe(serialized);
+  expect(editor.getMarkdown()).toBe(expected);
+  expect(fake.mdText).toBe(expected);
 });
 
 // The tracker feeds (pristine source, entry baseline, current serialization) to the
@@ -149,7 +154,9 @@ test('a Visual edit to one line leaves the other lines byte-identical', async ()
   const editedLast = `${lines.at(-1)} edited`;
   fake.typeWysiwyg([...lines.slice(0, -1), editedLast].join('\n'));
 
-  const expected = [...lines.slice(0, -1), fake.serialize(editedLast)].join('\n');
+  // The edited line is adopted from the serialization, with the serializer's escapes
+  // removed (#322); the untouched lines keep their pristine bytes.
+  const expected = [...lines.slice(0, -1), editedLast].join('\n');
   expect(editor.getMarkdown()).toBe(expected);
   expect(textarea.value).toBe(expected);
   // the untouched hyperlink keeps its original, unescaped spelling
@@ -197,6 +204,30 @@ test('empty initial content stays empty', () => {
   expect(textarea.value).toBe('');
 });
 
+// When the three-way merge refuses (here: a serializer normalizeLine does not model, so
+// base coverage fails), the serialization is committed wholesale — but only the lines the
+// user actually changed or added may be unescaped. Untouched lines are serializer output
+// that reproduces the author's deliberate Source-mode escapes byte-for-byte, and those must
+// survive (the #262 guarantee).
+test('the wholesale fallback unescapes only the lines the user changed', () => {
+  const doc = 'alpha with a deliberate \\*escape\\*\nbravo line';
+  const fake = new FakeEditor('wysiwyg');
+  // Appending a marker to every line defeats normalization-based alignment (the merge
+  // falls back); escaping `_` mimics the serializer escaping typed markdown.
+  fake.serialize = (s: string) => s.split('\n').map((l) => `${l.replaceAll('_', '\\_')};`).join('\n');
+  const textarea = document.createElement('textarea');
+  textarea.value = doc;
+  installLosslessMarkdownTracker(fake, textarea);
+
+  fake.typeWysiwyg(`${doc}\nnew _typed_ line`);
+  const output = fake.getMarkdown();
+  // The untouched line keeps the deliberate escape (it is byte-identical to the baseline).
+  expect(output).toContain('deliberate \\*escape\\*');
+  // The new line is adopted and unescaped.
+  expect(output).toContain('new _typed_ line;');
+  expect(output).not.toContain('\\_typed\\_');
+});
+
 test('a Visual edit yields widget-stripped markdown, never $$widget placeholders', () => {
   const IMG = '![a](data:image/png;base64,AAA)';
   const doc = `Intro\n\n${IMG}\n\nOutro`;
@@ -223,4 +254,61 @@ test('a Visual edit yields widget-stripped markdown, never $$widget placeholders
   expect(edited).not.toContain('$$widget');
   expect(edited).toContain(IMG);
   expect(textarea.value).toBe(edited);
+});
+
+// Pins the clamping contract of the convertor's stored mode-switch position (issue #320)
+// against a minimal fake convertor: the real-editor tests prove the crash is gone, these
+// pin the boundary math cheaply.
+describe('the convertor stored mode-switch position is kept valid (issue #320)', () => {
+  function setupWithConvertor(initial: string, storedPos: unknown) {
+    const fake = new FakeEditor('markdown');
+    let stored = storedPos;
+    let setCalls = 0;
+    fake.convertor = {
+      getMappedPos: () => stored,
+      setMappedPos: (pos: unknown) => {
+        stored = pos;
+        setCalls++;
+      },
+    };
+    const textarea = document.createElement('textarea');
+    textarea.value = initial;
+    installLosslessMarkdownTracker(fake, textarea);
+    return {fake, getStored: () => stored, getSetCalls: () => setCalls};
+  }
+
+  test('a stored position past the document is clamped on programmatic replacement', () => {
+    const {getStored} = setupWithConvertor('one\ntwo', [500, 50]);
+    expect(getStored()).toStrictEqual([2, 4]); // last line, one past its last char
+  });
+
+  test('a below-range position is clamped up to [1, 1]', () => {
+    const {getStored} = setupWithConvertor('one\ntwo', [0, 0]);
+    expect(getStored()).toStrictEqual([1, 1]);
+  });
+
+  test('an in-range position is left untouched', () => {
+    const {getStored, getSetCalls} = setupWithConvertor('one\ntwo', [2, 2]);
+    expect(getStored()).toStrictEqual([2, 2]);
+    expect(getSetCalls()).toBe(0); // no gratuitous rewrite
+  });
+
+  test('a numeric (WYSIWYG-shaped) or malformed position is not touched', () => {
+    // Toast UI clamps numeric positions itself; the tracker must not turn them into arrays.
+    expect(setupWithConvertor('one\ntwo', 42).getStored()).toBe(42);
+    expect(setupWithConvertor('one\ntwo', null).getStored()).toBe(null);
+    expect(setupWithConvertor('one\ntwo', [1]).getStored()).toStrictEqual([1]);
+    expect(setupWithConvertor('one\ntwo', ['a', 'b']).getStored()).toStrictEqual(['a', 'b']);
+  });
+
+  test('a user edit in Source mode that shrinks the document re-clamps the position', () => {
+    const {fake, getStored} = setupWithConvertor('one\ntwo\nthree', [3, 5]);
+    expect(getStored()).toStrictEqual([3, 5]); // valid so far
+    fake.typeMarkdown('only'); // user edit path: change handler, not the setMarkdown override
+    expect(getStored()).toStrictEqual([1, 5]);
+  });
+
+  test('an editor without a convertor is simply skipped', () => {
+    expect(() => setup('markdown')).not.toThrow();
+  });
 });

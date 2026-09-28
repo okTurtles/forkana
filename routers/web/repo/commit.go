@@ -488,9 +488,14 @@ func ArticleView(ctx *context.Context) {
 // Callers must set "ArticleLink" beforehand so that in-page links stay on the route
 // the article was requested through (vanity subject URL or permanent repository URL).
 func renderArticleView(ctx *context.Context) {
+	// A tombstoned article is served through the regular frame; only its content is
+	// redacted, so the request keeps going from here. A tombstone exposes no git data,
+	// so no version of it can be served either.
+	isTombstone := ctx.Repo.Repository.IsTombstone()
+
 	// Check if version parameter is present
 	commitHash := ctx.FormString("version")
-	if commitHash != "" {
+	if commitHash != "" && !isTombstone {
 		// Show commit view for a specific version
 		articleCommitView(ctx, commitHash)
 		return

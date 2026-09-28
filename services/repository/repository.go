@@ -60,7 +60,12 @@ func CreateRepository(ctx context.Context, doer, owner *user_model.User, opts Cr
 }
 
 // DeleteRepository deletes a repository for a user or organization.
-func DeleteRepository(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, notify bool) error {
+//
+// A repository that still has forks is not removed but turned into a tombstone, so
+// that the descendants keep a resolvable ancestor and their commit history stays
+// meaningful. The returned outcome tells the caller what actually happened, including
+// the case where the repository already was a tombstone and nothing could be done.
+func DeleteRepository(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, notify bool) (DeleteOutcome, error) {
 	if err := pull_service.CloseRepoBranchesPulls(ctx, doer, repo); err != nil {
 		log.Error("CloseRepoBranchesPulls failed: %v", err)
 	}
@@ -70,7 +75,7 @@ func DeleteRepository(ctx context.Context, doer *user_model.User, repo *repo_mod
 		notify_service.DeleteRepository(ctx, doer, repo)
 	}
 
-	return DeleteRepositoryDirectly(ctx, repo.ID)
+	return deleteOrTombstoneRepository(ctx, repo)
 }
 
 // PushCreateRepo creates a repository when a new repository is pushed to an appropriate namespace

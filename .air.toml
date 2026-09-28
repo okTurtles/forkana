@@ -4,7 +4,10 @@ tmp_dir = ".air"
 [build]
 pre_cmd = ["killall -9 gitea 2>/dev/null || true"] # kill off potential zombie processes from previous runs
 cmd = "make --no-print-directory backend"
+# air >= 1.6x deprecated `bin` in favour of `entrypoint` and stopped launching
+# the binary from `bin` alone; keep both so older air versions still work.
 bin = "gitea"
+entrypoint = "./gitea"
 delay = 2000
 include_ext = ["go", "tmpl"]
 include_file = ["main.go"]

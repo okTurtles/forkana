@@ -298,6 +298,15 @@ func ServCommand(ctx *context.PrivateContext) {
 		}
 	}
 
+	// A tombstone keeps its git data only so that its forks retain a valid ancestor;
+	// the content itself must not be served or modified any more.
+	if repoExist && repo.IsTombstone() {
+		ctx.JSON(http.StatusNotFound, private.Response{
+			UserMsg: fmt.Sprintf("Repo: %s/%s has been deleted by its author.", results.OwnerName, results.RepoName),
+		})
+		return
+	}
+
 	// Don't allow pushing if the repo is archived
 	if repoExist && mode > perm.AccessModeRead && repo.IsArchived {
 		ctx.JSON(http.StatusUnauthorized, private.Response{

@@ -91,6 +91,10 @@ const props = defineProps<{
   isActive?: boolean;             // selected article (persisted selection)
   isCompareMode?: boolean;        // whether compare mode is active
   compareState?: 'none' | 'first' | 'second';  // compare selection state
+  /* The author deleted this article. The bubble is kept — the forks below it
+     need the ancestry — and stays interactive; it is drawn muted and dashed
+     and says so in the expanded card. */
+  isTombstoned?: boolean;
 }>();
 
 /* Emits so the parent can wire up interactions without D3 binding. The parent
@@ -200,9 +204,10 @@ watch(
 
 /* Convenience computed transform strings */
 const gTransform = computed(() => `translate(${props.x},${props.y})`);
-/* The expanded card has room to spell the number out, whatever the resting
-   rung had to abbreviate it to. */
-const countLabel = computed(() => `${props.contributors} ${getLabelText(props.contributors)}`);
+
+/* Picked for either slot of a comparison — the states that thicken and colour
+   the ring. */
+const compareSelected = computed(() => props.compareState === 'first' || props.compareState === 'second');
 
 /* Pointer handlers relay events upward (so the parent can grow this bubble and
    reflow the graph around it). `pointerType` travels with the event because
@@ -238,9 +243,12 @@ function onKeyDown(ev: KeyboardEvent) {
 <template>
   <!-- One node group at (x,y); we let the parent group receive the world transform -->
   <g
-    class="node cursor-pointer select-none" :class="{ 'is-expanded': expanded, 'is-frozen': frozen }"
+    class="node cursor-pointer select-none"
+    :class="{ 'is-expanded': expanded, 'is-frozen': frozen, 'is-tombstoned': isTombstoned }"
     :transform="gTransform" :data-node-id="id" role="button"
-    :aria-label="`Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
+    :aria-label="isTombstoned
+      ? `Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}, deleted by its author. Press Enter to select.`
+      : `Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
     :aria-pressed="isActive ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
     @pointerdown="onPointerDown" @pointerenter="onPointerEnter" @pointerleave="onPointerLeave"
     @focusin="onFocusIn" @focusout="onFocusOut"
@@ -252,9 +260,9 @@ function onKeyDown(ev: KeyboardEvent) {
         'compare-selected-first': props.compareState === 'first',
         'compare-selected-second': props.compareState === 'second'
       }" :r="r" fill="url(#bubbleGrad)"
-      :stroke="props.compareState === 'first' || props.compareState === 'second' ? 'var(--color-primary)' : isActive || expanded ? 'var(--color-primary)' : 'var(--bubble-stroke)'"
-      :stroke-width="props.compareState === 'first' || props.compareState === 'second' ? 3 : 1"
-      :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : 'none'"
+      :stroke="compareSelected || isActive || expanded ? 'var(--color-primary)' : 'none'"
+      :stroke-width="compareSelected ? 3 : 1"
+      :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : props.isTombstoned ? '4,4' : 'none'"
       filter="url(#softShadow)"
     />
 
@@ -266,8 +274,15 @@ function onKeyDown(ev: KeyboardEvent) {
     >
       <!-- EXPANDED (202px): the whole card, laid out by CSS. -->
       <div v-if="expanded" xmlns="http://www.w3.org/1999/xhtml" class="html-label-wrapper expanded-wrapper">
-        <div class="combined expanded-count">{{ countLabel }}</div>
-        <div v-if="description" class="expanded-description">{{ description }}</div>
+        <!-- #386 item 10: the same stack as the resting bubble — count above
+             its label — grown with the bubble, so nothing shifts onto another
+             line and no text gets SMALLER as the bubble gets bigger. -->
+        <div class="expanded-count-number">{{ contributors }}</div>
+        <div class="expanded-count-label">{{ getLabelText(contributors) }}</div>
+        <!-- The excerpt is the article's content and a tombstone has none left
+             to show; the card says what happened to it instead. -->
+        <div v-if="isTombstoned" class="expanded-deleted">Deleted by its author</div>
+        <div v-else-if="description" class="expanded-description">{{ description }}</div>
         <div v-if="updatedAt" class="expanded-updated">
           <div>Last updated</div>
           <div>{{ formattedDate }}</div>
@@ -309,14 +324,11 @@ function onKeyDown(ev: KeyboardEvent) {
   outline: none;
 }
 
-.node-circle:hover,
+/* #386 item 8: resting bubbles carry NO border (the figma draws bare circles);
+   only keyboard focus outlines one, as its visible focus indicator. */
 .node:focus .node-circle {
   stroke: var(--color-primary);
   stroke-width: 1;
-}
-
-.node-circle:hover {
-  cursor: pointer;
 }
 
 /* The expanded bubble paints over its neighbours' connectors, and its two
@@ -324,6 +336,24 @@ function onKeyDown(ev: KeyboardEvent) {
    inert. */
 .node.is-expanded {
   cursor: default;
+}
+
+/* ── TOMBSTONE ───────────────────────────────────────────────────────────
+   A deleted article keeps its place in the graph so its forks keep their
+   ancestry, and it stays selectable like any other bubble; it is only drawn
+   faded with a dashed outline (the dash pattern itself is on the circle, next
+   to the compare-mode one it has to co-exist with). The stroke is set here
+   rather than in the binding so it also wins over the hover/focus rules
+   below. */
+.node.is-tombstoned {
+  opacity: 0.55;
+}
+
+.node.is-tombstoned .node-circle,
+.node.is-tombstoned .node-circle:hover,
+.node.is-tombstoned:focus .node-circle {
+  stroke: var(--color-text-light-3, #9ca3af);
+  stroke-width: 1;
 }
 
 /* ── LABEL OPACITY IS DECOUPLED FROM THE GEOMETRY ────────────────────────
@@ -374,14 +404,6 @@ function onKeyDown(ev: KeyboardEvent) {
   white-space: nowrap;
 }
 
-/* Combined layout: count and label on same line with larger font */
-.html-label-wrapper .combined {
-  color: var(--color-text-primary);
-  font-weight: 600;
-  line-height: 1;
-  pointer-events: none;
-}
-
 /* Count: always visible, bold and prominent */
 .html-label-wrapper .count {
   color: var(--color-text-primary);
@@ -421,11 +443,21 @@ function onKeyDown(ev: KeyboardEvent) {
   white-space: normal;
 }
 
-.expanded-wrapper .expanded-count {
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.2;
+/* #386 item 10: the count keeps the resting stack (number over label) and
+   GROWS with the bubble instead of collapsing onto one 14px line. */
+.expanded-wrapper .expanded-count-number {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
   color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.expanded-wrapper .expanded-count-label {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
@@ -441,9 +473,17 @@ function onKeyDown(ev: KeyboardEvent) {
   overflow: hidden;
 }
 
+.expanded-deleted {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-text-light-2, #6b7280);
+}
+
 .expanded-updated {
-  font-size: 9px;
-  font-style: italic;
+  /* #386 item 10: never SMALLER than the resting bubble's 11px "Last updated"
+     lines — text must not shrink while the bubble it sits in grows. */
+  font-size: 11px;
   line-height: 1.3;
   color: var(--color-text-light-2, #6b7280);
   white-space: nowrap;
