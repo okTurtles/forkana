@@ -41,6 +41,8 @@ func SetCacheControlInHeader(h http.Header, opts *CacheControlOptions) {
 
 	// "max-age=0 + must-revalidate" (aka "no-cache") is preferred instead of "no-store"
 	// because browsers may restore some input fields after navigate-back / reload a page.
+	// The NoStore branch above is the deliberate exception for signed-in HTML pages,
+	// where session correctness outweighs form-input restoration.
 	publicPrivate := util.Iif(opts.IsPublic, "public", "private")
 	if setting.IsProd {
 		if opts.MaxAge == 0 {
