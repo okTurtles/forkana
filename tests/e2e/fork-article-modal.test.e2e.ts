@@ -5,6 +5,10 @@ import {login_user, load_logged_in_context} from './utils_e2e.ts';
 // - user2: owns repo1 (public, has subject_id: 1 "example-subject")
 // - user4: non-owner user who can fork
 
+// Canonical article route is "/subject/:subject/:user", optionally followed by
+// a sub-path, query string or fragment.
+const articleURL = (subject: string, user: string) => new RegExp(`/subject/${subject}/${user}(?:[/?#]|$)`);
+
 test.describe('Fork Article Confirmation Modal', () => {
   // Log in users once per worker to avoid race conditions
   test.beforeAll(async ({browser}, workerInfo) => {
@@ -28,7 +32,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
-      await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
+      await expect(page).toHaveURL(articleURL('example-subject', 'user2'));
 
       const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
@@ -84,7 +88,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
-      await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
+      await expect(page).toHaveURL(articleURL('example-subject', 'user2'));
 
       const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
@@ -123,7 +127,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
-      await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
+      await expect(page).toHaveURL(articleURL('example-subject', 'user2'));
 
       const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
@@ -159,7 +163,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
-      await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
+      await expect(page).toHaveURL(articleURL('example-subject', 'user2'));
 
       const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
       await expect(forkButton).toBeVisible({timeout: 10000});
@@ -225,7 +229,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
-      await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
+      await expect(page).toHaveURL(articleURL('example-subject', 'user2'));
 
       // Owner should see Submit Changes button, not Fork button
       const submitButton = page.locator('#submit-changes-button');
@@ -286,7 +290,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
-      await expect(page).toHaveURL(/\/article\/user2\/example-subject/);
+      await expect(page).toHaveURL(articleURL('example-subject', 'user2'));
 
       // Non-owner should see Fork button
       const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
