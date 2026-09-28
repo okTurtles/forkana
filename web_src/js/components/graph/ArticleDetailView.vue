@@ -80,6 +80,32 @@ const FADE_ONLY_MS = 220;     // no origin to fly from: plain cross-fade
 
 const bubbleRef = ref<HTMLElement | null>(null);
 const backRef = ref<HTMLElement | null>(null);
+const layerRef = ref<HTMLElement | null>(null);
+
+/* Where the circle's centre rests, in px from the layer's top: the midpoint of
+   the layer's visible intersection with the viewport, so on a canvas box
+   taller than the screen the circle opens (and stays) where the reader is,
+   without scrolling the page or resizing the box. Clamped so the circle never
+   pokes outside the layer's clipping. Falls back to the CSS 50% until first
+   measured. */
+const centerY = ref('50%');
+
+function updateCenterY() {
+  const layer = layerRef.value;
+  if (!layer) return;
+  const r = layer.getBoundingClientRect();
+  if (!r.height) return;
+  const visTop = Math.max(r.top, 0);
+  const visBottom = Math.min(r.bottom, window.innerHeight);
+  if (visBottom <= visTop) return;   // box fully off-screen: keep the last spot
+  const half = (bubbleRef.value?.offsetHeight || diameter.value) / 2;
+  const y = (visTop + visBottom) / 2 - r.top;
+  centerY.value = `${Math.round(Math.max(half, Math.min(r.height - half, y)))}px`;
+  /* Written straight to the node as well: the opening flight measures the
+     circle's resting rect synchronously in onMounted, before Vue would apply
+     the reactive binding, and it must measure the final spot. */
+  layer.style.setProperty('--detail-center-y', centerY.value);
+}
 const entered = ref(false);   // backdrop + content visible
 const leaving = ref(false);   // guard: the close runs once (distinct from the `closing` prop)
 let timer: number | null = null;
@@ -117,6 +143,9 @@ onMounted(() => {
      (:focus-visible), so this costs the mouse user nothing. No Back on a solo
      subject, and nothing to move focus to: the page starts here. */
   requestAnimationFrame(() => backRef.value?.focus());
+  updateCenterY();
+  window.addEventListener('scroll', updateCenterY, {passive: true});
+  window.addEventListener('resize', updateCenterY, {passive: true});
   if (prefersReducedMotion()) {
     entered.value = true;    // instant swap, no travel, no fade
     return;
@@ -166,13 +195,18 @@ watch(() => props.closing, (want) => {
   timer = window.setTimeout(() => emit('closed'), back ? CLOSE_TOTAL_MS : FADE_ONLY_MS);
 });
 
-onBeforeUnmount(clearTimer);
+onBeforeUnmount(() => {
+  clearTimer();
+  window.removeEventListener('scroll', updateCenterY);
+  window.removeEventListener('resize', updateCenterY);
+});
 </script>
 
 <template>
   <div
     class="detail-layer" :class="{'is-open': entered, 'is-closing': leaving}"
-    :style="{'--detail-size': diameter + 'px'}"
+    ref="layerRef"
+    :style="{'--detail-size': diameter + 'px', '--detail-center-y': centerY}"
   >
     <button v-if="showBack" ref="backRef" class="detail-back" @click="emit('back')">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -181,11 +215,11 @@ onBeforeUnmount(clearTimer);
       Back
     </button>
 
-    <!-- The circle centres in this wrapper, not in the layer: the wrapper is
-         the layer's height capped at one viewport and sticky, so on a canvas
-         box taller than the screen the circle rests in the VISIBLE part of
-         the box instead of at a centre below the fold. Sticky costs no
-         layout: the box (and the graph underneath) keeps its size. -->
+    <!-- The circle centres on --detail-center-y: the midpoint of the VISIBLE
+         part of the box (kept fresh on scroll and resize), so on a box taller
+         than the screen the circle rests where the reader is instead of at a
+         centre below the fold. The box (and the graph underneath) keeps its
+         size, and the wrapper is click-transparent so Back stays reachable. -->
     <div class="detail-viewport">
       <!-- `transform` on this element is owned by the open/close animation above
          and written straight to the node, so it must not appear in this
@@ -255,22 +289,28 @@ onBeforeUnmount(clearTimer);
   opacity: 1;
 }
 
-/* The circle's stage: the layer's height capped at one viewport, kept in view
-   by position:sticky while the layer (and the canvas box behind it) keeps its
-   full height. On a box taller than the screen the circle therefore rests
-   centred in the VISIBLE part of the box — the mockup's centring, without
-   scrolling the page and without resizing the box (which would relayout the
-   whole graph on every open and close). The mockup drew the circle left of
-   centre with the history card beside it, but a bubble off-centre in an empty
-   box reads as a layout bug — so the circle owns the centre and the history
-   card overlaps its right edge instead (see ArticleHistoryPopup). */
+/* The circle's stage: a click-transparent shim (Back and the backdrop live on
+   the layer below it) that parks the circle's centre on --detail-center-y —
+   the midpoint of the box's visible intersection with the viewport, measured
+   in the script. The mockup's centring, without scrolling the page and
+   without resizing the box (which would relayout the whole graph on every
+   open and close). The mockup drew the circle left of centre with the
+   history card beside it, but a bubble off-centre in an empty box reads as a
+   layout bug — so the circle owns the centre and the history card overlaps
+   its right edge instead (see ArticleHistoryPopup). */
 .detail-viewport {
-  position: sticky;
-  top: 0;
-  height: min(100%, 100dvh);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--detail-center-y, 50%);
+  transform: translateY(-50%);
   display: flex;
-  align-items: center;
   justify-content: center;
+  pointer-events: none;
+}
+
+.detail-viewport > * {
+  pointer-events: auto;
 }
 
 .detail-back {
