@@ -281,7 +281,7 @@ type EdgeGeom = {
 const nodesList = ref<FrameNode[]>([]);
 const edgesList = ref<EdgeGeom[]>([]);
 const trunksList = ref<{ x: number; y1: number; y2: number; id: string }[]>([]);
-const jointDots = ref<{ x: number; y: number; id: string; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
+const jointDots = ref<{ x: number; y: number; id: string; sourceId: NodeId; targetId: NodeId; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
 
 /* SVG/zoom plumbing */
 const svgHeight = ref(DEFAULT_CONTAINER_HEIGHT);
@@ -1192,6 +1192,8 @@ function setFrame(g: Graph, placements: Placements) {
     x: e.ex,
     y: e.ey,
     id: `${e.source.node.id}-${e.target.node.id}`,
+    sourceId: e.source.node.id,
+    targetId: e.target.node.id,
     sourceOwner: e.source.node.repoOwner || e.source.node.fullName?.split('/')[0] || '',
     targetOwner: e.target.node.repoOwner || e.target.node.fullName?.split('/')[0] || '',
     subject: e.source.node.repoSubject || e.target.node.repoSubject || props.subject || '',
@@ -2300,7 +2302,8 @@ function goToComparison() {
             <template v-if="graphRendered">
               <!-- Trunks (vertical) -->
               <line
-                v-for="t in trunksList" :key="t.id" class="trunk" :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
+                v-for="t in trunksList" :key="t.id" class="trunk" :class="{'is-related': expandedId === t.id}"
+                :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
                 stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
               />
 
@@ -2309,14 +2312,16 @@ function goToComparison() {
                  that a dot is ON its connector in EVERY frame of a reflow. -->
               <path
                 v-for="e in edgesList" :key="`${e.source.node.id}-${e.target.node.id}`"
-                :data-edge="`${e.source.node.id}-${e.target.node.id}`" class="branch" fill="none"
+                :data-edge="`${e.source.node.id}-${e.target.node.id}`" class="branch"
+                :class="{'is-related': expandedId === e.source.node.id || expandedId === e.target.node.id}" fill="none"
                 stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round" opacity="0.9"
                 :d="`M ${e.ex} ${e.ey} C ${e.ex} ${e.ey + 0.5522847498307936 * state.elbowR}, ${e.ex + e.side * 0.5522847498307936 * state.elbowR} ${e.hy}, ${e.hx} ${e.hy} L ${e.cx} ${e.cy}`"
               />
 
               <!-- Child stems -->
               <line
-                v-for="e in edgesList" :key="`stem-${e.source.node.id}-${e.target.node.id}`" class="child-stem" :x1="e.sx1"
+                v-for="e in edgesList" :key="`stem-${e.source.node.id}-${e.target.node.id}`" class="child-stem"
+                :class="{'is-related': expandedId === e.source.node.id || expandedId === e.target.node.id}" :x1="e.sx1"
                 :y1="e.sy1" :x2="e.sx2" :y2="e.sy2" stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
                 opacity="0.9"
               />
@@ -2324,6 +2329,7 @@ function goToComparison() {
               <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
               <circle
                 v-for="j in jointDots" :key="`joint-${j.id}`" :data-edge="j.id" class="joint-parent"
+                :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId}"
                 :cx="j.x" :cy="j.y" r="6"
                 fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="2"
                 style="cursor: pointer;"
@@ -2516,6 +2522,21 @@ function goToComparison() {
 
 .graph-dimmed :deep(g.node.is-expanded) {
   opacity: 1;
+}
+
+/* #386 item 6: the hovered bubble's own plumbing — its trunk, the branches
+   and stems that touch it, and the joint dots on them — keeps full strength
+   instead of fading with the rest of the graph. The 0.9 on branches and stems
+   mirrors their base presentation attribute, which the dimming property
+   would otherwise override. */
+.graph-dimmed :deep(.trunk.is-related),
+.graph-dimmed :deep(.joint-parent.is-related) {
+  opacity: 1;
+}
+
+.graph-dimmed :deep(.branch.is-related),
+.graph-dimmed :deep(.child-stem.is-related) {
+  opacity: 0.9;
 }
 
 /* Hide graph content when showing states, but keep SVG rendered */
