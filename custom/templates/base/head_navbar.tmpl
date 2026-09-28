@@ -110,12 +110,12 @@
 				</div><!-- end content avatar menu -->
 			</div><!-- end dropdown avatar menu -->
 		{{else}}
-		<a class="item tw-bg-transparent hover:tw-underline{{if .PageIsSignIn}} active{{end}}" rel="nofollow" href="{{AppSubUrl}}/user/login">
+		<a class="item navbar-auth-item{{if .PageIsSignIn}} active{{end}}" rel="nofollow" href="{{AppSubUrl}}/user/login">
 			<span class="tw-ml-1">{{ctx.Locale.Tr "sign_in"}}</span>
 		</a>
 			{{if .ShowRegistrationButton}}
         <div class="-tw-ml-4 -tw-mr-5 not-mobile">/</div>
-        <a class="item tw-bg-transparent hover:tw-underline{{if .PageIsSignUp}} active{{end}}" href="{{AppSubUrl}}/user/sign_up">
+        <a class="item navbar-auth-item{{if .PageIsSignUp}} active{{end}}" href="{{AppSubUrl}}/user/sign_up">
 					<span class="tw-ml-1">{{ctx.Locale.Tr "sign_up"}}</span>
 				</a>
 			{{end}}
