@@ -66,6 +66,13 @@
   padding: 3px 8px;
 }
 
+/* cancel the navbar's flex gap around the "/" so only the buttons' own
+   padding separates it from the labels; the highlight ends at the slash
+   without covering it */
+#navbar .navbar-auth-divider {
+  margin: 0 -5px;
+}
+
 #navbar .item.ui.dropdown {
   padding-right: 5px;
 }
