@@ -24,7 +24,10 @@ type GiteaContext map[string]any
 
 // GenerateGiteaContext generate the gitea context without token and gitea_runtime_token
 // job can be nil when generating a context for parsing workflow-level expressions
-func GenerateGiteaContext(run *actions_model.ActionRun, job *actions_model.ActionRunJob) GiteaContext {
+// ctx must be the caller's context: the repository url resolves the article index
+// through a database read, which a caller inside a transaction has to run on that
+// transaction rather than on a second connection.
+func GenerateGiteaContext(ctx context.Context, run *actions_model.ActionRun, job *actions_model.ActionRunJob) GiteaContext {
 	event := map[string]any{}
 	_ = json.Unmarshal([]byte(run.EventPayload), &event)
 
@@ -71,7 +74,7 @@ func GenerateGiteaContext(run *actions_model.ActionRun, job *actions_model.Actio
 		"path":              "",                                       // string, Path on the runner to the file that sets system PATH variables from workflow commands. This file is unique to the current step and is a different file for each step in a job. For more information, see "Workflow commands for GitHub Actions."
 		"repository":        run.Repo.OwnerName + "/" + run.Repo.Name, // string, The owner and repository name. For example, Codertocat/Hello-World.
 		"repository_owner":  run.Repo.OwnerName,                       // string, The repository owner's name. For example, Codertocat.
-		"repositoryUrl":     run.Repo.HTMLURL(),                       // string, The Git URL to the repository. For example, git://github.com/codertocat/hello-world.git.
+		"repositoryUrl":     run.Repo.HTMLURL()   ,                    // string, The Git URL to the repository. For example, git://github.com/codertocat/hello-world.git.
 		"retention_days":    "",                                       // string, The number of days that workflow run logs and artifacts are kept.
 		"run_id":            "",                                       // string, A unique number for each workflow run within a repository. This number does not change if you re-run the workflow run.
 		"run_number":        strconv.FormatInt(run.Index, 10),         // string, A unique number for each run of a particular workflow in a repository. This number begins at 1 for the workflow's first run, and increments with each new run. This number does not change if you re-run the workflow run.
