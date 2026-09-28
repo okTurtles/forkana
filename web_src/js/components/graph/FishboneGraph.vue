@@ -35,6 +35,7 @@ import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import { GET } from "../../modules/fetch.ts";
+import { extractArticleSummary } from "./article-summary.ts";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import {
   BUBBLE_HOVER_RADIUS, BUBBLE_UNKNOWN_RUNG, bubbleRungFor, countTextForRung,
@@ -611,6 +612,9 @@ async function fetchForkGraphAndSet() {
       return;                        // isLoading stays true
     }
     statsRetry = 0;
+    /* Fresh node objects: what was requested for the old ones no longer
+       says anything about these. */
+    summaryRequested.clear();
     state.graph = graph;
 
     // Clear loading state before layout/render
@@ -1677,43 +1681,6 @@ const soloPinned = computed(() => detailNode.value === null && openArticle.value
    is never fetched twice. */
 const summaryRequested = new Set<NodeId>();
 
-/** First real paragraph of a Markdown article: front matter, headings, images,
-   tables, HTML and code fences skipped; inline markup stripped; clamped so a
-   pathological first paragraph cannot flood the circle (the CSS line-clamps
-   at 4 lines anyway). */
-function extractArticleSummary(markdown: string): string {
-  let text = markdown.replace(/^﻿/, '');
-  const frontMatter = /^---[^\S\n]*\r?\n[\s\S]*?\r?\n---[^\S\n]*(?:\r?\n|$)/.exec(text);
-  if (frontMatter) text = text.slice(frontMatter[0].length);
-  const paragraph: string[] = [];
-  let inFence = false;
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (/^(```|~~~)/.test(line)) {
-      if (paragraph.length) break;
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
-    if (!line) {
-      if (paragraph.length) break;
-      continue;
-    }
-    if (/^(#{1,6}\s|!\[|\||<)/.test(line)) {
-      if (paragraph.length) break;
-      continue;
-    }
-    paragraph.push(line);
-  }
-  const summary = paragraph.join(' ')
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')  // links and images -> their text
-    .replace(/[*_`]/g, '')                      // emphasis and code markers
-    .replace(/\s+/g, ' ')
-    .trim();
-  const maxLength = 400;
-  return summary.length > maxLength ? `${summary.slice(0, maxLength - 1).trimEnd()}…` : summary;
-}
-
 async function fetchArticleSummary(n: Node) {
   if (summaryRequested.has(n.id)) return;
   const owner = n.repoOwner ?? n.fullName?.split('/')[0] ?? '';
@@ -1725,13 +1692,20 @@ async function fetchArticleSummary(n: Node) {
   const url = `${suburl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/raw/branch/${encodeURIComponent(branch)}/README.md`;
   try {
     const res = await GET(url);
-    if (!res.ok) return;
+    if (!res.ok) {
+      /* A 404 (no README) is definitive; a server error is transient, so let
+         reopening the article retry it. */
+      if (res.status >= 500) summaryRequested.delete(n.id);
+      return;
+    }
     const summary = extractArticleSummary(await res.text());
     const live = state.graph[n.id];
     if (summary && live && !live.description) live.description = summary;
   } catch {
-    /* Without a summary the circle simply keeps its current layout — same as
-       an article whose repository has no description. */
+    /* Network blip: allow a retry on the next open. Without a summary the
+       circle simply keeps its current layout — same as an article whose
+       repository has no description. */
+    summaryRequested.delete(n.id);
   }
 }
 
