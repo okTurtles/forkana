@@ -312,7 +312,7 @@
 }
 
 .feeds-sort-btn {
-  background: var(--color-white);
+  background: var(--color-button);
 }
 
 .feeds-filter-btn:hover,
