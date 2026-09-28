@@ -434,12 +434,21 @@ func (repo *Repository) FullName() string {
 func (repo *Repository) HTMLURL(ctxs ...context.Context) string {
 	// FIXME: this HTMLURL is still used in mail templates, so the "ctx" is not provided.
 	ctx := util.OptionalArg(ctxs, context.TODO())
-	return httplib.MakeAbsoluteURL(ctx, repo.Link())
+	// the link must resolve the article index on ctx: a caller inside a transaction
+	// would otherwise have it read on a second connection, which blocks until the
+	// transaction it is nested in commits
+	return httplib.MakeAbsoluteURL(ctx, repo.LinkCtx(ctx))
 }
 
 // CommitLink returns a link to the article view at the given commit ID.
 // It does not check whether the ID actually exists.
 func (repo *Repository) CommitLink(commitID string) string {
+	return repo.commitLink(context.Background(), commitID)
+}
+
+// commitLink is CommitLink resolved against ctx, which the article index lookup of the
+// link must run on. See LinkCtx.
+func (repo *Repository) commitLink(ctx context.Context, commitID string) string {
 	if git.IsEmptyCommitID(commitID) {
 		return ""
 	}
@@ -447,18 +456,18 @@ func (repo *Repository) CommitLink(commitID string) string {
 	// "version" query parameter. The article path is built here rather than from
 	// Link(), because Link() sends a tombstone to its repository route, which does not
 	// resolve a version of this repository.
-	return repo.articleLink(context.Background()) + "?version=" + url.QueryEscape(commitID)
+	return repo.articleLink(ctx) + "?version=" + url.QueryEscape(commitID)
 }
 
 // CommitHTMLURL returns the absolute URL of the article view at the given commit ID.
 // It does not check whether the ID actually exists.
 func (repo *Repository) CommitHTMLURL(commitID string, ctxs ...context.Context) string {
-	link := repo.CommitLink(commitID)
+	// FIXME: like HTMLURL, this is also used from mail templates, so the "ctx" is optional.
+	ctx := util.OptionalArg(ctxs, context.TODO())
+	link := repo.commitLink(ctx, commitID)
 	if link == "" {
 		return ""
 	}
-	// FIXME: like HTMLURL, this is also used from mail templates, so the "ctx" is optional.
-	ctx := util.OptionalArg(ctxs, context.TODO())
 	return httplib.MakeAbsoluteURL(ctx, link)
 }
 

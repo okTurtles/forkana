@@ -4,8 +4,11 @@
 package repo_test
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/cache"
@@ -546,4 +549,45 @@ func TestSubjectLookupPrefersActiveRepository(t *testing.T) {
 	// link carries the index that tells the two apart
 	assert.Equal(t, found.Link()+"/2", archived.Link())
 	assert.NotEqual(t, found.Link(), archived.Link())
+}
+
+// TestRepositoryHTMLURLResolvesArticleIndexOnContext covers the article index lookup
+// HTMLURL performs: it must run on the context it is given. A caller inside a write
+// transaction, such as the webhook payload built while an issue is created, would
+// otherwise have the index read on a second connection, which blocks until the
+// transaction it is nested in commits and deadlocks the request.
+func TestRepositoryHTMLURLResolvesArticleIndexOnContext(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Transactional Index Subject")
+	assert.NoError(t, err)
+
+	repo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	repo.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id"))
+
+	other, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.OwnerID, other.OwnerID)
+
+	// the owner's only article for the subject carries no index
+	assert.NotEmpty(t, repo.HTMLURL(ctx))
+	assert.NotContains(t, repo.HTMLURL(ctx), "/2")
+
+	// inside the transaction the second article is only visible to the transaction
+	// itself, so the index resolved there can only be the uncommitted one
+	assert.NoError(t, db.WithTx(ctx, func(ctx context.Context) error {
+		other.SubjectID = subject.ID
+		if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, other, "subject_id"); err != nil {
+			return err
+		}
+		if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {
+			return err
+		}
+		assert.Equal(t, 2, repo.ArticleIndex(ctx))
+		assert.True(t, strings.HasSuffix(repo.HTMLURL(ctx), "/2"), repo.HTMLURL(ctx))
+		return nil
+	}))
 }
