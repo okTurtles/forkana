@@ -19,31 +19,41 @@ import (
 	"code.gitea.io/gitea/modules/markup/attachmentref"
 )
 
-// maxHistoryBlobs caps how many distinct article blobs one repository
+// defaultMaxHistoryBlobs caps how many distinct article blobs one repository
 // contributes to a history scan. A long-lived article can hold thousands of
 // revisions, and the oldest ones are the least likely to hold a reference no
-// later revision has; add-only reconciliation picks up whatever a capped scan
-// missed.
-const maxHistoryBlobs = 4096
+// later revision has.
+//
+// A capped scan is incomplete and nothing repairs it later: reconciliation
+// runs the same scan under the same cap. A run that reaches the cap therefore
+// reports the repository, and finalizing refuses until a higher cap has read
+// the whole history.
+const defaultMaxHistoryBlobs = 4096
 
 // scanArticleHistoryUUIDs returns the attachment UUIDs referenced by any
-// retained version of the article content of the repository at repoPath.
+// retained version of the article content of the repository at repoPath, and
+// whether the scan stopped at maxBlobs before reaching the end of the history.
 //
 // History, not just the tip, is what matters: an association outlives the
 // content that introduced it, so a reference that only an older commit still
 // carries must keep its attachment alive.
-func scanArticleHistoryUUIDs(ctx context.Context, repoPath string) ([]string, error) {
-	shas, err := articleBlobSHAs(ctx, repoPath)
+func scanArticleHistoryUUIDs(ctx context.Context, repoPath string, maxBlobs int) ([]string, bool, error) {
+	shas, capped, err := articleBlobSHAs(ctx, repoPath, maxBlobs)
 	if err != nil || len(shas) == 0 {
-		return nil, err
+		return nil, capped, err
 	}
-	return uuidsFromBlobs(ctx, repoPath, shas)
+	uuids, err := uuidsFromBlobs(ctx, repoPath, shas)
+	return uuids, capped, err
 }
 
 // articleBlobSHAs lists the distinct blobs that ever appeared under an article
-// content path. One rev-list walk per repository replaces the object-per-commit
-// lookups a tree traversal would need.
-func articleBlobSHAs(ctx context.Context, repoPath string) ([]string, error) {
+// content path, and reports whether it stopped at the cap. One rev-list walk
+// per repository replaces the object-per-commit lookups a tree traversal would
+// need.
+func articleBlobSHAs(ctx context.Context, repoPath string, maxBlobs int) ([]string, bool, error) {
+	if maxBlobs <= 0 {
+		maxBlobs = defaultMaxHistoryBlobs
+	}
 	stdoutReader, stdoutWriter := io.Pipe()
 	stderr := new(bytes.Buffer)
 	go func() {
@@ -62,6 +72,7 @@ func articleBlobSHAs(ctx context.Context, repoPath string) ([]string, error) {
 
 	shas := make([]string, 0, 8)
 	seen := make(container.Set[string], 8)
+	capped := false
 	scanner := bufio.NewScanner(stdoutReader)
 	for scanner.Scan() {
 		// Commits and trees are listed without a path, so only named objects
@@ -73,14 +84,15 @@ func articleBlobSHAs(ctx context.Context, repoPath string) ([]string, error) {
 		if seen.Add(sha) {
 			shas = append(shas, sha)
 		}
-		if len(shas) >= maxHistoryBlobs {
+		if len(shas) >= maxBlobs {
+			capped = true
 			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, capped, err
 	}
-	return shas, nil
+	return shas, capped, nil
 }
 
 // uuidsFromBlobs reads the given blobs through a single cat-file batch and

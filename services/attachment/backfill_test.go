@@ -146,12 +146,20 @@ func TestScanArticleHistoryUUIDs(t *testing.T) {
 	commitArticle(t, repo.RepoPath(), articleContent(firstUUID), "")
 	commitArticle(t, repo.RepoPath(), articleContent(secondUUID), articleContent(ignoredUUID))
 
-	uuids, err := scanArticleHistoryUUIDs(t.Context(), repo.RepoPath())
+	uuids, capped, err := scanArticleHistoryUUIDs(t.Context(), repo.RepoPath(), 0)
 	require.NoError(t, err)
+	assert.False(t, capped)
 
 	// the reference only an overwritten revision carries still counts: an
 	// association outlives the content that introduced it
 	assert.ElementsMatch(t, []string{firstUUID, secondUUID}, uuids)
+
+	// a cap below the number of article blobs hides the oldest revisions, which
+	// is what the run has to report instead of treating as an absence
+	uuids, capped, err = scanArticleHistoryUUIDs(t.Context(), repo.RepoPath(), 1)
+	require.NoError(t, err)
+	assert.True(t, capped)
+	assert.Len(t, uuids, 1)
 }
 
 func TestScanArticleHistoryUUIDsAlternateArticlePaths(t *testing.T) {
@@ -170,7 +178,7 @@ func TestScanArticleHistoryUUIDsAlternateArticlePaths(t *testing.T) {
 			blobEntry(t, repo.RepoPath(), "Readme.md", articleContent(caseVariantUUID))+
 			blobEntry(t, repo.RepoPath(), "notes.md", articleContent(ignoredUUID)))
 
-	uuids, err := scanArticleHistoryUUIDs(t.Context(), repo.RepoPath())
+	uuids, _, err := scanArticleHistoryUUIDs(t.Context(), repo.RepoPath(), 0)
 	require.NoError(t, err)
 
 	assert.ElementsMatch(t, []string{changeRequestUUID, caseVariantUUID}, uuids)
@@ -263,9 +271,17 @@ func TestFinalizeLegacyFallback(t *testing.T) {
 
 	ensureReadableRepos(t)
 
+	// a capped scan read only the newest revisions, so the references the older
+	// ones carry are unobserved too, and nothing repairs that later
+	result, err = FinalizeLegacyFallback(t.Context(), BackfillOptions{MaxHistoryBlobs: 1})
+	require.ErrorContains(t, err, "scan cap")
+	assert.Positive(t, result.HistoryCapped)
+	assert.NotEqual(t, "false", storedFallback(t))
+
 	result, err = FinalizeLegacyFallback(t.Context(), BackfillOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Outstanding)
 	assert.Equal(t, 0, result.RepositoriesFailed)
+	assert.Equal(t, 0, result.HistoryCapped)
 	assert.Equal(t, "false", storedFallback(t))
 }

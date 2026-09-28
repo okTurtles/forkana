@@ -22,7 +22,9 @@ var microcmdBackfillArticleAttachments = &cli.Command{
 
 The run is idempotent and restartable, so it is safe to run it again after a failure or an interruption; use --start-repo-id to resume where the previous run stopped.
 
-Once a --verify run reports nothing outstanding and no unreadable repositories, --finalize switches attachment authorization to associations only. Enable the gc_article_attachments cron task afterwards, never before.`,
+Once a --verify run reports nothing outstanding, no unreadable repositories and no capped histories, --finalize switches attachment authorization to associations only. Enable the gc_article_attachments cron task afterwards, never before.
+
+A capped history means the scan stopped before the oldest revisions of an article; re-run with a higher --max-history-blobs to read them.`,
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
 			Name:  "dry-run",
@@ -45,6 +47,10 @@ Once a --verify run reports nothing outstanding and no unreadable repositories, 
 			Name:  "start-repo-id",
 			Usage: "Resume at this repository ID",
 		},
+		&cli.IntFlag{
+			Name:  "max-history-blobs",
+			Usage: "How many distinct article blobs to read per repository; raise it when a run reports a capped history",
+		},
 	},
 	Action: runBackfillArticleAttachments,
 }
@@ -66,10 +72,11 @@ func runBackfillArticleAttachments(ctx context.Context, c *cli.Command) error {
 	}
 
 	opts := attachment_service.BackfillOptions{
-		DryRun:      c.Bool("dry-run"),
-		Verify:      c.Bool("verify"),
-		BatchSize:   c.Int("batch-size"),
-		StartRepoID: c.Int64("start-repo-id"),
+		DryRun:          c.Bool("dry-run"),
+		Verify:          c.Bool("verify"),
+		BatchSize:       c.Int("batch-size"),
+		StartRepoID:     c.Int64("start-repo-id"),
+		MaxHistoryBlobs: c.Int("max-history-blobs"),
 	}
 
 	var result *attachment_service.BackfillResult
@@ -94,6 +101,7 @@ func runBackfillArticleAttachments(ctx context.Context, c *cli.Command) error {
 func printBackfillArticleAttachmentsResult(result *attachment_service.BackfillResult) {
 	fmt.Printf(`repositories scanned:            %d
 unreadable repositories:         %d
+capped histories:                %d
 references found:                %d
 associations inserted:           %d
 legacy rows inferred:            %d
@@ -104,7 +112,7 @@ outstanding references:          %d
 unassociated legacy attachments: %d
 last repository processed:       %d
 `,
-		result.ReposScanned, result.RepositoriesFailed, result.ReferencesFound, result.AssociationsInserted,
-		result.LegacyInferred, result.SuspiciousSkipped, result.MissingAttachments, result.MissingFiles,
-		result.Outstanding, result.UnassociatedLegacy, result.LastRepoID)
+		result.ReposScanned, result.RepositoriesFailed, result.HistoryCapped, result.ReferencesFound,
+		result.AssociationsInserted, result.LegacyInferred, result.SuspiciousSkipped, result.MissingAttachments,
+		result.MissingFiles, result.Outstanding, result.UnassociatedLegacy, result.LastRepoID)
 }

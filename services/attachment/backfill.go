@@ -31,6 +31,11 @@ type BackfillOptions struct {
 	BatchSize int
 	// StartRepoID resumes an interrupted run at that repository ID.
 	StartRepoID int64
+	// MaxHistoryBlobs caps how many distinct article blobs one repository
+	// contributes to its history scan. Zero uses defaultMaxHistoryBlobs; a
+	// higher value is how an operator reads the whole history of a repository
+	// a previous run reported as capped.
+	MaxHistoryBlobs int
 	// suppressReport leaves the reporting to a caller that has more to say,
 	// so a single run never produces two notices.
 	suppressReport bool
@@ -50,6 +55,10 @@ type BackfillResult struct {
 	// not be read at all, because the git directory is missing, broken or
 	// otherwise unreadable. Their references are unobserved, not absent.
 	RepositoriesFailed int
+	// HistoryCapped counts the repositories whose article history hit the blob
+	// cap, so the oldest revisions went unread. Like a failed scan, their
+	// references are unobserved rather than absent.
+	HistoryCapped int
 	// Outstanding counts the references a read-only run would have
 	// associated. Finalizing the transition requires it to be zero.
 	Outstanding int
@@ -89,7 +98,7 @@ func BackfillArticleAttachments(ctx context.Context, opts BackfillOptions) (*Bac
 			if err := ctx.Err(); err != nil {
 				return result, err
 			}
-			if err := backfillRepository(ctx, repo, readOnly, result); err != nil {
+			if err := backfillRepository(ctx, repo, opts, readOnly, result); err != nil {
 				return result, fmt.Errorf("backfill [repo: %s, id: %d]: %w", repo.FullName(), repo.ID, err)
 			}
 			result.ReposScanned++
@@ -128,6 +137,13 @@ func FinalizeLegacyFallback(ctx context.Context, opts BackfillOptions) (*Backfil
 	if result.RepositoriesFailed > 0 {
 		return result, fmt.Errorf("%d repositories could not be scanned, repair or remove them and verify again before finalizing", result.RepositoriesFailed)
 	}
+	// A capped scan read only the newest revisions of an article, and nothing
+	// repairs that later: reconciliation applies the same cap. Finalizing on a
+	// partial reading would strand whatever only the unread revisions
+	// reference.
+	if result.HistoryCapped > 0 {
+		return result, fmt.Errorf("%d repositories have more article history than the scan cap of %d blobs, raise the history blob cap and verify again before finalizing", result.HistoryCapped, historyBlobCap(opts))
+	}
 	if result.MissingAttachments > 0 {
 		log.Warn("finalizing with %d references to attachments that no longer exist; they were already broken", result.MissingAttachments)
 	}
@@ -144,7 +160,7 @@ func FinalizeLegacyFallback(ctx context.Context, opts BackfillOptions) (*Backfil
 // justifies. References it may not claim are counted and logged, never
 // associated: a reference is an observation, and only a trusted relationship
 // turns it into access.
-func backfillRepository(ctx context.Context, repo *repo_model.Repository, readOnly bool, result *BackfillResult) error {
+func backfillRepository(ctx context.Context, repo *repo_model.Repository, opts BackfillOptions, readOnly bool, result *BackfillResult) error {
 	if repo.IsEmpty {
 		return nil
 	}
@@ -159,7 +175,8 @@ func backfillRepository(ctx context.Context, repo *repo_model.Repository, readOn
 		return nil
 	}
 
-	uuids, err := scanArticleHistoryUUIDs(ctx, repo.RepoPath())
+	maxBlobs := historyBlobCap(opts)
+	uuids, capped, err := scanArticleHistoryUUIDs(ctx, repo.RepoPath(), maxBlobs)
 	if err != nil {
 		// A repository whose git data cannot be read must not stop the run:
 		// the walk is add-only, so the remaining repositories still gain their
@@ -167,6 +184,10 @@ func backfillRepository(ctx context.Context, repo *repo_model.Repository, readOn
 		result.RepositoriesFailed++
 		log.Error("article attachment backfill: cannot scan the article history of %s: %v", repo.FullName(), err)
 		return nil
+	}
+	if capped {
+		result.HistoryCapped++
+		log.Warn("article attachment backfill: the article history of %s exceeds the scan cap of %d blobs, its oldest revisions were not read; raise the cap to read them", repo.FullName(), maxBlobs)
 	}
 	if len(uuids) == 0 {
 		return nil
@@ -304,6 +325,14 @@ func inferredLegacyArticleAttachment(ctx context.Context, repo *repo_model.Repos
 	return inheritsThroughForkChain(ctx, repo, attach, true)
 }
 
+// historyBlobCap is the blob cap a run applies to every repository it scans.
+func historyBlobCap(opts BackfillOptions) int {
+	if opts.MaxHistoryBlobs > 0 {
+		return opts.MaxHistoryBlobs
+	}
+	return defaultMaxHistoryBlobs
+}
+
 // repositoriesFrom pages repositories by ID, which is what makes a run
 // resumable: an ID never changes and never reappears behind the cursor.
 func repositoriesFrom(ctx context.Context, startID int64, limit int) ([]*repo_model.Repository, error) {
@@ -312,19 +341,19 @@ func repositoriesFrom(ctx context.Context, startID int64, limit int) ([]*repo_mo
 }
 
 func reportBackfill(result *BackfillResult, readOnly bool) {
-	log.Info("article attachment backfill: %d repositories scanned (%d unreadable), %d references found, %d associations inserted, %d legacy rows inferred, %d suspicious skipped, %d missing attachments, %d missing files, %d outstanding, %d unassociated legacy attachments (read-only: %t)",
-		result.ReposScanned, result.RepositoriesFailed, result.ReferencesFound, result.AssociationsInserted,
+	log.Info("article attachment backfill: %d repositories scanned (%d unreadable, %d history capped), %d references found, %d associations inserted, %d legacy rows inferred, %d suspicious skipped, %d missing attachments, %d missing files, %d outstanding, %d unassociated legacy attachments (read-only: %t)",
+		result.ReposScanned, result.RepositoriesFailed, result.HistoryCapped, result.ReferencesFound, result.AssociationsInserted,
 		result.LegacyInferred, result.SuspiciousSkipped, result.MissingAttachments, result.MissingFiles,
 		result.Outstanding, result.UnassociatedLegacy, readOnly)
 
 	// One notice for the whole run: a notice per rejected reference would let a
 	// single bad paste fill the administrator's notice list.
-	reportable := result.SuspiciousSkipped + result.MissingAttachments + result.MissingFiles + result.RepositoriesFailed
+	reportable := result.SuspiciousSkipped + result.MissingAttachments + result.MissingFiles + result.RepositoriesFailed + result.HistoryCapped
 	if readOnly || reportable == 0 {
 		return
 	}
-	if err := system_model.CreateRepositoryNotice("Article attachment backfill finished with %d suspicious references skipped, %d missing attachments, %d missing files and %d unreadable repositories, see the log for details",
-		result.SuspiciousSkipped, result.MissingAttachments, result.MissingFiles, result.RepositoriesFailed); err != nil {
+	if err := system_model.CreateRepositoryNotice("Article attachment backfill finished with %d suspicious references skipped, %d missing attachments, %d missing files, %d unreadable repositories and %d repositories whose article history exceeded the scan cap, see the log for details",
+		result.SuspiciousSkipped, result.MissingAttachments, result.MissingFiles, result.RepositoriesFailed, result.HistoryCapped); err != nil {
 		log.Error("CreateRepositoryNotice: %v", err)
 	}
 }

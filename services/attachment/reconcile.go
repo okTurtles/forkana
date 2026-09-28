@@ -72,21 +72,22 @@ func ReconcileArticleAttachments(ctx context.Context, opts ReconcileOptions) (*R
 // one notice per reference would let a single bad paste fill the
 // administrator's notice list.
 func reportReconcile(result *ReconcileResult, dryRun bool) {
-	log.Info("article attachment reconciliation: %d repositories scanned (%d unreadable), %d references found, %d associations inserted, %d legacy rows inferred, %d suspicious skipped, %d missing attachments, %d missing files, %d dangling associations, %d unassociated legacy attachments (dry run: %t)",
-		result.ReposScanned, result.RepositoriesFailed, result.ReferencesFound, result.AssociationsInserted,
+	log.Info("article attachment reconciliation: %d repositories scanned (%d unreadable, %d history capped), %d references found, %d associations inserted, %d legacy rows inferred, %d suspicious skipped, %d missing attachments, %d missing files, %d dangling associations, %d unassociated legacy attachments (dry run: %t)",
+		result.ReposScanned, result.RepositoriesFailed, result.HistoryCapped, result.ReferencesFound, result.AssociationsInserted,
 		result.LegacyInferred, result.SuspiciousSkipped, result.MissingAttachments, result.MissingFiles,
 		result.DanglingAssociations, result.UnassociatedLegacy, dryRun)
 
 	missing := result.MissingAttachments + result.MissingFiles
-	if result.SuspiciousSkipped+missing+result.RepositoriesFailed == 0 && result.DanglingAssociations == 0 {
+	if result.SuspiciousSkipped+missing+result.RepositoriesFailed+result.HistoryCapped == 0 && result.DanglingAssociations == 0 {
 		return
 	}
 	// A dry run reports what a real run would repair, so it is worth a notice
 	// too: it is how an operator checks the instance before enabling the
 	// collector.
-	if err := system_model.CreateRepositoryNotice("Article attachment reconciliation found %d suspicious references, %d missing attachments, %d missing stored objects, %d dangling associations and %d unreadable repositories; inserted %d missing associations (dry run: %t), see the log for details",
+	if err := system_model.CreateRepositoryNotice("Article attachment reconciliation found %d suspicious references, %d missing attachments, %d missing stored objects, %d dangling associations, %d unreadable repositories and %d repositories whose article history exceeded the scan cap; inserted %d missing associations (dry run: %t), see the log for details",
 		result.SuspiciousSkipped, result.MissingAttachments, result.MissingFiles,
-		result.DanglingAssociations, result.RepositoriesFailed, result.AssociationsInserted, dryRun); err != nil {
+		result.DanglingAssociations, result.RepositoriesFailed, result.HistoryCapped,
+		result.AssociationsInserted, dryRun); err != nil {
 		log.Error("CreateRepositoryNotice: %v", err)
 	}
 }
