@@ -4,6 +4,7 @@
 package attachment
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -94,7 +95,8 @@ func newArticleRepo(t *testing.T, name string) *repo_model.Repository {
 	require.NoError(t, os.MkdirAll(repo.RepoPath(), 0o755))
 	gitRun(t, repo.RepoPath(), "", "init", "--bare", "--initial-branch=master")
 	t.Cleanup(func() {
-		_, _ = db.GetEngine(t.Context()).ID(repo.ID).Delete(&repo_model.Repository{})
+		// the test context is canceled by now, so the delete needs a live one
+		_, _ = db.GetEngine(context.Background()).ID(repo.ID).Delete(&repo_model.Repository{})
 		_ = os.RemoveAll(repo.RepoPath())
 	})
 	return repo
@@ -238,7 +240,8 @@ func TestFinalizeLegacyFallback(t *testing.T) {
 
 	fallbackKey := setting.Config().Attachment.LegacyArticleFallback.DynKey()
 	t.Cleanup(func() {
-		require.NoError(t, system_model.SetSettings(t.Context(), map[string]string{fallbackKey: "true"}))
+		// the test context is canceled by now, so restoring the setting needs a live one
+		require.NoError(t, system_model.SetSettings(context.Background(), map[string]string{fallbackKey: "true"}))
 	})
 	// The stored setting is what finalizing writes; the in-process value is
 	// only refreshed when its cache expires.

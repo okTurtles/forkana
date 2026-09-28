@@ -5,6 +5,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/png"
@@ -648,13 +649,15 @@ func TestLegacyAttachmentFallbackRetires(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	fallbackKey := setting.Config().Attachment.LegacyArticleFallback.DynKey()
-	setFallback := func(t *testing.T, enabled string) {
+	setFallback := func(ctx context.Context, enabled string) {
 		t.Helper()
-		require.NoError(t, system_model.SetSettings(t.Context(), map[string]string{fallbackKey: enabled}))
+		require.NoError(t, system_model.SetSettings(ctx, map[string]string{fallbackKey: enabled}))
 		// the value is cached by revision, and the revision itself for a second
 		config.GetDynGetter().InvalidateCache()
 	}
-	t.Cleanup(func() { setFallback(t, "true") })
+	// the test context is canceled by the time a cleanup runs, so restoring the
+	// setting needs a live one
+	t.Cleanup(func() { setFallback(context.Background(), "true") })
 
 	legacy := func(t *testing.T, uuid string) *repo_model.Attachment {
 		t.Helper()
@@ -680,11 +683,11 @@ func TestLegacyAttachmentFallbackRetires(t *testing.T) {
 	reader := loginUser(t, "user8")
 	get := func(uuid string) *RequestWrapper { return NewRequest(t, "GET", "/attachments/"+uuid) }
 
-	setFallback(t, "true")
+	setFallback(t.Context(), "true")
 	reader.MakeRequest(t, get(unassociated.UUID), http.StatusOK)
 	reader.MakeRequest(t, get(associated.UUID), http.StatusOK)
 
-	setFallback(t, "false")
+	setFallback(t.Context(), "false")
 	reader.MakeRequest(t, get(unassociated.UUID), http.StatusNotFound)
 	uploader.MakeRequest(t, get(unassociated.UUID), http.StatusOK)
 	reader.MakeRequest(t, get(associated.UUID), http.StatusOK)
