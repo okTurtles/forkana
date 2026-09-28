@@ -313,6 +313,9 @@ jobs:
         run: |
           PROJECT_CTX="${PROJECT_CTX:-You are reviewing a pull request to a software project.}"
 
+          # The backticks in the printf formats below are markdown for the
+          # prompt, not command substitution, so the formats stay single-quoted.
+          # shellcheck disable=SC2016
           {
             printf '%s\n\n' "$PROJECT_CTX"
             printf 'Run the `code-review` skill to review this pull request.\n\n'
@@ -538,6 +541,7 @@ jobs:
           # the token or the runner credentials — better no review than an
           # unsandboxed one. The runner agent dirs are passed as positional
           # arguments so the check probes the exact paths that were masked.
+          # shellcheck disable=SC2016 # expands in the sandboxed sh, not here
           "${BWRAP[@]}" sh -c '
             fail=0
             [ -z "$GH_TOKEN" ] || { echo "GH_TOKEN visible inside sandbox"; fail=1; }
@@ -623,7 +627,7 @@ jobs:
                   while (substr(line, n + 1, 1) == mark) n++
                   if (fence == "") fence = substr(line, 1, n)
                   else if (mark == substr(fence, 1, 1) && n >= length(fence) &&
-                           substr(line, n + 1) ~ /^[ \t]*$/) fence = ""
+                          substr(line, n + 1) ~ /^[ \t]*$/) fence = ""
                 }
                 END { if (fence != "") print fence }
               '
