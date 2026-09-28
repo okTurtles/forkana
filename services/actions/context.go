@@ -74,7 +74,7 @@ func GenerateGiteaContext(ctx context.Context, run *actions_model.ActionRun, job
 		"path":              "",                                       // string, Path on the runner to the file that sets system PATH variables from workflow commands. This file is unique to the current step and is a different file for each step in a job. For more information, see "Workflow commands for GitHub Actions."
 		"repository":        run.Repo.OwnerName + "/" + run.Repo.Name, // string, The owner and repository name. For example, Codertocat/Hello-World.
 		"repository_owner":  run.Repo.OwnerName,                       // string, The repository owner's name. For example, Codertocat.
-		"repositoryUrl":     run.Repo.HTMLURL()   ,                    // string, The Git URL to the repository. For example, git://github.com/codertocat/hello-world.git.
+		"repositoryUrl":     run.Repo.HTMLURL(ctx),                    // string, The Git URL to the repository. For example, git://github.com/codertocat/hello-world.git.
 		"retention_days":    "",                                       // string, The number of days that workflow run logs and artifacts are kept.
 		"run_id":            "",                                       // string, A unique number for each workflow run within a repository. This number does not change if you re-run the workflow run.
 		"run_number":        strconv.FormatInt(run.Index, 10),         // string, A unique number for each run of a particular workflow in a repository. This number begins at 1 for the workflow's first run, and increments with each new run. This number does not change if you re-run the workflow run.
