@@ -80,6 +80,32 @@ const FADE_ONLY_MS = 220;     // no origin to fly from: plain cross-fade
 
 const bubbleRef = ref<HTMLElement | null>(null);
 const backRef = ref<HTMLElement | null>(null);
+const layerRef = ref<HTMLElement | null>(null);
+
+/* Where the circle's centre rests, in px from the layer's top: the midpoint of
+   the layer's visible intersection with the viewport, so on a canvas box
+   taller than the screen the circle opens (and stays) where the reader is,
+   without scrolling the page or resizing the box. Clamped so the circle never
+   pokes outside the layer's clipping. Falls back to the CSS 50% until first
+   measured. */
+const centerY = ref('50%');
+
+function updateCenterY() {
+  const layer = layerRef.value;
+  if (!layer) return;
+  const r = layer.getBoundingClientRect();
+  if (!r.height) return;
+  const visTop = Math.max(r.top, 0);
+  const visBottom = Math.min(r.bottom, window.innerHeight);
+  if (visBottom <= visTop) return;   // box fully off-screen: keep the last spot
+  const half = (bubbleRef.value?.offsetHeight || diameter.value) / 2;
+  const y = (visTop + visBottom) / 2 - r.top;
+  centerY.value = `${Math.round(Math.max(half, Math.min(r.height - half, y)))}px`;
+  /* Written straight to the node as well: the opening flight measures the
+     circle's resting rect synchronously in onMounted, before Vue would apply
+     the reactive binding, and it must measure the final spot. */
+  layer.style.setProperty('--detail-center-y', centerY.value);
+}
 const entered = ref(false);   // backdrop + content visible
 const leaving = ref(false);   // guard: the close runs once (distinct from the `closing` prop)
 let timer: number | null = null;
@@ -117,6 +143,9 @@ onMounted(() => {
      (:focus-visible), so this costs the mouse user nothing. No Back on a solo
      subject, and nothing to move focus to: the page starts here. */
   requestAnimationFrame(() => backRef.value?.focus());
+  updateCenterY();
+  window.addEventListener('scroll', updateCenterY, {passive: true});
+  window.addEventListener('resize', updateCenterY, {passive: true});
   if (prefersReducedMotion()) {
     entered.value = true;    // instant swap, no travel, no fade
     return;
@@ -166,13 +195,18 @@ watch(() => props.closing, (want) => {
   timer = window.setTimeout(() => emit('closed'), back ? CLOSE_TOTAL_MS : FADE_ONLY_MS);
 });
 
-onBeforeUnmount(clearTimer);
+onBeforeUnmount(() => {
+  clearTimer();
+  window.removeEventListener('scroll', updateCenterY);
+  window.removeEventListener('resize', updateCenterY);
+});
 </script>
 
 <template>
   <div
     class="detail-layer" :class="{'is-open': entered, 'is-closing': leaving}"
-    :style="{'--detail-size': diameter + 'px'}"
+    ref="layerRef"
+    :style="{'--detail-size': diameter + 'px', '--detail-center-y': centerY}"
   >
     <button v-if="showBack" ref="backRef" class="detail-back" @click="emit('back')">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -181,24 +215,31 @@ onBeforeUnmount(clearTimer);
       Back
     </button>
 
-    <!-- `transform` on this element is owned by the open/close animation above
+    <!-- The circle centres on --detail-center-y: the midpoint of the VISIBLE
+         part of the box (kept fresh on scroll and resize), so on a box taller
+         than the screen the circle rests where the reader is instead of at a
+         centre below the fold. The box (and the graph underneath) keeps its
+         size, and the wrapper is click-transparent so Back stays reachable. -->
+    <div class="detail-viewport">
+      <!-- `transform` on this element is owned by the open/close animation above
          and written straight to the node, so it must not appear in this
          binding — Vue would patch it away on the next render. -->
-    <div ref="bubbleRef" class="detail-bubble" :style="{'--detail-size': diameter + 'px'}">
-      <div class="detail-content">
-        <!-- Count and word on ONE line here, as in the design. -->
-        <p class="detail-count">{{ contributors }} {{ label }}</p>
+      <div ref="bubbleRef" class="detail-bubble" :style="{'--detail-size': diameter + 'px'}">
+        <div class="detail-content">
+          <!-- Count and word on ONE line here, as in the design. -->
+          <p class="detail-count">{{ contributors }} {{ label }}</p>
 
-        <!-- The article excerpt. This one WRAPS: it is a paragraph, not a label. -->
-        <p v-if="description" class="detail-description">{{ description }}</p>
+          <!-- The article excerpt. This one WRAPS: it is a paragraph, not a label. -->
+          <p v-if="description" class="detail-description">{{ description }}</p>
 
-        <button class="btn-neutral detail-read" @click="emit('read')">Read full article</button>
-        <button class="detail-history" @click="emit('history')">View history</button>
+          <button class="btn-neutral detail-read" @click="emit('read')">Read full article</button>
+          <button class="detail-history" @click="emit('history')">View history</button>
 
-        <p v-if="updatedAt" class="detail-updated">
-          <span>Last updated</span>
-          <span>{{ formattedDate }}</span>
-        </p>
+          <p v-if="updatedAt" class="detail-updated">
+            <span>Last updated</span>
+            <span>{{ formattedDate }}</span>
+          </p>
+        </div>
       </div>
     </div>
 
@@ -216,15 +257,6 @@ onBeforeUnmount(clearTimer);
   position: absolute;
   inset: 0;
   z-index: 10;
-  display: flex;
-  align-items: center;
-  /* Centred in the canvas box, horizontally and vertically. The mockup drew the
-     circle left of centre with the history card in the space it left on the
-     right, but a bubble that sits off-centre in an otherwise empty box reads as
-     a layout bug — so the circle owns the centre and the history card overlaps
-     its right edge instead (see ArticleHistoryPopup, which positions itself
-     from the same centre and clamps to this box's right edge). */
-  justify-content: center;
   /* Follow the canvas box's own rounded frame instead of squaring it off, and
      keep the circle and the history card clipped to it. */
   border-radius: inherit;
@@ -255,6 +287,30 @@ onBeforeUnmount(clearTimer);
 
 .detail-layer.is-open::before {
   opacity: 1;
+}
+
+/* The circle's stage: a click-transparent shim (Back and the backdrop live on
+   the layer below it) that parks the circle's centre on --detail-center-y —
+   the midpoint of the box's visible intersection with the viewport, measured
+   in the script. The mockup's centring, without scrolling the page and
+   without resizing the box (which would relayout the whole graph on every
+   open and close). The mockup drew the circle left of centre with the
+   history card beside it, but a bubble off-centre in an empty box reads as a
+   layout bug — so the circle owns the centre and the history card overlaps
+   its right edge instead (see ArticleHistoryPopup). */
+.detail-viewport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--detail-center-y, 50%);
+  transform: translateY(-50%);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.detail-viewport > * {
+  pointer-events: auto;
 }
 
 .detail-back {
@@ -292,7 +348,10 @@ onBeforeUnmount(clearTimer);
     var(--bubble-grad-start, #fafbfc) 0%,
     var(--bubble-grad-mid, #eef2f7) 60%,
     var(--bubble-grad-end, #e6ebf2) 100%);
-  border: 1px solid var(--bubble-stroke, #dbe2ea);
+  /* No border here on purpose (#389): the Figma draws the opened circle with
+     the gradient and its soft shadow only — the small in-graph bubbles keep
+     their 1px stroke, but at 425px that stroke reads as a gray frame. */
+  border: none;
   box-shadow: 0 2px 6px rgb(100 116 139 / 18%);
 
   /* Transform only — the circle is never re-laid-out while it travels. */
