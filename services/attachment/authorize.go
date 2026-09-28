@@ -108,6 +108,13 @@ func isPendingUploadOf(ctx context.Context, doer *user_model.User, attach *repo_
 	return count == 0, nil
 }
 
+// defaultForkAncestryDepth bounds the ancestry walk when MAX_FORK_TREE_NODES
+// carries no usable depth: a negative value disables the fork tree limit and
+// zero forbids forking altogether, so neither says how deep a chain may be.
+// It matches the fallback of repo_model.FindForkTreeRoot, the other walk over
+// the same ancestry.
+const defaultForkAncestryDepth = 300
+
 // inheritsThroughForkChain walks target's fork ancestry looking for an already
 // associated repository, or, when the attachment is article content, the origin
 // repository, which is what makes a fork's inherited content trustworthy. The
@@ -116,7 +123,7 @@ func isPendingUploadOf(ctx context.Context, doer *user_model.User, attach *repo_
 func inheritsThroughForkChain(ctx context.Context, target *repo_model.Repository, attach *repo_model.Attachment, isArticle bool) (bool, error) {
 	limit := setting.Repository.MaxForkTreeNodes
 	if limit <= 0 {
-		limit = 1
+		limit = defaultForkAncestryDepth
 	}
 
 	visited := make(map[int64]bool, 4)

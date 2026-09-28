@@ -4,17 +4,36 @@
 package attachment
 
 import (
+	"strings"
 	"testing"
 
 	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/test"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// newForkRepo inserts a repository recorded as a fork of parentID, which is the
+// only part of a fork the ancestry walk reads.
+func newForkRepo(t *testing.T, name string, parentID int64) *repo_model.Repository {
+	t.Helper()
+	repo := &repo_model.Repository{
+		OwnerID:   2,
+		OwnerName: "user2",
+		Name:      name,
+		LowerName: strings.ToLower(name),
+		IsFork:    true,
+		ForkID:    parentID,
+	}
+	require.NoError(t, db.Insert(t.Context(), repo))
+	return repo
+}
 
 // newTestAttachment inserts an article attachment owned by repoID and uploaded
 // by uploaderID, which is the shape a pending editor upload has.
@@ -160,6 +179,19 @@ func TestCanAssociate(t *testing.T) {
 		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repo10.ID, []int64{attach.ID}))
 
 		ok, _, err := CanAssociate(t.Context(), nil, repo11, attach)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	// A negative MAX_FORK_TREE_NODES disables the fork tree limit, so the
+	// ancestry walk must still reach past the immediate parent.
+	t.Run("ForkOfForkInheritsWithTheLimitDisabled", func(t *testing.T) {
+		defer test.MockVariableValue(&setting.Repository.MaxForkTreeNodes, -1)()
+
+		grandchild := newForkRepo(t, "fork-chain-grandchild", repo11.ID)
+		attach := newTestAttachment(t, repo10.ID, user13.ID)
+
+		ok, _, err := CanAssociate(t.Context(), nil, grandchild, attach)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
