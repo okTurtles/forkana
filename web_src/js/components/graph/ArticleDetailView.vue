@@ -117,6 +117,18 @@ onMounted(() => {
      (:focus-visible), so this costs the mouse user nothing. No Back on a solo
      subject, and nothing to move focus to: the page starts here. */
   requestAnimationFrame(() => backRef.value?.focus());
+  /* The circle rests at the centre of the canvas box, and on a box taller than
+     the viewport that centre can sit below the fold — the reader clicks a
+     bubble and is left staring at the backdrop until they scroll. Measured
+     here, before the flight transform is applied, the rect IS the resting
+     place: when it is not fully visible, bring it to the middle of the
+     viewport, smoothly alongside the opening flight so the two read as one
+     move. Only for a clicked bubble (origin set): a solo subject loads
+     straight into this view and must not scroll the page it just opened on. */
+  const rest = bubbleRef.value?.getBoundingClientRect();
+  if (props.origin && rest && (rest.top < 0 || rest.bottom > window.innerHeight)) {
+    bubbleRef.value?.scrollIntoView({block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth'});
+  }
   if (prefersReducedMotion()) {
     entered.value = true;    // instant swap, no travel, no fade
     return;
