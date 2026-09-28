@@ -358,9 +358,6 @@ const hasData = computed(() => {
   return false;
 });
 
-/* The legend only explains the muted, dashed bubble when the graph has one. */
-const hasTombstones = computed(() => Object.values(state.graph).some((n) => n.isTombstoned === true));
-
 /* Container size drives the canvas height AND the responsive dials; observe it
    and re-measure on every change (#348). `measured` is the RAW box; the width
    the layout runs at is that value clamped, and the two must not be conflated
@@ -2448,7 +2445,7 @@ function goToComparison() {
       <!-- End graph-container -->
 
       <div ref="legendRef">
-        <LegendFishbone v-if="hasData" :has-tombstones="hasTombstones"/>
+        <LegendFishbone v-if="hasData"/>
       </div>
 
       <!-- Compare Popup Modal -->
