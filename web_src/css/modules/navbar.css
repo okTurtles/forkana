@@ -58,9 +58,12 @@
   text-decoration: none;
 }
 
-/* Sign In / Sign Up buttons in the signed-out navbar */
+/* Sign In / Sign Up buttons in the signed-out navbar: bold, and a tighter
+   horizontal padding so the hover/active highlight hugs the label instead of
+   reaching the "/" divider between the two buttons */
 #navbar .item.navbar-auth-item {
   font-weight: var(--font-weight-bold);
+  padding: 3px 8px;
 }
 
 #navbar .item.ui.dropdown {
