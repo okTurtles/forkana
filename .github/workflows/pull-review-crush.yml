@@ -623,7 +623,7 @@ jobs:
                   while (substr(line, n + 1, 1) == mark) n++
                   if (fence == "") fence = substr(line, 1, n)
                   else if (mark == substr(fence, 1, 1) && n >= length(fence) &&
-                           substr(line, n + 1) ~ /^[ \t]*$/) fence = ""
+                          substr(line, n + 1) ~ /^[ \t]*$/) fence = ""
                 }
                 END { if (fence != "") print fence }
               '
