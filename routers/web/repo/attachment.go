@@ -9,6 +9,7 @@ import (
 
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
+	system_model "code.gitea.io/gitea/models/system"
 	"code.gitea.io/gitea/modules/httpcache"
 	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/log"
@@ -104,20 +105,21 @@ func DeleteAttachment(ctx *context.Context) {
 	// An attachment referenced by committed article content is shared: the repositories that
 	// reference it — including forks the uploader has no say over — would lose the blob. Only
 	// dropping the last association may delete it, which is the garbage collector's job.
-	associations, err := repo_model.CountArticleAttachmentRepos(ctx, attach.ID)
+	//
+	// The condition is part of the delete rather than a check preceding it, so a push that
+	// associates the attachment while this request is in flight keeps it alive.
+	deleted, err := repo_model.DeleteUnassociatedAttachment(ctx, attach.ID)
 	if err != nil {
-		ctx.HTTPError(http.StatusInternalServerError, fmt.Sprintf("CountArticleAttachmentRepos: %v", err))
+		ctx.HTTPError(http.StatusInternalServerError, fmt.Sprintf("DeleteUnassociatedAttachment: %v", err))
 		return
 	}
-	if associations > 0 {
+	if !deleted {
 		ctx.HTTPError(http.StatusConflict, "attachment is referenced by article content")
 		return
 	}
-	err = repo_model.DeleteAttachment(ctx, attach, true)
-	if err != nil {
-		ctx.HTTPError(http.StatusInternalServerError, fmt.Sprintf("DeleteAttachment: %v", err))
-		return
-	}
+	// The row is gone, so nothing can hand the object out any more: removing it now cannot
+	// strand a live attachment, while the reverse order could.
+	system_model.RemoveStorageWithNotice(ctx, storage.Attachments, "Delete attachment", attach.RelativePath())
 	ctx.JSON(http.StatusOK, map[string]string{
 		"uuid": attach.UUID,
 	})

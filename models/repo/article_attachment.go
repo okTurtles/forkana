@@ -164,6 +164,14 @@ func DeleteArticleAttachmentsByRepoID(ctx context.Context, repoID int64) error {
 	return err
 }
 
+// noArticleAssociationCond matches attachments that no repository keeps alive.
+func noArticleAssociationCond() builder.Cond {
+	return builder.NotExists(
+		builder.Select("1").From("article_attachment").
+			Where(builder.Expr("article_attachment.attachment_id = attachment.id")),
+	)
+}
+
 // unassociatedAttachmentCond matches attachments of the given purpose that no
 // repository keeps alive and that no issue, comment or release links to.
 func unassociatedAttachmentCond(purpose AttachmentPurpose) builder.Cond {
@@ -172,10 +180,7 @@ func unassociatedAttachmentCond(purpose AttachmentPurpose) builder.Cond {
 		"attachment.issue_id":   0,
 		"attachment.comment_id": 0,
 		"attachment.release_id": 0,
-	}.And(builder.NotExists(
-		builder.Select("1").From("article_attachment").
-			Where(builder.Expr("article_attachment.attachment_id = attachment.id")),
-	))
+	}.And(noArticleAssociationCond())
 }
 
 // unreferencedArticleAttachmentCond matches attachments the garbage collector
@@ -222,6 +227,26 @@ func DeleteUnreferencedArticleAttachment(ctx context.Context, attachmentID int64
 	count, err := db.GetEngine(ctx).Table("attachment").
 		Where(unreferencedArticleAttachmentCond()).
 		And(builder.Eq{"attachment.id": attachmentID}).
+		Delete(&Attachment{})
+	return count > 0, err
+}
+
+// DeleteUnassociatedAttachment deletes the attachment row only if no repository
+// keeps it alive through an article association, and reports whether it did.
+//
+// Unlike DeleteUnreferencedArticleAttachment it says nothing about the purpose
+// or the linked unit of the row, so it also serves the uploader-initiated
+// removal of an issue, release or still pending editor upload. The association
+// condition is re-evaluated by the database as part of the delete, so a commit
+// that associates the attachment between a caller's check and this call keeps
+// it alive instead of losing its blob.
+func DeleteUnassociatedAttachment(ctx context.Context, attachmentID int64) (bool, error) {
+	if attachmentID == 0 {
+		return false, nil
+	}
+	count, err := db.GetEngine(ctx).Table("attachment").
+		Where(builder.Eq{"attachment.id": attachmentID}).
+		And(noArticleAssociationCond()).
 		Delete(&Attachment{})
 	return count > 0, err
 }

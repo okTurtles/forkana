@@ -182,6 +182,33 @@ func TestDeleteUnreferencedArticleAttachment(t *testing.T) {
 	assert.False(t, deleted)
 }
 
+func TestDeleteUnassociatedAttachment(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	pending := addAttachment(t, &repo_model.Attachment{UUID: "3d6b1f2c-0000-4000-8000-00000000c001", RepoID: 1, UploaderID: 2, Purpose: repo_model.AttachmentPurposeArticle, Name: "pending.png"}, timeutil.TimeStamp(1000))
+	// an issue draft carries no association, so its removal path is unaffected
+	draft := addAttachment(t, &repo_model.Attachment{UUID: "3d6b1f2c-0000-4000-8000-00000000c002", RepoID: 1, IssueID: 1, UploaderID: 2, Name: "draft.png"}, timeutil.TimeStamp(1000))
+	claimed := addAttachment(t, &repo_model.Attachment{UUID: "3d6b1f2c-0000-4000-8000-00000000c003", RepoID: 1, UploaderID: 2, Purpose: repo_model.AttachmentPurposeArticle, Name: "claimed.png"}, timeutil.TimeStamp(1000))
+	require.NoError(t, repo_model.AddArticleAttachments(t.Context(), 2, []int64{claimed.ID}))
+
+	for _, attach := range []*repo_model.Attachment{pending, draft} {
+		deleted, err := repo_model.DeleteUnassociatedAttachment(t.Context(), attach.ID)
+		assert.NoError(t, err)
+		assert.True(t, deleted)
+		unittest.AssertNotExistsBean(t, &repo_model.Attachment{ID: attach.ID})
+	}
+
+	// an association written while the removal request was in flight keeps the row
+	deleted, err := repo_model.DeleteUnassociatedAttachment(t.Context(), claimed.ID)
+	assert.NoError(t, err)
+	assert.False(t, deleted)
+	unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: claimed.ID})
+
+	deleted, err = repo_model.DeleteUnassociatedAttachment(t.Context(), 0)
+	assert.NoError(t, err)
+	assert.False(t, deleted)
+}
+
 func TestMarkAttachmentsArticlePurpose(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
