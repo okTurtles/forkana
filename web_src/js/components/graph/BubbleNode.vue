@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /* BubbleNode.vue
    This component is responsible for rendering ONE bubble (circle + labels).
-   It does NOT know about the graph; it only gets coordinates, radius, a zoom
-   factor (k) and whether it is the EXPANDED bubble (hovered/opened). When any
-   of those change it re-evaluates what text fits. This keeps label logic
-   independent from layout and D3.
+   It does NOT know about the graph; it only gets coordinates, radius and
+   whether it is the EXPANDED bubble (hovered/opened). When any of those
+   change it re-evaluates what text fits. This keeps label logic independent
+   from layout, D3 and the zoom (labels scale with the world, #386 item 5).
 
    TWO RENDERINGS
    --------------
@@ -37,16 +37,17 @@ import type { BubbleLabelDetail } from './bubble-size.ts';
    allowed to shrink — by a single uniform scale, so the block keeps its
    proportions — to keep a line that would otherwise not fit. */
 const SECONDARY_SCALE_MIN = 0.5;     // Secondary lines may shrink to half...
-const FONT_SIZE_FLOOR = 8;           // ...but never below this, in screen px: it stops being legible
+const FONT_SIZE_FLOOR = 8;           // ...but never below this, in WORLD px (8px on screen at zoom 1)
 const FONT_SIZE_LABEL = 12;          // Base font size for the "Contributor(s)" label
 const FONT_SIZE_SMALL = 11;          // Base font size for the "Last updated" lines
 
 /* === LABEL SPACING === */
-/* Breathing room between the arc and the text, in SCREEN px. Proportional to
-   the bubble rather than constant: 12px is right on a large circle but eats a
-   quarter of a small one's diameter, which is what used to stop mid-sized
-   bubbles from showing their "Contributors" line at all. */
-const LABEL_PADDING_RATIO = 0.12;    // fraction of the on-screen radius
+/* Breathing room between the arc and the text, in WORLD px (see the fit-model
+   note above: on-screen size = this × zoom). Proportional to the bubble
+   rather than constant: 12px is right on a large circle but eats a quarter of
+   a small one's diameter, which is what used to stop mid-sized bubbles from
+   showing their "Contributors" line at all. */
+const LABEL_PADDING_RATIO = 0.12;    // fraction of the bubble's radius
 const LABEL_PADDING_MAX = 12;        // ...capped, so big bubbles are not hollow
 const LABEL_PADDING_MIN = 4;         // ...and floored, so small ones still breathe
 const LABEL_GAP_PRIMARY = 6;         // Gap between count and contributor label
@@ -68,7 +69,6 @@ const props = defineProps<{
   id: string;
   x: number; y: number;          // world coordinates (graph space)
   r: number;                      // bubble radius (graph units)
-  k: number;                      // current zoom scale (world→screen)
   contributors: number;           // primary number (always shown)
   /* The count as it is to be WRITTEN — already abbreviated if this rung is too
      small to spell it out (bubble-size.ts), so this component never has to
@@ -114,7 +114,7 @@ const emit = defineEmits<{
 const fit = reactive({
   showLabel: false,
   showUpdated: false,
-  // secondary font sizes in px (on screen); the count's is props.countFontSize
+  // secondary font sizes in WORLD px; the count's is props.countFontSize
   fsLabel: FONT_SIZE_LABEL,
   fsSmall: FONT_SIZE_SMALL,
 });
@@ -200,7 +200,7 @@ function recomputeFit() {
    sees it), and the first recompute after the freeze lifts uses the settled
    radius, at which point it fades back in. */
 watch(
-  () => [props.k, props.r, props.updatedAt, props.contributors, props.countText,
+  () => [props.r, props.updatedAt, props.contributors, props.countText,
     props.countFontSize, props.detail, props.expanded, props.frozen],
   () => { if (!props.frozen) recomputeFit(); },
   {immediate: true},

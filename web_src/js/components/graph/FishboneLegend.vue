@@ -42,7 +42,7 @@
 
 .legend-swatch--contention {
   background: var(--bubble-joint-fill, #fff);
-  border: 2px solid var(--bubble-joint-stroke, #c7d2df);
+  border: 2px solid var(--bubble-joint-stroke, #818b98);
 }
 
 .legend-swatch--deleted {
