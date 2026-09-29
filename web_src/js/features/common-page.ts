@@ -8,6 +8,18 @@ import {initCompSearchRepoBox} from './comp/SearchRepoBox.ts';
 
 const {appUrl} = window.config;
 
+export function initPageShowBfcacheReload() {
+  // When navigating with the browser back/forward buttons, the page may be restored
+  // from the back/forward cache (bfcache) instead of being re-requested from the server.
+  // The server's "no-cache" Cache-Control headers do not apply to the bfcache, so a user
+  // who signed out (or signed in) could still see a stale page rendered for the previous
+  // auth state. Force a reload when a page is restored from the bfcache so the page
+  // always reflects the current session state.
+  window.addEventListener('pageshow', (e: PageTransitionEvent) => {
+    if (e.persisted) window.location.reload();
+  });
+}
+
 export function initHeadNavbarContentToggle() {
   const navbar = document.querySelector('#navbar');
   const btn = document.querySelector('#navbar-expand-toggle');
