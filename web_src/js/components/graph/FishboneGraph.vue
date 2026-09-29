@@ -281,7 +281,7 @@ type EdgeGeom = {
 const nodesList = ref<FrameNode[]>([]);
 const edgesList = ref<EdgeGeom[]>([]);
 const trunksList = ref<{ x: number; y1: number; y2: number; id: string }[]>([]);
-const jointDots = ref<{ x: number; y: number; id: string; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
+const jointDots = ref<{ x: number; y: number; id: string; sourceId: NodeId; targetId: NodeId; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
 
 /* SVG/zoom plumbing */
 const svgHeight = ref(DEFAULT_CONTAINER_HEIGHT);
@@ -294,7 +294,6 @@ const worldRef = ref<SVGGElement | null>(null);
 let svgSel!: Selection<SVGSVGElement, unknown, null, undefined>;
 let worldSel!: Selection<SVGGElement, unknown, null, undefined>;
 let zoomBehavior!: ZoomBehavior<Element, unknown>;
-const currentK = ref(1);
 /* Bubble bounds in world units, cached at layout time: the pan constraint
    reads them on every zoom event and should not walk the graph. */
 let contentBox = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
@@ -357,9 +356,6 @@ const hasData = computed(() => {
 
   return false;
 });
-
-/* The legend only explains the muted, dashed bubble when the graph has one. */
-const hasTombstones = computed(() => Object.values(state.graph).some((n) => n.isTombstoned === true));
 
 /* Container size drives the canvas height AND the responsive dials; observe it
    and re-measure on every change (#348). `measured` is the RAW box; the width
@@ -1192,6 +1188,8 @@ function setFrame(g: Graph, placements: Placements) {
     x: e.ex,
     y: e.ey,
     id: `${e.source.node.id}-${e.target.node.id}`,
+    sourceId: e.source.node.id,
+    targetId: e.target.node.id,
     sourceOwner: e.source.node.repoOwner || e.source.node.fullName?.split('/')[0] || '',
     targetOwner: e.target.node.repoOwner || e.target.node.fullName?.split('/')[0] || '',
     subject: e.source.node.repoSubject || e.target.node.repoSubject || props.subject || '',
@@ -1442,7 +1440,6 @@ function resetView(animated = false) {
   const t = constrainToViewport(zoomIdentity.translate(tx, ty).scale(targetScale), zoomExtent());
   (animated ? svgSel.transition().duration(VIEW_TRANSITION_DURATION) : svgSel).call(zoomBehavior.transform as any, t);
 
-  currentK.value = targetScale;
   /* The component owns the view again: the next re-measure may re-frame it.
      Set AFTER the transform, because applying it runs the zoom handler. */
   viewMovedByUser = false;
@@ -1521,7 +1518,7 @@ onMounted(async () => {
        PAGE scrolls (the canvas is content-sized, see the note further down). */
     .filter((event: any) => event.type === "wheel" ? event.ctrlKey : true)
     .on("zoom", (e: any) => {
-      const z: ZoomTransform = e.transform; currentK.value = z.k;
+      const z: ZoomTransform = e.transform;
       /* A sourceEvent means a real gesture (wheel, drag, pinch) rather than a
          programmatic framing, so the view is now the user's — a re-measure
          must keep it. */
@@ -1612,9 +1609,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
   window.removeEventListener('keydown', onGraphKeydown);
 });
-
-/* Derived for template binding */
-const kComputed = computed(() => currentK.value);
 
 /* ──────────────────────────────────────────────────────────────────────────────
    HOVER / OPEN — one bubble grows to 202px and the graph reflows around it
@@ -1951,7 +1945,6 @@ function closeDetail() {
   contentBox = bubbleBounds();
   if (transformBeforeDetail && svgSel) {
     svgSel.call(zoomBehavior.transform as any, transformBeforeDetail);
-    currentK.value = transformBeforeDetail.k;
   }
   /* WHERE THE CIRCLE LANDS, recomputed here rather than reused from the open.
      `detailOrigin` was captured when the article was opened — off the 202px
@@ -2300,7 +2293,8 @@ function goToComparison() {
             <template v-if="graphRendered">
               <!-- Trunks (vertical) -->
               <line
-                v-for="t in trunksList" :key="t.id" class="trunk" :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
+                v-for="t in trunksList" :key="t.id" class="trunk" :class="{'is-related': expandedId === t.id}"
+                :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
                 stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
               />
 
@@ -2309,14 +2303,16 @@ function goToComparison() {
                  that a dot is ON its connector in EVERY frame of a reflow. -->
               <path
                 v-for="e in edgesList" :key="`${e.source.node.id}-${e.target.node.id}`"
-                :data-edge="`${e.source.node.id}-${e.target.node.id}`" class="branch" fill="none"
+                :data-edge="`${e.source.node.id}-${e.target.node.id}`" class="branch"
+                :class="{'is-related': expandedId === e.source.node.id || expandedId === e.target.node.id}" fill="none"
                 stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round" opacity="0.9"
                 :d="`M ${e.ex} ${e.ey} C ${e.ex} ${e.ey + 0.5522847498307936 * state.elbowR}, ${e.ex + e.side * 0.5522847498307936 * state.elbowR} ${e.hy}, ${e.hx} ${e.hy} L ${e.cx} ${e.cy}`"
               />
 
               <!-- Child stems -->
               <line
-                v-for="e in edgesList" :key="`stem-${e.source.node.id}-${e.target.node.id}`" class="child-stem" :x1="e.sx1"
+                v-for="e in edgesList" :key="`stem-${e.source.node.id}-${e.target.node.id}`" class="child-stem"
+                :class="{'is-related': expandedId === e.source.node.id || expandedId === e.target.node.id}" :x1="e.sx1"
                 :y1="e.sy1" :x2="e.sx2" :y2="e.sy2" stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
                 opacity="0.9"
               />
@@ -2324,6 +2320,7 @@ function goToComparison() {
               <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
               <circle
                 v-for="j in jointDots" :key="`joint-${j.id}`" :data-edge="j.id" class="joint-parent"
+                :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId}"
                 :cx="j.x" :cy="j.y" r="6"
                 fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="2"
                 style="cursor: pointer;"
@@ -2338,7 +2335,7 @@ function goToComparison() {
               <BubbleNode
                 v-for="f in nodesList" :key="f.node.id" :id="f.node.id" :x="f.x" :y="f.y"
                 :r="f.r" :contributors="f.node.contributors" :updated-at="f.node.updatedAt"
-                :description="f.node.description" :k="kComputed"
+                :description="f.node.description"
                 :detail="detailFor(f.node.contributors)"
                 :count-text="countTextFor(f.node.contributors)"
                 :count-font-size="countFontFor(f.node.contributors)"
@@ -2442,7 +2439,7 @@ function goToComparison() {
       <!-- End graph-container -->
 
       <div ref="legendRef">
-        <LegendFishbone v-if="hasData" :has-tombstones="hasTombstones"/>
+        <LegendFishbone v-if="hasData"/>
       </div>
 
       <!-- Compare Popup Modal -->
@@ -2516,6 +2513,21 @@ function goToComparison() {
 
 .graph-dimmed :deep(g.node.is-expanded) {
   opacity: 1;
+}
+
+/* #386 item 6: the hovered bubble's own plumbing — its trunk, the branches
+   and stems that touch it, and the joint dots on them — keeps full strength
+   instead of fading with the rest of the graph. The 0.9 on branches and stems
+   mirrors their base presentation attribute, which the dimming property
+   would otherwise override. */
+.graph-dimmed :deep(.trunk.is-related),
+.graph-dimmed :deep(.joint-parent.is-related) {
+  opacity: 1;
+}
+
+.graph-dimmed :deep(.branch.is-related),
+.graph-dimmed :deep(.child-stem.is-related) {
+  opacity: 0.9;
 }
 
 /* Hide graph content when showing states, but keep SVG rendered */

@@ -1,11 +1,7 @@
 <script setup lang="ts">
-/* Simple, reusable legend; keeps layout file cleaner. */
-
-defineProps<{
-  /* Only graphs that actually contain a deleted article explain the muted,
-     dashed bubble — the key is noise everywhere else. */
-  hasTombstones?: boolean;
-}>();
+/* Simple, reusable legend; keeps layout file cleaner. The figma legend
+   (node 641-61421) always shows all three keys — Article, Point of
+   contention, Deleted — whatever the graph contains. */
 </script>
 
 <template>
@@ -22,28 +18,34 @@ defineProps<{
       <span class="legend-swatch legend-swatch--contention inline-block tw-w-4 tw-h-4 tw-rounded-full"/>
       <span class="tw-text-sm">Point of contention</span>
     </div>
-    <div v-if="hasTombstones" class="tw-flex tw-items-center tw-gap-2 tw-text-slate-600">
-      <span
-        class="inline-block tw-w-4 tw-h-4 tw-rounded-full"
-        style="background: radial-gradient(circle at 35% 30%, #FAFBFC 0%, #EEF2F7 60%, #E6EBF2 100%);
-                   border:1px dashed #9CA3AF; opacity:.55"
-      />
-      <span class="tw-text-sm">Deleted article</span>
+    <div class="tw-flex tw-items-center tw-gap-2 tw-text-slate-600">
+      <!-- The figma's ⊘ mark: an outlined circle with a slash, in the same
+           emphasis stroke as the joint rings. -->
+      <svg class="legend-swatch--deleted" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+        <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="3.4" y1="12.6" x2="12.6" y2="3.4" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      <span class="tw-text-sm">Deleted</span>
     </div>
   </div>
 </template>
 
 <style scoped>
 .legend-swatch--article {
-  background: radial-gradient(circle at 35% 30%,
-    var(--bubble-grad-start, #fafbfc) 0%,
-    var(--bubble-grad-mid, #eef2f7) 60%,
-    var(--bubble-grad-end, #e6ebf2) 100%);
+  /* The figma draws the swatch FLAT #D1D9E0 — the gradient's strong end, one
+     step deeper than the bubbles themselves — which --bubble-stroke carries
+     in both themes. A miniature of the bubble gradient read as dim (#386
+     item 4). */
+  background: var(--bubble-stroke, #d1d9e0);
   box-shadow: 0 1px 2px rgba(100, 116, 139, 0.25);
 }
 
 .legend-swatch--contention {
   background: var(--bubble-joint-fill, #fff);
-  border: 2px solid var(--bubble-joint-stroke, #c7d2df);
+  border: 2px solid var(--bubble-joint-stroke, #818b98);
+}
+
+.legend-swatch--deleted {
+  color: var(--bubble-joint-stroke, #818b98);
 }
 </style>

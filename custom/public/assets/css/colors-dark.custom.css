@@ -4,13 +4,17 @@
    prefers-color-scheme) so it's available both when a dark theme is explicitly selected and
    when gitea-auto matches dark OS mode below; the two consumers can never drift. */
 :root {
+  /* #386 items 4, 7: the figma palette is a neutral gray-blue (#D1D9E0
+     family, joints #818B98 — see base.custom.css); these are its dark-mode
+     mirrors, with the joint ring kept at the light value, which reads as
+     "emphasis" on the dark body too. */
   --bubble-dark-grad-start: #2e3640;
   --bubble-dark-grad-mid: #232b35;
   --bubble-dark-grad-end: #1d2530;
   --bubble-dark-stroke: #3a4450;
-  --bubble-dark-edge-stroke: #2d3540;
+  --bubble-dark-edge-stroke: #39424d;
   --bubble-dark-joint-fill: #1b1f23;
-  --bubble-dark-joint-stroke: #3d4a58;
+  --bubble-dark-joint-stroke: #818b98;
   --bubble-dark-shadow-color: #000000;
   --bubble-dark-overlay-bg: rgba(27, 31, 35, 0.98);
 
