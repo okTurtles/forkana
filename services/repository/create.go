@@ -405,6 +405,10 @@ func createRepositoryInDB(ctx context.Context, doer, u *user_model.User, repo *r
 	if err = db.Insert(ctx, repo); err != nil {
 		return err
 	}
+	// a new article sorts first among its siblings and renumbers them
+	if repo.SubjectID > 0 {
+		repo_model.DropArticleIndexesOfOwner(ctx, repo.OwnerName)
+	}
 	if err = repo_model.DeleteRedirect(ctx, u.ID, repo.Name); err != nil {
 		return err
 	}

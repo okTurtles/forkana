@@ -30,8 +30,10 @@ func UpdateRepositoryOwnerNames(ctx context.Context, ownerID int64, ownerName st
 }
 
 // UpdateRepositoryUpdatedTime updates a repository's updated time
-func UpdateRepositoryUpdatedTime(ctx context.Context, repoID int64, updateTime time.Time) error {
-	_, err := db.GetEngine(ctx).Exec("UPDATE repository SET updated_unix = ? WHERE id = ?", updateTime.Unix(), repoID)
+// updated_unix is part of the article ordering, so the owner's cached article indexes are dropped.
+func UpdateRepositoryUpdatedTime(ctx context.Context, repo *Repository, updateTime time.Time) error {
+	_, err := db.GetEngine(ctx).Exec("UPDATE repository SET updated_unix = ? WHERE id = ?", updateTime.Unix(), repo.ID)
+	dropArticleIndexesOfOwner(ctx, repo.OwnerName)
 	return err
 }
 

@@ -1206,6 +1206,12 @@ func dropArticleIndexesOfOwner(ctx context.Context, ownerName string) {
 	}
 }
 
+// DropArticleIndexesOfOwner is the exported form of dropArticleIndexesOfOwner, for
+// renumbering writes that live outside the models package (create, delete, transfer).
+func DropArticleIndexesOfOwner(ctx context.Context, ownerName string) {
+	dropArticleIndexesOfOwner(ctx, ownerName)
+}
+
 func loadArticleIndexesOfOwner(ctx context.Context, lowerOwnerName string) (map[int64]int, error) {
 	var repos []*Repository
 	err := db.GetEngine(ctx).Table("repository").Select("repository.id, repository.subject_id").
