@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"testing"
 
+	"code.gitea.io/gitea/models/db"
+	issues_model "code.gitea.io/gitea/models/issues"
 	"code.gitea.io/gitea/models/renderhelper"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
@@ -141,4 +143,31 @@ func TestArticleCommitLink(t *testing.T) {
 		req := NewRequest(t, "GET", link)
 		session.MakeRequest(t, req, http.StatusOK)
 	})
+}
+
+// TestArticleMergedPullLinks covers the links of a merged change request: the merge event
+// and the title both point at the article it was merged into, through the links the
+// repository builds, so they keep the article index and select the merged version.
+func TestArticleMergedPullLinks(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{ID: 1})
+	require.True(t, pr.HasMerged)
+	require.NoError(t, pr.LoadBaseRepo(t.Context()))
+	require.NoError(t, db.Insert(t.Context(), &issues_model.Comment{
+		Type:     issues_model.CommentTypeMergePull,
+		IssueID:  pr.IssueID,
+		PosterID: pr.MergerID,
+	}))
+
+	repo := pr.BaseRepo
+	session := loginUser(t, "user2")
+	resp := session.MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("%s/pulls/%d", repo.LinkCtx(t.Context()), pr.Index)), http.StatusOK)
+	htmlDoc := NewHTMLParser(t, resp.Body)
+
+	event := htmlDoc.Find(".timeline-item.event .comment-text-line")
+	require.Equal(t, 1, event.Find("a.ui.sha").Length())
+	assert.Equal(t, repo.CommitLink(pr.MergedCommitID), event.Find("a.ui.sha").AttrOr("href", ""))
+	assert.Equal(t, repo.Link(), event.Find("b > a").AttrOr("href", ""))
+	assert.Equal(t, 1, htmlDoc.Find(`.pull-desc a[href="`+repo.Link()+`"]`).Length())
 }
