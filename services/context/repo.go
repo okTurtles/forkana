@@ -1238,7 +1238,7 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 		if repo_model.IsErrRepoNotExist(err) || repo_model.IsErrSubjectNotExist(err) {
 			ctx.NotFound(err)
 		} else {
-			ctx.ServerError("GetRepositoryByOwnerAndSubject", err)
+			ctx.ServerError("RepoAssignmentByOwnerAndSubject", err)
 		}
 		return
 	}
