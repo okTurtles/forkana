@@ -1112,37 +1112,14 @@ func findArticlesByOwnerAndSubjectID(ctx context.Context, ownerName string, subj
 // archived, so the most recently updated active one wins; archived ones are only
 // returned when the owner has no active repository left for the subject.
 func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName string) (*Repository, error) {
-	// First, get the subject by name
-	subject, err := GetSubjectByName(ctx, subjectName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Find the repository with this owner and subject_id
-	var repo Repository
-	has, err := db.GetEngine(ctx).Table("repository").Select("repository.*").
-		Join("INNER", "`user`", "`user`.id = repository.owner_id").
-		Where("repository.subject_id = ?", subject.ID).
-		And("`user`.lower_name = ?", strings.ToLower(ownerName)).
-		OrderBy(articleOrderBy).
-		NoAutoCondition().
-		Get(&repo)
-
-	if err != nil {
-		return nil, err
-	} else if !has {
-		return nil, ErrRepoNotExist{ID: 0, UID: 0, OwnerName: ownerName, Name: subjectName}
-	}
-
-	// Load the subject relation
-	repo.SubjectRelation = subject
-
-	return &repo, nil
+	// it is article index 1 by definition, so it shares the lookup rather than repeating
+	// the article order; an owner holds only a handful of articles per subject
+	return GetRepositoryByOwnerSubjectAndIndex(ctx, ownerName, subjectName, 1)
 }
 
 // GetRepositoryByOwnerSubjectAndIndex returns the index-th (1-based) repository the owner
-// holds for the subject. Index 1 is the same repository GetRepositoryByOwnerAndSubject
-// returns, so higher indexes address the owner's remaining, normally archived, articles.
+// holds for the subject. Index 1 is what GetRepositoryByOwnerAndSubject returns, so
+// higher indexes address the owner's remaining, normally archived, articles.
 func GetRepositoryByOwnerSubjectAndIndex(ctx context.Context, ownerName, subjectName string, index int) (*Repository, error) {
 	subject, err := GetSubjectByName(ctx, subjectName)
 	if err != nil {
