@@ -310,3 +310,28 @@ func TestArticleSubjectWithSlash(t *testing.T) {
 		session.MakeRequest(t, NewRequest(t, "GET", href), http.StatusOK)
 	}
 }
+
+// TestArticleHistoryVersionLinks covers the version links of the history mode: each one
+// selects its commit on the route the article was requested through, so they stay on the
+// permanent URL when the article was opened from it.
+func TestArticleHistoryVersionLinks(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	session := loginUser(t, owner.Name)
+	for _, base := range []string{
+		fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name),
+		fmt.Sprintf("/%s/%s", owner.Name, repo.Name),
+	} {
+		t.Run(base, func(t *testing.T) {
+			resp := session.MakeRequest(t, NewRequest(t, "GET", base+"?mode=history"), http.StatusOK)
+			links := NewHTMLParser(t, resp.Body).Find(`a[href*="version="]`)
+			require.Positive(t, links.Length())
+			for i := range links.Length() {
+				href := links.Eq(i).AttrOr("href", "")
+				assert.True(t, strings.HasPrefix(href, base+"?version="), "version link must stay on %q, got %q", base, href)
+			}
+			session.MakeRequest(t, NewRequest(t, "GET", links.First().AttrOr("href", "")), http.StatusOK)
+		})
+	}
+}
