@@ -265,3 +265,22 @@ func TestArticleSubRoutes(t *testing.T) {
 		}
 	}
 }
+
+// TestArticleLegacyRedirect covers the retired "/article/..." urls, which permanently redirect
+// to the routes that replaced them, keeping the sub-path, the query and the escaping.
+func TestArticleLegacyRedirect(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	for _, tc := range []struct{ from, to string }{
+		{"/article/user2/example-subject", "/subject/example-subject/user2"},
+		{"/article/user2/example-subject?version=abc", "/subject/example-subject/user2?version=abc"},
+		{"/article/user2/example-subject/pulls/2", "/subject/example-subject/user2/pulls/2"},
+		{"/article/user2/moon%20landing", "/subject/moon%20landing/user2"},
+		{"/article/repo/user2/repo1", "/user2/repo1"},
+	} {
+		t.Run(tc.from, func(t *testing.T) {
+			resp := MakeRequest(t, NewRequest(t, "GET", tc.from), http.StatusMovedPermanently)
+			assert.Equal(t, tc.to, resp.Header().Get("Location"))
+		})
+	}
+}

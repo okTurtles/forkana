@@ -1260,6 +1260,12 @@ func registerWebRoutes(m *web.Router) {
 	)
 	// end "/{username}/{reponame}/settings"
 
+	// Retired "/article/..." urls, permanently redirected to the routes that replaced them.
+	// Only GET is redirected: forms are always rendered with the current urls.
+	m.Get("/article/repo/{username}/{reponame}", repo.RedirectLegacyArticleRepo)
+	m.Get("/article/{username}/{subjectname}", repo.RedirectLegacyArticle)
+	m.Get("/article/{username}/{subjectname}/*", repo.RedirectLegacyArticle)
+
 	// Article route - shows commit view if version parameter is present, otherwise shows home
 	addArticleRoute(m, "", optSignIn, context.RepoAssignmentByOwnerAndSubject, repo.ArticleView)
 
