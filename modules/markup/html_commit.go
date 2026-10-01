@@ -18,8 +18,11 @@ import (
 // articleCommitLink builds a root-relative link to the article view at a specific
 // commit. The article routes have no "/commit/{sha}" path: a version is selected
 // through the "version" query parameter, see routers/web/repo.ArticleView.
-func articleCommitLink(owner, name, commitID string) string {
-	return LinkTypeRoot + "/subject/" + url.PathEscape(name) + "/" + url.PathEscape(owner) + "?version=" + url.QueryEscape(commitID)
+// The subject comes first in the url, ahead of the owner. The link is built from the
+// render metas, which carry no article index, so it always resolves against the owner's
+// current article for the subject, even when rendered inside one of their archived ones.
+func articleCommitLink(owner, subject, commitID string) string {
+	return LinkTypeRoot + "/subject/" + url.PathEscape(subject) + "/" + url.PathEscape(owner) + "?version=" + url.QueryEscape(commitID)
 }
 
 type anyHashPatternResult struct {
