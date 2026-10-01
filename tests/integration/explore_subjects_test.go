@@ -322,7 +322,8 @@ func TestExploreSubjectsExactMatchNotHiddenByFilters(t *testing.T) {
 		hrefs := make([]string, 0)
 		h.Find(`a[href^="` + setting.AppSubURL + `/subject/"]`).Each(func(_ int, s *goquery.Selection) {
 			href, _ := s.Attr("href")
-			// the subject namespace also holds the article urls, which are not subject links
+			// the subject namespace also holds the article urls, which are not subject links;
+			// a subject is always escaped as a single segment, so a "/" means an owner follows
 			if strings.Contains(strings.TrimPrefix(href, setting.AppSubURL+"/subject/"), "/") {
 				return
 			}

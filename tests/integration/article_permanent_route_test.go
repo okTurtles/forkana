@@ -284,3 +284,29 @@ func TestArticleLegacyRedirect(t *testing.T) {
 		})
 	}
 }
+
+// TestArticleSubjectWithSlash covers a subject whose name contains "/", as many Wikipedia
+// titles do. Every link must escape the subject as a single segment: spelled as two
+// segments, "/subject/AC/DC/user2" would be read as the subject "AC" of the owner "DC".
+func TestArticleSubjectWithSlash(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	subject, err := repo_model.GetOrCreateSubject(t.Context(), "AC/DC")
+	require.NoError(t, err)
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	repo.SubjectID, repo.SubjectRelation = subject.ID, nil
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "subject_id"))
+
+	articleLink := repo.LinkCtx(t.Context())
+	assert.Equal(t, "/subject/AC%2FDC/user2", articleLink)
+
+	session := loginUser(t, "user2")
+	resp := session.MakeRequest(t, NewRequest(t, "GET", articleLink), http.StatusOK)
+	hrefs := NewHTMLParser(t, resp.Body).Find(`a[href^="/subject/AC"]`)
+	require.Positive(t, hrefs.Length())
+	for i := range hrefs.Length() {
+		href := hrefs.Eq(i).AttrOr("href", "")
+		assert.True(t, strings.HasPrefix(href, "/subject/AC%2FDC"), "subject escaped as one segment: %s", href)
+		session.MakeRequest(t, NewRequest(t, "GET", href), http.StatusOK)
+	}
+}
