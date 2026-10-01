@@ -35,12 +35,17 @@ function buildSubjectUrlWithMode(base: string, view: ViewKey, mode?: string) {
   return url.pathname + url.search;
 }
 
-function buildArticleUrl(articleBase: string, selection: RepoSelection, mode?: string) {
+function buildArticleUrl(appSubUrl: string, articleBase: string, selection: RepoSelection, mode?: string) {
   // The server-built link already carries the article index when the owner holds several
   // articles for the subject, so it is preferred over the plain subject url, which always
-  // resolves to the owner's current article.
-  const path = selection.link ||
-    `${articleBase.replace(/\/+$/, '')}/${encodeURIComponent(selection.subject || selection.repo)}/${encodeURIComponent(selection.owner)}`;
+  // resolves to the owner's current article. A selection restored from storage has no
+  // link: the current article is then exactly the plain subject url, and an archived one
+  // is addressed by its permanent repository url.
+  let path = selection.link;
+  if (!path && selection.archived) {
+    path = `${appSubUrl.replace(/\/+$/, '')}/${encodeURIComponent(selection.owner)}/${encodeURIComponent(selection.repo)}`;
+  }
+  path ||= `${articleBase.replace(/\/+$/, '')}/${encodeURIComponent(selection.subject || selection.repo)}/${encodeURIComponent(selection.owner)}`;
   const url = new URL(path, window.location.origin);
   url.searchParams.set('view', 'article');
   if (mode && mode !== 'read') url.searchParams.set('mode', mode);
@@ -136,7 +141,7 @@ export function initRepoHistory() {
   // between modes never falls back to the vanity URL of another repository of the subject.
   function articleUrlFor(selection: RepoSelection, mode?: string) {
     if (!articleCanonical || !matchesSelection(initialSelection, selection)) {
-      return buildArticleUrl(articleBase, selection, mode);
+      return buildArticleUrl(appSubUrl, articleBase, selection, mode);
     }
     const url = new URL(articleCanonical, window.location.origin);
     url.searchParams.set('view', 'article');
