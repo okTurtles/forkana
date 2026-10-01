@@ -174,8 +174,6 @@ func transferOwnership(ctx context.Context, doer *user_model.User, newOwnerName 
 	if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "owner_id", "owner_name"); err != nil {
 		return fmt.Errorf("update owner: %w", err)
 	}
-	// the update above only dropped the new owner's cached article indexes
-	repo_model.DropArticleIndexesOfOwner(ctx, oldOwnerName)
 
 	// Remove redundant collaborators.
 	collaborators, _, err := repo_model.GetCollaborators(ctx, &repo_model.FindCollaborationOptions{RepoID: repo.ID})

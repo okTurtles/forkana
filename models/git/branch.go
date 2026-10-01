@@ -383,7 +383,9 @@ func RenameBranch(ctx context.Context, repo *repo_model.Repository, from, to str
 		isDefault := repo.DefaultBranch == from
 		if isDefault {
 			repo.DefaultBranch = to
+			// the update also bumps updated_unix, which renumbers articles
 			_, err = sess.ID(repo.ID).Cols("default_branch").Update(repo)
+			repo_model.DropArticleIndexes(ctx)
 			if err != nil {
 				return err
 			}

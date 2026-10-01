@@ -1180,19 +1180,19 @@ func articleIndexesOfOwner(ctx context.Context, ownerName string) (map[int64]int
 	return cache.GetWithContextCache(ctx, articleIndexesCacheGroup, strings.ToLower(ownerName), loadArticleIndexesOfOwner)
 }
 
-// dropArticleIndexesOfOwner drops the owner's cached article indexes. Every write that
-// can renumber them must call it, because the index of an article follows the rows of
-// its siblings rather than its own.
-func dropArticleIndexesOfOwner(ctx context.Context, ownerName string) {
+// DropArticleIndexes drops the cached article indexes. Every write that can renumber them
+// must call it, because the index of an article follows the rows of its siblings rather
+// than its own: inserting, deleting or transferring a subject-bound repository, and any
+// update of the columns of articleOrderBy, which includes the updated_unix that xorm bumps
+// on every update made without NoAutoTime.
+// The indexes of every owner are dropped, not just those of the written repository's
+// owner: a transfer renumbers two owners, and some writers only know the repository id.
+// Writes are rare within a request, so reloading the indexes costs at most a query per
+// owner linked to afterwards.
+func DropArticleIndexes(ctx context.Context) {
 	if c := cache.GetContextCache(ctx); c != nil {
-		c.Delete(articleIndexesCacheGroup, strings.ToLower(ownerName))
+		c.DeleteGroup(articleIndexesCacheGroup)
 	}
-}
-
-// DropArticleIndexesOfOwner is the exported form of dropArticleIndexesOfOwner, for
-// renumbering writes that live outside the models package (create, delete, transfer).
-func DropArticleIndexesOfOwner(ctx context.Context, ownerName string) {
-	dropArticleIndexesOfOwner(ctx, ownerName)
 }
 
 func loadArticleIndexesOfOwner(ctx context.Context, lowerOwnerName string) (map[int64]int, error) {

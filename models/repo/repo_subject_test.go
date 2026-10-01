@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -466,11 +467,25 @@ func TestArticleIndexWithContextCache(t *testing.T) {
 	assert.Equal(t, first, other.ArticleIndex(ctx))
 	assert.Equal(t, second, repo.ArticleIndex(ctx))
 
-	// archiving the article at the first position renumbers both, and the cached
-	// indexes must not survive that write
-	assert.NoError(t, repo_model.SetArchiveRepoState(ctx, other, true))
+	// every write below renumbers both articles, so the cached indexes must not survive it
+
+	// a raw updated_unix write that only knows the repository id
+	assert.NoError(t, repo_model.UpdateRepositoryUpdatedTime(ctx, repo.ID, time.Now().Add(time.Hour)))
 	assert.Equal(t, 1, repo.ArticleIndex(ctx))
 	assert.Equal(t, 2, other.ArticleIndex(ctx))
+
+	// an update made without NoAutoTime, which bumps updated_unix as a side effect
+	assert.NoError(t, repo_model.UpdateRepositoryUpdatedTime(ctx, other.ID, time.Now().Add(-time.Hour)))
+	assert.NoError(t, repo_model.UpdateRepositoryUpdatedTime(ctx, repo.ID, time.Now().Add(-2*time.Hour)))
+	assert.Equal(t, 2, repo.ArticleIndex(ctx))
+	assert.NoError(t, repo_model.SaveTopics(ctx, repo.ID, "renumbered"))
+	assert.Equal(t, 1, repo.ArticleIndex(ctx))
+	assert.Equal(t, 2, other.ArticleIndex(ctx))
+
+	// archiving the article at the first position
+	assert.NoError(t, repo_model.SetArchiveRepoState(ctx, repo, true))
+	assert.Equal(t, 1, other.ArticleIndex(ctx))
+	assert.Equal(t, 2, repo.ArticleIndex(ctx))
 }
 
 // TestRepositoryLinkTombstoneUsesSubject documents that a deleted article keeps an

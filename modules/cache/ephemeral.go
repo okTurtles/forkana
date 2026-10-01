@@ -76,6 +76,13 @@ func (cc *EphemeralCache) Delete(tp, key any) {
 	delete(cc.data[tp], key)
 }
 
+// DeleteGroup deletes every key of the given group
+func (cc *EphemeralCache) DeleteGroup(tp any) {
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
+	delete(cc.data, tp)
+}
+
 func GetWithEphemeralCache[T, K any](ctx context.Context, c *EphemeralCache, groupKey string, targetKey K, f func(context.Context, K) (T, error)) (T, error) {
 	v, has := c.Get(groupKey, targetKey)
 	if vv, ok := v.(T); has && ok {
