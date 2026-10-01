@@ -246,3 +246,22 @@ func TestArticlePermanentRoute(t *testing.T) {
 		assert.Equal(t, repoURL, app.AttrOr("data-article-canonical", ""))
 	})
 }
+
+// TestArticleSubRoutes covers the pages that are linked or redirected to under the article
+// link: they are built from ctx.Repo.RepoLink, so each must resolve under both article shapes.
+func TestArticleSubRoutes(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, _, subjectName := loadArticleRepo(t, 1)
+	session := loginUser(t, owner.Name)
+	for _, prefix := range []string{
+		fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name),
+		fmt.Sprintf("/subject/%s/%s/1", subjectName, owner.Name),
+	} {
+		for _, subPath := range []string{"/stars", "/forks", "/issues", "/issues/1", "/labels", "/wiki/raw/jpeg.jpg"} {
+			t.Run(prefix+subPath, func(t *testing.T) {
+				session.MakeRequest(t, NewRequest(t, "GET", prefix+subPath), http.StatusOK)
+			})
+		}
+	}
+}

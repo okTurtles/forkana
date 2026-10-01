@@ -1472,7 +1472,23 @@ func registerWebRoutes(m *web.Router) {
 	addArticleGroup(m, "/{type:issues}", addIssuesPullsViewRoutes, optSignIn, context.RepoAssignmentByOwnerAndSubject, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests))
 	addArticleGroup(m, "", func() {
 		m.Get("/comments/{id}/attachments", repo.GetCommentAttachments)
+		m.Get("/labels", repo.RetrieveLabelsForList, repo.Labels)
 	}, optSignIn, context.RepoAssignmentByOwnerAndSubject, reqRepoIssuesOrPullsReader)
+
+	// Pages that are linked or redirected to through ctx.Repo.RepoLink, which is the article
+	// link: the issue list and view (#N references in rendered markdown), and the stars and
+	// forks of the fork-history bubbles. They mirror the "/{username}/{reponame}" routes.
+	addArticleGroup(m, "/{type:issues}", func() {
+		m.Get("", repo.Issues)
+		m.Get("/{index}", repo.ViewIssue) // also redirects a pull request to ".../pulls/{index}"
+	}, optSignIn, context.RepoAssignmentByOwnerAndSubject, context.RequireUnitReader(unit.TypeIssues, unit.TypePullRequests, unit.TypeExternalTracker))
+	addArticleGroup(m, "", func() {
+		m.Get("/stars", starsEnabled, repo.Stars)
+		m.Get("/forks", reqUnitCodeReader, repo.Forks)
+	}, optSignIn, context.RepoAssignmentByOwnerAndSubject)
+	addArticleGroup(m, "/wiki", func() {
+		m.Get("/raw/*", repo.WikiRaw)
+	}, optSignIn, context.RepoAssignmentByOwnerAndSubject, repo.MustEnableWiki, reqUnitWikiReader)
 
 	// Article-based pull request update routes (comments, reactions, title, content, etc.)
 	addArticleGroup(m, "", func() {
