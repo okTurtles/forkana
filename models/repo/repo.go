@@ -1149,7 +1149,8 @@ func GetRepositoryByOwnerSubjectAndIndex(ctx context.Context, ownerName, subject
 // instead resolved for all of the owner's articles at once, cached for the duration of
 // the request, and dropped again by every write that can renumber them.
 func (repo *Repository) ArticleIndex(ctx context.Context) int {
-	if repo.SubjectID == 0 {
+	// a repository that is not stored yet has no siblings to be numbered against
+	if repo.SubjectID == 0 || repo.ID == 0 {
 		return 1
 	}
 
@@ -1161,6 +1162,9 @@ func (repo *Repository) ArticleIndex(ctx context.Context) int {
 	if index := indexes[repo.ID]; index > 0 {
 		return index
 	}
+	// index 1 is the vanity url, which resolves to the owner's current article rather than
+	// this one, so a miss (e.g. a renumbering write that did not drop the cache) is logged
+	log.Warn("Repository %d (%s) is missing from the article indexes of %s, falling back to index 1", repo.ID, repo.FullName(), repo.OwnerName)
 	return 1
 }
 
