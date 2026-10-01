@@ -441,9 +441,11 @@ func (repo *Repository) HTMLURL(ctxs ...context.Context) string {
 }
 
 // CommitLink returns a link to the article view at the given commit ID.
-// It does not check whether the ID actually exists.
-func (repo *Repository) CommitLink(commitID string) string {
-	return repo.commitLink(context.Background(), commitID)
+// It does not check whether the ID actually exists. Callers that have a ctx should
+// pass it, for the same reasons as LinkCtx.
+func (repo *Repository) CommitLink(commitID string, ctxs ...context.Context) string {
+	ctx := util.OptionalArg(ctxs, context.TODO())
+	return repo.commitLink(ctx, commitID)
 }
 
 // commitLink is CommitLink resolved against ctx, which the article index lookup of the

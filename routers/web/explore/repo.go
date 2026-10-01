@@ -180,7 +180,7 @@ func renderSubjectsSitemap(ctx *context.Context) {
 
 	m := sitemap.NewSitemap()
 	for _, item := range repos {
-		m.Add(sitemap.URL{URL: item.HTMLURL(), LastMod: item.UpdatedUnix.AsTimePtr()})
+		m.Add(sitemap.URL{URL: item.HTMLURL(ctx), LastMod: item.UpdatedUnix.AsTimePtr()})
 	}
 	ctx.Resp.Header().Set("Content-Type", "text/xml")
 	if _, err := m.WriteTo(ctx.Resp); err != nil {
