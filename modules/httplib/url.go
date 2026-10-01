@@ -190,7 +190,8 @@ func ParseGiteaSiteURL(ctx context.Context, s string) *GiteaSiteURL {
 		ret.OwnerName, ret.RepoName = fields[1], fields[0]
 		if len(fields) == 3 {
 			subPath := fields[2]
-			// the optional article index sits between the owner and the sub path
+			// the optional article index sits between the owner and the sub path; keep in
+			// sync with the "{articleindex:[0-9]+}" pattern of articleRoutePrefixes in routers/web
 			if head, tail, _ := strings.Cut(subPath, "/"); isAllDigits(head) {
 				subPath = tail
 			}

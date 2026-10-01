@@ -235,7 +235,7 @@ func ctxDataSet(args ...any) func(ctx *context.Context) {
 // "pulls", "_edit", ...) that follow the same segment.
 var articleRoutePrefixes = []string{
 	"/subject/{subjectname}/{username}",
-	"/subject/{subjectname}/{username}/{articleindex:[0-9]+}",
+	"/subject/{subjectname}/{username}/{articleindex:[0-9]+}", // also parsed by httplib.ParseGiteaSiteURL
 }
 
 // addArticleRoute registers the same GET route under every article url shape.
