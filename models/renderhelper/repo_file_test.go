@@ -30,7 +30,7 @@ func TestRepoFile(t *testing.T) {
 		assert.NoError(t, err)
 		// Repository 1 has subject_id 1, which is "example-subject"
 		assert.Equal(t,
-			`<p><a href="/article/user2/example-subject?version=65f1bf27bc3bf70f64657658635e66094edbcb4d" rel="nofollow"><code>65f1bf27bc</code></a>
+			`<p><a href="/subject/example-subject/user2?version=65f1bf27bc3bf70f64657658635e66094edbcb4d" rel="nofollow"><code>65f1bf27bc</code></a>
 #1
 <a href="/user2" rel="nofollow">@user2</a></p>
 `, rendered)
@@ -48,10 +48,10 @@ func TestRepoFile(t *testing.T) {
 		assert.NoError(t, err)
 		// Repository 1 has subject_id 1, which is "example-subject"
 		assert.Equal(t,
-			`<p><a href="/article/user2/example-subject/src/branch/main/test" rel="nofollow">/test</a>
-<a href="/article/user2/example-subject/src/branch/main/test" rel="nofollow">./test</a>
-<a href="/article/user2/example-subject/src/branch/main/image" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/media/branch/main/image" alt="/image"/></a>
-<a href="/article/user2/example-subject/src/branch/main/image" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/media/branch/main/image" alt="./image"/></a></p>
+			`<p><a href="/subject/example-subject/user2/src/branch/main/test" rel="nofollow">/test</a>
+<a href="/subject/example-subject/user2/src/branch/main/test" rel="nofollow">./test</a>
+<a href="/subject/example-subject/user2/src/branch/main/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/branch/main/image" alt="/image"/></a>
+<a href="/subject/example-subject/user2/src/branch/main/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/branch/main/image" alt="./image"/></a></p>
 `, rendered)
 	})
 
@@ -64,8 +64,8 @@ func TestRepoFile(t *testing.T) {
 `)
 		assert.NoError(t, err)
 		// Repository 1 has subject_id 1, which is "example-subject"
-		assert.Equal(t, `<p><a href="/article/user2/example-subject/src/commit/1234/test" rel="nofollow">/test</a>
-<a href="/article/user2/example-subject/src/commit/1234/image" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/media/commit/1234/image" alt="/image"/></a></p>
+		assert.Equal(t, `<p><a href="/subject/example-subject/user2/src/commit/1234/test" rel="nofollow">/test</a>
+<a href="/subject/example-subject/user2/src/commit/1234/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/commit/1234/image" alt="/image"/></a></p>
 `, rendered)
 	})
 
@@ -81,8 +81,8 @@ func TestRepoFile(t *testing.T) {
 `)
 		assert.NoError(t, err)
 		// Repository 1 has subject_id 1, which is "example-subject"
-		assert.Equal(t, `<a href="/article/user2/example-subject/src/commit/1234/my-dir/LINK" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/media/commit/1234/my-dir/LINK"/></a>
-<video src="/article/user2/example-subject/media/commit/1234/my-dir/LINK">
+		assert.Equal(t, `<a href="/subject/example-subject/user2/src/commit/1234/my-dir/LINK" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/commit/1234/my-dir/LINK"/></a>
+<video src="/subject/example-subject/user2/media/commit/1234/my-dir/LINK">
 </video>`, rendered)
 	})
 }
@@ -105,7 +105,7 @@ func TestRepoFileOrgMode(t *testing.T) {
 		// Repository 1 has subject_id 1, which is "example-subject"
 		assert.Equal(t, `<p>
 <a href="https://google.com/" rel="nofollow">https://google.com/</a>
-<a href="/article/user2/example-subject/src/commit/1234/my-dir/ImageLink.svg" rel="nofollow">The Image Desc</a></p>
+<a href="/subject/example-subject/user2/src/commit/1234/my-dir/ImageLink.svg" rel="nofollow">The Image Desc</a></p>
 `, rendered)
 	})
 

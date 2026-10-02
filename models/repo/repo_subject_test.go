@@ -4,10 +4,15 @@
 package repo_test
 
 import (
+	"context"
+	"strings"
 	"testing"
+	"time"
 
+	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
+	"code.gitea.io/gitea/modules/cache"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 
@@ -393,7 +398,7 @@ func TestGetRepositoriesBySubjectIDAndOwners_EmptyOwnerList(t *testing.T) {
 	assert.Empty(t, repos)
 }
 
-func TestRepositoryLinkArchivedUsesPermanentURL(t *testing.T) {
+func TestRepositoryLinkArchivedUsesArticleIndex(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
@@ -405,13 +410,124 @@ func TestRepositoryLinkArchivedUsesPermanentURL(t *testing.T) {
 	repo.SubjectID = subject.ID
 	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id"))
 
-	// active articles keep the subject vanity url
-	assert.Equal(t, setting.AppSubURL+"/article/"+repo.OwnerName+"/Link%20Routing%20Subject", repo.Link())
+	base := setting.AppSubURL + "/subject/Link%20Routing%20Subject/" + repo.OwnerName
 
-	// archived articles use the permanent repository url, which always resolves to
-	// that exact repository
-	repo.IsArchived = true
-	assert.Equal(t, repo.OperationsLink(), repo.Link())
+	// the owner's only article for the subject carries no index
+	assert.Equal(t, base, repo.Link())
+
+	// archiving it while the same owner holds an active article for the subject moves
+	// it past the first position, which the url spells out
+	other, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.OwnerID, other.OwnerID)
+	other.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, other, "subject_id"))
+
+	assert.NoError(t, repo_model.SetArchiveRepoState(ctx, repo, true))
+	assert.Equal(t, base+"/2", repo.Link())
+	assert.Equal(t, 2, repo.ArticleIndex(ctx))
+	assert.Equal(t, 1, other.ArticleIndex(ctx))
+}
+
+// TestArticleIndexWithContextCache covers the request level cache the article indexes
+// of an owner are resolved through: a page rendering many links reads them once, and a
+// write that renumbers them drops the cached ones.
+func TestArticleIndexWithContextCache(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := cache.WithCacheContext(t.Context())
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Cached Index Subject")
+	assert.NoError(t, err)
+	otherSubject, err := repo_model.GetOrCreateSubject(ctx, "Cached Index Other Subject")
+	assert.NoError(t, err)
+
+	repo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	other, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.OwnerID, other.OwnerID)
+
+	repo.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id"))
+	other.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, other, "subject_id"))
+
+	// the indexes of one owner are numbered per subject, so the articles of a second
+	// subject start at 1 again
+	third, err := repo_model.GetRepositoryByID(ctx, 3)
+	assert.NoError(t, err)
+	third.SubjectID = otherSubject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, third, "subject_id"))
+	assert.Equal(t, 1, third.ArticleIndex(ctx))
+
+	first, second := other.ArticleIndex(ctx), repo.ArticleIndex(ctx)
+	assert.Equal(t, 1, first)
+	assert.Equal(t, 2, second)
+	// repeating the lookups is served from the cache and agrees with itself
+	assert.Equal(t, first, other.ArticleIndex(ctx))
+	assert.Equal(t, second, repo.ArticleIndex(ctx))
+
+	// every write below renumbers both articles, so the cached indexes must not survive it
+
+	// a raw updated_unix write that only knows the repository id
+	assert.NoError(t, repo_model.UpdateRepositoryUpdatedTime(ctx, repo.ID, time.Now().Add(time.Hour)))
+	assert.Equal(t, 1, repo.ArticleIndex(ctx))
+	assert.Equal(t, 2, other.ArticleIndex(ctx))
+
+	// an update made without NoAutoTime, which bumps updated_unix as a side effect
+	assert.NoError(t, repo_model.UpdateRepositoryUpdatedTime(ctx, other.ID, time.Now().Add(-time.Hour)))
+	assert.NoError(t, repo_model.UpdateRepositoryUpdatedTime(ctx, repo.ID, time.Now().Add(-2*time.Hour)))
+	assert.Equal(t, 2, repo.ArticleIndex(ctx))
+	assert.NoError(t, repo_model.SaveTopics(ctx, repo.ID, "renumbered"))
+	assert.Equal(t, 1, repo.ArticleIndex(ctx))
+	assert.Equal(t, 2, other.ArticleIndex(ctx))
+
+	// archiving the article at the first position
+	assert.NoError(t, repo_model.SetArchiveRepoState(ctx, repo, true))
+	assert.Equal(t, 1, other.ArticleIndex(ctx))
+	assert.Equal(t, 2, repo.ArticleIndex(ctx))
+}
+
+// TestRepositoryLinkTombstoneUsesSubject documents that a deleted article keeps an
+// address inside the subject hierarchy, sorted behind every article the owner can
+// still show, so the deletion notice is served where the article used to be.
+func TestRepositoryLinkTombstoneUsesSubject(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Tombstone Routing Subject")
+	assert.NoError(t, err)
+
+	repo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	repo.SubjectID = subject.ID
+	repo.IsTombstoned = true
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id", "is_tombstoned"))
+
+	base := setting.AppSubURL + "/subject/Tombstone%20Routing%20Subject/" + repo.OwnerName
+
+	// the owner's only article for the subject carries no index, deleted or not
+	assert.Equal(t, base, repo.Link())
+
+	// a tombstone never stands in for an article the owner can still show, so an
+	// active one takes the first position and the tombstone spells out its index
+	other, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.OwnerID, other.OwnerID)
+	other.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, other, "subject_id"))
+
+	assert.Equal(t, base+"/2", repo.Link())
+	assert.Equal(t, 2, repo.ArticleIndex(ctx))
+	assert.Equal(t, 1, other.ArticleIndex(ctx))
+
+	found, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, repo.OwnerName, "Tombstone Routing Subject")
+	assert.NoError(t, err)
+	assert.Equal(t, other.ID, found.ID)
+
+	found, err = repo_model.GetRepositoryByOwnerSubjectAndIndex(ctx, repo.OwnerName, "Tombstone Routing Subject", 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.ID, found.ID)
 }
 
 // TestSubjectLookupPrefersActiveRepository documents that the vanity url of a subject
@@ -444,8 +560,49 @@ func TestSubjectLookupPrefersActiveRepository(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, active.ID, found.ID)
 
-	// the archived article is never linked through the article namespace, so its link
-	// cannot be captured by the active repository of the subject
-	assert.Equal(t, archived.OperationsLink(), archived.Link())
+	// the archived article sits behind the active one in the subject hierarchy, so its
+	// link carries the index that tells the two apart
+	assert.Equal(t, found.Link()+"/2", archived.Link())
 	assert.NotEqual(t, found.Link(), archived.Link())
+}
+
+// TestRepositoryHTMLURLResolvesArticleIndexOnContext covers the article index lookup
+// HTMLURL performs: it must run on the context it is given. A caller inside a write
+// transaction, such as the webhook payload built while an issue is created, would
+// otherwise have the index read on a second connection, which blocks until the
+// transaction it is nested in commits and deadlocks the request.
+func TestRepositoryHTMLURLResolvesArticleIndexOnContext(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Transactional Index Subject")
+	assert.NoError(t, err)
+
+	repo, err := repo_model.GetRepositoryByID(ctx, 1)
+	assert.NoError(t, err)
+	repo.SubjectID = subject.ID
+	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id"))
+
+	other, err := repo_model.GetRepositoryByID(ctx, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, repo.OwnerID, other.OwnerID)
+
+	// the owner's only article for the subject carries no index
+	assert.NotEmpty(t, repo.HTMLURL(ctx))
+	assert.NotContains(t, repo.HTMLURL(ctx), "/2")
+
+	// inside the transaction the second article is only visible to the transaction
+	// itself, so the index resolved there can only be the uncommitted one
+	assert.NoError(t, db.WithTx(ctx, func(ctx context.Context) error {
+		other.SubjectID = subject.ID
+		if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, other, "subject_id"); err != nil {
+			return err
+		}
+		if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {
+			return err
+		}
+		assert.Equal(t, 2, repo.ArticleIndex(ctx))
+		assert.True(t, strings.HasSuffix(repo.HTMLURL(ctx), "/2"), repo.HTMLURL(ctx))
+		return nil
+	}))
 }

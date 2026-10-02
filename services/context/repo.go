@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -545,7 +546,9 @@ func RepoAssignment(ctx *Context) {
 		return
 	}
 
-	ctx.Repo.RepoLink = repo.Link()
+	// the repository assignment runs before any handler writes, so the article index
+	// behind the link is resolved through the request cache
+	ctx.Repo.RepoLink = repo.LinkCtx(ctx)
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
@@ -644,8 +647,9 @@ func RepoAssignment(ctx *Context) {
 		ctx.Link == ctx.Repo.RepoLink+"/-/migrate/status"
 
 	// A tombstone only keeps the git data around so that its forks retain a valid
-	// ancestor. Nothing but the placeholder home page may be served, and the git
-	// repository is deliberately left unopened so no content can leak.
+	// ancestor. Nothing but the deletion notice may be served, at the article url the
+	// repository link resolves to, and the git repository is deliberately left unopened
+	// so no content can leak.
 	if ctx.Repo.Repository.IsTombstone() {
 		if ctx.Link != ctx.Repo.RepoLink {
 			ctx.Redirect(ctx.Repo.RepoLink)
@@ -877,7 +881,7 @@ func RepoRefByType(detectRefType git.RefType) func(*Context) {
 		if ctx.Repo.Repository.IsTombstone() {
 			// The git repo is intentionally not opened for tombstones, so no ref can be
 			// resolved. The repository assignment has already redirected every other route
-			// to the home link, whose handler renders the deletion notice.
+			// to the repository link, whose handler renders the deletion notice.
 			return
 		}
 		// Empty repository does not have reference information.
@@ -1155,7 +1159,7 @@ func RepoAssignmentBySubject(ctx *Context) {
 	ctx.Data["CanWriteActions"] = ctx.Repo.CanWrite(unit_model.TypeActions)
 
 	// Set up repository link data
-	ctx.Repo.RepoLink = repo.Link()
+	ctx.Repo.RepoLink = repo.LinkCtx(ctx)
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
@@ -1203,11 +1207,11 @@ func RepoAssignmentBySubject(ctx *Context) {
 }
 
 // RepoAssignmentByOwnerAndSubject assigns repository context by owner name and subject name
-// This is used for routes like /article/{username}/{subjectname} that display a specific user's repository.
-// When the owner also has an active article for the subject, the vanity url resolves to the
-// active one and the archived article is only reachable via its permanent repository url
-// "/{username}/{reponame}". An archived article is still served here when it is the owner's
-// only article for the subject.
+// This is used for routes like /subject/{subjectname}/{username} that display a specific
+// user's article for a subject. Without a trailing index the owner's current article is
+// served: the active one, or the most recently updated archived one when the owner has no
+// active article left for the subject. The owner's further articles, which are archived,
+// are addressed by appending their article index, "/subject/{subjectname}/{username}/{n}".
 func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	userName := ctx.PathParam("username")
 	subjectName := ctx.PathParam("subjectname")
@@ -1217,13 +1221,24 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 		return
 	}
 
-	// Find repository by owner and subject name
-	repo, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, userName, subjectName)
+	// Find repository by owner and subject name, honouring the optional article index
+	var repo *repo_model.Repository
+	var err error
+	if indexParam := ctx.PathParam("articleindex"); indexParam != "" {
+		index, convErr := strconv.Atoi(indexParam)
+		if convErr != nil || index < 1 {
+			ctx.NotFound(errors.New("invalid article index"))
+			return
+		}
+		repo, err = repo_model.GetRepositoryByOwnerSubjectAndIndex(ctx, userName, subjectName, index)
+	} else {
+		repo, err = repo_model.GetRepositoryByOwnerAndSubject(ctx, userName, subjectName)
+	}
 	if err != nil {
 		if repo_model.IsErrRepoNotExist(err) || repo_model.IsErrSubjectNotExist(err) {
 			ctx.NotFound(err)
 		} else {
-			ctx.ServerError("GetRepositoryByOwnerAndSubject", err)
+			ctx.ServerError("RepoAssignmentByOwnerAndSubject", err)
 		}
 		return
 	}
@@ -1247,7 +1262,7 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	}
 
 	// Set up repository link data
-	ctx.Repo.RepoLink = repo.Link()
+	ctx.Repo.RepoLink = repo.LinkCtx(ctx)
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
@@ -1259,8 +1274,8 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	ctx.Data["Owner"] = ctx.Repo.Repository.Owner
 
 	// A tombstone only keeps the git data around so that its forks retain a valid
-	// ancestor. Nothing but the placeholder article page may be served, and the git
-	// repository is deliberately left unopened so no content can leak.
+	// ancestor. Nothing but the deletion notice may be served, and the git repository
+	// is deliberately left unopened so no content can leak.
 	if ctx.Repo.Repository.IsTombstone() {
 		if ctx.Link != ctx.Repo.RepoLink {
 			ctx.Redirect(ctx.Repo.RepoLink)

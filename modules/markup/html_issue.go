@@ -167,7 +167,7 @@ func issueIndexPatternProcessor(ctx *RenderContext, node *html.Node) {
 				issueRepo = ctx.RenderOptions.Metas["repo"]
 			}
 			issuePath := util.Iif(ref.IsPull, "pulls", "issues")
-			linkHref := "/:root/" + util.URLJoin("article", issueOwner, issueRepo, issuePath, ref.Issue)
+			linkHref := "/:root/" + util.URLJoin("subject", issueRepo, issueOwner, issuePath, ref.Issue)
 
 			// at the moment, only render the issue index in a full line (or simple line) as icon+title
 			// otherwise it would be too noisy for "take #1 as an example" in a sentence

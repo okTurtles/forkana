@@ -346,7 +346,7 @@ func TestForkAndEditFormActionURL(t *testing.T) {
 
 	t.Run("FormActionUsesRepoOperationsLink", func(t *testing.T) {
 		// The form action should use RepoOperationsLink (/{owner}/{repo}/...)
-		// not RepoLink (which could be /article/... for subject repos)
+		// not RepoLink (which could be /subject/... for subject repos)
 		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
 		req := NewRequest(t, "GET", editURL)
 		resp := sessionNonOwner.MakeRequest(t, req, http.StatusOK)
@@ -357,10 +357,10 @@ func TestForkAndEditFormActionURL(t *testing.T) {
 		if form.Length() > 0 {
 			action, exists := form.Attr("action")
 			if exists {
-				// Action should contain the owner/repo path, not /article/
+				// Action should contain the owner/repo path, not /subject/
 				assert.Contains(t, action, owner.Name)
 				assert.Contains(t, action, repo.Name)
-				assert.NotContains(t, action, "/article/")
+				assert.NotContains(t, action, "/subject/")
 			}
 		}
 	})

@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"code.gitea.io/gitea/cmd"
 	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/graceful"
 	"code.gitea.io/gitea/modules/log"
@@ -31,6 +32,14 @@ import (
 var testE2eWebRoutes *web.Router
 
 func TestMain(m *testing.M) {
+	// The delegate hooks of the test repositories call setting.AppPath, which is this test
+	// executable, so the "hook" sub-commands have to be served before the test runner starts.
+	if len(os.Args) > 1 && os.Args[1] == "hook" {
+		_ = cmd.RunMainApp(cmd.NewMainApp(cmd.AppVersion{}), os.Args...)
+		log.GetManager().Close()
+		os.Exit(0)
+	}
+
 	defer log.GetManager().Close()
 
 	managerCtx, cancel := context.WithCancel(context.Background())

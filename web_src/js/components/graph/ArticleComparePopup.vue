@@ -9,8 +9,10 @@ defineProps<{
   articles: Array<{
     id: string;
     repoOwner?: string;
+    repoName?: string;
     repoSubject?: string;
     fullName?: string;
+    articleLink?: string;
     contributors: number;
     children: string[];
     updatedAt?: string;
@@ -29,6 +31,16 @@ function getOwner(article: { repoOwner?: string; fullName?: string }): string {
 
 function getSubjectName(article: { repoSubject?: string; fullName?: string }, subject: string): string {
   return article.repoSubject || article.fullName?.split('/')[1] || subject || 'Unknown';
+}
+
+/* The article url the server built carries the article index, which only the server
+   knows. Without it, the permanent repository url still names this exact article,
+   whereas "/{owner}/{subject}" names a repository only when it is named like its subject. */
+function getArticleHref(article: { repoOwner?: string; repoName?: string; fullName?: string; articleLink?: string }): string {
+  if (article.articleLink) return article.articleLink;
+  const owner = article.repoOwner || article.fullName?.split('/')[0] || '';
+  const repo = article.repoName || article.fullName?.split('/')[1] || '';
+  return `${window.config.appSubUrl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
 }
 </script>
 
@@ -57,7 +69,7 @@ function getSubjectName(article: { repoSubject?: string; fullName?: string }, su
             </svg>
           </div>
           <div class="compare-article-content">
-            <a class="compare-article-name" :href="`/${getOwner(article)}/${getSubjectName(article, subject)}`">
+            <a class="compare-article-name" :href="getArticleHref(article)">
               {{ getOwner(article) }} / {{ getSubjectName(article, subject) }}
             </a>
             <div class="compare-article-meta">

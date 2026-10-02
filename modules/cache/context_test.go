@@ -48,3 +48,20 @@ func TestWithCacheContext(t *testing.T) {
 	v, _ = c.Get(field, "my_config1")
 	assert.Nil(t, v)
 }
+
+func TestContextCacheDeleteGroup(t *testing.T) {
+	ctx := WithCacheContext(t.Context())
+	c := GetContextCache(ctx)
+	c.Put("group", 1, "a")
+	c.Put("group", 2, "b")
+	c.Put("other", 1, "c")
+
+	c.DeleteGroup("group")
+	_, has := c.Get("group", 1)
+	assert.False(t, has)
+	_, has = c.Get("group", 2)
+	assert.False(t, has)
+	v, has := c.Get("other", 1)
+	assert.True(t, has)
+	assert.Equal(t, "c", v)
+}

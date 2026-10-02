@@ -81,20 +81,21 @@
                                     {{ctx.Locale.Tr "repo.never_updated"}}
                                 {{end}}
                             </div>
+                            {{$repoLink := $node.Repository.LinkCtx ctx}}
                             <div class="item">
-                                <a href="{{$node.Repository.Link}}/stars" class="ui basic mini label">
+                                <a href="{{$repoLink}}/stars" class="ui basic mini label">
                                     {{svg "octicon-star" 12 "tw-mr-1"}}
                                     {{CountFmt $node.Repository.NumStars}}
                                 </a>
                             </div>
                             <div class="item">
-                                <a href="{{$node.Repository.Link}}/forks" class="ui basic mini label">
+                                <a href="{{$repoLink}}/forks" class="ui basic mini label">
                                     {{svg "octicon-repo-forked" 12 "tw-mr-1"}}
                                     {{CountFmt $node.Repository.NumForks}}
                                 </a>
                             </div>
                             <div class="item">
-                                <a href="{{$node.Repository.Link}}/issues" class="ui basic mini label">
+                                <a href="{{$repoLink}}/issues" class="ui basic mini label">
                                     {{svg "octicon-issue-opened" 12 "tw-mr-1"}}
                                     {{CountFmt $node.Repository.NumIssues}}
                                 </a>
@@ -188,7 +189,7 @@
     {{template "repo/header" .}}
 
     <div class="ui container">
-        {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscapeSegments .SubjectName) }}
+        {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName) }}
         <div id="repo-history-app"
             class="history-view-app"
             data-initial-view="{{.HistoryView}}"
@@ -197,10 +198,11 @@
             data-initial-repo="{{.Repository.Name}}"
             data-initial-subject="{{.SubjectName}}"
             data-initial-archived="{{if .Repository.IsArchived}}true{{end}}"
+            data-initial-link="{{.Repository.LinkCtx ctx}}"
             data-subject-url="{{$subjectPath}}"
             data-bubble-url="{{QueryBuild $subjectPath "view" "bubble"}}"
             data-table-url="{{QueryBuild $subjectPath "view" "table"}}"
-            data-article-base="{{printf "%s/article" AppSubUrl}}"
+            data-article-base="{{printf "%s/subject" AppSubUrl}}"
             {{if .ArticleLink}}data-article-canonical="{{.ArticleLink}}"{{end}}>
             {{template "shared/repo/bubble" .}}
             {{template "shared/repo/table" .}}

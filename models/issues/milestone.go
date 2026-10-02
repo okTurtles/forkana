@@ -278,7 +278,10 @@ func DeleteMilestoneByRepoID(ctx context.Context, repoID, id int64) error {
 		repo.NumMilestones = int(numMilestones)
 		repo.NumClosedMilestones = int(numClosedMilestones)
 
-		if _, err = db.GetEngine(ctx).ID(repo.ID).Cols("num_milestones, num_closed_milestones").Update(repo); err != nil {
+		// the update also bumps updated_unix, which renumbers articles
+		_, err = db.GetEngine(ctx).ID(repo.ID).Cols("num_milestones, num_closed_milestones").Update(repo)
+		repo_model.DropArticleIndexes(ctx)
+		if err != nil {
 			return err
 		}
 

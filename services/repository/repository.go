@@ -286,7 +286,10 @@ func updateRepository(ctx context.Context, repo *repo_model.Repository, visibili
 
 	e := db.GetEngine(ctx)
 
-	if _, err = e.ID(repo.ID).NoAutoTime().AllCols().Update(repo); err != nil {
+	// all columns are written, including those of the article order
+	_, err = e.ID(repo.ID).NoAutoTime().AllCols().Update(repo)
+	repo_model.DropArticleIndexes(ctx)
+	if err != nil {
 		return fmt.Errorf("update: %w", err)
 	}
 

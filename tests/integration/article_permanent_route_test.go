@@ -67,7 +67,7 @@ func TestArticlePermanentRoute(t *testing.T) {
 	})
 
 	t.Run("VanityURLStillRendersArticleView", func(t *testing.T) {
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", owner.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
 
@@ -117,9 +117,10 @@ func TestArticlePermanentRoute(t *testing.T) {
 
 		app := htmlDoc.Find("#repo-history-app")
 		require.Equal(t, 1, app.Length())
-		// the links of an archived article are built from its permanent repository URL
+		// the owner has no other article for the subject, so the archived one is still
+		// the first article of the subject hierarchy and carries no index
 		assert.Equal(t, "true", app.AttrOr("data-initial-archived", ""))
-		assert.Equal(t, repoURL, repo.Link())
+		assert.Equal(t, fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name), repo.Link())
 		notice := htmlDoc.Find("#article-archived-notice")
 		require.Equal(t, 1, notice.Length())
 		assert.False(t, notice.HasClass("tw-hidden"))
@@ -133,21 +134,83 @@ func TestArticlePermanentRoute(t *testing.T) {
 	t.Run("ArticleURLByRepositoryNameIsNotFound", func(t *testing.T) {
 		// the article namespace only resolves subject names, so a repository name that
 		// is not a subject name cannot address the article
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", owner.Name, repo.Name))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", repo.Name, owner.Name))
 		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 
 	t.Run("ArticleURLByUnknownRefIsNotFound", func(t *testing.T) {
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", owner.Name, "no-such-article"))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", "no-such-article", owner.Name))
 		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 
-	// ArticleView builds the article link straight from "subjectname" without a fallback,
-	// which holds because the route cannot match an empty segment.
-	t.Run("ArticleURLWithoutSubjectDoesNotReachTheArticleView", func(t *testing.T) {
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/", owner.Name))
-		resp := session.MakeRequest(t, req, NoExpectedStatus)
-		assert.NotEqual(t, http.StatusOK, resp.Code)
+	// ArticleView builds the article link straight from "subjectname" and "username"
+	// without a fallback, which holds because the route cannot match an empty segment.
+	t.Run("ArticleURLWithoutOwnerDoesNotReachTheArticleView", func(t *testing.T) {
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/", subjectName))
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		assert.NotEqual(t, "article", htmlDoc.Find("#repo-history-app").AttrOr("data-initial-view", ""))
+	})
+
+	// The article index is 1-based and only addresses articles the owner actually holds
+	// for the subject.
+	t.Run("ArticleIndexOutOfRangeIsNotFound", func(t *testing.T) {
+		for _, index := range []string{"0", "2"} {
+			req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/%s", subjectName, owner.Name, index))
+			session.MakeRequest(t, req, http.StatusNotFound)
+		}
+	})
+
+	// Once the owner holds a second article for the subject, the indexed url is the
+	// only address the article past the first one has, so it must both resolve to that
+	// exact repository and carry the index into every in-page link.
+	t.Run("IndexedArticleURLResolvesAndIsCarried", func(t *testing.T) {
+		other := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 2})
+		require.Equal(t, repo.OwnerID, other.OwnerID)
+		other.SubjectID = repo.SubjectID
+		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), other, "subject_id"))
+		t.Cleanup(func() {
+			other.SubjectID = 0
+			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), other, "subject_id")
+		})
+
+		// archiving it puts the original article behind the owner's active one
+		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, true))
+		t.Cleanup(func() {
+			_ = repo_model.SetArchiveRepoState(t.Context(), repo, false)
+		})
+
+		indexedURL := fmt.Sprintf("/subject/%s/%s/2", subjectName, owner.Name)
+		assert.Equal(t, indexedURL, repo.Link())
+		assert.Equal(t, fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name), other.Link())
+
+		// the unsuffixed url addresses the owner's active article, not the archived one
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name))
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		assert.Equal(t, other.Name,
+			NewHTMLParser(t, resp.Body).Find("#repo-history-app").AttrOr("data-initial-repo", ""))
+
+		req = NewRequest(t, "GET", indexedURL)
+		resp = session.MakeRequest(t, req, http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+
+		app := htmlDoc.Find("#repo-history-app")
+		require.Equal(t, 1, app.Length())
+		assert.Equal(t, "article", app.AttrOr("data-initial-view", ""))
+		assert.Equal(t, repo.Name, app.AttrOr("data-initial-repo", ""))
+		assert.Equal(t, "true", app.AttrOr("data-initial-archived", ""))
+		// both the link handed to the client and the canonical route keep the index,
+		// so switching modes cannot fall back to the owner's active article
+		assert.Equal(t, indexedURL, app.AttrOr("data-initial-link", ""))
+		assert.Equal(t, indexedURL, app.AttrOr("data-article-canonical", ""))
+
+		for _, mode := range []string{"read", "history"} {
+			tab := htmlDoc.Find(fmt.Sprintf(`#article-tabs a[data-article-tab=%q]`, mode))
+			require.Equal(t, 1, tab.Length(), "tab %q must be rendered", mode)
+			assert.True(t, strings.HasPrefix(tab.AttrOr("href", ""), indexedURL+"?"),
+				"tab %q must stay on %q, got %q", mode, indexedURL, tab.AttrOr("href", ""))
+		}
 	})
 
 	// The repository name of an article is the slug of its subject, so an archived
@@ -167,9 +230,9 @@ func TestArticlePermanentRoute(t *testing.T) {
 			_ = repo_model.SetArchiveRepoState(t.Context(), repo, false)
 		})
 
-		// the archived article is addressed by its permanent URL, which cannot be
-		// captured by the subject of the owner's active article
-		assert.Equal(t, repoURL, repo.Link())
+		// the archived article is the owner's only one for its subject, so the subject
+		// hierarchy still addresses it without an index
+		assert.Equal(t, fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name), repo.Link())
 
 		req := NewRequest(t, "GET", repoURL)
 		resp := session.MakeRequest(t, req, http.StatusOK)
@@ -182,4 +245,93 @@ func TestArticlePermanentRoute(t *testing.T) {
 		assert.Equal(t, "true", app.AttrOr("data-initial-archived", ""))
 		assert.Equal(t, repoURL, app.AttrOr("data-article-canonical", ""))
 	})
+}
+
+// TestArticleSubRoutes covers the pages that are linked or redirected to under the article
+// link: they are built from ctx.Repo.RepoLink, so each must resolve under both article shapes.
+func TestArticleSubRoutes(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, _, subjectName := loadArticleRepo(t, 1)
+	session := loginUser(t, owner.Name)
+	for _, prefix := range []string{
+		fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name),
+		fmt.Sprintf("/subject/%s/%s/1", subjectName, owner.Name),
+	} {
+		for _, subPath := range []string{"/stars", "/forks", "/issues", "/issues/1", "/labels", "/wiki/raw/jpeg.jpg"} {
+			t.Run(prefix+subPath, func(t *testing.T) {
+				session.MakeRequest(t, NewRequest(t, "GET", prefix+subPath), http.StatusOK)
+			})
+		}
+	}
+}
+
+// TestArticleLegacyRedirect covers the retired "/article/..." urls, which permanently redirect
+// to the routes that replaced them, keeping the sub-path, the query and the escaping.
+func TestArticleLegacyRedirect(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	for _, tc := range []struct{ from, to string }{
+		{"/article/user2/example-subject", "/subject/example-subject/user2"},
+		{"/article/user2/example-subject?version=abc", "/subject/example-subject/user2?version=abc"},
+		{"/article/user2/example-subject/pulls/2", "/subject/example-subject/user2/pulls/2"},
+		{"/article/user2/moon%20landing", "/subject/moon%20landing/user2"},
+		{"/article/repo/user2/repo1", "/user2/repo1"},
+	} {
+		t.Run(tc.from, func(t *testing.T) {
+			resp := MakeRequest(t, NewRequest(t, "GET", tc.from), http.StatusMovedPermanently)
+			assert.Equal(t, tc.to, resp.Header().Get("Location"))
+		})
+	}
+}
+
+// TestArticleSubjectWithSlash covers a subject whose name contains "/", as many Wikipedia
+// titles do. Every link must escape the subject as a single segment: spelled as two
+// segments, "/subject/AC/DC/user2" would be read as the subject "AC" of the owner "DC".
+func TestArticleSubjectWithSlash(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	subject, err := repo_model.GetOrCreateSubject(t.Context(), "AC/DC")
+	require.NoError(t, err)
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	repo.SubjectID, repo.SubjectRelation = subject.ID, nil
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "subject_id"))
+
+	articleLink := repo.LinkCtx(t.Context())
+	assert.Equal(t, "/subject/AC%2FDC/user2", articleLink)
+
+	session := loginUser(t, "user2")
+	resp := session.MakeRequest(t, NewRequest(t, "GET", articleLink), http.StatusOK)
+	hrefs := NewHTMLParser(t, resp.Body).Find(`a[href^="/subject/AC"]`)
+	require.Positive(t, hrefs.Length())
+	for i := range hrefs.Length() {
+		href := hrefs.Eq(i).AttrOr("href", "")
+		assert.True(t, strings.HasPrefix(href, "/subject/AC%2FDC"), "subject escaped as one segment: %s", href)
+		session.MakeRequest(t, NewRequest(t, "GET", href), http.StatusOK)
+	}
+}
+
+// TestArticleHistoryVersionLinks covers the version links of the history mode: each one
+// selects its commit on the route the article was requested through, so they stay on the
+// permanent URL when the article was opened from it.
+func TestArticleHistoryVersionLinks(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	session := loginUser(t, owner.Name)
+	for _, base := range []string{
+		fmt.Sprintf("/subject/%s/%s", subjectName, owner.Name),
+		fmt.Sprintf("/%s/%s", owner.Name, repo.Name),
+	} {
+		t.Run(base, func(t *testing.T) {
+			resp := session.MakeRequest(t, NewRequest(t, "GET", base+"?mode=history"), http.StatusOK)
+			links := NewHTMLParser(t, resp.Body).Find(`a[href*="version="]`)
+			require.Positive(t, links.Length())
+			for i := range links.Length() {
+				href := links.Eq(i).AttrOr("href", "")
+				assert.True(t, strings.HasPrefix(href, base+"?version="), "version link must stay on %q, got %q", base, href)
+			}
+			session.MakeRequest(t, NewRequest(t, "GET", links.First().AttrOr("href", "")), http.StatusOK)
+		})
+	}
 }
