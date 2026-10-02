@@ -288,18 +288,15 @@ func registerRepoFileEditorRoutes(m *web.Router, reqRepoCodeWriter func(*context
 			m.Post("/upload-remove", repo.RemoveUploadFileFromServer)
 		}, repo.MustBeAbleToUpload, reqRepoCodeWriter)
 		// Stores images pasted/dropped in the article/file editor as repo attachments
-		// (referenced by /attachments/{uuid}) instead of inline base64. Reuses
-		// UploadIssueAttachment: the resulting attachment is never linked to an issue/release,
-		// only referenced from the committed Markdown by RepoID, and ServeAttachment
-		// authorizes such attachments by repository read permission so embedded article
-		// images are visible to readers. Only "code reader" is required so the "fork and
-		// edit" flow can upload before the fork is created; the enclosing groups already
-		// enforce sign-in and repo read access.
-		// Trade-off: like pending issue attachments, an upload that is never followed by a
-		// commit becomes a permanent orphan (no issue/release to link it to for cleanup), and
-		// any signed-in reader can create one. This is the same orphan class as issue drafts
-		// and is accepted here to keep fork-and-edit working without pre-creating the fork.
-		m.Post("/editor-attachments", repo.UploadIssueAttachment)
+		// (referenced by /attachments/{uuid}) instead of inline base64. The upload is
+		// recorded with the article purpose, and once committed it is associated with the
+		// repository; ServeAttachment then authorizes it by that association, so embedded
+		// article images are visible to the readers of every repository keeping them alive.
+		// Only "code reader" is required so the "fork and edit" flow can upload before the
+		// fork is created; the enclosing groups already enforce sign-in and repo read access.
+		// Any signed-in reader can still create an abandoned upload; the article-attachment
+		// garbage collector eventually reclaims it.
+		m.Post("/editor-attachments", repo.UploadEditorAttachment)
 	}, repo.MustBeEditable, context.RepoMustNotBeArchived())
 }
 

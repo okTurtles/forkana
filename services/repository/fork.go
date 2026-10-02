@@ -358,7 +358,14 @@ func ForkRepository(ctx context.Context, doer, owner *user_model.User, opts Fork
 		}
 
 		// copy lfs files failure should not be ignored
-		return git_model.CopyLFS(ctx, repo, opts.BaseRepo)
+		if err = git_model.CopyLFS(ctx, repo, opts.BaseRepo); err != nil {
+			return err
+		}
+
+		// The bare clone below moves refs without running a hook, so the association
+		// hooks never see the forked article content. Inherit the base repository's
+		// associations here instead, sharing the very same attachments.
+		return repo_model.CopyArticleAttachments(ctx, repo.ID, opts.BaseRepo.ID)
 	})
 	if err != nil {
 		return nil, err

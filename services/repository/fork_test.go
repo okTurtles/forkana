@@ -15,6 +15,7 @@ import (
 	"code.gitea.io/gitea/modules/util"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestForkRepository(t *testing.T) {
@@ -87,6 +88,67 @@ func TestForkRepositoryCleanup(t *testing.T) {
 	exist, err = util.IsExist(repo_model.RepoPath(user2.Name, "test"))
 	assert.NoError(t, err)
 	assert.False(t, exist)
+}
+
+func TestForkRepositoryArticleAttachments(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	user5 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+	baseIDs, err := repo_model.GetRepoArticleAttachmentIDs(t.Context(), repo1.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, baseIDs)
+
+	t.Run("ForkInheritsAssociations", func(t *testing.T) {
+		fork, err := ForkRepository(t.Context(), user5, user5, ForkRepoOptions{
+			BaseRepo: repo1,
+			Name:     "article-fork",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, fork)
+
+		forkIDs, err := repo_model.GetRepoArticleAttachmentIDs(t.Context(), fork.ID)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, baseIDs, forkIDs)
+
+		// the fork shares the very same attachments, it does not get copies of them
+		for _, attachmentID := range forkIDs {
+			unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: attachmentID})
+		}
+
+		// deleting the fork drops its own associations and leaves the base's alone
+		require.NoError(t, DeleteRepositoryDirectly(t.Context(), fork.ID))
+
+		forkIDs, err = repo_model.GetRepoArticleAttachmentIDs(t.Context(), fork.ID)
+		require.NoError(t, err)
+		assert.Empty(t, forkIDs)
+
+		stillBaseIDs, err := repo_model.GetRepoArticleAttachmentIDs(t.Context(), repo1.ID)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, baseIDs, stillBaseIDs)
+	})
+
+	// A fork that fails after its database records exist must not leave associations
+	// behind: the rows would keep attachments alive for a repository nobody can reach.
+	t.Run("RollbackRemovesAssociations", func(t *testing.T) {
+		before := unittest.GetCount(t, &repo_model.ArticleAttachment{})
+
+		// create the repository directory so the fork fails after the database record exists
+		require.NoError(t, os.MkdirAll(repo_model.RepoPath(user5.Name, "article-fork"), os.ModePerm))
+		defer func() {
+			_ = util.RemoveAll(repo_model.RepoPath(user5.Name, "article-fork"))
+		}()
+
+		fork, err := ForkRepository(t.Context(), user5, user5, ForkRepoOptions{
+			BaseRepo: repo1,
+			Name:     "article-fork",
+		})
+		assert.Nil(t, fork)
+		assert.Error(t, err)
+
+		assert.Equal(t, before, unittest.GetCount(t, &repo_model.ArticleAttachment{}))
+	})
 }
 
 func TestConvertNormalToForkRepository(t *testing.T) {

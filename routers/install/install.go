@@ -429,6 +429,9 @@ func SubmitInstall(ctx *context.Context) {
 	if err := system_model.SetSettings(ctx, map[string]string{
 		setting.Config().Picture.DisableGravatar.DynKey():       strconv.FormatBool(form.DisableGravatar),
 		setting.Config().Picture.EnableFederatedAvatar.DynKey(): strconv.FormatBool(form.EnableFederatedAvatar),
+		// A fresh instance has no attachment predating the association table, so it starts with
+		// strict association-based authorization; the fallback exists only for upgrades.
+		setting.Config().Attachment.LegacyArticleFallback.DynKey(): "false",
 	}); err != nil {
 		ctx.RenderWithErr(ctx.Tr("install.save_config_failed", err), tplInstall, &form)
 		return

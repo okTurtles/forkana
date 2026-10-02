@@ -25,6 +25,7 @@ import (
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/routers/api/v1/utils"
 	asymkey_service "code.gitea.io/gitea/services/asymkey"
+	attachment_service "code.gitea.io/gitea/services/attachment"
 	pull_service "code.gitea.io/gitea/services/pull"
 )
 
@@ -317,6 +318,14 @@ func ChangeRepoFiles(ctx context.Context, repo *repo_model.Repository, doer *use
 	commit, err := t.GetCommit(commitHash)
 	if err != nil {
 		return nil, err
+	}
+
+	// The ref has moved, so the attachments this commit references may now be associated with the
+	// repository. This cannot happen earlier: modifyFile runs before the push and a failed push
+	// would leave associations describing a commit that does not exist. An internal push skips the
+	// post-receive path, so this is the only hook that sees it.
+	if err := attachment_service.AssociateArticleAttachmentsFromCommit(ctx, doer, repo, commit, treePaths); err != nil {
+		attachment_service.ReportAssociationFailure(repo, opts.NewBranch, err)
 	}
 
 	// FIXME: this call seems not right, why it needs to read the file content again

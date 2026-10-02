@@ -93,6 +93,26 @@ services:
       # pinned below under networks.forkana-network.ipam.config.subnet.
       GITEA__security__REVERSE_PROXY_TRUSTED_PROXIES: "127.0.0.0/8,::1/128,172.30.0.0/16"
       GITEA__oauth2__JWT_SECRET: ${FORKANA_JWT_SECRET}
+
+      # Article attachments
+      GITEA__attachment__ENABLED: "true"
+      # Serves pre-association attachments through their origin repository.
+      # `gitea admin backfill-article-attachments --finalize` switches it off in
+      # the database, which then takes precedence over this value.
+      GITEA__attachment__LEGACY_ARTICLE_FALLBACK: "true"
+      # Section names containing "." are written as _0X2E_ (environment-to-ini).
+      # Keep the collector off until the backfill has been finalized; it only
+      # reclaims attachments older than OLDER_THAN that nothing references.
+      GITEA__cron_0X2E_gc_article_attachments__ENABLED: "false"
+      GITEA__cron_0X2E_gc_article_attachments__RUN_AT_START: "false"
+      GITEA__cron_0X2E_gc_article_attachments__SCHEDULE: "@every 24h"
+      GITEA__cron_0X2E_gc_article_attachments__OLDER_THAN: "168h"
+      GITEA__cron_0X2E_gc_article_attachments__MAX_PER_RUN: "1000"
+      # Add-only repair of missing associations; never removes one.
+      GITEA__cron_0X2E_reconcile_article_attachments__ENABLED: "true"
+      GITEA__cron_0X2E_reconcile_article_attachments__RUN_AT_START: "false"
+      GITEA__cron_0X2E_reconcile_article_attachments__SCHEDULE: "@every 24h"
+      GITEA__cron_0X2E_reconcile_article_attachments__BATCH_SIZE: "50"
     volumes:
       - ${HOME}/forkana/data:/var/lib/gitea
       - ${HOME}/forkana/config:/etc/gitea

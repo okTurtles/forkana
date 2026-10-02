@@ -136,15 +136,52 @@ func (err ErrForkTreeTooLarge) Unwrap() error {
 	return util.ErrPermissionDenied
 }
 
+// forkAncestryDepthLimit returns how far up a fork chain a walk may go. It is
+// derived from MAX_FORK_TREE_NODES, which bounds a tree's node count; a
+// negative value disables that limit and zero forbids forking, so neither
+// carries a depth and both fall back to 300.
+func forkAncestryDepthLimit() int {
+	if depthLimit := setting.Repository.MaxForkTreeNodes; depthLimit > 0 {
+		return depthLimit
+	}
+	return 300
+}
+
+// ForkAncestorIDs returns the IDs of the repositories a repository descends
+// from in the recorded fork chain, nearest parent first. The walk is bounded
+// like FindForkTreeRoot's and ends at the first ancestor that no longer exists.
+func ForkAncestorIDs(ctx context.Context, repoID int64) ([]int64, error) {
+	ancestorIDs := make([]int64, 0, 4)
+	if repoID == 0 {
+		return ancestorIDs, nil
+	}
+
+	query := `
+		WITH RECURSIVE fork_ancestors AS (
+			-- Base case: start with the given repository
+			SELECT id, fork_id, is_fork, 1 as depth
+			FROM repository WHERE id = ?
+			UNION ALL
+			-- Recursive case: get the parent repository
+			SELECT r.id, r.fork_id, r.is_fork, fa.depth + 1
+			FROM repository r
+			INNER JOIN fork_ancestors fa ON r.id = fa.fork_id
+			WHERE fa.is_fork = ? AND fa.fork_id > 0 AND fa.depth < ?
+		)
+		-- Everything above the starting repository, closest ancestor first
+		SELECT id FROM fork_ancestors WHERE depth > 1 ORDER BY depth
+	`
+
+	if err := db.GetEngine(ctx).SQL(query, repoID, true, forkAncestryDepthLimit()).Find(&ancestorIDs); err != nil {
+		return nil, fmt.Errorf("failed to find fork ancestors: %w", err)
+	}
+	return ancestorIDs, nil
+}
+
 // FindForkTreeRoot finds the root repository of a fork tree by traversing up the fork chain
 // using a single recursive SQL query (Common Table Expression).
 func FindForkTreeRoot(ctx context.Context, repoID int64) (int64, error) {
-	// Use MaxForkTreeNodes as depth limit derived from MAX_FORK_TREE_NODES,
-	// defaulting to 300 if disabled or zero
-	depthLimit := setting.Repository.MaxForkTreeNodes
-	if depthLimit <= 0 {
-		depthLimit = 300
-	}
+	depthLimit := forkAncestryDepthLimit()
 
 	query := `
 		WITH RECURSIVE fork_ancestors AS (

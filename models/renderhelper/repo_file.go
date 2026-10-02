@@ -10,6 +10,7 @@ import (
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/markup"
+	"code.gitea.io/gitea/modules/markup/attachmentref"
 	"code.gitea.io/gitea/modules/util"
 )
 
@@ -31,6 +32,12 @@ func (r *RepoFile) IsCommitIDExisting(commitID string) bool {
 
 func (r *RepoFile) ResolveLink(link, preferLinkType string) (finalLink string) {
 	linkType, link := markup.ParseRenderedLink(link, preferLinkType)
+	// An attachment written as "/attachments/{uuid}" (or "attachments/{uuid}") is not a file
+	// of the repository: resolving it under "media/{ref}" or "src/{ref}" yields a 404. Serve it
+	// from the global attachment route, as an absolute attachment URL in the content would be.
+	if (linkType == markup.LinkTypeMedia || linkType == markup.LinkTypeDefault) && attachmentref.IsAttachmentPath(link) {
+		return r.ctx.ResolveLinkRoot(link)
+	}
 	switch linkType {
 	case markup.LinkTypeRoot:
 		finalLink = r.ctx.ResolveLinkRoot(link)

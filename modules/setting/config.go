@@ -52,9 +52,21 @@ type RepositoryStruct struct {
 	GitGuideRemoteName *config.Value[string]
 }
 
+// AttachmentStruct holds the attachment settings an administrator or the
+// article-attachment backfill may change at runtime.
+type AttachmentStruct struct {
+	// LegacyArticleFallback authorizes an attachment that carries no article
+	// association by the read permission of the repository it was uploaded to.
+	// It is the transitional compatibility path for rows predating the
+	// association table: it is on for upgraded instances until the backfill is
+	// finalized, and off for fresh installations, which start strict.
+	LegacyArticleFallback *config.Value[bool]
+}
+
 type ConfigStruct struct {
 	Picture    *PictureStruct
 	Repository *RepositoryStruct
+	Attachment *AttachmentStruct
 }
 
 var (
@@ -72,6 +84,10 @@ func initDefaultConfig() {
 		Repository: &RepositoryStruct{
 			OpenWithEditorApps: config.ValueJSON[OpenWithEditorAppsType]("repository.open-with.editor-apps"),
 			GitGuideRemoteName: config.ValueJSON[string]("repository.git-guide-remote-name").WithDefault("origin"),
+		},
+		Attachment: &AttachmentStruct{
+			LegacyArticleFallback: config.ValueJSON[bool]("attachment.legacy_article_fallback").WithDefault(true).
+				WithFileConfig(config.CfgSecKey{Sec: "attachment", Key: "LEGACY_ARTICLE_FALLBACK"}),
 		},
 	}
 }
