@@ -351,12 +351,12 @@ func syncTopicsInRepository(ctx context.Context, repoID int64) error {
 		return err
 	}
 
-	if _, err := db.GetEngine(ctx).ID(repoID).Cols("topics").Update(&Repository{
+	// the update also bumps updated_unix, which renumbers articles
+	_, err := db.GetEngine(ctx).ID(repoID).Cols("topics").Update(&Repository{
 		Topics: topicNames,
-	}); err != nil {
-		return err
-	}
-	return nil
+	})
+	DropArticleIndexes(ctx)
+	return err
 }
 
 // CountOrphanedAttachments returns the number of topics that don't belong to any repository.

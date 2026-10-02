@@ -136,7 +136,7 @@ func DispatchActionWorkflow(ctx reqctx.RequestContext, doer *user_model.User, re
 		return err
 	}
 
-	giteaCtx := GenerateGiteaContext(run, nil)
+	giteaCtx := GenerateGiteaContext(ctx, run, nil)
 
 	workflows, err = jobparser.Parse(content, jobparser.WithGitContext(giteaCtx.ToGitHubContext()))
 	if err != nil {

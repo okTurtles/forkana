@@ -274,7 +274,7 @@ func ViewPost(ctx *context_module.Context) {
 
 	resp.State.Run.Commit = ViewCommit{
 		ShortSha: base.ShortSha(run.CommitSHA),
-		Link:     run.Repo.CommitLink(run.CommitSHA),
+		Link:     run.Repo.CommitLink(run.CommitSHA, ctx),
 		Pusher:   pusher,
 		Branch:   branch,
 	}

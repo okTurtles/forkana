@@ -125,7 +125,7 @@ com 88fc37a3c0a4dda553bdcfc80c178a58247f42fb mit
 <span class="emoji" aria-label="thumbs up">👍</span>
 <a href="mailto:mail@domain.com">mail@domain.com</a>
 <a href="/mention-user">@mention-user</a> test
-<a href="/article/user13/repo11/issues/123" class="ref-issue">#123</a>
+<a href="/subject/repo11/user13/issues/123" class="ref-issue">#123</a>
   space`
 		assert.Equal(t, expected, string(newTestRenderUtils(t).RenderCommitBody(testInput(), mockRepo)))
 	})
@@ -160,7 +160,7 @@ com 88fc37a3c0a4dda553bdcfc80c178a58247f42fb mit
 <span class="emoji" aria-label="thumbs up">👍</span>
 mail@domain.com
 @mention-user test
-<a href="/article/user13/repo11/issues/123" class="ref-issue">#123</a>
+<a href="/subject/repo11/user13/issues/123" class="ref-issue">#123</a>
   space<SPACE><SPACE>
 `
 		expected = strings.ReplaceAll(expected, "<SPACE>", " ")

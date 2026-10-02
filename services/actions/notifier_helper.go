@@ -357,7 +357,7 @@ func handleWorkflows(
 			continue
 		}
 
-		giteaCtx := GenerateGiteaContext(run, nil)
+		giteaCtx := GenerateGiteaContext(ctx, run, nil)
 
 		jobs, err := jobparser.Parse(dwf.Content, jobparser.WithVars(vars), jobparser.WithGitContext(giteaCtx.ToGitHubContext()))
 		if err != nil {
@@ -566,7 +566,7 @@ func handleSchedules(
 			continue
 		}
 
-		giteaCtx := GenerateGiteaContext(run.ToActionRun(), nil)
+		giteaCtx := GenerateGiteaContext(ctx, run.ToActionRun(), nil)
 
 		jobs, err := jobparser.Parse(dwf.Content, jobparser.WithVars(vars), jobparser.WithGitContext(giteaCtx.ToGitHubContext()))
 		if err != nil {

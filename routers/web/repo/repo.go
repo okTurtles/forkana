@@ -305,7 +305,7 @@ func CreatePost(ctx *context.Context) {
 			if subject == "" {
 				subject = repo.Name
 			}
-			ctx.Redirect(setting.AppSubURL + "/subject/" + util.PathEscapeSegments(subject) + "?view=bubble")
+			ctx.Redirect(setting.AppSubURL + "/subject/" + url.PathEscape(subject) + "?view=bubble")
 			return
 		}
 	} else {
@@ -330,7 +330,7 @@ func CreatePost(ctx *context.Context) {
 			if subject == "" {
 				subject = repo.Name
 			}
-			ctx.Redirect(setting.AppSubURL + "/subject/" + util.PathEscapeSegments(subject) + "?view=bubble")
+			ctx.Redirect(setting.AppSubURL + "/subject/" + url.PathEscape(subject) + "?view=bubble")
 			return
 		}
 	}
@@ -768,7 +768,7 @@ func getRepositoryByOwnerIDAndSubjectID(ctx *context.Context, ownerID, subjectID
 // Unlike handleCreateError, this function uses flash messages and redirects back to the subject page
 // instead of rendering a template, since CreateFirstArticle is a redirect-based flow.
 func handleCreateFirstArticleError(ctx *context.Context, err error, subjectName string) {
-	subjectURL := setting.AppSubURL + "/subject/" + util.PathEscapeSegments(subjectName) + "?view=bubble"
+	subjectURL := setting.AppSubURL + "/subject/" + url.PathEscape(subjectName) + "?view=bubble"
 
 	switch {
 	case repo_model.IsErrReachLimitOfRepo(err):

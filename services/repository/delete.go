@@ -101,6 +101,8 @@ func DeleteRepositoryDirectly(ctx context.Context, repoID int64, ignoreOrgTeams 
 	if err := deleteDBRepository(ctx, repoID); err != nil {
 		return err
 	}
+	// the siblings of the deleted article shift down
+	repo_model.DropArticleIndexes(ctx)
 
 	if org != nil && org.IsOrganization() {
 		teams, err := organization.FindOrgTeams(ctx, org.ID)

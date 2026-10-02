@@ -16,7 +16,7 @@
 					<p class="tw-flex tw-items-center tw-gap-2 tw-italic tw-text-sm text muted tw-mb-3">
 						{{svg "octicon-filter" 16}} {{ctx.Locale.Tr "search.exact_page_exists_not_shown" .ExactSubject.Name}}
 					</p>
-					<a class="ui basic button" href="{{AppSubUrl}}/subject/{{PathEscapeSegments .ExactSubject.Name}}">
+					<a class="ui basic button" href="{{AppSubUrl}}/subject/{{PathEscape .ExactSubject.Name}}">
 						{{ctx.Locale.Tr "search.view_existing_subject"}}
 					</a>
 				</div>

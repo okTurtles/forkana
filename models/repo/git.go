@@ -31,6 +31,8 @@ const (
 
 // UpdateDefaultBranch updates the default branch
 func UpdateDefaultBranch(ctx context.Context, repo *Repository) error {
+	// the update also bumps updated_unix, which renumbers articles
 	_, err := db.GetEngine(ctx).ID(repo.ID).Cols("default_branch").Update(repo)
+	DropArticleIndexes(ctx)
 	return err
 }

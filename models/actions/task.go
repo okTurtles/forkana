@@ -91,11 +91,11 @@ func (task *ActionTask) GetRunLink() string {
 	return task.Job.Run.Link()
 }
 
-func (task *ActionTask) GetCommitLink() string {
+func (task *ActionTask) GetCommitLink(ctx context.Context) string {
 	if task.Job == nil || task.Job.Run == nil || task.Job.Run.Repo == nil {
 		return ""
 	}
-	return task.Job.Run.Repo.CommitLink(task.CommitSHA)
+	return task.Job.Run.Repo.CommitLink(task.CommitSHA, ctx)
 }
 
 func (task *ActionTask) GetRepoName() string {

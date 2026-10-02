@@ -1,7 +1,6 @@
 import {GET} from '../modules/fetch.ts';
 import {createElementFromHTML, hideElem, showElem, toggleElem} from '../utils/dom.ts';
 import {html, htmlEscape, htmlRaw} from '../utils/html.ts';
-import {pathEscapeSegments} from '../utils/url.ts';
 
 const {appSubUrl} = window.config;
 
@@ -123,7 +122,7 @@ class HomeSearch {
 
   private render(names: string[], keyword: string): void {
     this.suggestions.replaceChildren(...names.map((name, i) => createElementFromHTML(
-      html`<a id="home-search-suggestion-${i}" class="home-search-suggestion" role="option" aria-selected="false" href="${appSubUrl}/subject/${htmlRaw(pathEscapeSegments(name))}">${htmlRaw(highlightKeyword(name, keyword))}</a>`,
+      html`<a id="home-search-suggestion-${i}" class="home-search-suggestion" role="option" aria-selected="false" href="${appSubUrl}/subject/${htmlRaw(encodeURIComponent(name))}">${htmlRaw(highlightKeyword(name, keyword))}</a>`,
     )));
     this.setActive(-1);
     if (!names.length) {

@@ -349,9 +349,9 @@ func (n *Notification) Link(ctx context.Context) string {
 		}
 		return n.Issue.Link()
 	case NotificationSourceCommit:
-		return n.Repository.CommitLink(n.CommitID)
+		return n.Repository.CommitLink(n.CommitID, ctx)
 	case NotificationSourceRepository, NotificationSourceRepoTransferRejected:
-		return n.Repository.Link()
+		return n.Repository.LinkCtx(ctx)
 	}
 	return ""
 }
