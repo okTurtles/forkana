@@ -88,6 +88,18 @@ func ExtractAttachmentUUIDs(content string) []string {
 	return uuids
 }
 
+// IsAttachmentPath reports whether link is the bare attachment path that editors
+// write, "/attachments/{uuid}" or "attachments/{uuid}", optionally followed by a
+// query string or fragment. Unlike ExtractAttachmentUUIDs it judges a single
+// link as written, without resolving hosts or longer scoped paths.
+func IsAttachmentPath(link string) bool {
+	if i := strings.IndexAny(link, "?#"); i >= 0 {
+		link = link[:i]
+	}
+	rest, ok := strings.CutPrefix(strings.TrimPrefix(link, "/"), marker)
+	return ok && len(rest) == uuidLen && uuidPattern.MatchString(rest)
+}
+
 // uuidAt reads a well-formed UUID from the start of s, rejecting a longer
 // token that merely begins with one.
 func uuidAt(s string) (string, bool) {

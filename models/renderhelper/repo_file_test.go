@@ -69,6 +69,26 @@ func TestRepoFile(t *testing.T) {
 `, rendered)
 	})
 
+	t.Run("AttachmentPaths", func(t *testing.T) {
+		rctx := NewRenderContextRepoFile(t.Context(), repo1, RepoFileOptions{CurrentRefPath: "commit/1234"}).
+			WithMarkupType(markdown.MarkupName)
+		rendered, err := markup.RenderString(rctx, `
+![a](/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11)
+![b](attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11)
+[c](/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11)
+![d](/attachments/not-a-uuid)
+`)
+		assert.NoError(t, err)
+		// Attachment paths resolve to the global attachment route at any ref, while a path
+		// that is not an attachment still resolves inside the repository.
+		assert.Equal(t,
+			`<p><a href="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" target="_blank" rel="nofollow noopener"><img src="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" alt="a"/></a>
+<a href="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" target="_blank" rel="nofollow noopener"><img src="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" alt="b"/></a>
+<a href="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" rel="nofollow">c</a>
+<a href="/article/user2/example-subject/src/commit/1234/attachments/not-a-uuid" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/media/commit/1234/attachments/not-a-uuid" alt="d"/></a></p>
+`, rendered)
+	})
+
 	t.Run("WithCurrentRefPathByTag", func(t *testing.T) {
 		rctx := NewRenderContextRepoFile(t.Context(), repo1, RepoFileOptions{
 			CurrentRefPath:  "/commit/1234",

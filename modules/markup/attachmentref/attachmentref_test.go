@@ -109,3 +109,28 @@ func TestExtractAttachmentUUIDsRefPrefixCap(t *testing.T) {
 	beyond := strings.Repeat("x", maxRefPrefix) + "/attachments/" + uuidA
 	assert.Empty(t, ExtractAttachmentUUIDs(beyond))
 }
+
+func TestIsAttachmentPath(t *testing.T) {
+	cases := []struct {
+		link     string
+		expected bool
+	}{
+		{"/attachments/" + uuidA, true},
+		{"attachments/" + uuidA, true},
+		{"/attachments/" + uuidA + "?inline=1", true},
+		{"/attachments/" + uuidA + "#top", true},
+		{"/attachments/" + strings.ToUpper(uuidA), true},
+		{"", false},
+		{"/attachments/", false},
+		{"/attachments/not-a-uuid", false},
+		{"/attachments/" + uuidA + "x", false},
+		{"/attachments/" + uuidA + "/extra", false},
+		{"./attachments/" + uuidA, false},
+		{"/user2/repo1/attachments/" + uuidA, false},
+		{"https://forkana.example/attachments/" + uuidA, false},
+		{"/image", false},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.expected, IsAttachmentPath(c.link), c.link)
+	}
+}
