@@ -85,7 +85,7 @@ func TestRepoFile(t *testing.T) {
 			`<p><a href="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" target="_blank" rel="nofollow noopener"><img src="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" alt="a"/></a>
 <a href="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" target="_blank" rel="nofollow noopener"><img src="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" alt="b"/></a>
 <a href="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" rel="nofollow">c</a>
-<a href="/article/user2/example-subject/src/commit/1234/attachments/not-a-uuid" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/media/commit/1234/attachments/not-a-uuid" alt="d"/></a></p>
+<a href="/subject/example-subject/user2/src/commit/1234/attachments/not-a-uuid" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/commit/1234/attachments/not-a-uuid" alt="d"/></a></p>
 `, rendered)
 	})
 
