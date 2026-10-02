@@ -39,21 +39,21 @@ func TestArticleRoutePermissions(t *testing.T) {
 
 	t.Run("UnauthenticatedUserCanViewPublicArticle", func(t *testing.T) {
 		// Unauthenticated users should be able to view public articles
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, user2.Name))
 		resp := MakeRequest(t, req, http.StatusOK)
 		assert.Contains(t, resp.Body.String(), subjectName)
 	})
 
 	t.Run("UnauthenticatedUserCannotEditArticle", func(t *testing.T) {
 		// Unauthenticated users should be redirected to login when accessing edit routes
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_edit/master/README.md", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_edit/master/README.md", subjectName, user2.Name))
 		MakeRequest(t, req, http.StatusSeeOther) // Redirects to login page
 	})
 
 	t.Run("AuthenticatedNonOwnerCanViewPublicArticle", func(t *testing.T) {
 		// Authenticated non-owner should be able to view public articles
 		session := loginUser(t, user4.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, user2.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		assert.Contains(t, resp.Body.String(), subjectName)
 	})
@@ -63,14 +63,14 @@ func TestArticleRoutePermissions(t *testing.T) {
 		// This is consistent with Gitea's permission model where readers can view the edit page
 		// but cannot POST changes without write permission
 		session := loginUser(t, user4.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_edit/master/README.md", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_edit/master/README.md", subjectName, user2.Name))
 		session.MakeRequest(t, req, http.StatusOK)
 	})
 
 	t.Run("OwnerCanViewOwnArticle", func(t *testing.T) {
 		// Repository owner should be able to view their own article
 		session := loginUser(t, user2.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, user2.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		assert.Contains(t, resp.Body.String(), subjectName)
 	})
@@ -78,7 +78,7 @@ func TestArticleRoutePermissions(t *testing.T) {
 	t.Run("OwnerCanEditOwnArticle", func(t *testing.T) {
 		// Repository owner should be able to access edit routes
 		session := loginUser(t, user2.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_edit/master/README.md", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_edit/master/README.md", subjectName, user2.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		assert.Contains(t, resp.Body.String(), "README.md")
 	})
@@ -107,21 +107,21 @@ func TestArticleRoutePrivateRepository(t *testing.T) {
 
 	t.Run("UnauthenticatedUserCannotViewPrivateArticle", func(t *testing.T) {
 		// Unauthenticated users should not be able to view private articles
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, user2.Name))
 		MakeRequest(t, req, http.StatusNotFound)
 	})
 
 	t.Run("NonCollaboratorCannotViewPrivateArticle", func(t *testing.T) {
 		// Authenticated non-collaborator should not be able to view private articles
 		session := loginUser(t, user4.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, user2.Name))
 		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 
 	t.Run("OwnerCanViewPrivateArticle", func(t *testing.T) {
 		// Repository owner should be able to view their own private article
 		session := loginUser(t, user2.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, user2.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		assert.Contains(t, resp.Body.String(), subjectName)
 	})
@@ -134,12 +134,12 @@ func TestArticleRouteNonExistentSubject(t *testing.T) {
 	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
 	t.Run("NonExistentSubjectReturns404", func(t *testing.T) {
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/nonexistent-subject-12345", user2.Name))
+		req := NewRequest(t, "GET", "/subject/nonexistent-subject-12345/"+user2.Name)
 		MakeRequest(t, req, http.StatusNotFound)
 	})
 
 	t.Run("NonExistentUserReturns404", func(t *testing.T) {
-		req := NewRequest(t, "GET", "/article/nonexistentuser12345/some-subject")
+		req := NewRequest(t, "GET", "/subject/some-subject/nonexistentuser12345")
 		MakeRequest(t, req, http.StatusNotFound)
 	})
 }
@@ -164,39 +164,39 @@ func TestArticleFileOperationPermissions(t *testing.T) {
 
 	t.Run("NonOwnerCannotCreateFile", func(t *testing.T) {
 		session := loginUser(t, user4.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_new/master/", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_new/master/", subjectName, user2.Name))
 		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 
 	t.Run("OwnerCanCreateFile", func(t *testing.T) {
 		session := loginUser(t, user2.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_new/master/", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_new/master/", subjectName, user2.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		assert.Contains(t, resp.Body.String(), "New File")
 	})
 
 	t.Run("NonOwnerCannotUploadFile", func(t *testing.T) {
 		session := loginUser(t, user4.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_upload/master/", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_upload/master/", subjectName, user2.Name))
 		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 
 	t.Run("OwnerCanUploadFile", func(t *testing.T) {
 		session := loginUser(t, user2.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_upload/master/", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_upload/master/", subjectName, user2.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		assert.Contains(t, resp.Body.String(), "Upload")
 	})
 
 	t.Run("NonOwnerCannotDeleteFile", func(t *testing.T) {
 		session := loginUser(t, user4.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_delete/master/README.md", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_delete/master/README.md", subjectName, user2.Name))
 		session.MakeRequest(t, req, http.StatusNotFound)
 	})
 
 	t.Run("OwnerCanDeleteFile", func(t *testing.T) {
 		session := loginUser(t, user2.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_delete/master/README.md", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_delete/master/README.md", subjectName, user2.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		assert.Contains(t, resp.Body.String(), "Delete")
 	})
@@ -221,7 +221,7 @@ func TestArticleRouteMiddlewareChain(t *testing.T) {
 	t.Run("RepoAssignmentByOwnerAndSubjectPopulatesContext", func(t *testing.T) {
 		// This test verifies that the middleware correctly populates ctx.Repo
 		session := loginUser(t, user2.Name)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s", user2.Name, subjectName))
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s", subjectName, user2.Name))
 		resp := session.MakeRequest(t, req, http.StatusOK)
 
 		// The page should render correctly, which means ctx.Repo was populated
@@ -238,7 +238,7 @@ func TestArticleRouteMiddlewareChain(t *testing.T) {
 
 		// GET request for edit page with read-only token should succeed
 		// (Gitea allows readers to view edit page for "fork and edit" functionality)
-		req := NewRequest(t, "GET", fmt.Sprintf("/article/%s/%s/_edit/master/README.md", user2.Name, subjectName)).
+		req := NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s/_edit/master/README.md", subjectName, user2.Name)).
 			AddTokenAuth(token)
 		MakeRequest(t, req, http.StatusSeeOther) // Token auth redirects to login for web routes
 	})

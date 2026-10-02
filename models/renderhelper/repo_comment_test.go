@@ -29,8 +29,8 @@ func TestRepoComment(t *testing.T) {
 		assert.NoError(t, err)
 		// Repository 1 has subject_id 1, which is "example-subject"
 		assert.Equal(t,
-			`<p><a href="/article/user2/example-subject?version=65f1bf27bc3bf70f64657658635e66094edbcb4d" rel="nofollow"><code>65f1bf27bc</code></a><br/>
-<a href="/article/user2/example-subject/issues/1" class="ref-issue" rel="nofollow">#1</a><br/>
+			`<p><a href="/subject/example-subject/user2?version=65f1bf27bc3bf70f64657658635e66094edbcb4d" rel="nofollow"><code>65f1bf27bc</code></a><br/>
+<a href="/subject/example-subject/user2/issues/1" class="ref-issue" rel="nofollow">#1</a><br/>
 <a href="/user2" rel="nofollow">@user2</a></p>
 `, rendered)
 	})
@@ -49,10 +49,10 @@ func TestRepoComment(t *testing.T) {
 		assert.NoError(t, err)
 		// Repository 1 has subject_id 1, which is "example-subject"
 		assert.Equal(t,
-			`<p><a href="/article/user2/example-subject/test" rel="nofollow">/test</a><br/>
-<a href="/article/user2/example-subject/test" rel="nofollow">./test</a><br/>
-<a href="/article/user2/example-subject/image" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/image" alt="/image"/></a><br/>
-<a href="/article/user2/example-subject/image" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/image" alt="./image"/></a></p>
+			`<p><a href="/subject/example-subject/user2/test" rel="nofollow">/test</a><br/>
+<a href="/subject/example-subject/user2/test" rel="nofollow">./test</a><br/>
+<a href="/subject/example-subject/user2/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/image" alt="/image"/></a><br/>
+<a href="/subject/example-subject/user2/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/image" alt="./image"/></a></p>
 `, rendered)
 	})
 
@@ -69,10 +69,10 @@ func TestRepoComment(t *testing.T) {
 `)
 		assert.NoError(t, err)
 		// Repository 1 has subject_id 1, which is "example-subject"
-		assert.Equal(t, `<p><a href="/article/user2/example-subject/test" rel="nofollow">/test</a><br/>
-<a href="/article/user2/example-subject/commit/1234/test" rel="nofollow">./test</a><br/>
-<a href="/article/user2/example-subject/image" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/image" alt="/image"/></a><br/>
-<a href="/article/user2/example-subject/commit/1234/image" target="_blank" rel="nofollow noopener"><img src="/article/user2/example-subject/commit/1234/image" alt="./image"/></a></p>
+		assert.Equal(t, `<p><a href="/subject/example-subject/user2/test" rel="nofollow">/test</a><br/>
+<a href="/subject/example-subject/user2/commit/1234/test" rel="nofollow">./test</a><br/>
+<a href="/subject/example-subject/user2/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/image" alt="/image"/></a><br/>
+<a href="/subject/example-subject/user2/commit/1234/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/commit/1234/image" alt="./image"/></a></p>
 `, rendered)
 	})
 

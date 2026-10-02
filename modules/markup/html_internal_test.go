@@ -108,7 +108,7 @@ func TestRender_IssueIndexPattern2(t *testing.T) {
 		isExternal := false
 		if marker == "!" {
 			path = "pulls"
-			prefix = "/article/someUser/someRepo/pulls/"
+			prefix = "/subject/someRepo/someUser/pulls/"
 		} else {
 			path = "issues"
 			prefix = "https://someurl.com/someUser/someRepo/"
@@ -117,7 +117,7 @@ func TestRender_IssueIndexPattern2(t *testing.T) {
 
 		links := make([]any, len(indices))
 		for i, index := range indices {
-			links[i] = numericIssueLink(util.URLJoin("/article/test-owner/test-repo", path), "ref-issue", index, marker)
+			links[i] = numericIssueLink(util.URLJoin("/subject/test-repo/test-owner", path), "ref-issue", index, marker)
 		}
 		expectedNil := fmt.Sprintf(expectedFmt, links...)
 		testRenderIssueIndexPattern(t, s, expectedNil, NewTestRenderContext(TestAppURL, localMetas))
@@ -304,7 +304,7 @@ func TestRender_AutoLink(t *testing.T) {
 }
 
 // TestArticleCommitLink checks that article commit links match the article route
-// "/article/{username}/{subjectname}", which resolves a version through the
+// "/subject/{subjectname}/{username}", which resolves a version through the
 // "version" query parameter, and that subjects are path escaped.
 func TestArticleCommitLink(t *testing.T) {
 	cases := []struct {
@@ -313,23 +313,23 @@ func TestArticleCommitLink(t *testing.T) {
 	}{
 		{
 			owner: "user13", name: "repo11", commitID: "65f1bf27bc3bf70f64657658635e66094edbcb4d",
-			expected: "/:root/article/user13/repo11?version=65f1bf27bc3bf70f64657658635e66094edbcb4d",
+			expected: "/:root/subject/repo11/user13?version=65f1bf27bc3bf70f64657658635e66094edbcb4d",
 		},
 		{
 			owner: "user13", name: "repo11", commitID: "65f1bf2",
-			expected: "/:root/article/user13/repo11?version=65f1bf2",
+			expected: "/:root/subject/repo11/user13?version=65f1bf2",
 		},
 		{
 			owner: "user13", name: "Subject With Spaces", commitID: "65f1bf2",
-			expected: "/:root/article/user13/Subject%20With%20Spaces?version=65f1bf2",
+			expected: "/:root/subject/Subject%20With%20Spaces/user13?version=65f1bf2",
 		},
 		{
 			owner: "user13", name: "a/b?c#d", commitID: "65f1bf2",
-			expected: "/:root/article/user13/a%2Fb%3Fc%23d?version=65f1bf2",
+			expected: "/:root/subject/a%2Fb%3Fc%23d/user13?version=65f1bf2",
 		},
 		{
 			owner: "üser", name: "Ünicode", commitID: "65f1bf2",
-			expected: "/:root/article/%C3%BCser/%C3%9Cnicode?version=65f1bf2",
+			expected: "/:root/subject/%C3%9Cnicode/%C3%BCser?version=65f1bf2",
 		},
 	}
 
@@ -344,14 +344,14 @@ func TestArticleCommitLink(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, c.commitID, parsed.Query().Get("version"))
 
-		// the route only accepts an owner and a subject below "/article"
+		// the route only accepts a subject and an owner below "/subject"
 		var segments []string
 		for segment := range strings.SplitSeq(parsed.EscapedPath(), "/") {
 			unescaped, err := url.PathUnescape(segment)
 			assert.NoError(t, err)
 			segments = append(segments, unescaped)
 		}
-		assert.Equal(t, []string{"article", c.owner, c.name}, segments)
+		assert.Equal(t, []string{"subject", c.name, c.owner}, segments)
 	}
 }
 

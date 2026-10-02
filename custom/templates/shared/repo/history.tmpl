@@ -63,7 +63,7 @@
                             </div>
                         </td>
                         <td class="sha">
-                            <a href="{{or $.ArticleLink $.RepoLink}}?version={{.ID.String}}" rel="nofollow" class="muted">
+                            <a href="{{QueryBuild (or $.ArticleLink $.RepoLink) "version" .ID.String}}" rel="nofollow" class="muted">
                                 {{ShortSha .ID.String}}
                             </a>
                         </td>
@@ -78,7 +78,7 @@
                             <td class="tw-text-right">{{DateUtils.TimeSince .Author.When}}</td>
                         {{end}}
                         <td class="tw-text-right tw-py-0">
-                            <a class="btn interact-bg tw-p-2" data-tooltip-content="{{ctx.Locale.Tr "repo.commits.view_path"}}" href="{{$.RepoLink}}?version={{PathEscape .ID.String}}">
+                            <a class="btn interact-bg tw-p-2" data-tooltip-content="{{ctx.Locale.Tr "repo.commits.view_path"}}" href="{{QueryBuild (or $.ArticleLink $.RepoLink) "version" .ID.String}}">
                                 {{if $.Repository.IsFork}}
                                     {{svg "octicon-repo-forked" 16}}
                                 {{else}}

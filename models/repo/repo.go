@@ -21,6 +21,7 @@ import (
 	"code.gitea.io/gitea/models/unit"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/base"
+	"code.gitea.io/gitea/modules/cache"
 	"code.gitea.io/gitea/modules/git"
 	giturl "code.gitea.io/gitea/modules/git/url"
 	"code.gitea.io/gitea/modules/httplib"
@@ -433,31 +434,42 @@ func (repo *Repository) FullName() string {
 func (repo *Repository) HTMLURL(ctxs ...context.Context) string {
 	// FIXME: this HTMLURL is still used in mail templates, so the "ctx" is not provided.
 	ctx := util.OptionalArg(ctxs, context.TODO())
-	return httplib.MakeAbsoluteURL(ctx, repo.Link())
+	// the link must resolve the article index on ctx: a caller inside a transaction
+	// would otherwise have it read on a second connection, which blocks until the
+	// transaction it is nested in commits
+	return httplib.MakeAbsoluteURL(ctx, repo.LinkCtx(ctx))
 }
 
 // CommitLink returns a link to the article view at the given commit ID.
-// It does not check whether the ID actually exists.
-func (repo *Repository) CommitLink(commitID string) string {
+// It does not check whether the ID actually exists. Callers that have a ctx should
+// pass it, for the same reasons as LinkCtx.
+func (repo *Repository) CommitLink(commitID string, ctxs ...context.Context) string {
+	ctx := util.OptionalArg(ctxs, context.TODO())
+	return repo.commitLink(ctx, commitID)
+}
+
+// commitLink is CommitLink resolved against ctx, which the article index lookup of the
+// link must run on. See LinkCtx.
+func (repo *Repository) commitLink(ctx context.Context, commitID string) string {
 	if git.IsEmptyCommitID(commitID) {
 		return ""
 	}
 	// The article view has no "/commit/{sha}" route: it selects a version through the
 	// "version" query parameter. The article path is built here rather than from
-	// Link(), because Link() sends an archived article to its repository route, which
-	// does not resolve a version of this repository.
-	return repo.articleLink() + "?version=" + url.QueryEscape(commitID)
+	// Link(), because Link() sends a tombstone to its repository route, which does not
+	// resolve a version of this repository.
+	return repo.articleLink(ctx) + "?version=" + url.QueryEscape(commitID)
 }
 
 // CommitHTMLURL returns the absolute URL of the article view at the given commit ID.
 // It does not check whether the ID actually exists.
 func (repo *Repository) CommitHTMLURL(commitID string, ctxs ...context.Context) string {
-	link := repo.CommitLink(commitID)
+	// FIXME: like HTMLURL, this is also used from mail templates, so the "ctx" is optional.
+	ctx := util.OptionalArg(ctxs, context.TODO())
+	link := repo.commitLink(ctx, commitID)
 	if link == "" {
 		return ""
 	}
-	// FIXME: like HTMLURL, this is also used from mail templates, so the "ctx" is optional.
-	ctx := util.OptionalArg(ctxs, context.TODO())
 	return httplib.MakeAbsoluteURL(ctx, link)
 }
 
@@ -691,22 +703,44 @@ func (repo *Repository) RepoPath() string {
 }
 
 // Link returns the repository relative url for viewing articles.
-// An archived article with a subject, and a tombstone, use OperationsLink instead,
-// because the subject vanity url resolves to the active repository of that subject,
-// which is a different article. Any other repository yields /article/{owner}/{subject},
-// using the repository name in place of the subject when none is assigned.
+// A tombstone keeps its article url, /subject/{subject}/{owner}, so the deletion notice
+// is served where the article used to be. Only a tombstone that never had a subject
+// falls back to OperationsLink, since it has no place in the subject hierarchy. Any
+// other repository yields /subject/{subject}/{owner}, using the repository name in
+// place of the subject when none is assigned.
 func (repo *Repository) Link() string {
-	if repo.IsTombstone() || (repo.IsArchived && repo.SubjectID > 0) {
-		return repo.OperationsLink()
-	}
-	return repo.articleLink()
+	return repo.LinkCtx(context.Background())
 }
 
-// articleLink returns the article view url of this repository, /article/{owner}/{subject},
-// using the repository name in place of the subject when none is assigned.
-func (repo *Repository) articleLink() string {
-	subject := repo.GetSubject(context.Background())
-	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(subject)
+// LinkCtx is Link resolved against ctx, which read-only paths should prefer: the
+// article index is then read through the request's article index cache, so a page
+// rendering many links resolves the indexes of each owner once instead of once per
+// link. A path that has just written a repository must keep using Link, unless the
+// write dropped the owner's cached indexes.
+func (repo *Repository) LinkCtx(ctx context.Context) string {
+	if repo.IsTombstone() && repo.SubjectID == 0 {
+		return repo.OperationsLink()
+	}
+	return repo.articleLink(ctx)
+}
+
+// articleLink returns the article view url of this repository,
+// /subject/{subject}/{owner}, using the repository name in place of the subject when
+// none is assigned. When the owner holds several articles for the subject, the ones
+// past the first are addressed by appending their article index.
+func (repo *Repository) articleLink(ctx context.Context) string {
+	subject := repo.GetSubject(ctx)
+	link := setting.AppSubURL + "/subject/" + url.PathEscape(subject) + "/" + url.PathEscape(repo.OwnerName)
+	// The suffix follows the position alone. Archived and deleted articles are the
+	// usual ones to sit past the first position, but nothing stops an owner from
+	// holding several active articles for a subject, and two of them sharing this url
+	// would leave one of them unreachable.
+	if repo.SubjectID > 0 {
+		if index := repo.ArticleIndex(ctx); index > 1 {
+			link += "/" + strconv.Itoa(index)
+		}
+	}
+	return link
 }
 
 // OperationsLink returns the repository relative url for repository operations
@@ -1048,38 +1082,145 @@ func GetSubjectRootRepositoryExcluding(ctx context.Context, subjectID, excludeRe
 	return &repo, nil
 }
 
+// articleOrderBy is the order in which an owner's repositories for one subject are
+// numbered. The first one is what the subject vanity url "/subject/{subject}/{owner}"
+// resolves to, so it carries article index 1, and every further one is addressed by
+// appending its index to that url. Tombstones sort last: a deleted article must never
+// stand in for one the owner can still show, but it keeps an address of its own.
+const articleOrderBy = "repository.is_tombstoned ASC, repository.is_archived ASC, repository.updated_unix DESC, repository.id DESC"
+
+// findArticlesByOwnerAndSubjectID returns every repository the owner holds for the
+// subject, in article index order.
+func findArticlesByOwnerAndSubjectID(ctx context.Context, ownerName string, subjectID int64) ([]*Repository, error) {
+	var repos []*Repository
+	err := db.GetEngine(ctx).Table("repository").Select("repository.*").
+		Join("INNER", "`user`", "`user`.id = repository.owner_id").
+		Where("repository.subject_id = ?", subjectID).
+		And("`user`.lower_name = ?", strings.ToLower(ownerName)).
+		OrderBy(articleOrderBy).
+		NoAutoCondition().
+		Find(&repos)
+	if err != nil {
+		return nil, err
+	}
+	return repos, nil
+}
+
 // GetRepositoryByOwnerAndSubject returns a repository by owner name and subject name.
 // This function returns the specific user's repository (whether it's a root or fork).
 // An owner can hold several repositories for the same subject once older ones are
 // archived, so the most recently updated active one wins; archived ones are only
 // returned when the owner has no active repository left for the subject.
 func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName string) (*Repository, error) {
-	// First, get the subject by name
+	// it is article index 1 by definition, so it shares the lookup rather than repeating
+	// the article order; an owner holds only a handful of articles per subject
+	return GetRepositoryByOwnerSubjectAndIndex(ctx, ownerName, subjectName, 1)
+}
+
+// GetRepositoryByOwnerSubjectAndIndex returns the index-th (1-based) repository the owner
+// holds for the subject. Index 1 is what GetRepositoryByOwnerAndSubject returns, so
+// higher indexes address the owner's remaining, normally archived, articles.
+func GetRepositoryByOwnerSubjectAndIndex(ctx context.Context, ownerName, subjectName string, index int) (*Repository, error) {
 	subject, err := GetSubjectByName(ctx, subjectName)
 	if err != nil {
 		return nil, err
 	}
 
-	// Find the repository with this owner and subject_id
-	var repo Repository
-	has, err := db.GetEngine(ctx).Table("repository").Select("repository.*").
-		Join("INNER", "`user`", "`user`.id = repository.owner_id").
-		Where("repository.subject_id = ?", subject.ID).
-		And("`user`.lower_name = ?", strings.ToLower(ownerName)).
-		OrderBy("repository.is_archived ASC, repository.updated_unix DESC, repository.id DESC").
-		NoAutoCondition().
-		Get(&repo)
-
+	repos, err := findArticlesByOwnerAndSubjectID(ctx, ownerName, subject.ID)
 	if err != nil {
 		return nil, err
-	} else if !has {
+	}
+	if index < 1 || index > len(repos) {
 		return nil, ErrRepoNotExist{ID: 0, UID: 0, OwnerName: ownerName, Name: subjectName}
 	}
 
-	// Load the subject relation
+	repo := repos[index-1]
 	repo.SubjectRelation = subject
 
-	return &repo, nil
+	return repo, nil
+}
+
+// ArticleIndex returns the 1-based position of this repository among its owner's
+// repositories for its subject, which is the trailing segment of its article url.
+// It is 1 for the article the subject vanity url resolves to, which carries no
+// trailing segment.
+// The position depends on the owner's other articles for the subject, so it is never
+// kept on the repository: archiving or deleting any of them renumbers the rest. It is
+// instead resolved for all of the owner's articles at once, cached for the duration of
+// the request, and dropped again by every write that can renumber them.
+func (repo *Repository) ArticleIndex(ctx context.Context) int {
+	// a repository that is not stored yet has no siblings to be numbered against
+	if repo.SubjectID == 0 || repo.ID == 0 {
+		return 1
+	}
+
+	indexes, err := articleIndexesOfOwner(ctx, repo.OwnerName)
+	if err != nil {
+		log.Error("Failed to load article indexes of %s: %v", repo.OwnerName, err)
+		return 1
+	}
+	if index := indexes[repo.ID]; index > 0 {
+		return index
+	}
+	// index 1 is the vanity url, which resolves to the owner's current article rather than
+	// this one, so a miss (e.g. a renumbering write that did not drop the cache) is logged
+	log.Warn("Repository %d (%s) is missing from the article indexes of %s, falling back to index 1", repo.ID, repo.FullName(), repo.OwnerName)
+	return 1
+}
+
+// articleIndexesCacheGroup is the context cache group holding one map of article
+// indexes per owner, keyed by their lower case name.
+const articleIndexesCacheGroup = "repo_article_indexes"
+
+// articleIndexesOfOwner returns the article index of every subject-bound repository
+// the owner holds, keyed by repository id. The whole map is read in one query, so a
+// page that links to many of the owner's articles pays for one query rather than one
+// per link, and it is served from the context cache for the rest of the request.
+func articleIndexesOfOwner(ctx context.Context, ownerName string) (map[int64]int, error) {
+	return cache.GetWithContextCache(ctx, articleIndexesCacheGroup, strings.ToLower(ownerName), loadArticleIndexesOfOwner)
+}
+
+// DropArticleIndexes drops the cached article indexes. Every write that can renumber them
+// must call it, because the index of an article follows the rows of its siblings rather
+// than its own: inserting, deleting or transferring a subject-bound repository, and any
+// update of the columns of articleOrderBy, which includes the updated_unix that xorm bumps
+// on every update made without NoAutoTime.
+// The indexes of every owner are dropped, not just those of the written repository's
+// owner: a transfer renumbers two owners, and some writers only know the repository id.
+// Writes are rare within a request, so reloading the indexes costs at most a query per
+// owner linked to afterwards.
+func DropArticleIndexes(ctx context.Context) {
+	if c := cache.GetContextCache(ctx); c != nil {
+		c.DeleteGroup(articleIndexesCacheGroup)
+	}
+}
+
+func loadArticleIndexesOfOwner(ctx context.Context, lowerOwnerName string) (map[int64]int, error) {
+	var repos []*Repository
+	err := db.GetEngine(ctx).Table("repository").Select("repository.id, repository.subject_id").
+		Join("INNER", "`user`", "`user`.id = repository.owner_id").
+		Where("repository.subject_id > 0").
+		And("`user`.lower_name = ?", lowerOwnerName).
+		// the articles of one subject sit next to each other in article index order,
+		// so one pass numbers every subject of the owner
+		OrderBy("repository.subject_id ASC, " + articleOrderBy).
+		NoAutoCondition().
+		Find(&repos)
+	if err != nil {
+		return nil, err
+	}
+
+	indexes := make(map[int64]int, len(repos))
+	var subjectID int64
+	index := 0
+	for _, r := range repos {
+		if r.SubjectID != subjectID {
+			subjectID, index = r.SubjectID, 0
+		}
+		index++
+		indexes[r.ID] = index
+	}
+	return indexes, nil
 }
 
 // GetActiveRepositoryByOwnerIDAndSubjectID returns the owner's active (non-archived)

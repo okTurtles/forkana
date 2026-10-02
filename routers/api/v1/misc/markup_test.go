@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 func testRenderMarkup(t *testing.T, mode string, wiki bool, filePath, text, expectedBody string, expectedCode int) {
 	setting.AppURL = AppURL
 	defer test.MockVariableValue(&markup.RenderBehaviorForTesting.DisableAdditionalAttributes, true)()
-	context := "/article/user2/repo1"
+	context := "/subject/repo1/user2"
 	if !wiki {
 		context += path.Join("/src/branch/main", path.Dir(filePath))
 	}
@@ -61,7 +61,7 @@ func testRenderMarkup(t *testing.T, mode string, wiki bool, filePath, text, expe
 func testRenderMarkdown(t *testing.T, mode string, wiki bool, text, responseBody string, responseCode int) {
 	defer test.MockVariableValue(&markup.RenderBehaviorForTesting.DisableAdditionalAttributes, true)()
 	setting.AppURL = AppURL
-	context := "/article/user2/repo1"
+	context := "/subject/repo1/user2"
 	if !wiki {
 		context += "/src/branch/main"
 	}
@@ -123,20 +123,20 @@ Bezier widget (by @r-lyeh) https://github.com/ocornut/imgui/issues/786`,
 		// rendered
 		`<p>Wiki! Enjoy :)</p>
 <ul>
-<li><a href="http://localhost:3000/article/user2/repo1/wiki/Links" rel="nofollow">Links, Language bindings, Engine bindings</a></li>
-<li><a href="http://localhost:3000/article/user2/repo1/wiki/Tips" rel="nofollow">Tips</a></li>
+<li><a href="http://localhost:3000/subject/repo1/user2/wiki/Links" rel="nofollow">Links, Language bindings, Engine bindings</a></li>
+<li><a href="http://localhost:3000/subject/repo1/user2/wiki/Tips" rel="nofollow">Tips</a></li>
 </ul>
 <p>Bezier widget (by <a href="http://localhost:3000/r-lyeh" rel="nofollow">@r-lyeh</a>) <a href="https://github.com/ocornut/imgui/issues/786" rel="nofollow">https://github.com/ocornut/imgui/issues/786</a></p>
 `,
 		// Guard wiki sidebar: special syntax
 		`[[Guardfile-DSL / Configuring-Guard|Guardfile-DSL---Configuring-Guard]]`,
 		// rendered
-		`<p><a href="http://localhost:3000/article/user2/repo1/wiki/Guardfile-DSL---Configuring-Guard" rel="nofollow">Guardfile-DSL / Configuring-Guard</a></p>
+		`<p><a href="http://localhost:3000/subject/repo1/user2/wiki/Guardfile-DSL---Configuring-Guard" rel="nofollow">Guardfile-DSL / Configuring-Guard</a></p>
 `,
 		// special syntax
 		`[[Name|Link]]`,
 		// rendered
-		`<p><a href="http://localhost:3000/article/user2/repo1/wiki/Link" rel="nofollow">Name</a></p>
+		`<p><a href="http://localhost:3000/subject/repo1/user2/wiki/Link" rel="nofollow">Name</a></p>
 `,
 		// empty
 		``,
@@ -181,8 +181,8 @@ Here are some links to the most important topics. You can find the full list of 
 <p><strong>Wine Staging</strong> on website <a href="http://wine-staging.com" rel="nofollow">wine-staging.com</a>.</p>
 <h2 id="user-content-quick-links">Quick Links</h2>
 <p>Here are some links to the most important topics. You can find the full list of pages at the sidebar.</p>
-<p><a href="http://localhost:3000/article/user2/repo1/wiki/Configuration" rel="nofollow">Configuration</a>
-<a href="http://localhost:3000/article/user2/repo1/wiki/images/icon-bug.png" rel="nofollow"><img src="http://localhost:3000/article/user2/repo1/wiki/raw/images/icon-bug.png" title="icon-bug.png" alt="images/icon-bug.png"/></a></p>
+<p><a href="http://localhost:3000/subject/repo1/user2/wiki/Configuration" rel="nofollow">Configuration</a>
+<a href="http://localhost:3000/subject/repo1/user2/wiki/images/icon-bug.png" rel="nofollow"><img src="http://localhost:3000/subject/repo1/user2/wiki/raw/images/icon-bug.png" title="icon-bug.png" alt="images/icon-bug.png"/></a></p>
 `,
 	}
 
@@ -223,12 +223,12 @@ Here are some links to the most important topics. You can find the full list of 
 <a href="http://localhost:3000/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/media/image.png" alt="Image"/></a></p>
 `, http.StatusOK)
 
-	testRenderMarkup(t, "gfm", false, "", input, `<p><a href="http://localhost:3000/article/user2/repo1/src/test.md" rel="nofollow">Link</a>
-<a href="http://localhost:3000/article/user2/repo1/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/article/user2/repo1/media/image.png" alt="Image"/></a></p>
+	testRenderMarkup(t, "gfm", false, "", input, `<p><a href="http://localhost:3000/subject/repo1/user2/src/test.md" rel="nofollow">Link</a>
+<a href="http://localhost:3000/subject/repo1/user2/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/subject/repo1/user2/media/image.png" alt="Image"/></a></p>
 `, http.StatusOK)
 
-	testRenderMarkup(t, "file", false, "path/new-file.md", input, `<p><a href="http://localhost:3000/article/user2/repo1/src/test.md" rel="nofollow">Link</a>
-<a href="http://localhost:3000/article/user2/repo1/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/article/user2/repo1/media/image.png" alt="Image"/></a></p>
+	testRenderMarkup(t, "file", false, "path/new-file.md", input, `<p><a href="http://localhost:3000/subject/repo1/user2/src/test.md" rel="nofollow">Link</a>
+<a href="http://localhost:3000/subject/repo1/user2/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/subject/repo1/user2/media/image.png" alt="Image"/></a></p>
 `, http.StatusOK)
 
 	testRenderMarkup(t, "file", false, "path/test.unknown", "## Test", "unsupported file to render: \"path/test.unknown\"\n", http.StatusUnprocessableEntity)
@@ -258,7 +258,7 @@ func TestAPI_RenderSimple(t *testing.T) {
 	options := api.MarkdownOption{
 		Mode:    "markdown",
 		Text:    "",
-		Context: "/article/user2/repo1",
+		Context: "/subject/repo1/user2",
 	}
 	ctx, resp := contexttest.MockAPIContext(t, "POST /api/v1/markdown")
 	for i := 0; i < len(simpleCases); i += 2 {

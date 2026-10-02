@@ -4,17 +4,21 @@
 package tests
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"code.gitea.io/gitea/models/db"
 	packages_model "code.gitea.io/gitea/models/packages"
+	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/git"
+	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/graceful"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
@@ -185,58 +189,37 @@ func PrepareGitRepoDirectory(t testing.TB) {
 		return
 	}
 	assert.NoError(t, unittest.SyncDirs(filepath.Join(filepath.Dir(setting.AppPath), "tests/gitea-repositories-meta"), setting.RepoRootPath))
-	assert.NoError(t, ensureDelegateHooksExecutable(setting.RepoRootPath))
+	assert.NoError(t, syncDelegateHooks(t.Context(), setting.RepoRootPath))
 }
 
-func ensureDelegateHooksExecutable(repoRootPath string) error {
-	files, err := util.ListDirRecursively(repoRootPath, &util.ListDirOptions{})
+// syncDelegateHooks rewrites the delegate hooks of the synced fixture repositories.
+// The checked-in fixtures call a "gitea" binary next to GITEA_ROOT, which does not exist
+// when the tests are driven by another executable (for example "e2e.sqlite.test"), so the
+// hooks are regenerated from the executable which is currently running.
+func syncDelegateHooks(ctx context.Context, repoRootPath string) error {
+	owners, err := os.ReadDir(repoRootPath)
 	if err != nil {
 		return err
 	}
-
-	for _, file := range files {
-		if !isDelegateHookPath(file) {
+	for _, owner := range owners {
+		if !owner.IsDir() {
 			continue
 		}
-		path := filepath.Join(repoRootPath, file)
-		info, err := os.Stat(path)
+		repos, err := os.ReadDir(filepath.Join(repoRootPath, owner.Name()))
 		if err != nil {
 			return err
 		}
-		if info.Mode()&0o100 != 0 {
-			continue
-		}
-		if err := os.Chmod(path, info.Mode()|0o100); err != nil {
-			return err
+		for _, repo := range repos {
+			if !repo.IsDir() || !strings.HasSuffix(repo.Name(), ".git") {
+				continue
+			}
+			relPath := path.Join(owner.Name(), repo.Name())
+			if err := gitrepo.CreateDelegateHooks(ctx, repo_model.StorageRepo(relPath)); err != nil {
+				return fmt.Errorf("unable to create delegate hooks for '%s': %w", relPath, err)
+			}
 		}
 	}
 	return nil
-}
-
-func isDelegateHookPath(path string) bool {
-	parts := strings.Split(path, "/")
-	for i, part := range parts {
-		if part != "hooks" || i+1 >= len(parts) {
-			continue
-		}
-
-		if i+2 == len(parts) && isDelegateHookName(parts[i+1]) {
-			return true
-		}
-		if i+3 == len(parts) && parts[i+2] == "gitea" && strings.HasSuffix(parts[i+1], ".d") {
-			return isDelegateHookName(strings.TrimSuffix(parts[i+1], ".d"))
-		}
-	}
-	return false
-}
-
-func isDelegateHookName(name string) bool {
-	switch name {
-	case "pre-receive", "update", "post-receive", "proc-receive":
-		return true
-	default:
-		return false
-	}
 }
 
 func PrepareArtifactsStorage(t testing.TB) {

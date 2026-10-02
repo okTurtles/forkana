@@ -29,21 +29,24 @@ func UpdateRepositoryOwnerNames(ctx context.Context, ownerID int64, ownerName st
 	return nil
 }
 
-// UpdateRepositoryUpdatedTime updates a repository's updated time
+// UpdateRepositoryUpdatedTime updates a repository's updated time, which renumbers articles
 func UpdateRepositoryUpdatedTime(ctx context.Context, repoID int64, updateTime time.Time) error {
 	_, err := db.GetEngine(ctx).Exec("UPDATE repository SET updated_unix = ? WHERE id = ?", updateTime.Unix(), repoID)
+	DropArticleIndexes(ctx)
 	return err
 }
 
 // UpdateRepositoryColsWithAutoTime updates repository's columns and the timestamp fields automatically
 func UpdateRepositoryColsWithAutoTime(ctx context.Context, repo *Repository, colName string, moreColNames ...string) error {
 	_, err := db.GetEngine(ctx).ID(repo.ID).Cols(append([]string{colName}, moreColNames...)...).Update(repo)
+	DropArticleIndexes(ctx)
 	return err
 }
 
 // UpdateRepositoryColsNoAutoTime updates repository's columns, doesn't change timestamp field automatically
 func UpdateRepositoryColsNoAutoTime(ctx context.Context, repo *Repository, colName string, moreColNames ...string) error {
 	_, err := db.GetEngine(ctx).ID(repo.ID).Cols(append([]string{colName}, moreColNames...)...).NoAutoTime().Update(repo)
+	DropArticleIndexes(ctx)
 	return err
 }
 

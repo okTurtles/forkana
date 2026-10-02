@@ -35,7 +35,7 @@ func TestRender_Commits(t *testing.T) {
 	sha := "65f1bf27bc3bf70f64657658635e66094edbcb4d"
 	repo := markup.TestAppURL + testRepoOwnerName + "/" + testRepoName + "/"
 	commit := util.URLJoin(repo, "commit", sha)
-	commitPath := "/article/user13/repo11?version=" + sha
+	commitPath := "/subject/repo11/user13?version=" + sha
 	tree := util.URLJoin(repo, "tree", sha, "src")
 
 	file := util.URLJoin(repo, "commit", sha, "example.txt")
@@ -71,7 +71,7 @@ func TestRender_Commits(t *testing.T) {
 }
 
 // TestRender_CommitCrossReference makes sure that "owner/name@sha" references link to
-// the article view route ("/article/{owner}/{subject}?version={sha}"), the only route
+// the article view route ("/subject/{subject}/{owner}?version={sha}"), the only route
 // that resolves a specific article version.
 func TestRender_CommitCrossReference(t *testing.T) {
 	defer testModule.MockVariableValue(&markup.RenderBehaviorForTesting.DisableAdditionalAttributes, true)()
@@ -84,11 +84,11 @@ func TestRender_CommitCrossReference(t *testing.T) {
 
 	sha := "65f1bf27bc3bf70f64657658635e66094edbcb4d"
 	test("test-owner/test-repo@"+sha,
-		`<p><a href="/article/test-owner/test-repo?version=`+sha+`" class="commit" rel="nofollow">test-owner/test-repo@65f1bf27bc</a></p>`)
+		`<p><a href="/subject/test-repo/test-owner?version=`+sha+`" class="commit" rel="nofollow">test-owner/test-repo@65f1bf27bc</a></p>`)
 	test("test-owner/test-repo@"+sha[:7],
-		`<p><a href="/article/test-owner/test-repo?version=`+sha[:7]+`" class="commit" rel="nofollow">test-owner/test-repo@`+sha[:7]+`</a></p>`)
+		`<p><a href="/subject/test-repo/test-owner?version=`+sha[:7]+`" class="commit" rel="nofollow">test-owner/test-repo@`+sha[:7]+`</a></p>`)
 	test("see test-owner/test-repo@"+sha+" for details",
-		`<p>see <a href="/article/test-owner/test-repo?version=`+sha+`" class="commit" rel="nofollow">test-owner/test-repo@65f1bf27bc</a> for details</p>`)
+		`<p>see <a href="/subject/test-repo/test-owner?version=`+sha+`" class="commit" rel="nofollow">test-owner/test-repo@65f1bf27bc</a> for details</p>`)
 
 	// A reference to the current repository by its repository name must link to the
 	// subject name, the only name the article route resolves.
@@ -97,7 +97,7 @@ func TestRender_CommitCrossReference(t *testing.T) {
 	buffer, err := markup.RenderString(rctx, testRepoOwnerName+"/"+testRepoName+"@"+sha)
 	assert.NoError(t, err)
 	assert.Equal(t,
-		`<p><a href="/article/`+testRepoOwnerName+`/test-subject?version=`+sha+`" class="commit" rel="nofollow">`+testRepoOwnerName+`/`+testRepoName+`@65f1bf27bc</a></p>`,
+		`<p><a href="/subject/test-subject/`+testRepoOwnerName+`?version=`+sha+`" class="commit" rel="nofollow">`+testRepoOwnerName+`/`+testRepoName+`@65f1bf27bc</a></p>`,
 		strings.TrimSpace(buffer))
 }
 
@@ -112,10 +112,10 @@ func TestRender_CrossReferences(t *testing.T) {
 
 	test(
 		"test-owner/test-repo#12345",
-		`<p><a href="/article/test-owner/test-repo/issues/12345" class="ref-issue" rel="nofollow">test-owner/test-repo#12345</a></p>`)
+		`<p><a href="/subject/test-repo/test-owner/issues/12345" class="ref-issue" rel="nofollow">test-owner/test-repo#12345</a></p>`)
 	test(
 		"go-gitea/gitea#12345",
-		`<p><a href="/article/go-gitea/gitea/issues/12345" class="ref-issue" rel="nofollow">go-gitea/gitea#12345</a></p>`)
+		`<p><a href="/subject/gitea/go-gitea/issues/12345" class="ref-issue" rel="nofollow">go-gitea/gitea#12345</a></p>`)
 	test(
 		"/home/gitea/go-gitea/gitea#12345",
 		`<p>/home/gitea/go-gitea/gitea#12345</p>`)
@@ -539,7 +539,7 @@ func TestPostProcess(t *testing.T) {
 	// But cross-referenced issue index should work.
 	test(
 		"go-gitea/gitea#12345",
-		`<a href="/article/go-gitea/gitea/issues/12345" class="ref-issue">go-gitea/gitea#12345</a>`)
+		`<a href="/subject/gitea/go-gitea/issues/12345" class="ref-issue">go-gitea/gitea#12345</a>`)
 
 	// Test that other post-processing still works.
 	test(

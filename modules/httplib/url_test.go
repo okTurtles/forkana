@@ -174,6 +174,13 @@ func TestParseGiteaSiteURL(t *testing.T) {
 		{"http://localhost:3000/sub/foo/bar", &GiteaSiteURL{RoutePath: "/foo/bar", OwnerName: "foo", RepoName: "bar"}},
 		{"http://localhost:3000/sub/foo/bar/", &GiteaSiteURL{RoutePath: "/foo/bar", OwnerName: "foo", RepoName: "bar"}},
 		{"http://localhost:3000/sub/attachments/bar", &GiteaSiteURL{RoutePath: "/attachments/bar"}},
+		// article urls are subject-first and may carry an article index before the sub path
+		{"http://localhost:3000/sub/subject/foo", &GiteaSiteURL{RoutePath: "/subject/foo"}},
+		{"http://localhost:3000/sub/subject/foo/bar", &GiteaSiteURL{RoutePath: "/subject/foo/bar", OwnerName: "bar", RepoName: "foo"}},
+		{"http://localhost:3000/sub/subject/foo/bar/2", &GiteaSiteURL{RoutePath: "/subject/foo/bar/2", OwnerName: "bar", RepoName: "foo"}},
+		{"http://localhost:3000/sub/subject/foo/bar/attachments/uuid", &GiteaSiteURL{RoutePath: "/subject/foo/bar/attachments/uuid", OwnerName: "bar", RepoName: "foo", RepoSubPath: "/attachments/uuid"}},
+		{"http://localhost:3000/sub/subject/foo/bar/2/attachments/uuid", &GiteaSiteURL{RoutePath: "/subject/foo/bar/2/attachments/uuid", OwnerName: "bar", RepoName: "foo", RepoSubPath: "/attachments/uuid"}},
+		{"http://localhost:3000/sub/subject/foo/bar/releases/tag/1.0", &GiteaSiteURL{RoutePath: "/subject/foo/bar/releases/tag/1.0", OwnerName: "bar", RepoName: "foo", RepoSubPath: "/releases/tag/1.0"}},
 		{"http://localhost:3000/other", nil},
 		{"http://other/", nil},
 	}

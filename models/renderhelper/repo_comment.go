@@ -53,7 +53,7 @@ func NewRenderContextRepoComment(ctx context.Context, repo *repo_model.Repositor
 	helper.ctx = rctx
 	var metas map[string]string
 	if repo != nil {
-		helper.repoLink = repo.Link()
+		helper.repoLink = repo.LinkCtx(ctx)
 		helper.commitChecker = newCommitChecker(ctx, repo)
 		metas = repo.ComposeCommentMetas(ctx)
 	} else {

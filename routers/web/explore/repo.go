@@ -180,7 +180,7 @@ func renderSubjectsSitemap(ctx *context.Context) {
 
 	m := sitemap.NewSitemap()
 	for _, item := range repos {
-		m.Add(sitemap.URL{URL: item.HTMLURL(), LastMod: item.UpdatedUnix.AsTimePtr()})
+		m.Add(sitemap.URL{URL: item.HTMLURL(ctx), LastMod: item.UpdatedUnix.AsTimePtr()})
 	}
 	ctx.Resp.Header().Set("Content-Type", "text/xml")
 	if _, err := m.WriteTo(ctx.Resp); err != nil {
@@ -420,7 +420,7 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	// deletion notice instead.
 	if ctx.Repo.Repository.IsTombstone() {
 		ctx.Data["BranchName"] = ctx.Repo.Repository.DefaultBranch
-		ctx.Data["RepoLink"] = ctx.Repo.Repository.Link()
+		ctx.Data["RepoLink"] = ctx.Repo.Repository.LinkCtx(ctx)
 		ctx.Data["ArticleMode"] = "read"
 		ctx.Data["IsArticleModeRead"] = true
 		ctx.Data["ReadmeRequested"] = true
@@ -432,7 +432,7 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	if ctx.Repo.Repository.IsEmpty || ctx.Repo.Repository.IsBroken() {
 		ctx.Data["IsRepoEmpty"] = true
 		ctx.Data["BranchName"] = ctx.Repo.Repository.DefaultBranch
-		ctx.Data["RepoLink"] = ctx.Repo.Repository.Link()
+		ctx.Data["RepoLink"] = ctx.Repo.Repository.LinkCtx(ctx)
 		if ctx.Doer != nil {
 			ctx.Data["CloneButtonOriginLink"] = ctx.Repo.Repository.CloneLink(ctx, ctx.Doer)
 		}
@@ -489,7 +489,7 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	ctx.Data["LastCommitUser"] = commit.Committer
 
 	// Repository metadata
-	ctx.Data["RepoLink"] = ctx.Repo.Repository.Link()
+	ctx.Data["RepoLink"] = ctx.Repo.Repository.LinkCtx(ctx)
 	ctx.Data["CloneButtonOriginLink"] = ctx.Repo.Repository.CloneLink(ctx, ctx.Doer)
 
 	// Build table entries for the base repository and its forks
@@ -626,7 +626,7 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	// Article routes set "ArticleLink" to the route the article was requested through;
 	// other entry points (subject page) fall back to the vanity article URL.
 	if _, ok := ctx.Data["ArticleLink"]; !ok {
-		ctx.Data["ArticleLink"] = ctx.Repo.Repository.Link()
+		ctx.Data["ArticleLink"] = ctx.Repo.Repository.LinkCtx(ctx)
 	}
 
 	// The Settings tab is only rendered for the article owner, so ownership must be

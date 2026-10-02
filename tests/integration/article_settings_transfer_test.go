@@ -44,7 +44,7 @@ func TestArticleSettingsTransfer(t *testing.T) {
 
 	session := loginUser(t, owner.Name)
 	settingsURL := fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name)
-	articleSettingsURL := fmt.Sprintf("/article/%s/%s?view=article&mode=settings", owner.Name, subjectName)
+	articleSettingsURL := fmt.Sprintf("/subject/%s/%s?view=article&mode=settings", subjectName, owner.Name)
 
 	post := func(t *testing.T, form map[string]string) {
 		t.Helper()
@@ -112,7 +112,7 @@ func TestArticleSettingsTransfer(t *testing.T) {
 	})
 
 	t.Run("RecipientSeesBanner", func(t *testing.T) {
-		articleURL := fmt.Sprintf("/article/%s/%s?view=article", owner.Name, subjectName)
+		articleURL := fmt.Sprintf("/subject/%s/%s?view=article", subjectName, owner.Name)
 
 		// the owner is not the recipient, so no banner is offered to them
 		AssertHTMLElement(t, NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK).Body),
@@ -208,7 +208,7 @@ func TestArticleSettingsTransferRecipientHasArticleOnSubject(t *testing.T) {
 	require.NoError(t, err)
 
 	session := loginUser(t, owner.Name)
-	articleSettingsURL := fmt.Sprintf("/article/%s/%s?view=article&mode=settings", owner.Name, subjectName)
+	articleSettingsURL := fmt.Sprintf("/subject/%s/%s?view=article&mode=settings", subjectName, owner.Name)
 	req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name),
 		transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name))
 	resp := session.MakeRequest(t, req, http.StatusSeeOther)
@@ -239,7 +239,7 @@ func TestArticleSettingsTransferRecipientHasArchivedArticleOnSubject(t *testing.
 	require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), sameSubject, true))
 
 	session := loginUser(t, owner.Name)
-	articleSettingsURL := fmt.Sprintf("/article/%s/%s?view=article&mode=settings", owner.Name, subjectName)
+	articleSettingsURL := fmt.Sprintf("/subject/%s/%s?view=article&mode=settings", subjectName, owner.Name)
 	req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name),
 		transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name))
 	resp := session.MakeRequest(t, req, http.StatusSeeOther)
@@ -259,7 +259,7 @@ func TestArticleSettingsTransferCandidates(t *testing.T) {
 
 	owner, repo, subjectName := loadArticleRepo(t, 1)
 	session := loginUser(t, owner.Name)
-	candidatesURL := fmt.Sprintf("/article/%s/%s/settings/transfer_candidates", owner.Name, subjectName)
+	candidatesURL := fmt.Sprintf("/subject/%s/%s/settings/transfer_candidates", subjectName, owner.Name)
 
 	searchUsers := func(t *testing.T, keyword string) []*api.User {
 		t.Helper()
