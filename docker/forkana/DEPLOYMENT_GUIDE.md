@@ -1149,8 +1149,8 @@ sudo systemctl start forkana
 
 ---
 
-<summary><h2>Additional Configuration</h2></summary>
 <details>
+<summary><h2>Additional Configuration</h2></summary>
 
 ### Environment Variable Reference
 
