@@ -61,6 +61,14 @@ export function initArticleEditor() {
   const textarea = document.querySelector<HTMLTextAreaElement>('#edit_area');
   if (!textarea) return;
 
+  // Both the global DOM-ready init and the history view call this on page load. A second run
+  // would mount another editor into the same container (detaching the first) and bind every
+  // submit button twice; the stale editor's handler then submits first and the form's
+  // is-loading guard drops the real one, committing the unchanged content. The history view
+  // replaces the form when it loads the edit mode, so a fresh form is still initialized.
+  if (editForm.hasAttribute('data-article-editor-initialized')) return;
+  editForm.setAttribute('data-article-editor-initialized', '');
+
   // Initialize Toast UI Editor
   (async () => {
     const editor = await createToastEditor(textarea, {
