@@ -100,7 +100,10 @@ func HomeSitemap(ctx *context.Context) {
 	count := int(cnt)
 	idx := 1
 	for i := 0; i < count; i += setting.UI.SitemapPagingNum {
-		m.Add(sitemap.URL{URL: setting.AppURL + "explore/articles/sitemap-" + strconv.Itoa(idx) + ".xml"})
+		// The per-article sitemaps are served from the subjects path: the /explore/articles
+		// listing is gone, but the entries are still one URL per article, so the page count
+		// stays driven by the repository count above.
+		m.Add(sitemap.URL{URL: setting.AppURL + "explore/subjects/sitemap-" + strconv.Itoa(idx) + ".xml"})
 		idx++
 	}
 

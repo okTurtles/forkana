@@ -193,6 +193,11 @@ type Repository struct {
 	IsArchived bool `xorm:"INDEX"`
 	IsMirror   bool `xorm:"INDEX"`
 
+	// IsTombstoned marks an article that its author deleted while forks still existed.
+	// The database row and the on-disk git data are kept so that the surviving forks
+	// keep a valid ancestor, but the content is no longer served.
+	IsTombstoned bool `xorm:"INDEX NOT NULL DEFAULT false"`
+
 	Status RepositoryStatus `xorm:"NOT NULL DEFAULT 0"`
 
 	commonRenderingMetas map[string]string `xorm:"-"`
@@ -221,9 +226,10 @@ type Repository struct {
 	// Avatar: ID(10-20)-md5(32) - must fit into 64 symbols
 	Avatar string `xorm:"VARCHAR(64)"`
 
-	CreatedUnix  timeutil.TimeStamp `xorm:"INDEX created"`
-	UpdatedUnix  timeutil.TimeStamp `xorm:"INDEX updated"`
-	ArchivedUnix timeutil.TimeStamp `xorm:"DEFAULT 0"`
+	CreatedUnix    timeutil.TimeStamp `xorm:"INDEX created"`
+	UpdatedUnix    timeutil.TimeStamp `xorm:"INDEX updated"`
+	ArchivedUnix   timeutil.TimeStamp `xorm:"DEFAULT 0"`
+	TombstonedUnix timeutil.TimeStamp `xorm:"DEFAULT 0"`
 }
 
 func init() {
@@ -321,6 +327,14 @@ func (repo *Repository) IsBeingCreated() bool {
 // IsBroken indicates that repository is broken
 func (repo *Repository) IsBroken() bool {
 	return repo.Status == RepositoryBroken
+}
+
+// IsTombstone indicates that the article was deleted by its author but is kept
+// as a tombstone because other articles were forked from it. It reads the
+// IsTombstoned field through a nil-safe receiver; the names differ because Go
+// forbids a method and a field of the same name on one type.
+func (repo *Repository) IsTombstone() bool {
+	return repo != nil && repo.IsTombstoned
 }
 
 // MarkAsBrokenEmpty marks the repo as broken and empty
@@ -422,15 +436,29 @@ func (repo *Repository) HTMLURL(ctxs ...context.Context) string {
 	return httplib.MakeAbsoluteURL(ctx, repo.Link())
 }
 
-// CommitLink make link to by commit full ID
-// note: won't check whether it's an right id
-func (repo *Repository) CommitLink(commitID string) (result string) {
+// CommitLink returns a link to the article view at the given commit ID.
+// It does not check whether the ID actually exists.
+func (repo *Repository) CommitLink(commitID string) string {
 	if git.IsEmptyCommitID(commitID) {
-		result = ""
-	} else {
-		result = repo.Link() + "/commit/" + url.PathEscape(commitID)
+		return ""
 	}
-	return result
+	// The article view has no "/commit/{sha}" route: it selects a version through the
+	// "version" query parameter. The article path is built here rather than from
+	// Link(), because Link() sends an archived article to its repository route, which
+	// does not resolve a version of this repository.
+	return repo.articleLink() + "?version=" + url.QueryEscape(commitID)
+}
+
+// CommitHTMLURL returns the absolute URL of the article view at the given commit ID.
+// It does not check whether the ID actually exists.
+func (repo *Repository) CommitHTMLURL(commitID string, ctxs ...context.Context) string {
+	link := repo.CommitLink(commitID)
+	if link == "" {
+		return ""
+	}
+	// FIXME: like HTMLURL, this is also used from mail templates, so the "ctx" is optional.
+	ctx := util.OptionalArg(ctxs, context.TODO())
+	return httplib.MakeAbsoluteURL(ctx, link)
 }
 
 // APIURL returns the repository API URL
@@ -662,9 +690,21 @@ func (repo *Repository) RepoPath() string {
 	return RepoPath(repo.OwnerName, repo.Name)
 }
 
-// Link returns the repository relative url for viewing articles
-// Uses subject name if available, falls back to repository name
+// Link returns the repository relative url for viewing articles.
+// An archived article with a subject, and a tombstone, use OperationsLink instead,
+// because the subject vanity url resolves to the active repository of that subject,
+// which is a different article. Any other repository yields /article/{owner}/{subject},
+// using the repository name in place of the subject when none is assigned.
 func (repo *Repository) Link() string {
+	if repo.IsTombstone() || (repo.IsArchived && repo.SubjectID > 0) {
+		return repo.OperationsLink()
+	}
+	return repo.articleLink()
+}
+
+// articleLink returns the article view url of this repository, /article/{owner}/{subject},
+// using the repository name in place of the subject when none is assigned.
+func (repo *Repository) articleLink() string {
 	subject := repo.GetSubject(context.Background())
 	return setting.AppSubURL + "/article/" + url.PathEscape(repo.OwnerName) + "/" + url.PathEscape(subject)
 }
@@ -947,14 +987,15 @@ func GetPublicRepositoryBySubject(ctx context.Context, subjectName string) (*Rep
 
 	// Find the first public repository with this subject_id
 	// Priority order:
-	// 1. Non-empty repos (is_empty=false)
-	// 2. Root repos (is_fork=false)
-	// 3. Most recently updated
+	// 1. Live repos (is_tombstoned=false), so a tombstone never stands in for the subject
+	// 2. Non-empty repos (is_empty=false)
+	// 3. Root repos (is_fork=false)
+	// 4. Most recently updated
 	var repo Repository
 	has, err := db.GetEngine(ctx).
 		Where("`subject_id`=?", subject.ID).
 		And("`is_private`=?", false).
-		OrderBy("`is_empty` ASC, `is_fork` ASC, `updated_unix` DESC").
+		OrderBy("`is_tombstoned` ASC, `is_empty` ASC, `is_fork` ASC, `updated_unix` DESC").
 		NoAutoCondition().
 		Get(&repo)
 
@@ -1009,6 +1050,9 @@ func GetSubjectRootRepositoryExcluding(ctx context.Context, subjectID, excludeRe
 
 // GetRepositoryByOwnerAndSubject returns a repository by owner name and subject name.
 // This function returns the specific user's repository (whether it's a root or fork).
+// An owner can hold several repositories for the same subject once older ones are
+// archived, so the most recently updated active one wins; archived ones are only
+// returned when the owner has no active repository left for the subject.
 func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName string) (*Repository, error) {
 	// First, get the subject by name
 	subject, err := GetSubjectByName(ctx, subjectName)
@@ -1022,6 +1066,7 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 		Join("INNER", "`user`", "`user`.id = repository.owner_id").
 		Where("repository.subject_id = ?", subject.ID).
 		And("`user`.lower_name = ?", strings.ToLower(ownerName)).
+		OrderBy("repository.is_archived ASC, repository.updated_unix DESC, repository.id DESC").
 		NoAutoCondition().
 		Get(&repo)
 
@@ -1037,13 +1082,20 @@ func GetRepositoryByOwnerAndSubject(ctx context.Context, ownerName, subjectName 
 	return &repo, nil
 }
 
-// GetRepositoryByOwnerIDAndSubjectID returns a repository by owner ID and subject ID.
-// Returns nil if no such repository exists (without error).
-func GetRepositoryByOwnerIDAndSubjectID(ctx context.Context, ownerID, subjectID int64) (*Repository, error) {
+// GetActiveRepositoryByOwnerIDAndSubjectID returns the owner's active (non-archived)
+// repository for the given subject ID. Returns nil if the owner has none, including
+// when all of their repositories for the subject are archived: an archived article is
+// read-only and does not occupy the owner's slot for the subject.
+func GetActiveRepositoryByOwnerIDAndSubjectID(ctx context.Context, ownerID, subjectID int64) (*Repository, error) {
 	var repo Repository
 	has, err := db.GetEngine(ctx).
 		Where("owner_id = ?", ownerID).
 		And("subject_id = ?", subjectID).
+		And("is_archived = ?", false).
+		// Same tie-break as GetRepositoryByOwnerAndSubject, so the slot check and the
+		// vanity url agree on which repository wins if an owner ever ends up with
+		// several active ones for a subject.
+		OrderBy("updated_unix DESC, id DESC").
 		Get(&repo)
 	if err != nil {
 		return nil, err
@@ -1195,6 +1247,9 @@ func (err ErrUserOwnRepos) Error() string {
 type CountRepositoryOptions struct {
 	OwnerID int64
 	Private optional.Option[bool]
+	// Tombstoned counts only tombstoned repositories when true and only live ones
+	// when false. Unset counts both.
+	Tombstoned optional.Option[bool]
 }
 
 // CountRepositories returns number of repositories.
@@ -1208,6 +1263,9 @@ func CountRepositories(ctx context.Context, opts CountRepositoryOptions) (int64,
 	}
 	if opts.Private.Has() {
 		sess.And("is_private=?", opts.Private.Value())
+	}
+	if opts.Tombstoned.Has() {
+		sess.And("is_tombstoned=?", opts.Tombstoned.Value())
 	}
 
 	count, err := sess.Count(new(Repository))

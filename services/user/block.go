@@ -140,6 +140,9 @@ func unstarRepos(ctx context.Context, starrer, repoOwner *user_model.User) error
 		},
 		StarrerID:   starrer.ID,
 		RepoOwnerID: repoOwner.ID,
+		// The star rows are removed here, so a tombstone must not be skipped or its row
+		// would survive the block.
+		IncludeTombstoned: true,
 	}
 
 	for {
@@ -170,6 +173,9 @@ func unwatchRepos(ctx context.Context, watcher, repoOwner *user_model.User) erro
 		},
 		WatcherID:   watcher.ID,
 		RepoOwnerID: repoOwner.ID,
+		// The watch rows are removed here, so a tombstone must not be skipped or its row
+		// would survive the block.
+		IncludeTombstoned: true,
 	}
 
 	for {

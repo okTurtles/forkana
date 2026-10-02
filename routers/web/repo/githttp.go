@@ -119,6 +119,13 @@ func httpBase(ctx *context.Context) *serviceHandler {
 		repoExist = false
 	}
 
+	// A tombstone keeps its git data only so that its forks retain a valid ancestor;
+	// the content itself must not be served or modified any more.
+	if repoExist && repo.IsTombstone() {
+		ctx.PlainText(http.StatusNotFound, "This article has been deleted by its author.")
+		return nil
+	}
+
 	// Don't allow pushing if the repo is archived
 	if repoExist && repo.IsArchived && !isPull {
 		ctx.PlainText(http.StatusForbidden, "This repo is archived. You can view files and clone it, but cannot push or open issues/pull-requests.")

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -158,7 +157,9 @@ func UpdateIssuesCommit(ctx context.Context, doer *user_model.User, repo *repo_m
 				continue
 			}
 
-			message := fmt.Sprintf(`<a href="%s/commit/%s">%s</a>`, html.EscapeString(repo.Link()), html.EscapeString(url.PathEscape(c.Sha1)), html.EscapeString(strings.SplitN(c.Message, "\n", 2)[0]))
+			// CommitLink resolves through the article view, which selects a version via
+			// the "version" query parameter; the article namespace has no "/commit/{sha}" route.
+			message := fmt.Sprintf(`<a href="%s">%s</a>`, html.EscapeString(repo.CommitLink(c.Sha1)), html.EscapeString(strings.SplitN(c.Message, "\n", 2)[0]))
 			if err = CreateRefComment(ctx, doer, refRepo, refIssue, message, c.Sha1); err != nil {
 				if errors.Is(err, user_model.ErrBlockedUser) {
 					continue

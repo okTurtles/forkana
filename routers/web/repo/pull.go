@@ -455,10 +455,10 @@ func prepareViewPullInfo(ctx *context.Context, issue *issues_model.Issue) *pull_
 			ctx.ServerError("IsUserAllowedToUpdate", err)
 			return nil
 		}
-		ctx.Data["GetCommitMessages"] = pull_service.GetSquashMergeCommitMessages(ctx, pull)
-	} else {
-		ctx.Data["GetCommitMessages"] = ""
 	}
+	// Forkana: the merge box does not offer an editable merge message any more, so the
+	// squashed commit messages are no longer pre-computed for every change-request view;
+	// they are generated when the merge is actually performed.
 
 	sha, err := baseGitRepo.GetRefCommitID(pull.GetGitHeadRefName())
 	if err != nil {
@@ -2562,26 +2562,31 @@ func MergePullRequest(ctx *context.Context) {
 		return
 	}
 
-	message := strings.TrimSpace(form.MergeTitleField)
-	if len(message) == 0 {
+	// Forkana: the web UI merges in a single click, so it sends neither a merge title nor a
+	// merge message body and the whole merge commit message is generated here.
+	formTitle := strings.TrimSpace(form.MergeTitleField)
+	formBody := strings.TrimSpace(form.MergeMessageField)
+	mergeStyle := repo_model.MergeStyle(form.Do)
+
+	var defaultTitle, defaultBody string
+	if formTitle == "" {
 		var err error
-		message, _, err = pull_service.GetDefaultMergeMessage(ctx, ctx.Repo.GitRepo, pr, repo_model.MergeStyle(form.Do))
+		defaultTitle, defaultBody, err = pull_service.GetDefaultMergeMessage(ctx, ctx.Repo.GitRepo, pr, mergeStyle)
 		if err != nil {
 			ctx.ServerError("GetDefaultMergeMessage", err)
 			return
 		}
+		if mergeStyle == repo_model.MergeStyleSquash && formBody == "" {
+			defaultBody = pull_service.GetSquashMergeCommitMessages(ctx, pr) + defaultBody
+		}
 	}
-
-	form.MergeMessageField = strings.TrimSpace(form.MergeMessageField)
-	if len(form.MergeMessageField) > 0 {
-		message += "\n\n" + form.MergeMessageField
-	}
+	message := pull_service.ComposeMergeCommitMessage(formTitle, formBody, defaultTitle, defaultBody)
 
 	if form.MergeWhenChecksSucceed {
 		// delete all scheduled auto merges
 		_ = pull_model.DeleteScheduledAutoMerge(ctx, pr.ID)
 		// schedule auto merge
-		scheduled, err := automerge.ScheduleAutoMerge(ctx, ctx.Doer, pr, repo_model.MergeStyle(form.Do), message, form.DeleteBranchAfterMerge)
+		scheduled, err := automerge.ScheduleAutoMerge(ctx, ctx.Doer, pr, mergeStyle, message, form.DeleteBranchAfterMerge)
 		if err != nil {
 			ctx.ServerError("ScheduleAutoMerge", err)
 			return
@@ -2593,7 +2598,7 @@ func MergePullRequest(ctx *context.Context) {
 		}
 	}
 
-	if err := pull_service.Merge(ctx, pr, ctx.Doer, ctx.Repo.GitRepo, repo_model.MergeStyle(form.Do), form.HeadCommitID, message, false); err != nil {
+	if err := pull_service.Merge(ctx, pr, ctx.Doer, ctx.Repo.GitRepo, mergeStyle, form.HeadCommitID, message, false); err != nil {
 		if pull_service.IsErrInvalidMergeStyle(err) {
 			ctx.JSONError(ctx.Tr("repo.pulls.invalid_merge_option"))
 		} else if pull_service.IsErrMergeConflicts(err) {

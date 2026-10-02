@@ -6,7 +6,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	"code.gitea.io/gitea/models/avatars"
@@ -80,7 +79,7 @@ func ToAPIPayloadCommit(ctx context.Context, emailUsers map[string]*user_model.U
 	return &api.PayloadCommit{
 		ID:      commit.Sha1,
 		Message: commit.Message,
-		URL:     fmt.Sprintf("%s/commit/%s", repo.HTMLURL(), url.PathEscape(commit.Sha1)),
+		URL:     repo.CommitHTMLURL(commit.Sha1, ctx),
 		Author: &api.PayloadUser{
 			Name:     commit.AuthorName,
 			Email:    commit.AuthorEmail,

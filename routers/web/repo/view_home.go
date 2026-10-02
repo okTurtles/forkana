@@ -258,6 +258,14 @@ func handleRepoEmptyOrBroken(ctx *context.Context) {
 	ctx.Redirect(link)
 }
 
+// handleRepoTombstone prepares a request for a deleted article. The git history is
+// still on disk for the forks, but none of it is exposed: the regular repository
+// frame is rendered and the templates redact the content based on "IsTombstonedRepo",
+// which the repository assignment middleware already set.
+func handleRepoTombstone(ctx *context.Context) {
+	ctx.Data["Title"] = ctx.Repo.Repository.FullName()
+}
+
 func isViewHomeOnlyContent(ctx *context.Context) bool {
 	return ctx.FormBool("only_content")
 }
@@ -318,6 +326,19 @@ func handleRepoHomeFeed(ctx *context.Context) bool {
 	return true
 }
 
+// handleRepoHomeArticle renders the article view for repositories bound to a subject.
+// The permanent repository URL always resolves to that exact repository, so an archived
+// article stays reachable even when the owner has a newer active one for the same subject.
+// Sub-paths (file tree, refs) keep the regular code view.
+func handleRepoHomeArticle(ctx *context.Context) bool {
+	if ctx.Repo.Repository.SubjectID == 0 || ctx.Repo.TreePath != "" || ctx.PathParam("*") != "" {
+		return false
+	}
+	ctx.Data["ArticleLink"] = ctx.Repo.Repository.OperationsLink()
+	renderArticleView(ctx)
+	return true
+}
+
 func prepareHomeTreeSideBarSwitch(ctx *context.Context) {
 	showFileTree := true
 	if ctx.Doer != nil {
@@ -358,6 +379,18 @@ func redirectFollowSymlink(ctx *context.Context, treePathEntry *git.TreeEntry) b
 
 // Home render repository home page
 func Home(ctx *context.Context) {
+	if ctx.Repo.Repository.IsTombstone() {
+		// A tombstone is only ever served here: every other route redirects to this one.
+		// An article renders the deletion notice in the article frame, like the vanity
+		// url did before the deletion; a repository without a subject has no such frame
+		// and falls back to the repository one, which redacts it the same way.
+		if handleRepoHomeArticle(ctx) {
+			return
+		}
+		handleRepoTombstone(ctx)
+		ctx.HTML(http.StatusOK, tplRepoHome)
+		return
+	}
 	if handleRepoHomeFeed(ctx) {
 		return
 	}
@@ -369,6 +402,10 @@ func Home(ctx *context.Context) {
 	// Ideally the "feed" logic should be after this, but old code did so, so keep it as-is.
 	checkHomeCodeViewable(ctx)
 	if ctx.Written() {
+		return
+	}
+
+	if handleRepoHomeArticle(ctx) {
 		return
 	}
 

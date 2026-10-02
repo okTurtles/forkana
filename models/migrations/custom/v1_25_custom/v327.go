@@ -10,7 +10,7 @@ import (
 
 // repositoryForkOnEditIndexes is a temporary struct used only for this migration.
 // It defines composite indexes to optimize fork-on-edit permission queries:
-// - IDX_repository_owner_subject: for GetRepositoryByOwnerIDAndSubjectID()
+// - IDX_repository_owner_subject: for GetActiveRepositoryByOwnerIDAndSubjectID()
 // - IDX_repository_owner_fork: for GetForkedRepo()
 type repositoryForkOnEditIndexes struct {
 	ID        int64 `xorm:"pk autoincr"`
@@ -24,8 +24,8 @@ func (*repositoryForkOnEditIndexes) TableName() string {
 }
 
 func (*repositoryForkOnEditIndexes) TableIndices() []*schemas.Index {
-	// Composite index for GetRepositoryByOwnerIDAndSubjectID()
-	// Query: WHERE owner_id = ? AND subject_id = ?
+	// Composite index for GetActiveRepositoryByOwnerIDAndSubjectID()
+	// Query: WHERE owner_id = ? AND subject_id = ? AND is_archived = ?
 	ownerSubjectIndex := schemas.NewIndex("IDX_repository_owner_subject", schemas.IndexType)
 	ownerSubjectIndex.AddColumn("owner_id", "subject_id")
 
@@ -39,7 +39,7 @@ func (*repositoryForkOnEditIndexes) TableIndices() []*schemas.Index {
 
 // AddCompositeIndexesForForkOnEdit adds composite indexes to optimize fork-on-edit permission queries.
 // These composite indexes optimize the CheckForkOnEditPermissions queries:
-// - (owner_id, subject_id): Used by GetRepositoryByOwnerIDAndSubjectID to check if user owns a different repo for the same subject
+// - (owner_id, subject_id): Used by GetActiveRepositoryByOwnerIDAndSubjectID to check if user owns a different repo for the same subject
 // - (owner_id, fork_id): Used by GetForkedRepo and HasForkedRepo to detect existing forks
 func AddCompositeIndexesForForkOnEdit(x *xorm.Engine) error {
 	return x.Sync(new(repositoryForkOnEditIndexes))

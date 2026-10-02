@@ -54,6 +54,9 @@
 							</td>
 							<td>
 								<a class="tw-break-anywhere" href="{{.Link}}">{{.Name}}</a>
+								{{if .IsTombstone}}
+									<span class="ui basic label">{{ctx.Locale.Tr "repo.tombstone.label"}}</span>
+								{{end}}
 								{{if .IsArchived}}
 									<span class="ui basic label">{{ctx.Locale.Tr "repo.desc.archived"}}</span>
 								{{end}}

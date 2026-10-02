@@ -22,6 +22,7 @@ import (
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/markbates/goth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,6 +100,42 @@ func TestSigninWithRememberMe(t *testing.T) {
 	// With session the settings page should be reachable
 	req = NewRequest(t, "GET", "/user/settings")
 	session.MakeRequest(t, req, http.StatusOK)
+}
+
+func TestAnonymousNavbarSignInLinkHasNoRedirect(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// The navbar sign-in link must not record the currently viewed page (issue #382):
+	// signing in should always land on the user's home page unless a redirect was
+	// explicitly requested (e.g. by an invite link).
+	req := NewRequest(t, "GET", "/explore/subjects")
+	resp := MakeRequest(t, req, http.StatusOK)
+
+	doc := NewHTMLParser(t, resp.Body)
+	links := doc.doc.Find(`a[href^="` + setting.AppSubURL + `/user/login"]`)
+	assert.Positive(t, links.Length(), "expected a sign-in link in the navbar")
+	links.Each(func(_ int, s *goquery.Selection) {
+		href, _ := s.Attr("href")
+		assert.NotContains(t, href, "redirect_to", "navbar sign-in link must not carry redirect_to")
+	})
+}
+
+func TestSigninHonorsExplicitRedirectParam(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+
+	// An explicit redirect_to parameter (e.g. from an invite link) must still be honored
+	session := emptyTestSession(t)
+	req := NewRequest(t, "GET", "/user/login?redirect_to="+url.QueryEscape("/user/settings"))
+	session.MakeRequest(t, req, http.StatusOK)
+
+	req = NewRequestWithValues(t, "POST", "/user/login", map[string]string{
+		"user_name": user.Name,
+		"password":  userPassword,
+	})
+	resp := session.MakeRequest(t, req, http.StatusSeeOther)
+	assert.Equal(t, "/user/settings", test.RedirectURL(resp))
 }
 
 func TestEnablePasswordSignInFormAndEnablePasskeyAuth(t *testing.T) {

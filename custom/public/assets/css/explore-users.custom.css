@@ -18,27 +18,32 @@
   background: var(--color-hover);
 }
 
-/* Bordered container for user list */
-.page-content.explore.users .explore-users-list-container {
+/* Bordered box around the user rows.
+
+   The border lives on ".explore-users-rows", not on the outer
+   ".explore-users-list-container", so that it wraps only the rows. The search
+   headings ("Search results for ...", "Similar") and the no-exact-match note are
+   siblings of these boxes and stay outside the border (#276). A search renders two
+   such boxes -- the exact match and the similar list -- each framed on its own. */
+.page-content.explore.users .explore-users-list-container .explore-users-rows {
   border: 1px solid var(--color-secondary);
   border-radius: 8px;
   overflow: hidden;
   background: var(--color-body);
-}
-
-.page-content.explore.users .explore-users-list-container .flex-list {
+  /* the rows box also carries "flex-list" (the divider rule needs the rows to be its
+     direct children), so this resets that class's own margin in the same place */
   margin: 0;
 }
 
-.page-content.explore.users .explore-users-list-container .flex-item {
+.page-content.explore.users .explore-users-rows .flex-item {
   padding: 16px 20px;
 }
 
-.page-content.explore.users .explore-users-list-container .flex-item:first-child {
+.page-content.explore.users .explore-users-rows .flex-item:first-child {
   padding-top: 16px;
 }
 
-.page-content.explore.users .explore-users-list-container .flex-item:last-child {
+.page-content.explore.users .explore-users-rows .flex-item:last-child {
   padding-bottom: 16px;
 }
 

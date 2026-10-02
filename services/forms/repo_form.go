@@ -96,7 +96,11 @@ func (f *MigrateRepoForm) Validate(req *http.Request, errs binding.Errors) bindi
 
 // RepoSettingForm form for changing repository settings
 type RepoSettingForm struct {
-	RepoName               string `binding:"Required;AlphaDashDot;MaxSize(100)"`
+	RepoName string `binding:"Required;AlphaDashDot;MaxSize(100)"`
+	// ArticleName is the "<owner>/<subject>" confirmation typed in the article settings modals.
+	// Optional here because RepoSettingForm is shared with non-article actions; the handlers that
+	// need it compare it against the repository's own owner and subject before proceeding.
+	ArticleName            string `binding:"MaxSize(255)"`
 	Subject                string `binding:"MaxSize(255)"`
 	Description            string `binding:"MaxSize(2048)"`
 	Website                string `binding:"ValidUrl;MaxSize(1024)"`
@@ -599,11 +603,20 @@ func (f SubmitReviewForm) ReviewType() issues_model.ReviewType {
 		return issues_model.ReviewTypeComment
 	case "reject":
 		return issues_model.ReviewTypeReject
+	case "close":
+		// Forkana: "close" is not a review type of its own, the feedback is recorded as a
+		// normal comment review and the change request is closed afterwards by the handler.
+		return issues_model.ReviewTypeComment
 	case "":
 		return issues_model.ReviewTypeComment // default to comment when doing quick-submit (Ctrl+Enter) on the review form
 	default:
 		return issues_model.ReviewTypeUnknown
 	}
+}
+
+// IsCloseRequest returns whether the submitted review also asks to close the change request.
+func (f SubmitReviewForm) IsCloseRequest() bool {
+	return f.Type == "close"
 }
 
 // HasEmptyContent checks if the content of the review form is empty.

@@ -202,12 +202,18 @@ func feedActionsToFeedItems(ctx *context.Context, actions activities_model.Actio
 			case activities_model.ActionCommitRepo, activities_model.ActionMirrorSyncPush:
 				push := templates.ActionContent2Commits(act)
 				_ = act.LoadRepo(ctx)
+				commitHTMLURL := func(sha string) string {
+					if act.Repo == nil {
+						return ""
+					}
+					return act.Repo.CommitHTMLURL(sha, ctx)
+				}
 				for _, commit := range push.Commits {
 					if len(desc) != 0 {
 						desc += "\n\n"
 					}
 					desc += fmt.Sprintf("<a href=\"%s\">%s</a>\n%s",
-						html.EscapeString(fmt.Sprintf("%s/commit/%s", act.GetRepoAbsoluteLink(ctx), commit.Sha1)),
+						html.EscapeString(commitHTMLURL(commit.Sha1)),
 						commit.Sha1,
 						renderUtils.RenderCommitMessage(commit.Message, act.Repo),
 					)
@@ -216,7 +222,7 @@ func feedActionsToFeedItems(ctx *context.Context, actions activities_model.Actio
 				if push.Len > 1 {
 					link = &feeds.Link{Href: fmt.Sprintf("%s/%s", setting.AppSubURL, push.CompareURL)}
 				} else if push.Len == 1 {
-					link = &feeds.Link{Href: fmt.Sprintf("%s/commit/%s", act.GetRepoAbsoluteLink(ctx), push.Commits[0].Sha1)}
+					link = &feeds.Link{Href: commitHTMLURL(push.Commits[0].Sha1)}
 				}
 
 			case activities_model.ActionCreateIssue, activities_model.ActionCreatePullRequest:

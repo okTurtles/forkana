@@ -3,6 +3,169 @@
   max-width: 220px;
 }
 
+/* ===== Home page =====
+
+   The home page is one block -- logo, heading, search bar, and the feeds card when
+   signed in -- that sits in the vertical middle of the space between the navbar and
+   the footer. Both the signed-out and the signed-in views are centered (#358); the
+   signed-in one is simply taller, and "flex: 1 0 auto" below keeps the page scrolling
+   from the top rather than clipping once it outgrows the free space.
+
+   The section inside carries symmetric vertical padding. Equal top and bottom padding
+   cancels out while there is free space to distribute, so the centered position is
+   unchanged, but once the content overflows -- which the signed-in page can do on a
+   short or scaled viewport, where the feeds card pushes it past ~650px -- it keeps the
+   logo off the navbar and the card off the footer. ".full.height" cannot do that here
+   because the rule below zeroes its "--page-space-bottom".
+
+   It used to get there with "height: 100%" on the <main> element, which relied
+   on every ancestor having a definite height. That chain was broken by #316,
+   which relaxed "body" from "height: 100%" to "min-height: 100%" so that pages
+   taller than the viewport stop pushing the footer out of view (#242). With an
+   indefinite "body" height, "height: 100%" on <main> resolves to "auto", the
+   element shrinks to its content, "justify-content: center" has no free space
+   left to distribute, and the block ends up stuck at the top of the page.
+
+   Use flexbox instead of percentage heights, the same way the auth pages do
+   (see web_src/css/user.css): ".full.height" already grows to fill the viewport
+   via "flex: 1 0 auto", so making it a flex column and letting the landing take
+   the remaining space gives <main> a real height to center inside -- no
+   definite-height chain required. */
+.full.height:has(> .home-hero) {
+  display: flex;
+  flex-direction: column;
+  /* ".full.height" reserves "--page-space-bottom" (64px) below the last page
+     element to keep dense content pages off the footer. Here that is dead space
+     that would push the visual center 32px above the real one. */
+  padding-bottom: 0;
+}
+
+.home-hero {
+  /* grow into the free space, but never shrink below the content: on a short
+     viewport the page scrolls from the top instead of clipping the logo */
+  flex: 1 0 auto;
+  justify-content: center;
+}
+
+/* ===== Homepage search suggestions ===== */
+
+.home-search {
+  position: relative;
+}
+
+/* Sits on top of the page instead of pushing the rest of it down, and stays inside the width of
+   the search field it belongs to. */
+.home-search-suggestions {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  text-align: left;
+  overflow: hidden;
+  background: var(--color-body);
+  border: 1px solid var(--color-secondary);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px var(--color-shadow);
+}
+
+/* Both states are spelled out so that this beats the "a:hover" rule of base.css, which would
+   otherwise colour and underline a hovered suggestion. */
+.home-search-suggestion,
+.home-search-suggestion:hover {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.home-search-suggestion {
+  display: block;
+  padding: 10px 16px;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Display-only capitalization so mixed-case subject names (e.g. "mars",
+   "Hank Williams") render consistently; stored names are untouched. */
+.home-search-suggestion::first-letter {
+  text-transform: uppercase;
+}
+
+.home-search-suggestion b {
+  font-weight: var(--font-weight-semibold);
+}
+
+.home-search-suggestion:hover,
+.home-search-suggestion.active {
+  background: var(--color-hover);
+}
+
+/* ===== Homepage search button =====
+
+   Sits inside the right end of the search field and only shows while the field holds
+   text (initHomeSearch in web_src/js/features/home-search.ts), per the Figma design. */
+
+.home-search-button {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+  color: var(--color-primary-contrast);
+  background: var(--color-primary);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.home-search-button:hover {
+  background: var(--color-primary-hover);
+}
+
+.home-search-button:active {
+  background: var(--color-primary-active);
+}
+
+/* Matches the site's button convention (see .ui.button:focus-visible in
+   web_src/css/modules/button.css); "currentcolor" is the button's contrast color,
+   so the ring stays visible on the primary background. */
+.home-search-button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px currentcolor;
+}
+
+/* Overrides the "tw-pr-4" utility of the field while the button is shown, so a long keyword
+   scrolls instead of running underneath the button. The inset is set from the rendered button's
+   width (updateButton in web_src/js/features/home-search.ts), so a longer translated label still
+   fits; the fallback only exists as a safety net (the class and the variable are set in the same
+   synchronous block, so it never applies in practice) and is sized for the rendered English
+   "Search" (~75px) plus the 24px gap. "!important" is required no matter the
+   specificity: tailwind runs with `important: true` (tailwind.config.ts), so every tw- utility
+   on the input is itself !important. */
+#home-search-form input[name="q"].home-search-input-with-button {
+  padding-right: var(--home-search-button-inset, 100px) !important;
+}
+
+/* ===== Homepage search validation ===== */
+
+.home-search-error {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--color-red);
+}
+
+/* Overrides the tailwind border utilities of the search field, including the focused state.
+   "!important" is required no matter the specificity: tailwind runs with `important: true`
+   (tailwind.config.ts), so every tw- utility on the input is itself !important. */
+#home-search-form input[name="q"].home-search-input-invalid,
+#home-search-form input[name="q"].home-search-input-invalid:focus {
+  border-color: var(--color-red) !important;
+}
+
 /* ===== Homepage feeds card ===== */
 
 .home-feeds-card {
@@ -152,10 +315,6 @@
   white-space: nowrap;
   background: transparent;
   color: var(--color-text);
-}
-
-.feeds-sort-btn {
-  background: var(--color-white);
 }
 
 .feeds-filter-btn:hover,
@@ -482,6 +641,7 @@
 
 .page-footer {
   display: flex;
+  flex-shrink: 0; /* body is a flex column: never squeeze the footer to fit the viewport */
   justify-content: space-between;
   background-color: var(--color-footer);
   border-top: 1px solid var(--color-secondary);

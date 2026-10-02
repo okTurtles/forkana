@@ -1,0 +1,46 @@
+/* Explore Subjects list — the name-first row from the Forkana design (#248).
+
+   Gitea's stock flex-list draws a rule between every row and spaces them for a repository
+   listing. The subjects list is a plain index of names, so the separators are removed and the
+   rows are tightened. Scoped to ".page-content.explore.subjects" so the flex-lists on the user
+   profile and the explore users tab keep their own treatment. */
+
+.page-content.explore.subjects .flex-list {
+  margin-top: 8px;
+}
+
+/* Drop the row separators (web_src/css/shared/flex-list.css sets a border-top here) and space
+   the rows 16px apart. The gap is a margin between siblings rather than padding on every row so
+   that it is exactly 16px of whitespace, and so the section headings inside the list keep the
+   margins their own utility classes give them. */
+.page-content.explore.subjects .flex-list > .flex-item + .flex-item {
+  border-top: none;
+  margin-top: 16px;
+}
+
+/* The 8px gap matches the stock .flex-item, but it is a value the design asks for by name, so
+   it is restated here rather than inherited from a rule that is free to change. */
+.page-content.explore.subjects .flex-list > .flex-item {
+  padding: 0;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Target glyph in the body text colour rather than the link colour, so the name is the only
+   accented thing in the row. The token is near-black on light themes and near-white on dark
+   ones, which keeps the glyph legible either way. */
+.page-content.explore.subjects .flex-item .flex-item-leading {
+  color: var(--color-text);
+}
+
+.page-content.explore.subjects .flex-item .flex-item-title a {
+  font-size: 14px;
+  font-weight: 500;
+  /* ::first-letter only applies to a block container, and the anchor is inline by default. */
+  display: inline-block;
+}
+
+/* Display-only capitalisation: the stored subject name and the URL it links to are untouched. */
+.page-content.explore.subjects .flex-item .flex-item-title a::first-letter {
+  text-transform: uppercase;
+}

@@ -193,6 +193,19 @@ func Contexter() func(next http.Handler) http.Handler {
 			}
 
 			httpcache.SetCacheControlInHeader(ctx.Resp.Header(), &httpcache.CacheControlOptions{NoTransform: true})
+
+			// The auth middlewares run after Contexter, so whether the viewer is signed
+			// in is only known once the response is about to be written. Signed-in HTML
+			// pages must not be cached at all (see CacheControlOptions.NoStore), otherwise
+			// the browser can show them again after sign-out via history navigation.
+			// Only HTML needs this: handlers that serve cacheable non-HTML content
+			// (avatar redirects, public repo blobs, attachments) set their own headers,
+			// and those responses are not history-navigation targets.
+			ctx.Resp.Before(func(resp ResponseWriter) {
+				if ctx.IsSigned && strings.HasPrefix(resp.Header().Get("Content-Type"), "text/html") {
+					httpcache.SetCacheControlInHeader(resp.Header(), &httpcache.CacheControlOptions{NoStore: true, NoTransform: true})
+				}
+			})
 			ctx.Resp.Header().Set(`X-Frame-Options`, setting.CORSConfig.XFrameOptions)
 
 			ctx.Data["SystemConfig"] = setting.Config()
@@ -261,6 +274,12 @@ func (ctx *Context) JSONError(msg any) {
 	default:
 		panic(fmt.Sprintf("unsupported type: %T", msg))
 	}
+}
+
+// JSONForbidden is the 403 sibling of JSONError: the frontend's fetch-action
+// handler renders the "errorMessage" payload as an error toast.
+func (ctx *Context) JSONForbidden(msg string) {
+	ctx.JSON(http.StatusForbidden, map[string]any{"errorMessage": msg, "renderFormat": "text"})
 }
 
 func (ctx *Context) JSONErrorNotFound(optMsg ...string) {

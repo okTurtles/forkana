@@ -180,6 +180,54 @@ func TestAPIForkWithSubjectConflict(t *testing.T) {
 			"Error message should mention subject ownership conflict")
 	})
 
+	t.Run("ForkSucceedsAfterArchivingOwnArticle", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+
+		// An archived article is not an active one, so it no longer occupies user5's
+		// "one article per subject" slot and must not block forking another article
+		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), user5Repo, true))
+		defer func() {
+			_ = repo_model.SetArchiveRepoState(t.Context(), user5Repo, false)
+		}()
+
+		// user5's own article was created as a fork of repo1, so repo1 itself cannot be
+		// forked again: user4 provides another article of the same subject to contribute to
+		user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		otherArticle, err := repo_service.ForkRepository(t.Context(), user4, user4, repo_service.ForkRepoOptions{
+			BaseRepo:     repo1,
+			Name:         "user4-other-article",
+			SingleBranch: repo1.DefaultBranch,
+		})
+		require.NoError(t, err)
+		defer func() {
+			_ = repo_service.DeleteRepositoryDirectly(t.Context(), otherArticle.ID)
+		}()
+
+		// The archived article keeps its name, so the fork needs a different one
+		forkName := "user5-fork-after-archive"
+		req := NewRequestWithJSON(t, "POST", "/api/v1/repos/"+user4.Name+"/"+otherArticle.Name+"/forks", &api.CreateForkOption{
+			Name: &forkName,
+		}).AddTokenAuth(user5Token)
+		resp := MakeRequest(t, req, http.StatusAccepted)
+
+		var fork api.Repository
+		DecodeJSON(t, resp, &fork)
+		assert.Equal(t, forkName, fork.Name)
+		assert.Equal(t, user5.Name, fork.Owner.UserName)
+
+		forkRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{Name: forkName, OwnerID: user5.ID})
+		defer func() {
+			_ = repo_service.DeleteRepositoryDirectly(t.Context(), forkRepo.ID)
+		}()
+
+		// user5 now has two repositories for the subject, but only the fork is active
+		assert.Equal(t, repo1.SubjectID, forkRepo.SubjectID)
+		assert.False(t, forkRepo.IsArchived)
+		archived := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: user5Repo.ID})
+		assert.True(t, archived.IsArchived, "the original article should still be archived")
+		assert.Equal(t, repo1.SubjectID, archived.SubjectID)
+	})
+
 	t.Run("ForkSucceedsForUserWithoutSubjectRepo", func(t *testing.T) {
 		defer tests.PrintCurrentTest(t)()
 

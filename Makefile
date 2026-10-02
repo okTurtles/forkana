@@ -25,8 +25,14 @@ COMMA := ,
 
 XGO_VERSION := go-1.25.x
 
+# The xgo images bake in their own Go toolchain, which neither go.mod nor
+# actions/setup-go can influence. GOTOOLCHAIN=auto makes the container honour the
+# toolchain directive in go.mod as a minimum, so release binaries are never built
+# with a Go older than the pin.
+XGO_ENV := -env GOTOOLCHAIN=auto
+
 AIR_PACKAGE ?= github.com/air-verse/air@v1
-EDITORCONFIG_CHECKER_PACKAGE ?= github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@v3
+EDITORCONFIG_CHECKER_PACKAGE ?= github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@v3.11.1
 GOFUMPT_PACKAGE ?= mvdan.cc/gofumpt@v0.9.1
 GOLANGCI_LINT_PACKAGE ?= github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
 GXZ_PACKAGE ?= github.com/ulikunitz/xz/cmd/gxz@v0.5.15
@@ -602,8 +608,14 @@ test-mssql\#%: integrations.mssql.test generate-ini-mssql
 test-mssql-migration: migrations.mssql.test migrations.individual.mssql.test
 
 .PHONY: playwright
+# Set SKIP_PLAYWRIGHT_INSTALL to skip the browser installation, for environments
+# where the browsers are already provisioned out of band.
 playwright: deps-frontend
+ifdef SKIP_PLAYWRIGHT_INSTALL
+	@echo "Skipping 'playwright install' (SKIP_PLAYWRIGHT_INSTALL is set)"
+else
 	$(NODE_VARS) pnpm exec playwright install $(PLAYWRIGHT_FLAGS)
+endif
 
 .PHONY: test-e2e%
 test-e2e%: TEST_TYPE ?= e2e
@@ -797,22 +809,22 @@ $(DIST_DIRS):
 
 .PHONY: release-windows
 release-windows: | $(DIST_DIRS)
-	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) -buildmode exe -dest $(DIST)/binaries -tags 'osusergo $(TAGS)' -ldflags '-s -w -linkmode external -extldflags "-static" $(LDFLAGS)' -targets 'windows/*' -out gitea-$(VERSION) .
+	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) $(XGO_ENV) -buildmode exe -dest $(DIST)/binaries -tags 'osusergo $(TAGS)' -ldflags '-s -w -linkmode external -extldflags "-static" $(LDFLAGS)' -targets 'windows/*' -out gitea-$(VERSION) .
 ifeq (,$(findstring gogit,$(TAGS)))
-	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) -buildmode exe -dest $(DIST)/binaries -tags 'osusergo gogit $(TAGS)' -ldflags '-s -w -linkmode external -extldflags "-static" $(LDFLAGS)' -targets 'windows/*' -out gitea-$(VERSION)-gogit .
+	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) $(XGO_ENV) -buildmode exe -dest $(DIST)/binaries -tags 'osusergo gogit $(TAGS)' -ldflags '-s -w -linkmode external -extldflags "-static" $(LDFLAGS)' -targets 'windows/*' -out gitea-$(VERSION)-gogit .
 endif
 
 .PHONY: release-linux
 release-linux: | $(DIST_DIRS)
-	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) -dest $(DIST)/binaries -tags 'netgo osusergo $(TAGS)' -ldflags '-s -w -linkmode external -extldflags "-static" $(LDFLAGS)' -targets '$(LINUX_ARCHS)' -out gitea-$(VERSION) .
+	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) $(XGO_ENV) -dest $(DIST)/binaries -tags 'netgo osusergo $(TAGS)' -ldflags '-s -w -linkmode external -extldflags "-static" $(LDFLAGS)' -targets '$(LINUX_ARCHS)' -out gitea-$(VERSION) .
 
 .PHONY: release-darwin
 release-darwin: | $(DIST_DIRS)
-	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) -dest $(DIST)/binaries -tags 'netgo osusergo $(TAGS)' -ldflags '-s -w $(LDFLAGS)' -targets 'darwin-10.12/amd64,darwin-10.12/arm64' -out gitea-$(VERSION) .
+	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) $(XGO_ENV) -dest $(DIST)/binaries -tags 'netgo osusergo $(TAGS)' -ldflags '-s -w $(LDFLAGS)' -targets 'darwin-10.12/amd64,darwin-10.12/arm64' -out gitea-$(VERSION) .
 
 .PHONY: release-freebsd
 release-freebsd: | $(DIST_DIRS)
-	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) -dest $(DIST)/binaries -tags 'netgo osusergo $(TAGS)' -ldflags '-s -w $(LDFLAGS)' -targets 'freebsd/amd64' -out gitea-$(VERSION) .
+	CGO_CFLAGS="$(CGO_CFLAGS)" $(GO) run $(XGO_PACKAGE) -go $(XGO_VERSION) $(XGO_ENV) -dest $(DIST)/binaries -tags 'netgo osusergo $(TAGS)' -ldflags '-s -w $(LDFLAGS)' -targets 'freebsd/amd64' -out gitea-$(VERSION) .
 
 .PHONY: release-copy
 release-copy: | $(DIST_DIRS)
@@ -886,7 +898,7 @@ update-js: node-check | node_modules ## update js dependencies
 	@# nolyfill writes package.json#pnpm.overrides, which REPLACES (not merges with)
 	@# the overrides in pnpm-workspace.yaml, silently dropping any entry nolyfill
 	@# does not manage, such as the cosmiconfig pin.
-	@if grep -qE '^  "pnpm"[[:space:]]*:' package.json; then \
+	@if node -e 'process.exit(JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).pnpm === undefined ? 1 : 0)'; then \
 		echo "nolyfill re-created package.json#pnpm.overrides."; \
 		echo "That field REPLACES the overrides in pnpm-workspace.yaml rather than merging with"; \
 		echo "them, so every override pnpm-workspace.yaml holds that nolyfill does not manage"; \

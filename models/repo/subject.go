@@ -241,6 +241,26 @@ func DeleteSubject(ctx context.Context, id int64) error {
 	return err
 }
 
+// DeleteSubjectIfOrphaned deletes the subject once no repository references it anymore
+// and reports whether it was deleted. The check and the delete are a single statement, so
+// a repository attached to the subject by a concurrent transaction keeps the subject alive.
+func DeleteSubjectIfOrphaned(ctx context.Context, id int64) (bool, error) {
+	if id <= 0 {
+		return false, nil
+	}
+
+	res, err := db.Exec(ctx,
+		"DELETE FROM `subject` WHERE id = ? AND NOT EXISTS (SELECT 1 FROM `repository` WHERE subject_id = ?)", id, id)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
 // FindSubjects finds subjects based on options
 func FindSubjects(ctx context.Context, opts FindSubjectsOptions) ([]*Subject, int64, error) {
 	sess := db.GetEngine(ctx).Where(opts.ToConds())
@@ -523,78 +543,6 @@ func CountRepositoriesBySubject(ctx context.Context, subjectID int64) (int64, er
 // logic should only trigger when a user commits content, not when they create an empty repository.
 func CountRootRepositoriesBySubject(ctx context.Context, subjectID int64) (int64, error) {
 	return db.GetEngine(ctx).Where("subject_id = ? AND is_fork = ? AND is_empty = ?", subjectID, false, false).Count(new(Repository))
-}
-
-// SubjectRepoCounts holds repository counts for a subject
-type SubjectRepoCounts struct {
-	SubjectID     int64
-	RepoCount     int64
-	RootRepoCount int64
-}
-
-// BatchCountRepositoriesBySubjects counts repositories for multiple subjects in a single query.
-// It returns a map of subject ID to SubjectRepoCounts containing both total repository count
-// and root (non-fork, non-empty) repository count for each subject.
-//
-// Note: If a subject ID doesn't exist in the database or has no repositories, the returned
-// SubjectRepoCounts will have zero values for RepoCount and RootRepoCount. This is intentional
-// behavior to allow callers to handle missing subjects gracefully. Callers should validate
-// subject existence separately if they need to distinguish between "subject exists with zero
-// repos" and "subject doesn't exist".
-func BatchCountRepositoriesBySubjects(ctx context.Context, subjectIDs []int64) (map[int64]*SubjectRepoCounts, error) {
-	if len(subjectIDs) == 0 {
-		return make(map[int64]*SubjectRepoCounts), nil
-	}
-
-	// Initialize result map with zero counts for all requested subjects
-	result := make(map[int64]*SubjectRepoCounts, len(subjectIDs))
-	for _, id := range subjectIDs {
-		result[id] = &SubjectRepoCounts{SubjectID: id}
-	}
-
-	// Count all repositories per subject
-	type countResult struct {
-		SubjectID int64 `xorm:"subject_id"`
-		Count     int64 `xorm:"count"`
-	}
-
-	var allCounts []countResult
-	err := db.GetEngine(ctx).
-		Table("repository").
-		Select("subject_id, COUNT(*) as count").
-		In("subject_id", subjectIDs).
-		GroupBy("subject_id").
-		Find(&allCounts)
-	if err != nil {
-		return nil, fmt.Errorf("count all repositories: %w", err)
-	}
-
-	for _, c := range allCounts {
-		if counts, ok := result[c.SubjectID]; ok {
-			counts.RepoCount = c.Count
-		}
-	}
-
-	// Count root (non-fork) repositories per subject
-	var rootCounts []countResult
-	err = db.GetEngine(ctx).
-		Table("repository").
-		Select("subject_id, COUNT(*) as count").
-		In("subject_id", subjectIDs).
-		And("is_fork = ?", false).
-		GroupBy("subject_id").
-		Find(&rootCounts)
-	if err != nil {
-		return nil, fmt.Errorf("count root repositories: %w", err)
-	}
-
-	for _, c := range rootCounts {
-		if counts, ok := result[c.SubjectID]; ok {
-			counts.RootRepoCount = c.Count
-		}
-	}
-
-	return result, nil
 }
 
 // ErrSubjectNotExist represents a "SubjectNotExist" error

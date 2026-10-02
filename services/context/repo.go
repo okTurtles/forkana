@@ -429,6 +429,12 @@ func repoAssignment(ctx *Context, repo *repo_model.Repository) {
 	ctx.Repo.Repository = repo
 	ctx.Data["RepoName"] = ctx.Repo.Repository.Name
 	ctx.Data["IsEmptyRepo"] = ctx.Repo.Repository.IsEmpty
+	// The "Repo" suffix follows IsEmptyRepo above: the template data holds flags of the
+	// doer and of the request too, so a repository state says which one it describes.
+	ctx.Data["IsTombstonedRepo"] = ctx.Repo.Repository.IsTombstone()
+	// Resolved here so the templates never have to call GetSubject with a context
+	// argument, which the template engine cannot always supply.
+	ctx.Data["SubjectName"] = ctx.Repo.Repository.GetSubject(ctx)
 }
 
 // RepoAssignment returns a middleware to handle repository assignment
@@ -637,6 +643,16 @@ func RepoAssignment(ctx *Context) {
 		strings.HasPrefix(ctx.Link, ctx.Repo.RepoLink+"/settings/") ||
 		ctx.Link == ctx.Repo.RepoLink+"/-/migrate/status"
 
+	// A tombstone only keeps the git data around so that its forks retain a valid
+	// ancestor. Nothing but the placeholder home page may be served, and the git
+	// repository is deliberately left unopened so no content can leak.
+	if ctx.Repo.Repository.IsTombstone() {
+		if ctx.Link != ctx.Repo.RepoLink {
+			ctx.Redirect(ctx.Repo.RepoLink)
+		}
+		return
+	}
+
 	// Disable everything when the repo is being created
 	if ctx.Repo.Repository.IsBeingCreated() || ctx.Repo.Repository.IsBroken() {
 		if !isHomeOrSettings {
@@ -716,22 +732,9 @@ func RepoAssignment(ctx *Context) {
 	ctx.Data["CanCompareOrPull"] = canCompare
 	ctx.Data["PullRequestCtx"] = ctx.Repo.PullRequest
 
-	if ctx.Repo.Repository.Status == repo_model.RepositoryPendingTransfer {
-		repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
-		if err != nil {
-			ctx.ServerError("GetPendingRepositoryTransfer", err)
-			return
-		}
-
-		if err := repoTransfer.LoadAttributes(ctx); err != nil {
-			ctx.ServerError("LoadRecipient", err)
-			return
-		}
-
-		ctx.Data["RepoTransfer"] = repoTransfer
-		if ctx.Doer != nil {
-			ctx.Data["CanUserAcceptOrRejectTransfer"] = repoTransfer.CanUserAcceptOrRejectTransfer(ctx, ctx.Doer)
-		}
+	retrievePendingRepositoryTransfer(ctx)
+	if ctx.Written() {
+		return
 	}
 
 	if ctx.FormString("go-get") == "1" {
@@ -870,6 +873,12 @@ func RepoRefByType(detectRefType git.RefType) func(*Context) {
 
 		if ctx.Repo.Repository.IsBeingCreated() || ctx.Repo.Repository.IsBroken() {
 			return // no git repo, so do nothing, users will see a "migrating" UI provided by "migrate/migrating.tmpl", or empty repo guide
+		}
+		if ctx.Repo.Repository.IsTombstone() {
+			// The git repo is intentionally not opened for tombstones, so no ref can be
+			// resolved. The repository assignment has already redirected every other route
+			// to the home link, whose handler renders the deletion notice.
+			return
 		}
 		// Empty repository does not have reference information.
 		if ctx.Repo.Repository.IsEmpty {
@@ -1075,6 +1084,13 @@ func RepoAssignmentBySubject(ctx *Context) {
 		return
 	}
 
+	// GetPublicRepositoryBySubject only falls back to a tombstone when every article on
+	// the subject was deleted, and a tombstone must never have its content rendered.
+	if repo.IsTombstone() {
+		ctx.NotFound(nil)
+		return
+	}
+
 	// Load repository owner
 	if err = repo.LoadOwner(ctx); err != nil {
 		ctx.ServerError("LoadOwner", err)
@@ -1132,6 +1148,7 @@ func RepoAssignmentBySubject(ctx *Context) {
 	ctx.Data["Owner"] = ctx.Repo.Repository.Owner
 	ctx.Data["RepoName"] = ctx.Repo.Repository.Name
 	ctx.Data["IsEmptyRepo"] = ctx.Repo.Repository.IsEmpty
+	ctx.Data["SubjectName"] = ctx.Repo.Repository.GetSubject(ctx)
 	ctx.Data["CanWriteCode"] = ctx.Repo.CanWrite(unit_model.TypeCode)
 	ctx.Data["CanWriteIssues"] = ctx.Repo.CanWrite(unit_model.TypeIssues)
 	ctx.Data["CanWritePulls"] = ctx.Repo.CanWrite(unit_model.TypePullRequests)
@@ -1186,7 +1203,11 @@ func RepoAssignmentBySubject(ctx *Context) {
 }
 
 // RepoAssignmentByOwnerAndSubject assigns repository context by owner name and subject name
-// This is used for routes like /article/{username}/{subjectname} that display a specific user's repository
+// This is used for routes like /article/{username}/{subjectname} that display a specific user's repository.
+// When the owner also has an active article for the subject, the vanity url resolves to the
+// active one and the archived article is only reachable via its permanent repository url
+// "/{username}/{reponame}". An archived article is still served here when it is the owner's
+// only article for the subject.
 func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	userName := ctx.PathParam("username")
 	subjectName := ctx.PathParam("subjectname")
@@ -1230,6 +1251,22 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
+
+	// Set here rather than further down because a tombstone returns early and its
+	// notice still renders the repository frame, which needs the repository itself.
+	ctx.Data["Title"] = repo.Owner.Name + "/" + repo.Name
+	ctx.Data["Repository"] = repo
+	ctx.Data["Owner"] = ctx.Repo.Repository.Owner
+
+	// A tombstone only keeps the git data around so that its forks retain a valid
+	// ancestor. Nothing but the placeholder article page may be served, and the git
+	// repository is deliberately left unopened so no content can leak.
+	if ctx.Repo.Repository.IsTombstone() {
+		if ctx.Link != ctx.Repo.RepoLink {
+			ctx.Redirect(ctx.Repo.RepoLink)
+		}
+		return
+	}
 
 	// Initialize Git repository (required for RepoRefByType middleware)
 	if ctx.Repo.GitRepo != nil {
@@ -1297,9 +1334,6 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	}
 
 	// Set up additional repository data for templates (similar to RepoAssignment)
-	ctx.Data["Title"] = repo.Owner.Name + "/" + repo.Name
-	ctx.Data["Repository"] = repo
-	ctx.Data["Owner"] = ctx.Repo.Repository.Owner
 	ctx.Data["CanWriteCode"] = ctx.Repo.CanWrite(unit_model.TypeCode)
 	ctx.Data["CanWriteIssues"] = ctx.Repo.CanWrite(unit_model.TypeIssues)
 	ctx.Data["CanWritePulls"] = ctx.Repo.CanWrite(unit_model.TypePullRequests)
@@ -1359,5 +1393,34 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 		if ctx.Written() {
 			return
 		}
+	}
+
+	// The article view shows the recipient a banner to accept or reject a pending transfer
+	retrievePendingRepositoryTransfer(ctx)
+}
+
+// retrievePendingRepositoryTransfer loads the pending transfer of the current repository into
+// the template data, together with whether the doer may accept or reject it. The transfer is
+// fully loaded via LoadAttributes, so consumers can read Recipient, Teams and Repo without
+// querying again. It is a no-op for repositories that are not awaiting a transfer.
+func retrievePendingRepositoryTransfer(ctx *Context) {
+	if ctx.Repo.Repository.Status != repo_model.RepositoryPendingTransfer {
+		return
+	}
+
+	repoTransfer, err := repo_model.GetPendingRepositoryTransfer(ctx, ctx.Repo.Repository)
+	if err != nil {
+		ctx.ServerError("GetPendingRepositoryTransfer", err)
+		return
+	}
+
+	if err := repoTransfer.LoadAttributes(ctx); err != nil {
+		ctx.ServerError("LoadAttributes", err)
+		return
+	}
+
+	ctx.Data["RepoTransfer"] = repoTransfer
+	if ctx.Doer != nil {
+		ctx.Data["CanUserAcceptOrRejectTransfer"] = repoTransfer.CanUserAcceptOrRejectTransfer(ctx, ctx.Doer)
 	}
 }

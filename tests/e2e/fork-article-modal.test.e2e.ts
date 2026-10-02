@@ -260,7 +260,14 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       // The editor creates two .toastui-editor elements (md-mode and ww-mode), so use .first()
       await expect(page.locator('.toastui-editor').first()).toBeAttached({timeout: 20000});
 
-      await submitButton.click();
+      // Scroll button into view and ensure it's clickable
+      await submitButton.scrollIntoViewIfNeeded();
+      // eslint-disable-next-line playwright/no-wait-for-timeout
+      await page.waitForTimeout(500);
+
+      // Use force click for mobile browsers to avoid click interception issues
+      // eslint-disable-next-line playwright/no-force-option
+      await submitButton.click({force: true});
 
       // No confirmation modal should appear for repo owner
       const modal = page.locator('.ui.g-modal-confirm.modal.visible');

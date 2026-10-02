@@ -89,7 +89,7 @@ func GetFileCommitResponse(repo *repo_model.Repository, commit *git.Commit) (*ap
 			}
 		}
 	}
-	commitHTMLURL, _ := url.Parse(repo.HTMLURL() + "/commit/" + url.PathEscape(commit.ID.String()))
+	commitHTMLURL, _ := url.Parse(repo.CommitHTMLURL(commit.ID.String()))
 	fileCommit := &api.FileCommitResponse{
 		CommitMeta: api.CommitMeta{
 			SHA: commit.ID.String(),

@@ -34,7 +34,6 @@ var UI = struct {
 	CustomEmojis            []string
 	CustomEmojisMap         map[string]string `ini:"-"`
 	SearchRepoDescription   bool
-	OnlyShowRelevantRepos   bool
 	ExploreDefaultSort      string `ini:"EXPLORE_PAGING_DEFAULT_SORT"`
 	ExcludeForksDefault     bool
 	PreferredTimestampTense string
@@ -159,10 +158,6 @@ func loadUIFrom(rootCfg ConfigProvider) {
 	if UI.PreferredTimestampTense != "mixed" && UI.PreferredTimestampTense != "absolute" {
 		log.Fatal("ui.PREFERRED_TIMESTAMP_TENSE must be either 'mixed' or 'absolute'")
 	}
-
-	// OnlyShowRelevantRepos=false is important for many private/enterprise instances,
-	// because many private repositories do not have "description/topic", users just want to search by their names.
-	UI.OnlyShowRelevantRepos = sec.Key("ONLY_SHOW_RELEVANT_REPOS").MustBool(false)
 
 	UI.ReactionsLookup = make(container.Set[string])
 	for _, reaction := range UI.Reactions {

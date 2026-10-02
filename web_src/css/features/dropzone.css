@@ -113,10 +113,18 @@
   flex: 1 1 auto;
 }
 
+/* The toolbar popups ("Insert image", "Insert table", heading list) and the button
+   tooltips are absolutely positioned inside the editor. Clipping them here hid the
+   popup's Cancel/OK buttons whenever the editor was shorter than the popup, and cut
+   off the "More" tooltip at the right edge (#222), so this container must not clip. */
 .toast-comment-editor .toast-editor-wrapper {
   height: auto;
-  overflow: hidden;
+  overflow: visible;
 }
+
+/* The room reserved for the last toolbar button's tooltip lives with the toolbar's other
+   padding in `custom/public/assets/css/toast-editor.css` (`padding-right: 12px`), so both
+   editors get it from one declaration. */
 
 /* Editable content area fills container height and is resizable */
 .toast-comment-editor .ProseMirror.toastui-editor-contents {

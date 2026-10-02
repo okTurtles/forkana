@@ -437,7 +437,9 @@ func SubmitReview(ctx context.Context, doer *user_model.User, issue *Issue, revi
 			return nil, nil, err
 		}
 
-		if reviewType != ReviewTypeApprove && len(strings.TrimSpace(content)) == 0 {
+		// Forkana (see #321 for the equivalent fix on plain comments): a review that carries
+		// attachments is not empty, even when no text was typed.
+		if reviewType != ReviewTypeApprove && len(strings.TrimSpace(content)) == 0 && len(attachmentUUIDs) == 0 {
 			return nil, nil, ContentEmptyErr{}
 		}
 
@@ -467,7 +469,7 @@ func SubmitReview(ctx context.Context, doer *user_model.User, issue *Issue, revi
 		if err := review.LoadCodeComments(ctx); err != nil {
 			return nil, nil, err
 		}
-		if reviewType != ReviewTypeApprove && len(review.CodeComments) == 0 && len(strings.TrimSpace(content)) == 0 {
+		if reviewType != ReviewTypeApprove && len(review.CodeComments) == 0 && len(strings.TrimSpace(content)) == 0 && len(attachmentUUIDs) == 0 {
 			return nil, nil, ContentEmptyErr{}
 		}
 

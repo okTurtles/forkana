@@ -372,6 +372,13 @@ func RepoPendingTransfer(ctx context.Context, doer, newOwner *user_model.User, r
 	}
 }
 
+// RepoTransferRejected notifies the user who started a repository transfer that it was rejected
+func RepoTransferRejected(ctx context.Context, doer, initiator *user_model.User, repo *repo_model.Repository) {
+	for _, notifier := range notifiers {
+		notifier.RepoTransferRejected(ctx, doer, initiator, repo)
+	}
+}
+
 // PackageCreate notifies creation of a package to notifiers
 func PackageCreate(ctx context.Context, doer *user_model.User, pd *packages_model.PackageDescriptor) {
 	for _, notifier := range notifiers {

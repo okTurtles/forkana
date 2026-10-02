@@ -292,6 +292,19 @@ func DeleteRepositoryDirectly(ctx context.Context, repoID int64, ignoreOrgTeams 
 		return err
 	}
 
+	// A pending transfer outlives the repository it points at, so drop it here.
+	// Deletion stays available while a transfer is pending, so this is reachable.
+	if err := repo_model.DeleteRepositoryTransfer(ctx, repoID); err != nil {
+		return fmt.Errorf("delete pending transfer [%d]: %w", repoID, err)
+	}
+
+	// A subject only exists to group articles, so drop it once its last article is gone.
+	// This runs in the same transaction as the repository delete, so a concurrent
+	// create/fork attaching to the subject keeps it alive.
+	if _, err := repo_model.DeleteSubjectIfOrphaned(ctx, repo.SubjectID); err != nil {
+		return fmt.Errorf("delete orphaned subject [%d]: %w", repo.SubjectID, err)
+	}
+
 	if err = committer.Commit(); err != nil {
 		return err
 	}
@@ -387,6 +400,9 @@ func DeleteOwnerRepositoriesDirectly(ctx context.Context, owner *user_model.User
 			Private: true,
 			OwnerID: owner.ID,
 			Actor:   owner,
+			// Tombstones are deliberately left behind: purging one would strip its
+			// forks of their ancestor. The owner row is anonymized instead, see
+			// AnonymizeTombstoneOwner.
 		})
 		if err != nil {
 			return fmt.Errorf("GetUserRepositories: %w", err)

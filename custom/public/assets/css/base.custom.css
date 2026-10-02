@@ -5,13 +5,19 @@
 
 	/* Bubble graph defaults (light) — single source of truth for gitea-light and gitea-auto
 	   in light OS mode; overridden for dark themes by colors-dark.custom.css */
-	--bubble-grad-start: #FAFBFC;
-	--bubble-grad-mid: #EEF2F7;
-	--bubble-grad-end: #E6EBF2;
-	--bubble-stroke: #DBE2EA;
-	--bubble-edge-stroke: #D7DFE8;
+	/* #386 items 4, 7 — exact values read from the figma (node 641-61421):
+	   the bubble is a linear gradient of #D1D9E0 at 20% -> 60% alpha over the
+	   white page, i.e. #F6F7F9 -> #E3E8ED flattened; the legend's Article dot
+	   is flat #D1D9E0 (= --bubble-stroke); joint rings and the Point of
+	   contention swatch are white with a #818B98 border (the design system's
+	   borderColor/emphasis). The legend swatches share these tokens. */
+	--bubble-grad-start: #F6F7F9;
+	--bubble-grad-mid: #EDF0F3;
+	--bubble-grad-end: #E3E8ED;
+	--bubble-stroke: #D1D9E0;
+	--bubble-edge-stroke: #D1D9E0;
 	--bubble-joint-fill: #ffffff;
-	--bubble-joint-stroke: #C7D2DF;
+	--bubble-joint-stroke: #818B98;
 	--bubble-shadow-color: #64748b;
 	--bubble-overlay-bg: rgba(255, 255, 255, 0.98);
 }

@@ -37,6 +37,7 @@ import {initUserAuthWebAuthn, initUserAuthWebAuthnRegister} from './features/use
 import {initRepoRelease, initRepoReleaseNew} from './features/repo-release.ts';
 import {initRepoEditor} from './features/repo-editor.ts';
 import {initArticleEditor} from './features/article-editor.ts';
+import {initArticleSettings} from './features/article-settings.ts';
 import {initCompSearchUserBox} from './features/comp/SearchUserBox.ts';
 import {initInstall} from './features/install.ts';
 import {initCompWebHookEditor} from './features/comp/WebHookEditor.ts';
@@ -58,11 +59,12 @@ import {initRepoRecentCommits} from './features/recent-commits.ts';
 import {initRepoDiffCommitBranchesAndTags} from './features/repo-diff-commit.ts';
 import {initGlobalSelectorObserver} from './modules/observer.ts';
 import {initExploreSearch} from './features/explore-search.ts';
+import {initHomeSearch} from './features/home-search.ts';
 import {initColorPickers} from './features/colorpicker.ts';
 import {initAdminSelfCheck} from './features/admin/selfcheck.ts';
 import {initOAuth2SettingsDisableCheckbox} from './features/oauth2-settings.ts';
 import {initGlobalFetchAction} from './features/common-fetch-action.ts';
-import {initFootLanguageMenu, initGlobalComponent, initGlobalDropdown, initGlobalInput, initHeadNavbarContentToggle} from './features/common-page.ts';
+import {initFootLanguageMenu, initGlobalComponent, initGlobalDropdown, initGlobalInput, initHeadNavbarContentToggle, initPageShowBfcacheReload} from './features/common-page.ts';
 import {initGlobalButtonClickOnEnter, initGlobalButtons, initGlobalDeleteButton} from './features/common-button.ts';
 import {initGlobalComboMarkdownEditor, initGlobalEnterQuickSubmit, initGlobalFormDirtyLeaveConfirm} from './features/common-form.ts';
 import {callInitFunctions} from './modules/init.ts';
@@ -70,6 +72,7 @@ import {initRepoViewFileTree} from './features/repo-view-file-tree.ts';
 import {initRepoBubbleView} from './features/repo-bubble-view.ts';
 import {initRepoHistory} from './features/repo-history.ts';
 import {initUserFeedsFilter} from './features/user-feeds.ts';
+import {initHomeSearchValidation} from './features/home-search-validation.ts';
 
 const initStartTime = performance.now();
 const initPerformanceTracer = callInitFunctions([
@@ -100,6 +103,7 @@ const initPerformanceTracer = callInitFunctions([
 
   initHeadNavbarContentToggle,
   initFootLanguageMenu,
+  initPageShowBfcacheReload,
 
   initContextPopups,
   initHeatmap,
@@ -119,6 +123,7 @@ const initPerformanceTracer = callInitFunctions([
   initAdminSelfCheck,
 
   initDashboardRepoList,
+  initHomeSearchValidation,
 
   initNotificationCount,
 
@@ -133,6 +138,7 @@ const initPerformanceTracer = callInitFunctions([
   initRepoDiffCommitBranchesAndTags,
   initRepoEditor,
   initArticleEditor,
+  initArticleSettings,
   initRepoGraphGit,
   initRepoIssueContentHistory,
   initRepoIssueList,
@@ -154,6 +160,7 @@ const initPerformanceTracer = callInitFunctions([
   initRepository,
   initRepositoryActionView,
   initExploreSearch,
+  initHomeSearch,
   initRepoContributors,
   initRepoCodeFrequency,
   initRepoRecentCommits,

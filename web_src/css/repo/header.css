@@ -38,3 +38,80 @@
   justify-content: center;
   margin-top: 6px;
 }
+
+/* ── Subject view tabs row (#386) ─────────────────────────────────────────
+   Item 2: the tabs are centred in the CONTAINER, not in the space left over
+   next to the Compare button — the button is lifted out of the flow and pinned
+   to the right edge, so it no longer pushes the tabs left of centre. */
+/* Item 5 lives here too: the Compare button reads as a button — bold label, a
+   hover you can see, and (via the `primary` class copycontent.ts toggles) a
+   filled active state with white text. The ID alone outweighs Fomantic's
+   class-only button rules, so no !important is needed. */
+#compare-mode-button {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: var(--font-weight-semibold);
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+overflow-menu:has(> #compare-mode-button) {
+  position: relative;
+}
+
+/* The pinned button is out of the flow, so neither the centred tab row nor
+   overflow-menu's own child measurement knows it is there. Reserve its width
+   on BOTH sides (so the tabs stay centred) to keep mid-width viewports from
+   running the tabs underneath it. */
+overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
+  margin: 0 110px;
+}
+
+/* Item 4 (and 3): the view-tab icons follow the label's colour instead of the
+   static gray that .svg.octicon-file carries elsewhere in the app. */
+#subject-view-tabs .item .svg {
+  color: inherit;
+}
+
+#compare-mode-button:hover:not(.primary) {
+  background: var(--color-secondary);
+}
+
+#compare-mode-button.primary {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+/* ── Mobile ───────────────────────────────────────────────────────────────
+   767.98px is this app's mobile breakpoint — 41 of the 43 max-width queries in
+   web_src/css use it, so this follows the house convention rather than the
+   bubble view's own `width <= 767px` switch (the same boundary, spelled the
+   way the CSS here spells it).
+
+   On a phone the subject header eats the top of the screen: the template gives
+   it `tw-pt-14` (56px) and `tw-pb-10` (40px), or 38px from
+   .repo-header-with-follow, under a 40px title. 1rem each way and a 20px title
+   leave room for the article itself.
+
+   THE SELECTORS ARE DELIBERATELY TWO DEEP. Tailwind's utilities are generated
+   with !important in this repo (`.tw-pt-14{padding-top:3.5rem!important}`) and
+   land ~35KB LATER in index.css than this file, so a single-class rule — even
+   an important one — loses to them on source order. `.secondary-nav` is the
+   real parent in both templates/repo/header.tmpl and its custom override, so
+   this is honest specificity, not a hack.
+
+   Only the h1 is retargeted: that is the subject title (custom/templates/repo/
+   header.tmpl). The plain repository header's `.flex-item-title` is an
+   owner/name breadcrumb and is left alone. */
+@media (max-width: 767.98px) {
+  .secondary-nav .repo-header {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+
+  .secondary-nav .repo-header h1 {
+    font-size: 20px !important;
+    text-align: center !important;
+  }
+}

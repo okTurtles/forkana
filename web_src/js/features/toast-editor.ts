@@ -3,6 +3,7 @@ import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 import {installLosslessMarkdownTracker} from './comp/losslessMarkdown.ts';
+import {defaultToolbarItems} from './comp/toastEditorToolbar.ts';
 import {showErrorToast} from '../modules/toast.ts';
 import {ensureFilesWithinLimit, getMaxAttachmentSize, showFileTooLargeError} from './comp/editorFileLimit.ts';
 import {POST} from '../modules/fetch.ts';
@@ -15,6 +16,14 @@ export type ToastEditorOptions = {
   hideModeSwitch?: boolean;
   toolbarItems?: string[][];
 };
+
+// Same pattern as ToastCommentEditor's `_giteaToastCommentEditor`: the textarea is hidden and
+// the editor owns the content, so the instance has to be reachable from the DOM for anything
+// that needs to read or replace it without a reference to the editor (E2E tests, in particular
+// — writing to the textarea directly is undone by the lossless tracker's next syncTextarea()).
+type ToastEditorContainer = HTMLElement & {_giteaToastEditor?: Editor};
+
+const toastEditorContainerSelector = '#toast-editor-container';
 
 // resolveRelativeSrc resolves a relative image path (e.g. "./img/a.png", "../b.png")
 // against the raw URL of the file being edited. The base URL is provided by the server
@@ -40,16 +49,11 @@ export async function createToastEditor(
     previewStyle = 'vertical',
     usageStatistics = false,
     hideModeSwitch = false,   // must be false to show the tabs
-    toolbarItems = [
-      ['heading', 'bold', 'italic'],
-      ['indent', 'outdent', 'code', 'link'],
-      ['ul', 'ol', 'task'],
-      ['image', 'table'],
-    ],
+    toolbarItems = defaultToolbarItems,
   } = options;
 
   // Use the existing container from the template
-  let container = document.querySelector<HTMLElement>('#toast-editor-container');
+  let container = document.querySelector<ToastEditorContainer>(toastEditorContainerSelector);
   if (!container) {
     container = document.createElement('div');
     container.id = 'toast-editor-container';
@@ -226,6 +230,10 @@ export async function createToastEditor(
   // installBase64WidgetPatch so comparisons see widget-stripped output.
   installLosslessMarkdownTracker(editor, textarea);
 
+  // Published only after the tracker is installed, so every consumer that reaches the editor
+  // through the DOM gets the lossless getMarkdown/setMarkdown.
+  container._giteaToastEditor = editor;
+
   // Rename mode switch labels
   const switchEl = container.querySelector('.toastui-editor-mode-switch');
   if (switchEl) {
@@ -246,5 +254,7 @@ export async function createToastEditor(
 }
 
 export function destroyToastEditor(editor: Editor): void {
+  const container = document.querySelector<ToastEditorContainer>(toastEditorContainerSelector);
+  if (container?._giteaToastEditor === editor) delete container._giteaToastEditor;
   editor.destroy();
 }

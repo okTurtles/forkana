@@ -367,16 +367,21 @@ func UpdateIssueContent(ctx *context.Context) {
 	rctx := renderhelper.NewRenderContextRepoComment(ctx, ctx.Repo.Repository, renderhelper.RepoCommentOptions{
 		FootnoteContextID: "0",
 	})
-	content, err := markdown.RenderString(rctx, issue.Content)
+	renderedContent, err := markdown.RenderString(rctx, issue.Content)
 	if err != nil {
 		ctx.ServerError("RenderString", err)
 		return
 	}
 
+	attachments := attachmentsHTML(ctx, issue.Attachments, renderedContent)
+	if ctx.Written() {
+		return
+	}
+
 	ctx.JSON(http.StatusOK, map[string]any{
-		"content":        content,
+		"content":        renderedContent,
 		"contentVersion": issue.ContentVersion,
-		"attachments":    attachmentsHTML(ctx, issue.Attachments, issue.Content),
+		"attachments":    attachments,
 	})
 }
 
@@ -634,11 +639,19 @@ func updateAttachments(ctx *context.Context, item any, files []string) error {
 	return err
 }
 
-func attachmentsHTML(ctx *context.Context, attachments []*repo_model.Attachment, content string) template.HTML {
+// attachmentsHTML renders the attachment list of an issue or comment. renderedContent must be the
+// *rendered* (HTML) content of that issue/comment, not the raw markdown: the template hides
+// attachments whose UUID already appears in it, because those are displayed inline by the content
+// itself. Raw markdown only matches by coincidence (the renderer may rewrite the links), and an
+// empty value — what the old "Content" key produced — disables the de-duplication entirely.
+//
+// On failure it responds via ctx.ServerError and returns "", so callers must check ctx.Written()
+// before writing a response of their own.
+func attachmentsHTML(ctx *context.Context, attachments []*repo_model.Attachment, renderedContent template.HTML) template.HTML {
 	attachHTML, err := ctx.RenderToHTML(tplAttachment, map[string]any{
-		"ctxData":     ctx.Data,
-		"Attachments": attachments,
-		"Content":     content,
+		"ctxData":         ctx.Data,
+		"Attachments":     attachments,
+		"RenderedContent": renderedContent,
 	})
 	if err != nil {
 		ctx.ServerError("attachmentsHTML.HTMLString", err)

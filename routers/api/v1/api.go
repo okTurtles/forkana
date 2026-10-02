@@ -458,6 +458,13 @@ func reqRepoWriter(unitTypes ...unit.Type) func(ctx *context.APIContext) {
 // reqRepoReader user should have specific read permission or be a repo admin or a site admin
 func reqRepoReader(unitType unit.Type) func(ctx *context.APIContext) {
 	return func(ctx *context.APIContext) {
+		// A tombstoned article keeps its git data only so that its forks retain a valid
+		// ancestor. Every code endpoint (contents, raw, media, archives, git objects)
+		// goes through this guard, so redacting here blocks them all at once.
+		if unitType == unit.TypeCode && ctx.Repo.Repository.IsTombstone() {
+			ctx.APIErrorNotFound("the article has been deleted by its author")
+			return
+		}
 		if !ctx.Repo.CanRead(unitType) && !ctx.IsUserRepoAdmin() && !ctx.IsUserSiteAdmin() {
 			ctx.APIError(http.StatusForbidden, "user should have specific read permission or be a repo admin or a site admin")
 			return

@@ -57,7 +57,7 @@ func ToPayloadCommit(ctx context.Context, repo *repo_model.Repository, c *git.Co
 	return &api.PayloadCommit{
 		ID:      c.ID.String(),
 		Message: c.Message(),
-		URL:     util.URLJoin(repo.HTMLURL(), "commit", c.ID.String()),
+		URL:     repo.CommitHTMLURL(c.ID.String(), ctx),
 		Author: &api.PayloadUser{
 			Name:     c.Author.Name,
 			Email:    c.Author.Email,
@@ -154,7 +154,7 @@ func ToCommit(ctx context.Context, repo *repo_model.Repository, gitRepo *git.Rep
 			SHA:     commit.ID.String(),
 			Created: commit.Committer.When,
 		},
-		HTMLURL: repo.HTMLURL() + "/commit/" + url.PathEscape(commit.ID.String()),
+		HTMLURL: repo.CommitHTMLURL(commit.ID.String(), ctx),
 		RepoCommit: &api.RepoCommit{
 			URL: repo.APIURL() + "/git/commits/" + url.PathEscape(commit.ID.String()),
 			Author: &api.CommitUser{

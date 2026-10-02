@@ -7,6 +7,7 @@
 import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {hideElem, generateElemId} from '../../utils/dom.ts';
+import {defaultToolbarItems} from './toastEditorToolbar.ts';
 import {imageInfo} from '../../utils/image.ts';
 import {
   EventUploadStateChanged,
@@ -54,6 +55,7 @@ export class ToastCommentEditor {
 
   dropzone: HTMLElement | null = null;
   attachedDropzoneInst: any = null;
+  private onTextareaChange: (() => void) | null = null;
 
   constructor(container: ToastCommentEditorContainer, options: ToastCommentEditorOptions = {}) {
     if (container._giteaToastCommentEditor) throw new Error('ToastCommentEditor already initialized');
@@ -83,12 +85,7 @@ export class ToastCommentEditor {
       height = '200px',
       initialEditType = 'wysiwyg',
       previewStyle = 'vertical',
-      toolbarItems = [
-        ['heading', 'bold', 'italic'],
-        ['indent', 'outdent', 'code', 'link'],
-        ['ul', 'ol', 'task'],
-        ['image', 'table'],
-      ],
+      toolbarItems = defaultToolbarItems,
     } = this.options;
 
     this.editorWrapper.style.minHeight = height;
@@ -114,7 +111,14 @@ export class ToastCommentEditor {
     // actually edit in the visual editor (issue #262). Installs itself on top of the widget
     // patch, loads the initial content, and overrides getMarkdown/setMarkdown so every
     // existing call site below (and value()) stays lossless with no further changes.
-    this.textarea.addEventListener('change', () => triggerEditorContentChanged(this.container));
+    // Kept on the instance so destroy() can detach it. Unlike the previous `events.change`
+    // editor option, this listener lives on the textarea rather than on the editor. Nothing
+    // calls destroy() today — every caller either reuses the existing instance
+    // (getToastCommentEditor) or replaces the whole container element, which takes the
+    // textarea and its listener with it — so this is housekeeping for a future explicit
+    // teardown, not a fix for a leak that can happen now.
+    this.onTextareaChange = () => triggerEditorContentChanged(this.container);
+    this.textarea.addEventListener('change', this.onTextareaChange);
     installLosslessMarkdownTracker(this.editor, this.textarea);
 
     // Rename mode switch labels
@@ -321,6 +325,10 @@ export class ToastCommentEditor {
   }
 
   destroy(): void {
+    if (this.onTextareaChange) {
+      this.textarea?.removeEventListener('change', this.onTextareaChange);
+      this.onTextareaChange = null;
+    }
     if (this.editor) {
       this.editor.destroy();
       this.editor = null;

@@ -18,8 +18,10 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 	org_service "code.gitea.io/gitea/services/org"
+	repo_service "code.gitea.io/gitea/services/repository"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
@@ -60,6 +62,28 @@ func TestDeleteUser(t *testing.T) {
 
 	org := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 3})
 	assert.Error(t, DeleteUser(t.Context(), org, false))
+}
+
+func TestDeleteUserAnonymizesTombstoneOwner(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+
+	// repo 10 is the base of repo 11, so deleting it leaves a tombstone behind that
+	// has to outlive its author for repo 11 to keep an ancestor.
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 12})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	require.NoError(t, repo_service.TombstoneRepository(t.Context(), repo))
+
+	require.NoError(t, DeleteUser(t.Context(), user, true))
+
+	anonymized := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 12})
+	assert.Equal(t, "deleted-user-12", anonymized.Name)
+	assert.Equal(t, "Deleted user", anonymized.FullName)
+	assert.False(t, anonymized.IsActive)
+
+	kept := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	assert.True(t, kept.IsTombstoned)
+	assert.Equal(t, "deleted-user-12", kept.OwnerName)
+	unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 11})
 }
 
 func TestPurgeUser(t *testing.T) {

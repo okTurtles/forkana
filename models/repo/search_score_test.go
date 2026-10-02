@@ -251,3 +251,50 @@ func TestFallbackBehaviorWithoutKeyword(t *testing.T) {
 		assert.NotEmpty(t, repos[i].Name, "Repository should have a name")
 	}
 }
+
+func TestScoreSortingWithoutKeyword(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+
+	// Relevance ordering can be requested without anything to score against, e.g. by submitting
+	// the landing page search field empty. The search then has to fall back to a plain ordering
+	// instead of leaving the "relevance_score" placeholder in the ORDER BY clause, which would
+	// reference a non-existent column and fail the whole query.
+	for _, keyword := range []string{"", "   ", ",", " , , "} {
+		for _, sortOrder := range []string{"score", "reversescore"} {
+			t.Run(sortOrder+"/"+keyword, func(t *testing.T) {
+				repos, count, err := repo_model.SearchRepository(context.Background(), repo_model.SearchRepoOptions{
+					ListOptions: db.ListOptions{PageSize: 10},
+					Actor:       user,
+					Keyword:     keyword,
+					OrderBy:     repo_model.OrderByFlatMap[sortOrder],
+					Private:     true,
+				})
+				require.NoError(t, err, "SearchRepository should not return an error")
+				assert.Positive(t, count, "Should find some repositories")
+				assert.NotEmpty(t, repos, "Should return some repositories")
+			})
+		}
+	}
+}
+
+func TestScoreSortingWithPriorityOwner(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	// The owner prioritization clauses are prepended to an ORDER BY that already carries the bound
+	// arguments of the relevance scoring, so their own argument has to go in front of those. When
+	// it does not, the keyword is bound to the owner comparison and the prioritization silently
+	// does nothing (or fails the query outright on a strictly typed database).
+	repos, _, err := repo_model.SearchRepository(context.Background(), repo_model.SearchRepoOptions{
+		ListOptions:     db.ListOptions{PageSize: 10},
+		Keyword:         "repo",
+		OrderBy:         repo_model.OrderByFlatMap["score"],
+		PriorityOwnerID: 10,
+		Private:         true,
+		AllPublic:       true,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, repos)
+	assert.EqualValues(t, 10, repos[0].OwnerID, "repositories of the priority owner should come first")
+}

@@ -5,6 +5,7 @@ package markup
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -300,6 +301,58 @@ func TestRender_AutoLink(t *testing.T) {
 	// render other commit URLs
 	tmp = "https://external-link.gitea.io/go-gitea/gitea/commit/d8a994ef243349f321568f9e36d5c3f444b99cae#diff-2"
 	test(tmp, "<a href=\""+tmp+"\" class=\"commit\"><code>d8a994ef24 (diff-2)</code></a>")
+}
+
+// TestArticleCommitLink checks that article commit links match the article route
+// "/article/{username}/{subjectname}", which resolves a version through the
+// "version" query parameter, and that subjects are path escaped.
+func TestArticleCommitLink(t *testing.T) {
+	cases := []struct {
+		owner, name, commitID string
+		expected              string
+	}{
+		{
+			owner: "user13", name: "repo11", commitID: "65f1bf27bc3bf70f64657658635e66094edbcb4d",
+			expected: "/:root/article/user13/repo11?version=65f1bf27bc3bf70f64657658635e66094edbcb4d",
+		},
+		{
+			owner: "user13", name: "repo11", commitID: "65f1bf2",
+			expected: "/:root/article/user13/repo11?version=65f1bf2",
+		},
+		{
+			owner: "user13", name: "Subject With Spaces", commitID: "65f1bf2",
+			expected: "/:root/article/user13/Subject%20With%20Spaces?version=65f1bf2",
+		},
+		{
+			owner: "user13", name: "a/b?c#d", commitID: "65f1bf2",
+			expected: "/:root/article/user13/a%2Fb%3Fc%23d?version=65f1bf2",
+		},
+		{
+			owner: "üser", name: "Ünicode", commitID: "65f1bf2",
+			expected: "/:root/article/%C3%BCser/%C3%9Cnicode?version=65f1bf2",
+		},
+	}
+
+	for _, c := range cases {
+		link := articleCommitLink(c.owner, c.name, c.commitID)
+		assert.Equal(t, c.expected, link)
+
+		linkType, rendered := ParseRenderedLink(link, LinkTypeRoot)
+		assert.Equal(t, LinkTypeRoot, linkType)
+
+		parsed, err := url.Parse(rendered)
+		assert.NoError(t, err)
+		assert.Equal(t, c.commitID, parsed.Query().Get("version"))
+
+		// the route only accepts an owner and a subject below "/article"
+		var segments []string
+		for segment := range strings.SplitSeq(parsed.EscapedPath(), "/") {
+			unescaped, err := url.PathUnescape(segment)
+			assert.NoError(t, err)
+			segments = append(segments, unescaped)
+		}
+		assert.Equal(t, []string{"article", c.owner, c.name}, segments)
+	}
 }
 
 func TestRender_FullIssueURLs(t *testing.T) {

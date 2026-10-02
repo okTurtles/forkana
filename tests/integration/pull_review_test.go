@@ -23,6 +23,7 @@ import (
 	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -248,6 +249,138 @@ func TestPullView_GivenApproveOrRejectReviewOnClosedPR(t *testing.T) {
 			// Submit a reject review on the PR.
 			testSubmitReview(t, user2Session, htmlDoc.GetCSRF(), "user2", "repo1", elem[4], "", "reject", http.StatusUnprocessableEntity)
 		})
+	})
+}
+
+// TestPullView_SubmitReviewPermissions checks that a user without write access
+// to the change request, and who isn't its author, can only submit a plain
+// comment review: "approve", "reject" and "close" must be rejected server-side
+// (issue #205) instead of silently doing nothing or returning a 500.
+func TestPullView_SubmitReviewPermissions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// user2 owns repo1, user1 is the author of pull request #3, user5 is a
+	// random user with neither write access nor authorship.
+	const owner, repo, pullNumber = "user2", "repo1", "3"
+
+	getCSRF := func(session *TestSession) string {
+		req := NewRequest(t, "GET", path.Join("/", owner, repo, "pulls", pullNumber))
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		return NewHTMLParser(t, resp.Body).GetCSRF()
+	}
+
+	t.Run("RandomUser", func(t *testing.T) {
+		session := loginUser(t, "user5")
+		csrf := getCSRF(session)
+
+		testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "approve", http.StatusForbidden)
+		testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "reject", http.StatusForbidden)
+		testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "close", http.StatusForbidden)
+		// commenting stays available
+		testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "comment", http.StatusOK)
+	})
+
+	t.Run("Author", func(t *testing.T) {
+		// the change request author may not approve/reject (handled elsewhere),
+		// but must not be blocked by the write-access check
+		session := loginUser(t, "user1")
+		csrf := getCSRF(session)
+
+		// "close" is not turned into a permission error for the author. It does
+		// not succeed either — there is no "close" review type server-side, which
+		// is tracked separately as issue #347 — so only the absence of the 403
+		// this PR introduces can be asserted here.
+		resp := testSubmitReview(t, session, csrf, owner, repo, pullNumber, "", "close", NoExpectedStatus)
+		assert.NotEqual(t, http.StatusForbidden, resp.Code)
+	})
+}
+
+// TestPullView_SubmitReviewModalOptions checks that the disallowed options are
+// not even rendered in the "Submit Review" modal for a user without permission.
+func TestPullView_SubmitReviewModalOptions(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	filesLink := "/user2/repo1/pulls/3/files"
+	reviewModal := func(session *TestSession) *HTMLDoc {
+		req := NewRequest(t, "GET", filesLink)
+		resp := session.MakeRequest(t, req, http.StatusOK)
+		return NewHTMLParser(t, resp.Body)
+	}
+	reviewOptions := func(htmlDoc *HTMLDoc) []string {
+		var values []string
+		htmlDoc.Find(`.review-radio-options input[name="type"]`).Each(func(_ int, s *goquery.Selection) {
+			value, _ := s.Attr("value")
+			values = append(values, value)
+		})
+		return values
+	}
+
+	// a random user only gets the "comment" option
+	assert.Equal(t, []string{"comment"}, reviewOptions(reviewModal(loginUser(t, "user5"))))
+
+	// the repository owner keeps every option, all of them selectable
+	ownerDoc := reviewModal(loginUser(t, "user2"))
+	assert.ElementsMatch(t, []string{"comment", "approve", "reject", "close"}, reviewOptions(ownerDoc))
+	for _, value := range []string{"approve", "reject"} {
+		_, disabled := ownerDoc.Find(`.review-radio-options input[name="type"][value="` + value + `"]`).Attr("disabled")
+		assert.False(t, disabled, "the owner's %q option should be selectable", value)
+	}
+
+	// the change request author keeps the approve/reject options, but disabled (#192)
+	authorDoc := reviewModal(loginUser(t, "user1"))
+	assert.ElementsMatch(t, []string{"comment", "approve", "reject", "close"}, reviewOptions(authorDoc))
+	for _, value := range []string{"approve", "reject"} {
+		_, disabled := authorDoc.Find(`.review-radio-options input[name="type"][value="` + value + `"]`).Attr("disabled")
+		assert.True(t, disabled, "the author's %q option should be disabled", value)
+	}
+}
+
+// TestPullView_SubmitCloseReview covers the "Close" option of the review modal (issue
+// #347): it used to hit ctx.ServerError because "close" had no server-side counterpart.
+func TestPullView_SubmitCloseReview(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// user2 owns user2/repo1, user8 only has read access to it.
+	ownerSession := loginUser(t, "user2")
+	otherSession := loginUser(t, "user8")
+
+	t.Run("Without permission to close", func(t *testing.T) {
+		resp := testSubmitReview(t, otherSession, GetUserCSRFToken(t, otherSession), "user2", "repo1", "3", "", "close", http.StatusForbidden)
+		// the modal renders "errorMessage" out of the JSON body, an HTML error page would
+		// show up as an unexplained failure
+		assert.Contains(t, resp.Body.String(), "errorMessage")
+
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 3})
+		assert.False(t, issue.IsClosed)
+	})
+
+	t.Run("With feedback", func(t *testing.T) {
+		testSubmitReview(t, ownerSession, GetUserCSRFToken(t, ownerSession), "user2", "repo1", "3", "", "close", http.StatusOK)
+
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 3})
+		assert.True(t, issue.IsClosed)
+		// the review body is recorded as a plain comment review, no approval involved
+		unittest.AssertExistsAndLoadBean(t, &issues_model.Review{
+			IssueID:    issue.ID,
+			ReviewerID: 2,
+			Type:       issues_model.ReviewTypeComment,
+			Content:    "test",
+		})
+	})
+
+	t.Run("Without feedback", func(t *testing.T) {
+		options := map[string]string{
+			"_csrf":   GetUserCSRFToken(t, ownerSession),
+			"content": "",
+			"type":    "close",
+		}
+		req := NewRequestWithValues(t, "POST", path.Join("user2", "repo1", "pulls", "5", "files", "reviews", "submit"), options)
+		ownerSession.MakeRequest(t, req, http.StatusOK)
+
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 11})
+		assert.True(t, issue.IsClosed)
+		// an empty review body must not be recorded as an empty comment review
+		unittest.AssertNotExistsBean(t, &issues_model.Review{IssueID: issue.ID, ReviewerID: 2})
 	})
 }
 
