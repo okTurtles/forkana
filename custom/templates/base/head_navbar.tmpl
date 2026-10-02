@@ -21,7 +21,7 @@
 			{{end}}
 			*/}}
 			{{if not ctx.Consts.RepoUnitTypePullRequests.UnitGlobalDisabled}}
-				<span class="item navbar-view-modes">View modes</span>
+				{{/* #386 item 3: no "View modes" label before the link */}}
 				<a class="item{{if .PageIsPullList}} navbar-pill-active{{end}}" href="{{AppSubUrl}}/pulls">{{ctx.Locale.Tr "pull_requests"}}</a>
 			{{end}}
 			{{/* Milestones link hidden - not used in Forkana
@@ -98,10 +98,8 @@
 						{{svg "octicon-gear"}}
 						{{ctx.Locale.Tr "your_settings"}}
 					</a>
-					<a class="item" target="_blank" rel="noopener noreferrer" href="https://docs.gitea.com">
-						{{svg "octicon-question"}}
-						{{ctx.Locale.Tr "help"}}
-					</a>
+					{{/* #386 item 10: no Help entry — it led to the external Gitea docs,
+					     which are not Forkana's documentation */}}
 					<div class="divider"></div>
 					<a class="item link-action" href data-url="{{AppSubUrl}}/user/logout">
 						{{svg "octicon-sign-out"}}
@@ -110,13 +108,13 @@
 				</div><!-- end content avatar menu -->
 			</div><!-- end dropdown avatar menu -->
 		{{else}}
-		<a class="item tw-bg-transparent hover:tw-underline{{if .PageIsSignIn}} active{{end}}" rel="nofollow" href="{{AppSubUrl}}/user/login">
-			<span class="tw-ml-1">{{ctx.Locale.Tr "sign_in"}}</span>
-		</a>
+			<a class="item navbar-auth-item{{if .PageIsSignIn}} active{{end}}" rel="nofollow" href="{{AppSubUrl}}/user/login">
+				<span>{{ctx.Locale.Tr "sign_in"}}</span>
+			</a>
 			{{if .ShowRegistrationButton}}
-        <div class="-tw-ml-4 -tw-mr-5 not-mobile">/</div>
-        <a class="item tw-bg-transparent hover:tw-underline{{if .PageIsSignUp}} active{{end}}" href="{{AppSubUrl}}/user/sign_up">
-					<span class="tw-ml-1">{{ctx.Locale.Tr "sign_up"}}</span>
+				<div class="not-mobile navbar-auth-divider">/</div>
+				<a class="item navbar-auth-item{{if .PageIsSignUp}} active{{end}}" href="{{AppSubUrl}}/user/sign_up">
+					<span>{{ctx.Locale.Tr "sign_up"}}</span>
 				</a>
 			{{end}}
 		{{end}}

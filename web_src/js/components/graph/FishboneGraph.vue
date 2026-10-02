@@ -34,6 +34,8 @@ import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
+import { GET } from "../../modules/fetch.ts";
+import { extractArticleSummary } from "./article-summary.ts";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import {
   BUBBLE_HOVER_RADIUS, BUBBLE_UNKNOWN_RUNG, bubbleRungFor, countTextForRung,
@@ -71,6 +73,11 @@ type Node = {
      (202px) bubble. Already part of the fork-graph payload
      (api.Repository.Description), so no server-side change was needed. */
   description?: string;
+  /* The repository's default branch (api.Repository.DefaultBranch), needed to
+     fetch the article's README when the repository has no description to use
+     as the summary (#389) — the root's branch is a prop, but every fork can
+     have its own. */
+  defaultBranch?: string;
   isEmpty?: boolean;
   /* Archived articles are opened through their permanent repository url, because
      the subject vanity url resolves to the active repository of that subject. */
@@ -274,7 +281,7 @@ type EdgeGeom = {
 const nodesList = ref<FrameNode[]>([]);
 const edgesList = ref<EdgeGeom[]>([]);
 const trunksList = ref<{ x: number; y1: number; y2: number; id: string }[]>([]);
-const jointDots = ref<{ x: number; y: number; id: string; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
+const jointDots = ref<{ x: number; y: number; id: string; sourceId: NodeId; targetId: NodeId; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
 
 /* SVG/zoom plumbing */
 const svgHeight = ref(DEFAULT_CONTAINER_HEIGHT);
@@ -287,7 +294,6 @@ const worldRef = ref<SVGGElement | null>(null);
 let svgSel!: Selection<SVGSVGElement, unknown, null, undefined>;
 let worldSel!: Selection<SVGGElement, unknown, null, undefined>;
 let zoomBehavior!: ZoomBehavior<Element, unknown>;
-const currentK = ref(1);
 /* Bubble bounds in world units, cached at layout time: the pan constraint
    reads them on every zoom event and should not walk the graph. */
 let contentBox = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
@@ -350,9 +356,6 @@ const hasData = computed(() => {
 
   return false;
 });
-
-/* The legend only explains the muted, dashed bubble when the graph has one. */
-const hasTombstones = computed(() => Object.values(state.graph).some((n) => n.isTombstoned === true));
 
 /* Container size drives the canvas height AND the responsive dials; observe it
    and re-measure on every change (#348). `measured` is the RAW box; the width
@@ -605,6 +608,9 @@ async function fetchForkGraphAndSet() {
       return;                        // isLoading stays true
     }
     statsRetry = 0;
+    /* Fresh node objects: what was requested for the old ones no longer
+       says anything about these. */
+    summaryRequested.clear();
     state.graph = graph;
 
     // Clear loading state before layout/render
@@ -663,6 +669,7 @@ function buildGraphFromApi(root: any): Graph {
     const isArchived: boolean = repo?.archived === true;
     const isTombstoned: boolean = n?.is_tombstoned === true;
     const description: string = typeof repo?.description === 'string' ? repo.description : '';
+    const defaultBranch: string = typeof repo?.default_branch === 'string' ? repo.default_branch : '';
 
     /* A repository with content has at least one commit and therefore at least
        one contributor, so 0 on a NON-EMPTY repo never means "nobody": it means
@@ -687,6 +694,7 @@ function buildGraphFromApi(root: any): Graph {
       repoSubject: repoSubject ?? undefined,
       fullName: fullName ?? undefined,
       description: description || undefined,
+      defaultBranch: defaultBranch || undefined,
       isEmpty: isEmpty,
       isArchived,
       isTombstoned,
@@ -1180,6 +1188,8 @@ function setFrame(g: Graph, placements: Placements) {
     x: e.ex,
     y: e.ey,
     id: `${e.source.node.id}-${e.target.node.id}`,
+    sourceId: e.source.node.id,
+    targetId: e.target.node.id,
     sourceOwner: e.source.node.repoOwner || e.source.node.fullName?.split('/')[0] || '',
     targetOwner: e.target.node.repoOwner || e.target.node.fullName?.split('/')[0] || '',
     subject: e.source.node.repoSubject || e.target.node.repoSubject || props.subject || '',
@@ -1430,7 +1440,6 @@ function resetView(animated = false) {
   const t = constrainToViewport(zoomIdentity.translate(tx, ty).scale(targetScale), zoomExtent());
   (animated ? svgSel.transition().duration(VIEW_TRANSITION_DURATION) : svgSel).call(zoomBehavior.transform as any, t);
 
-  currentK.value = targetScale;
   /* The component owns the view again: the next re-measure may re-frame it.
      Set AFTER the transform, because applying it runs the zoom handler. */
   viewMovedByUser = false;
@@ -1509,7 +1518,7 @@ onMounted(async () => {
        PAGE scrolls (the canvas is content-sized, see the note further down). */
     .filter((event: any) => event.type === "wheel" ? event.ctrlKey : true)
     .on("zoom", (e: any) => {
-      const z: ZoomTransform = e.transform; currentK.value = z.k;
+      const z: ZoomTransform = e.transform;
       /* A sourceEvent means a real gesture (wheel, drag, pinch) rather than a
          programmatic framing, so the view is now the user's — a re-measure
          must keep it. */
@@ -1601,9 +1610,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGraphKeydown);
 });
 
-/* Derived for template binding */
-const kComputed = computed(() => currentK.value);
-
 /* ──────────────────────────────────────────────────────────────────────────────
    HOVER / OPEN — one bubble grows to 202px and the graph reflows around it
 
@@ -1656,6 +1662,52 @@ const openArticle = computed<Node | null>(
 /** True when the article view IS the page: nothing was clicked to get here, so
    there is nowhere to go Back to and nothing for Escape to dismiss. */
 const soloPinned = computed(() => detailNode.value === null && openArticle.value !== null);
+
+/* ── ARTICLE SUMMARY (#389) ───────────────────────────────────────────────
+   The opened circle shows the article's summary under the contributor count.
+   The fork-graph payload only carries api.Repository.Description, and most
+   articles have no repository description at all — so when a bubble opens
+   with nothing to show, the summary is taken from the article itself: its
+   README (the article IS its repository's single README, see AGENTS.md) is
+   fetched raw and its first paragraph used. Fetched lazily — only for the
+   article actually opened, never for the whole graph — and written back onto
+   the reactive node, so the paragraph appears in the already-open circle and
+   is never fetched twice. */
+const summaryRequested = new Set<NodeId>();
+
+async function fetchArticleSummary(n: Node) {
+  if (summaryRequested.has(n.id)) return;
+  const owner = n.repoOwner ?? n.fullName?.split('/')[0] ?? '';
+  const repo = n.repoName ?? n.fullName?.split('/')[1] ?? '';
+  const branch = n.defaultBranch || props.defaultBranch;
+  if (!owner || !repo || !branch) return;
+  summaryRequested.add(n.id);
+  const suburl = window.config?.suburl || '';
+  const url = `${suburl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/raw/branch/${encodeURIComponent(branch)}/README.md`;
+  try {
+    const res = await GET(url);
+    if (!res.ok) {
+      /* A 404 (no README) is definitive; a server error is transient, so let
+         reopening the article retry it. */
+      if (res.status >= 500) summaryRequested.delete(n.id);
+      return;
+    }
+    const summary = extractArticleSummary(await res.text());
+    const live = state.graph[n.id];
+    if (summary && live && !live.description) live.description = summary;
+  } catch {
+    /* Network blip: allow a retry on the next open. Without a summary the
+       circle simply keeps its current layout — same as an article whose
+       repository has no description. */
+    summaryRequested.delete(n.id);
+  }
+}
+
+watch(openArticle, (n) => {
+  /* An empty repository has no README and a tombstoned one deliberately shows
+     no excerpt (see BubbleNode), so neither is fetched. */
+  if (n && !n.description && !n.isEmpty && !n.isTombstoned) void fetchArticleSummary(n);
+}, {immediate: true});
 
 /** The graph is not merely covered while an article is open: its bubbles and
    connectors are not rendered at all. It comes back the moment the close
@@ -1893,7 +1945,6 @@ function closeDetail() {
   contentBox = bubbleBounds();
   if (transformBeforeDetail && svgSel) {
     svgSel.call(zoomBehavior.transform as any, transformBeforeDetail);
-    currentK.value = transformBeforeDetail.k;
   }
   /* WHERE THE CIRCLE LANDS, recomputed here rather than reused from the open.
      `detailOrigin` was captured when the article was opened — off the 202px
@@ -2025,11 +2076,21 @@ function updateHistoryAnchor() {
   const boxRect = box.getBoundingClientRect();
   let x: number, y: number;
   if (openArticle.value) {
-    /* The opened article is a circle centred in this box: the card hangs off
-       its right edge, exactly as the design draws it. */
-    const d = Math.min(detailSize.value, boxRect.width * 0.84);
-    x = boxRect.width / 2 + d / 2;
-    y = boxRect.height / 2;
+    /* The card hangs off the opened circle's right edge, exactly as the design
+       draws it. The circle is measured, not assumed at the box centre: on a
+       box taller than the viewport it rests in the visible part of the box
+       (ArticleDetailView's .detail-viewport). Fallback to the box centre for
+       the tick before the circle exists. */
+    const bubble = box.querySelector('.detail-bubble');
+    if (bubble) {
+      const r = bubble.getBoundingClientRect();
+      x = r.right - boxRect.left;
+      y = r.top + r.height / 2 - boxRect.top;
+    } else {
+      const d = Math.min(detailSize.value, boxRect.width * 0.84);
+      x = boxRect.width / 2 + d / 2;
+      y = boxRect.height / 2;
+    }
   } else {
     const svg = svgRef.value;
     const p = hoveredId.value !== null ? framePlacements.get(hoveredId.value) : null;
@@ -2040,7 +2101,13 @@ function updateHistoryAnchor() {
     y = (svgBox.top - boxRect.top) + t.applyY(p.y);
   }
   historyAnchor.x = Math.round(Math.max(0, Math.min(boxRect.width, x)));
-  historyAnchor.y = Math.round(Math.max(boxRect.height * 0.35, Math.min(boxRect.height * 0.65, y)));
+  /* The card extends up to ±35% of a viewport-ish box from its anchor; clamp
+     so it stays inside the box. Sized from the smaller of box and viewport:
+     on a box TALLER than the viewport, 35% of the box would push the card
+     away from a circle resting near the top (see .detail-viewport), while
+     35% of the viewport keeps the old guarantee and follows the circle. */
+  const halfCard = 0.35 * Math.min(boxRect.height, window.innerHeight);
+  historyAnchor.y = Math.round(Math.max(halfCard, Math.min(boxRect.height - halfCard, y)));
 }
 
 /* The circle is sized from the container, and on a solo subject nothing
@@ -2226,7 +2293,8 @@ function goToComparison() {
             <template v-if="graphRendered">
               <!-- Trunks (vertical) -->
               <line
-                v-for="t in trunksList" :key="t.id" class="trunk" :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
+                v-for="t in trunksList" :key="t.id" class="trunk" :class="{'is-related': expandedId === t.id}"
+                :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
                 stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
               />
 
@@ -2235,14 +2303,16 @@ function goToComparison() {
                  that a dot is ON its connector in EVERY frame of a reflow. -->
               <path
                 v-for="e in edgesList" :key="`${e.source.node.id}-${e.target.node.id}`"
-                :data-edge="`${e.source.node.id}-${e.target.node.id}`" class="branch" fill="none"
+                :data-edge="`${e.source.node.id}-${e.target.node.id}`" class="branch"
+                :class="{'is-related': expandedId === e.source.node.id || expandedId === e.target.node.id}" fill="none"
                 stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round" opacity="0.9"
                 :d="`M ${e.ex} ${e.ey} C ${e.ex} ${e.ey + 0.5522847498307936 * state.elbowR}, ${e.ex + e.side * 0.5522847498307936 * state.elbowR} ${e.hy}, ${e.hx} ${e.hy} L ${e.cx} ${e.cy}`"
               />
 
               <!-- Child stems -->
               <line
-                v-for="e in edgesList" :key="`stem-${e.source.node.id}-${e.target.node.id}`" class="child-stem" :x1="e.sx1"
+                v-for="e in edgesList" :key="`stem-${e.source.node.id}-${e.target.node.id}`" class="child-stem"
+                :class="{'is-related': expandedId === e.source.node.id || expandedId === e.target.node.id}" :x1="e.sx1"
                 :y1="e.sy1" :x2="e.sx2" :y2="e.sy2" stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
                 opacity="0.9"
               />
@@ -2250,6 +2320,7 @@ function goToComparison() {
               <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
               <circle
                 v-for="j in jointDots" :key="`joint-${j.id}`" :data-edge="j.id" class="joint-parent"
+                :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId}"
                 :cx="j.x" :cy="j.y" r="6"
                 fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="2"
                 style="cursor: pointer;"
@@ -2264,7 +2335,7 @@ function goToComparison() {
               <BubbleNode
                 v-for="f in nodesList" :key="f.node.id" :id="f.node.id" :x="f.x" :y="f.y"
                 :r="f.r" :contributors="f.node.contributors" :updated-at="f.node.updatedAt"
-                :description="f.node.description" :k="kComputed"
+                :description="f.node.description"
                 :detail="detailFor(f.node.contributors)"
                 :count-text="countTextFor(f.node.contributors)"
                 :count-font-size="countFontFor(f.node.contributors)"
@@ -2368,7 +2439,7 @@ function goToComparison() {
       <!-- End graph-container -->
 
       <div ref="legendRef">
-        <LegendFishbone v-if="hasData" :has-tombstones="hasTombstones"/>
+        <LegendFishbone v-if="hasData"/>
       </div>
 
       <!-- Compare Popup Modal -->
@@ -2442,6 +2513,21 @@ function goToComparison() {
 
 .graph-dimmed :deep(g.node.is-expanded) {
   opacity: 1;
+}
+
+/* #386 item 6: the hovered bubble's own plumbing — its trunk, the branches
+   and stems that touch it, and the joint dots on them — keeps full strength
+   instead of fading with the rest of the graph. The 0.9 on branches and stems
+   mirrors their base presentation attribute, which the dimming property
+   would otherwise override. */
+.graph-dimmed :deep(.trunk.is-related),
+.graph-dimmed :deep(.joint-parent.is-related) {
+  opacity: 1;
+}
+
+.graph-dimmed :deep(.branch.is-related),
+.graph-dimmed :deep(.child-stem.is-related) {
+  opacity: 0.9;
 }
 
 /* Hide graph content when showing states, but keep SVG rendered */

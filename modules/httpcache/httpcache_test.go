@@ -95,3 +95,16 @@ func TestHandleGenericETagCache(t *testing.T) {
 		assert.Equal(t, http.StatusNotModified, w.Code)
 	})
 }
+
+func TestSetCacheControlInHeaderNoStore(t *testing.T) {
+	t.Run("WithNoTransform", func(t *testing.T) {
+		h := http.Header{}
+		SetCacheControlInHeader(h, &CacheControlOptions{NoStore: true, NoTransform: true})
+		assert.Equal(t, "no-store, max-age=0, private, no-transform", h.Get("Cache-Control"))
+	})
+	t.Run("WithoutNoTransform", func(t *testing.T) {
+		h := http.Header{}
+		SetCacheControlInHeader(h, &CacheControlOptions{NoStore: true})
+		assert.Equal(t, "no-store, max-age=0, private", h.Get("Cache-Control"))
+	})
+}

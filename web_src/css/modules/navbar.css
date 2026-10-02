@@ -3,6 +3,9 @@
   --navbar-padding-x: 10px;
   /* horizontal padding of a single navbar item */
   --navbar-item-padding-x: 13px;
+  /* flex gap between navbar items; the auth divider cancels it with a
+     negative margin, so keep the two in sync through this token */
+  --navbar-item-gap: 5px;
   /* distance from the viewport edge to the content of a navbar item that carries
      the default item padding — the logo on the left, and on the right the last
      item whenever it is a plain one (as on the signed-out landing page).
@@ -28,7 +31,7 @@
 #navbar .navbar-right {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--navbar-item-gap);
   min-height: 49px; /* +1px border-bottom */
 }
 
@@ -54,6 +57,34 @@
 #navbar a.item:hover,
 #navbar button.item:hover {
   background: var(--color-nav-hover-bg);
+  color: var(--color-nav-text);
+  text-decoration: none;
+}
+
+/* Sign In / Sign Up buttons in the signed-out navbar */
+#navbar .item.navbar-auth-item {
+  font-weight: var(--font-weight-bold);
+}
+
+/* cancel the navbar's flex gap around the "/" so only the buttons' own
+   padding separates it from the labels; the highlight ends at the slash
+   without covering it */
+#navbar .navbar-auth-divider {
+  margin: 0 calc(-1 * var(--navbar-item-gap));
+}
+
+@media (min-width: 768px) {
+  /* tighter horizontal padding so the hover/active highlight hugs the label
+     instead of reaching the "/" divider; desktop only — in the open mobile
+     menu these rows must align with the other 13px-padded items */
+  #navbar .item.navbar-auth-item {
+    padding: 3px 8px;
+  }
+  /* but the last item's label must stay at the standard content inset so the
+     footer divider (see --navbar-content-inset-x) keeps lining up with it */
+  #navbar .item.navbar-auth-item:last-child {
+    padding-right: var(--navbar-item-padding-x);
+  }
 }
 
 #navbar .item.ui.dropdown {

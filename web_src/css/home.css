@@ -86,6 +86,12 @@
   white-space: nowrap;
 }
 
+/* Display-only capitalization so mixed-case subject names (e.g. "mars",
+   "Hank Williams") render consistently; stored names are untouched. */
+.home-search-suggestion::first-letter {
+  text-transform: uppercase;
+}
+
 .home-search-suggestion b {
   font-weight: var(--font-weight-semibold);
 }
@@ -309,10 +315,6 @@
   white-space: nowrap;
   background: transparent;
   color: var(--color-text);
-}
-
-.feeds-sort-btn {
-  background: var(--color-white);
 }
 
 .feeds-filter-btn:hover,
