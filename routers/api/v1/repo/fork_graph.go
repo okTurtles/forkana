@@ -24,7 +24,7 @@ import (
 // - v1: Initial implementation with basic fork graph traversal
 // - v2: Added cycle detection error handling (ErrCycleDetected)
 // - v3: Changed GetPublicRepositoryBySubject to prioritize non-empty repositories
-const forkGraphCacheVersion = "v3"
+const forkGraphCacheVersion = "v4"
 
 // ForkGraphParams represents the query parameters for fork graph endpoint
 type ForkGraphParams struct {
@@ -224,9 +224,17 @@ func GetForkGraph(ctx *context.APIContext) {
 		userID = ctx.Doer.ID
 	}
 
-	// Try cache first
+	// Try cache first. A graph with contributor counts is never served from the response
+	// cache: its key only changes with the root's own fork count, so it kept serving the
+	// counts (and the forks of forks) of up to 15 minutes ago while the table and the
+	// article view, which are rendered live, already showed the new ones (#405). Each
+	// node's count is cached by its branch head instead (ArticleContributorCount), so a
+	// fresh graph stays cheap and is never stale.
 	cacheKey := getCacheKey(ctx.Repo.Repository.ID, ctx.Repo.Repository.IsEmpty, ctx.Repo.Repository.NumForks, params, userID)
 	c := cache.GetCache()
+	if params.IncludeContributors {
+		c = nil
+	}
 	if c != nil {
 		var cachedResponse repository.ForkGraphResponse
 		found, err := c.GetJSON(cacheKey, &cachedResponse)

@@ -209,8 +209,16 @@
             {{if .IsArticleView}}
                 {{template "shared/repo/article" .}}
             {{else}}
+                {{/* Not rendered as an article yet: the section is filled in when an article is
+                     selected. Until then it has to say so, exactly like a rendered article
+                     section does when nothing is selected (#405 item 1); the loading
+                     placeholder only shows while an article is being fetched. */}}
                 <div class="history-view-section history-view-section--article" data-view="article" hidden>
-                    <div class="history-view-placeholder ui segment loading placeholder">
+                    <div class="ui message tw-mt-10" aria-live="polite" data-role="article-empty">
+                        {{svg "octicon-info" 16}}
+                        <span class="tw-ml-2">Please select an article in bubble or table view.</span>
+                    </div>
+                    <div class="history-view-placeholder ui segment loading placeholder" data-role="article-content" hidden>
                         <div class="header">
                             <div class="line"></div>
                             <div class="line"></div>

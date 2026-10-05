@@ -49,7 +49,7 @@ import {
   type ContainerSize,
 } from "./graph-viewport.ts";
 import {
-  readStoredSelection, writeStoredSelection,
+  SELECTION_PARAM, SELECTION_UPDATED_EVENT, getCurrentSelection, selectionToParam,
   type RepoSelection as RepoSelectionDetail,
 } from "../../modules/repo-selection.ts";
 
@@ -506,8 +506,10 @@ function setSelectionFromDetail(detail: RepoSelectionDetail | null) {
   }
 }
 
+/* The page's selection (repo-history.ts owns it, see modules/repo-selection.ts)
+   is applied once the nodes exist; until then it is only remembered. */
 function restoreSelectionAfterGraphLoad() {
-  const desired = pendingExternalSelection ?? readStoredSelection();
+  const desired = pendingExternalSelection ?? getCurrentSelection();
   if (desired) {
     pendingExternalSelection = null;
     setSelectionFromDetail(desired);
@@ -659,8 +661,14 @@ function buildGraphFromApi(root: any): Graph {
   const visit = (n: any, parentId: string | null): string => {
     if (!n) return '';
     const id: string = n?.id ?? (n?.repository?.full_name ?? Math.random().toString(36).slice(2));
-    const baseContrib: number = Number(n?.contributors?.total_count ?? n?.contributors?.recent_count ?? 0);
-    let contributors: number = Number.isFinite(baseContrib) ? baseContrib : 0;
+    /* total_count is the article's contributor count exactly as the Table and
+       Article views show it (services/repository ArticleContributorCount), so
+       a genuine 0 — a fork nobody has committed to yet — is shown as 0, like
+       its table row. Only a node WITHOUT stats (the server could not count)
+       is unknown. */
+    const baseContrib = Number(n?.contributors?.total_count);
+    const hasCount = n?.contributors != null && Number.isFinite(baseContrib);
+    let contributors: number = hasCount ? baseContrib : 0;
     const updatedAt: string | undefined = n?.repository?.updated_at ?? n?.repository?.updated ?? undefined;
     const repo = n?.repository ?? {};
     const ownerName: string | null =
@@ -676,14 +684,15 @@ function buildGraphFromApi(root: any): Graph {
     const description: string = typeof repo?.description === 'string' ? repo.description : '';
     const defaultBranch: string = typeof repo?.default_branch === 'string' ? repo.default_branch : '';
 
-    /* A repository with content has at least one commit and therefore at least
-       one contributor, so 0 on a NON-EMPTY repo never means "nobody": it means
-       the server has not finished computing the stats yet (it answers
-       TotalCount 0 while generation is in flight — services/repository/
-       fork_graph.go). Keep the placeholder 1 so a give-up render still draws
-       something, but remember that it IS a placeholder: fed into a ratio as if
-       it were real, it makes every bubble tie for biggest and paint at 126px. */
-    const statsPending: boolean = !isEmpty && contributors === 0;
+    /* No count for a repository with content: the server could not compute
+       it. Keep the placeholder 1 so a give-up render still draws something,
+       but remember that it IS a placeholder: fed into a ratio as if it were
+       real, it makes every bubble tie for biggest and paint at 126px.
+       (#405: a 0 used to be read as "still being computed" too, because the
+       count came from asynchronously generated stats; it no longer does, and
+       reading a real 0 as a placeholder 1 is what made a bubble disagree with
+       its table row.) */
+    const statsPending: boolean = !isEmpty && !hasCount;
     if (statsPending) {
       contributors = 1;
     }
@@ -1548,9 +1557,8 @@ onMounted(async () => {
       collapseAll();
       applySelection(null, null);
       pendingExternalSelection = null;
-      writeStoredSelection(null);
+      /* repo-history.ts records the change and broadcasts it back. */
       window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: null }));
-      window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: null }));
     }
   });
 
@@ -1594,9 +1602,13 @@ onMounted(async () => {
   }, {passive: true});
   pointerCleanup = () => window.removeEventListener('pointermove', trackPointer);
 
+  /* Follow the page's selection from now on: a change made while the graph is
+     still loading is remembered (pendingExternalSelection) and applied with the
+     nodes, rather than lost because nobody was listening yet. */
+  window.addEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
+
   /* Initial fetch from API */
   await fetchForkGraphAndSet();
-  window.addEventListener('repo:selection-updated', handleExternalSelection as EventListener);
   window.addEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
   window.addEventListener('keydown', onGraphKeydown);
 });
@@ -1611,7 +1623,7 @@ onBeforeUnmount(() => {
   cancelReflow();
   cancelStatsRetry();
   if (hoverTimer !== null) window.clearTimeout(hoverTimer);
-  window.removeEventListener('repo:selection-updated', handleExternalSelection as EventListener);
+  window.removeEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
   window.removeEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
   window.removeEventListener('keydown', onGraphKeydown);
 });
@@ -1867,10 +1879,8 @@ function onBubbleClick(n: Node) {
   if (!detail) return;
   const payload = { ...detail };
   applySelection(n, payload);
-  writeStoredSelection(payload);
   announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
   window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: payload }));
-  window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
 }
 
 /* ── THE OPENED ARTICLE (425px, centred) ──────────────────────────────────
@@ -2166,17 +2176,35 @@ function onBubbleView(n: Node) {
   if (!detail) return;
   const payload = { ...detail };
   applySelection(n, payload);
-  writeStoredSelection(payload);
-  window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
   window.dispatchEvent(new CustomEvent('repo:bubble-open-article', { detail: payload }));
 }
 
-/* Click handler for joint-parent: navigate to fork comparison page */
-function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string }) {
+/* Click handler for joint-parent (a "mini circle", the point of contention
+   between a fork and its parent): navigate to the fork comparison page.
+
+   #406: the click is ALSO a selection, exactly like clicking a bubble — it
+   selects the fork the joint leads to (its target; the parent is shared by
+   every joint on its trunk, the fork is not). The selection is recorded in
+   the current history entry before leaving, so Back lands on the graph with
+   that joint and its bubble highlighted, and it is passed to the compare page
+   as "?selected=", whose view tabs carry it on: the Article view then shows
+   that article and the Table view checks its row, in whatever order the views
+   are visited. */
+function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string; targetId: NodeId }) {
   if (!joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
   const suburl = window.config?.suburl || '';
-  const compareUrl = `${suburl}/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`;
-  window.location.href = compareUrl;
+  const compareUrl = new URL(
+    `${suburl}/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`,
+    window.location.origin,
+  );
+  const target = state.graph[joint.targetId];
+  const detail = target ? getSelectionDetailFromNode(target) : null;
+  if (target && detail) {
+    applySelection(target, detail);
+    window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: { ...detail } }));
+    compareUrl.searchParams.set(SELECTION_PARAM, selectionToParam(detail));
+  }
+  window.location.href = compareUrl.pathname + compareUrl.search;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -2326,7 +2354,8 @@ function goToComparison() {
               <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
               <circle
                 v-for="j in jointDots" :key="`joint-${j.id}`" :data-edge="j.id" class="joint-parent"
-                :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId}"
+                :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId, 'is-selected': selectedNodeId === j.targetId}"
+                :aria-pressed="selectedNodeId === j.targetId ? 'true' : 'false'"
                 :cx="j.x" :cy="j.y" r="6"
                 fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="2"
                 style="cursor: pointer;"
@@ -2677,6 +2706,20 @@ function goToComparison() {
   stroke: var(--color-primary, #2563eb) !important;
   stroke-width: 3 !important;
   fill: var(--color-primary-alpha-10) !important;
+}
+
+/* #406: the point of contention leading to the selected article. Clicking it
+   selects that article, and the selection is the page's, not the click's: it
+   stays highlighted when the view comes back to the graph, whichever views
+   were visited in between and in whatever order. */
+.joint-parent.is-selected {
+  stroke: var(--color-primary, #2563eb);
+  stroke-width: 3;
+  fill: var(--color-primary-alpha-20);
+}
+
+.graph-dimmed :deep(.joint-parent.is-selected) {
+  opacity: 1;
 }
 
 .joint-parent:focus {

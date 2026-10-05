@@ -212,6 +212,13 @@ const gTransform = computed(() => `translate(${props.x},${props.y})`);
 /* Picked for either slot of a comparison — the states that thicken and colour
    the ring. */
 const compareSelected = computed(() => props.compareState === 'first' || props.compareState === 'second');
+/* #405 item 6: in compare mode every bubble not (yet) picked is outlined with a
+   dashed line, as the figma draws it. The dash pattern was already set, but the
+   stroke itself had been removed with the resting borders (#386 item 8), so
+   the outline never showed. Its colour is the muted grey the points of
+   contention are drawn in (--bubble-joint-stroke); --bubble-compare-outline
+   is the hook to give it its own colour once the figma value is confirmed. */
+const compareDashed = computed(() => props.isCompareMode === true && props.compareState === 'none');
 
 /* Pointer handlers relay events upward (so the parent can grow this bubble and
    reflow the graph around it). `pointerType` travels with the event because
@@ -260,13 +267,13 @@ function onKeyDown(ev: KeyboardEvent) {
     <!-- Bubble circle with soft gradient & subtle stroke/shadow -->
     <circle
       class="node-circle" :class="{
-        'compare-dashed': props.isCompareMode && props.compareState === 'none',
+        'compare-dashed': compareDashed,
         'compare-selected-first': props.compareState === 'first',
         'compare-selected-second': props.compareState === 'second'
       }" :r="r" fill="url(#bubbleGrad)"
-      :stroke="compareSelected || isActive || expanded ? 'var(--color-primary)' : 'none'"
-      :stroke-width="compareSelected ? 3 : 1"
-      :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : props.isTombstoned ? '4,4' : 'none'"
+      :stroke="compareSelected || isActive || expanded ? 'var(--color-primary)' : compareDashed ? 'var(--bubble-compare-outline, var(--bubble-joint-stroke, #818b98))' : 'none'"
+      :stroke-width="compareSelected ? 3 : compareDashed ? 1.5 : 1"
+      :stroke-dasharray="compareDashed ? '8,4' : props.isTombstoned ? '4,4' : 'none'"
       filter="url(#softShadow)"
     />
 

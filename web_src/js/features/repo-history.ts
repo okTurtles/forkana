@@ -4,19 +4,13 @@ import {initArticleEditor} from './article-editor.ts';
 import {initArticleSettings} from './article-settings.ts';
 import {GET} from '../modules/fetch.ts';
 import {BUBBLE_VISIBLE_EVENT} from '../components/graph/graph-viewport.ts';
-import {readStoredSelection, writeStoredSelection, type RepoSelection} from '../modules/repo-selection.ts';
-
-type ViewKey = 'bubble' | 'table' | 'article';
-
-type HistoryState = {
-  view: ViewKey;
-  mode?: string;
-  owner?: string | null;
-  subject?: string | null;
-  repo?: string | null;
-  archived?: boolean;
-  link?: string | null;
-};
+import {
+  SELECTION_PARAM, SELECTION_UPDATED_EVENT,
+  clearLegacyStoredSelection, matchesSelection, normalizeSelection, resolveSelection,
+  selectionFromParam, setCurrentSelection, withSelectionParam,
+  type RepoSelection,
+} from '../modules/repo-selection.ts';
+import {pickInitialSelection, selectionFromHistoryState, type HistoryState, type ViewKey} from './repo-history-state.ts';
 
 function buildSubjectUrl(base: string, view?: ViewKey): string {
   if (!view) return base;
@@ -31,16 +25,16 @@ function buildSubjectUrl(base: string, view?: ViewKey): string {
 
 function buildSubjectUrlWithMode(base: string, view: ViewKey, mode?: string) {
   const url = new URL(buildSubjectUrl(base, view), window.location.origin);
-  if (mode) url.searchParams.set('mode', mode);
+  if (mode && mode !== 'read') url.searchParams.set('mode', mode);
   return url.pathname + url.search;
 }
 
 function buildArticleUrl(appSubUrl: string, articleBase: string, selection: RepoSelection, mode?: string) {
   // The server-built link already carries the article index when the owner holds several
   // articles for the subject, so it is preferred over the plain subject url, which always
-  // resolves to the owner's current article. A selection restored from storage has no
-  // link: the current article is then exactly the plain subject url, and an archived one
-  // is addressed by its permanent repository url.
+  // resolves to the owner's current article. A selection without a link (one the page
+  // could not complete) is the current article at the plain subject url, and an archived
+  // one is addressed by its permanent repository url.
   let path = selection.link;
   if (!path && selection.archived) {
     path = `${appSubUrl.replace(/\/+$/, '')}/${encodeURIComponent(selection.owner)}/${encodeURIComponent(selection.repo)}`;
@@ -52,38 +46,45 @@ function buildArticleUrl(appSubUrl: string, articleBase: string, selection: Repo
   return url.pathname + url.search;
 }
 
-function parseLocation(appSubUrl: string | undefined): HistoryState {
-  const {pathname, href} = window.location;
-  const url = new URL(href);
+// "/subject/{subject}/{owner}" and "/subject/{subject}/{owner}/{index}" are article urls;
+// "/subject/{subject}" alone is the subject page, whose view is in the query.
+function parseLocation(appSubUrl: string | undefined): {view: ViewKey, mode: string, owner: string | null, subject: string | null} {
+  const url = new URL(window.location.href);
   const params = url.searchParams;
   const view = (params.get('view') as ViewKey) || 'bubble';
   const mode = params.get('mode') || 'read';
 
   const basePrefix = (appSubUrl || '').replace(/\/+$/, '');
+  const pathname = url.pathname;
   const trimmedPath = pathname.startsWith(basePrefix) ? pathname.slice(basePrefix.length) : pathname;
   const segments = trimmedPath.replace(/^\/+/, '').split('/');
 
-  // "/subject/{subject}/{owner}" and "/subject/{subject}/{owner}/{index}" are article
-  // urls; "/subject/{subject}" alone is the subject view and is left to the default.
-  if (segments[0] === 'subject' && segments.length >= 3) {
-    const subject = decodeURIComponent(segments[1]);
-    const owner = decodeURIComponent(segments[2]);
-    return {view: 'article', mode, owner, subject, repo: subject, link: pathname};
+  if (segments[0] === 'subject' && segments.length >= 3 && segments[2]) {
+    return {view: 'article', mode, owner: decodeURIComponent(segments[2]), subject: decodeURIComponent(segments[1])};
   }
-
-  return {view, mode};
+  return {view, mode, owner: null, subject: null};
 }
 
-function matchesSelection(a: RepoSelection | null, b: RepoSelection | null) {
-  if (!a || !b) return false;
-  if (a.owner !== b.owner) return false;
-  if (a.repo && b.repo) return a.repo === b.repo;
-  return a.subject === b.subject;
+function selectionFromElement(el: Element): RepoSelection | null {
+  const owner = el.getAttribute('data-owner') || '';
+  const subject = el.getAttribute('data-subject') || '';
+  const repo = el.getAttribute('data-repo') || subject;
+  if (!owner || !repo) return null;
+  return {
+    owner,
+    subject: subject || null,
+    repo,
+    archived: el.getAttribute('data-archived') === 'true',
+    link: el.getAttribute('data-article-link') || null,
+  };
 }
 
 export function initRepoHistory() {
   const root = document.querySelector<HTMLElement>('#repo-history-app');
   if (!root) return;
+
+  // The selection is no longer kept in localStorage (#402): drop what earlier versions left.
+  clearLegacyStoredSelection();
 
   const appSubUrl = window.config.appSubUrl || '';
   const subjectUrl = root.getAttribute('data-subject-url') || window.location.pathname;
@@ -100,7 +101,7 @@ export function initRepoHistory() {
 
   const navEl = document.querySelector('#subject-view-tabs');
 
-  const initialView = root.getAttribute('data-initial-view');
+  const initialView = (root.getAttribute('data-initial-view') as ViewKey) || 'bubble';
   const initialOwner = root.getAttribute('data-initial-owner');
   const initialRepo = root.getAttribute('data-initial-repo');
   const initialSubject = root.getAttribute('data-initial-subject');
@@ -108,39 +109,51 @@ export function initRepoHistory() {
   const initialArchived = root.getAttribute('data-initial-archived') === 'true';
   const initialLink = root.getAttribute('data-initial-link') || '';
 
-  // Read stored selection and validate it matches the current page's subject
-  const storedSelection = readStoredSelection();
-  let initialSelection: RepoSelection | null = null;
+  // Every article of the subject: the table has one row per bubble (#405).
+  const candidates: RepoSelection[] = [];
+  for (const row of root.querySelectorAll('#articles-table tr.article-row')) {
+    const sel = selectionFromElement(row);
+    if (sel) candidates.push(sel);
+  }
 
-  // When rendering the article view with a server-provided initial selection,
-  // always use that selection instead of localStorage.
-  // This ensures that after a fork redirect, the correct article is shown (issue #177).
-  if (initialView === 'article' && initialOwner && (initialRepo || initialSubject)) {
-    initialSelection = {
+  // The article the server rendered into the article section, if it rendered one.
+  const renderedArticle: RepoSelection | null = initialView === 'article' && initialOwner && (initialRepo || initialSubject) ?
+    normalizeSelection({
       owner: initialOwner,
       repo: initialRepo || initialSubject,
       subject: initialSubject,
       archived: initialArchived,
       link: initialLink || null,
-    };
-    if (!matchesSelection(storedSelection, initialSelection)) {
-      writeStoredSelection(initialSelection);
+    }) :
+    null;
+
+  // Was the page opened on an article url (the vanity "/subject/{subject}/{owner}[/{n}]" or
+  // the permanent repository url) rather than on the subject url itself?
+  const samePath = (a: string, b: string) => {
+    try {
+      return decodeURIComponent(a).replace(/\/+$/, '') === decodeURIComponent(b).replace(/\/+$/, '');
+    } catch {
+      return a === b;
     }
-  } else {
-    // For non-article views (bubble, table): restore stored selection when it matches the current
-    // subject, or clear it when navigating away to a different subject.
-    if (storedSelection && initialSubject && storedSelection.subject === initialSubject) {
-      initialSelection = storedSelection;
-    } else if (storedSelection) {
-      writeStoredSelection(null);
-    }
-  }
+  };
+  const openedOnArticleUrl = !samePath(window.location.pathname, new URL(subjectUrl, window.location.origin).pathname);
+  const initialState = window.history.state as HistoryState | null;
+  const initialSelection = pickInitialSelection({
+    // An article url names its article: it is the selection, whatever else says
+    // otherwise. This also makes the article shown after a fork redirect the selected
+    // one (#177).
+    urlArticle: openedOnArticleUrl ? renderedArticle : null,
+    historySelection: selectionFromHistoryState(initialState),
+    urlSelection: selectionFromParam(new URL(window.location.href).searchParams.get(SELECTION_PARAM)),
+    candidates,
+  });
+  setCurrentSelection(initialSelection);
 
   // The article may have been served from its permanent repository URL, which resolves to
-  // that exact repository. Keep using it for the initially selected article so navigating
-  // between modes never falls back to the vanity URL of another repository of the subject.
+  // that exact repository. Keep using it for that article so navigating between modes
+  // never falls back to the vanity URL of another repository of the subject.
   function articleUrlFor(selection: RepoSelection, mode?: string) {
-    if (!articleCanonical || !matchesSelection(initialSelection, selection)) {
+    if (!articleCanonical || !matchesSelection(renderedArticle, selection)) {
       return buildArticleUrl(appSubUrl, articleBase, selection, mode);
     }
     const url = new URL(articleCanonical, window.location.origin);
@@ -149,17 +162,19 @@ export function initRepoHistory() {
     return url.pathname + url.search;
   }
 
-  const activeView = ref<ViewKey>((initialView as ViewKey) || 'bubble');
+  const activeView = ref<ViewKey>(initialView);
   const articleMode = ref<string>(initialMode || 'read');
   const selectedRepo = ref<RepoSelection | null>(initialSelection);
   const isLoading = ref(false);
   const loadError = ref('');
-  const articleRequestToken = ref(0);
+  let articleRequestToken = 0;
+  // the article (and mode) the article section currently holds, so switching back to it
+  // shows it again instead of fetching it anew
+  let loadedArticle: RepoSelection | null = renderedArticle;
+  let loadedMode = initialMode || 'read';
 
   const viewLoaded = reactive({
     bubble: false,
-    table: activeView.value === 'table',
-    article: activeView.value === 'article',
   });
 
   let tableBound = false;
@@ -189,14 +204,6 @@ export function initRepoHistory() {
     articleContentEl = articleSection.querySelector('[data-role="article-content"]');
   }
 
-  collectArticleRefs();
-  if (!selectedRepo.value || !selectedRepo.value.repo) {
-    showArticleEmpty();
-  } else {
-    showArticleContent();
-  }
-  updateArticleGuidance();
-
   function toggleHidden(el: Element | null, hidden: boolean) {
     if (!el) return;
     if (hidden) el.setAttribute('hidden', '');
@@ -205,8 +212,7 @@ export function initRepoHistory() {
 
   function updateArticleGuidance() {
     if (!articleGuidance) return;
-    const hasSelection = Boolean(selectedRepo.value);
-    articleGuidance.style.display = hasSelection ? 'none' : '';
+    articleGuidance.style.display = selectedRepo.value ? 'none' : '';
   }
 
   function showArticleEmpty() {
@@ -255,21 +261,36 @@ export function initRepoHistory() {
   function updateArchivedNoticeVisibility() {
     if (!archivedNoticeEl) return;
     // the notice is a flex container, so it has to be hidden by class rather than by attribute
-    archivedNoticeEl.classList.toggle('tw-hidden', !isArchivedArticle || activeView.value !== 'article');
+    // and it only describes the article on screen: the one loaded into the article section
+    const showsLoaded = activeView.value === 'article' && Boolean(selectedRepo.value) && matchesSelection(loadedArticle, selectedRepo.value);
+    archivedNoticeEl.classList.toggle('tw-hidden', !isArchivedArticle || !showsLoaded);
   }
 
   function syncNavActive() {
     if (!navEl) return;
     for (const anchor of navEl.querySelectorAll<HTMLAnchorElement>('a[data-view]')) {
-      if (anchor.getAttribute('data-view') === activeView.value) {
-        anchor.classList.add('active');
-      } else {
-        anchor.classList.remove('active');
-      }
+      anchor.classList.toggle('active', anchor.getAttribute('data-view') === activeView.value);
     }
   }
 
-  function updateHistoryState(view: ViewKey, mode: string, selection: RepoSelection | null, replace = false) {
+  function urlFor(view: ViewKey, mode: string, selection: RepoSelection | null): string {
+    if (view === 'article') {
+      return selection ? articleUrlFor(selection, mode) : buildSubjectUrlWithMode(subjectUrl, 'article', mode);
+    }
+    return withSelectionParam(view === 'table' ? tableUrl : bubbleUrl, selection);
+  }
+
+  // The view tabs are links: keep their targets on the selection, so opening one in a new
+  // tab (or with JavaScript unavailable to intercept it) lands on the same article.
+  function syncNavLinks() {
+    if (!navEl) return;
+    for (const anchor of navEl.querySelectorAll<HTMLAnchorElement>('a[data-view]')) {
+      const view = anchor.getAttribute('data-view') as ViewKey;
+      if (view) anchor.setAttribute('href', urlFor(view, 'read', selectedRepo.value));
+    }
+  }
+
+  function writeHistory(view: ViewKey, mode: string, selection: RepoSelection | null, how: 'push' | 'replace') {
     const state: HistoryState = {
       view,
       mode,
@@ -279,19 +300,8 @@ export function initRepoHistory() {
       archived: selection?.archived === true,
       link: selection?.link ?? null,
     };
-
-    let url: string;
-    if (view === 'article' && selection) {
-      url = articleUrlFor(selection, mode);
-    } else if (view === 'table') {
-      url = tableUrl;
-    } else if (view === 'bubble') {
-      url = bubbleUrl;
-    } else {
-      url = buildSubjectUrlWithMode(subjectUrl, view, mode);
-    }
-
-    if (replace) {
+    const url = urlFor(view, mode, selection);
+    if (how === 'replace') {
       window.history.replaceState(state, '', url);
     } else {
       window.history.pushState(state, '', url);
@@ -311,10 +321,7 @@ export function initRepoHistory() {
     for (const checkbox of table.querySelectorAll<HTMLInputElement>('tbody .row-check')) {
       const row = checkbox.closest<HTMLTableRowElement>('tr.article-row');
       if (!row) continue;
-      const owner = row.getAttribute('data-owner') || '';
-      const repo = row.getAttribute('data-repo') || '';
-      const subject = row.getAttribute('data-subject') || '';
-      checkbox.checked = Boolean(selection) && selection.owner === owner && selection.repo === (repo || subject);
+      checkbox.checked = matchesSelection(selection, selectionFromElement(row));
     }
   }
 
@@ -327,68 +334,50 @@ export function initRepoHistory() {
     }
   }
 
-  function normalizeSelection(selection: RepoSelection | null): RepoSelection | null {
-    if (!selection) return null;
-    const repo = selection.repo || selection.subject || '';
-    if (!selection.owner || !repo) return null;
-    return {
-      owner: selection.owner,
-      repo,
-      subject: selection.subject ?? selection.repo ?? null,
-      archived: selection.archived === true,
-      link: selection.link ?? null,
-    };
+  // THE one place the selection changes. `history` says what happens to the browser
+  // history: 'replace' records it in the current entry (a selection made inside a view,
+  // so Back/Forward and a reload restore it), 'none' leaves the history alone (the caller
+  // is restoring an entry, or is about to push a new one).
+  function setSelection(next: RepoSelection | null | undefined, history: 'replace' | 'none') {
+    const normalized = resolveSelection(normalizeSelection(next), candidates) ?? normalizeSelection(next);
+    const changed = !(selectedRepo.value === null && normalized === null) && !matchesSelection(selectedRepo.value, normalized);
+    if (changed) {
+      selectedRepo.value = normalized;
+      setCurrentSelection(normalized);
+      window.dispatchEvent(new CustomEvent(SELECTION_UPDATED_EVENT, {detail: normalized}));
+    }
+    if (history === 'replace') writeHistory(activeView.value, articleMode.value, selectedRepo.value, 'replace');
   }
 
-  function persistSelection(selection: RepoSelection | null) {
-    const normalized = normalizeSelection(selection);
-    if ((!selectedRepo.value && !normalized) || matchesSelection(selectedRepo.value, normalized)) {
-      return;
-    }
-    selectedRepo.value = normalized;
-    writeStoredSelection(normalized);
-    window.dispatchEvent(new CustomEvent('repo:selection-updated', {detail: normalized}));
-  }
-
-  function clearSelection(pushHistory = true) {
-    if (!selectedRepo.value) return;
-    persistSelection(null);
-    if (activeView.value === 'article') {
-      switchView('bubble', {pushState: pushHistory});
-    } else if (pushHistory) {
-      updateHistoryState(activeView.value, articleMode.value, null, false);
-    } else {
-      updateHistoryState(activeView.value, articleMode.value, null, true);
-    }
-    if (articleSection) {
-      collectArticleRefs();
-      showArticleEmpty();
-      updateArticleStatus();
-    }
+  // A subject with a single article has nothing to choose between: that article is the
+  // one the Article view shows (#405 item 4), as the Bubble view already shows it open.
+  function defaultSelection(): RepoSelection | null {
+    return candidates.length === 1 ? normalizeSelection(candidates[0]) : null;
   }
 
   async function ensureBubbleView() {
     if (!viewLoaded.bubble) {
       /* Claim the mount BEFORE the await. Two callers race on the first switch
          to bubble — switchView() and the activeView watcher — and with the
-         flag set after the await both got through the guard. It was benign
-         (initRepoBubbleView is idempotent via data-mounted), but the flag is
-         read nowhere else, so there is no reason to leave the race in place. */
+         flag set after the await both got through the guard. */
       viewLoaded.bubble = true;
       await nextTick();
       initRepoBubbleView();
     }
-    /* #348: tell the graph to measure the box it is actually drawn in. The
-       component mounts as part of the switch, when its section may still be
-       the hidden (0-height) placeholder, and the window can be resized while
-       the table view is the one on screen — either way the size it holds is
-       not the size it now has. Dispatched on EVERY call, not just the first:
-       it is the backstop for resizes that happened while the table view was
-       showing. FishboneGraph registers its listener before the first await of
-       its own mount, so the event cannot arrive early, and it re-measures and
-       drops the event when nothing moved. */
+    /* #348: tell the graph to measure the box it is actually drawn in. Dispatched on
+       EVERY call, not just the first: it is the backstop for resizes that happened
+       while the table view was showing. */
     await nextTick();
     window.dispatchEvent(new CustomEvent(BUBBLE_VISIBLE_EVENT));
+  }
+
+  function openArticleFrom(el: Element) {
+    const selection = selectionFromElement(el);
+    if (!selection) return;
+    // the clicked row becomes the selection of the table entry as well, so Back returns
+    // to the table with that row checked
+    setSelection(selection, 'replace');
+    switchView('article', {mode: 'read', pushState: true});
   }
 
   function bindTableInteractions() {
@@ -411,32 +400,16 @@ export function initRepoHistory() {
         const up = btn.querySelector<HTMLElement>('.icon-up');
         const isHidden = detailRow.classList.contains('tw-hidden');
         if (down && up) {
-          if (isHidden) {
-            down.classList.remove('tw-hidden');
-            up.classList.add('tw-hidden');
-          } else {
-            down.classList.add('tw-hidden');
-            up.classList.remove('tw-hidden');
-          }
+          down.classList.toggle('tw-hidden', !isHidden);
+          up.classList.toggle('tw-hidden', isHidden);
         }
         return;
       }
 
-      if (target.closest('.go-to-article')) {
-        const btn = target.closest<HTMLButtonElement>('.go-to-article');
-        if (!btn) return;
-        const owner = btn.getAttribute('data-owner') || '';
-        const subject = btn.getAttribute('data-subject') || '';
-        const repo = btn.getAttribute('data-repo') || subject;
-        const archived = btn.getAttribute('data-archived') === 'true';
-        const link = btn.getAttribute('data-article-link') || null;
-        if (!owner || !repo) return;
+      const goTo = target.closest('.go-to-article');
+      if (goTo) {
         event.preventDefault();
-        switchView('article', {
-          selection: {owner, subject, repo, archived, link},
-          mode: 'read',
-          pushState: true,
-        });
+        openArticleFrom(goTo);
         return;
       }
 
@@ -444,38 +417,22 @@ export function initRepoHistory() {
       if (!row) return;
       if (target.closest('input') || target.closest('label')) return;
       if (target.closest('.ui.checkbox')) return;
-      const owner = row.getAttribute('data-owner') || '';
-      const subject = row.getAttribute('data-subject') || '';
-      const repo = row.getAttribute('data-repo') || subject;
-      const archived = row.getAttribute('data-archived') === 'true';
-      const link = row.getAttribute('data-article-link') || null;
-      if (!owner || !repo) return;
-      switchView('article', {
-        selection: {owner, subject, repo, archived, link},
-        mode: 'read',
-        pushState: true,
-      });
+      openArticleFrom(row);
     });
 
     table.addEventListener('change', (event) => {
       const target = event.target as HTMLInputElement;
       if (!target || target.type !== 'checkbox' || !target.classList.contains('row-check')) return;
       const row = target.closest<HTMLTableRowElement>('tr.article-row');
-      if (!row) return;
-      const owner = row.getAttribute('data-owner') || '';
-      const subject = row.getAttribute('data-subject') || '';
-      const repo = row.getAttribute('data-repo') || subject;
-      const archived = row.getAttribute('data-archived') === 'true';
-      const link = row.getAttribute('data-article-link') || null;
-      if (!owner || !repo) return;
+      const selection = row ? selectionFromElement(row) : null;
+      if (!selection) return;
       if (target.checked) {
-        for (const checkbox of table.querySelectorAll<HTMLInputElement>('tbody .row-check')) {
-          if (checkbox !== target) checkbox.checked = false;
-        }
-        persistSelection({owner, subject, repo, archived, link});
-      } else if (matchesSelection(selectedRepo.value, {owner, subject, repo, archived, link})) {
-        persistSelection(null);
+        setSelection(selection, 'replace');
+      } else if (matchesSelection(selectedRepo.value, selection)) {
+        setSelection(null, 'replace');
       }
+      // one checkbox at most: the others follow the selection
+      updateCheckboxes();
     });
 
     tableBound = true;
@@ -490,20 +447,16 @@ export function initRepoHistory() {
     if (!articleTabs) return;
     for (const anchor of articleTabs.querySelectorAll<HTMLAnchorElement>('a[data-article-tab]')) {
       anchor.addEventListener('click', (event) => {
+        if (!selectedRepo.value) return;
         event.preventDefault();
         const tab = anchor.getAttribute('data-article-tab') || 'read';
-        if (!selectedRepo.value) return;
-        switchView('article', {
-          selection: selectedRepo.value,
-          mode: tab,
-          pushState: true,
-        });
+        switchView('article', {mode: tab, pushState: true});
       });
     }
   }
 
   async function loadArticleContent(selection: RepoSelection, mode: string, pushState: boolean) {
-    const currentToken = ++articleRequestToken.value;
+    const currentToken = ++articleRequestToken;
     isLoading.value = true;
     loadError.value = '';
     updateArticleStatus();
@@ -513,7 +466,7 @@ export function initRepoHistory() {
       const response = await GET(url);
       if (!response.ok) throw new Error(`Failed with status ${response.status}`);
       const html = await response.text();
-      if (articleRequestToken.value !== currentToken) return;
+      if (articleRequestToken !== currentToken) return;
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
       syncArchivedNotice(doc);
@@ -525,23 +478,22 @@ export function initRepoHistory() {
         showArticleContent();
         const newMode = articleSection.querySelector<HTMLElement>('#article-view-root')?.getAttribute('data-article-mode');
         articleMode.value = newMode || mode;
+        loadedArticle = selection;
+        loadedMode = articleMode.value;
         bindArticleTabs();
         updateArticleGuidance();
-        updateArticleStatus();
         if (articleMode.value === 'edit') {
           initArticleEditor();
         } else if (articleMode.value === 'settings') {
           initArticleSettings();
         }
       }
-      viewLoaded.article = true;
       isLoading.value = false;
       updateArticleStatus();
-      if (pushState) {
-        updateHistoryState('article', articleMode.value, selection, false);
-      }
+      updateArchivedNoticeVisibility();
+      if (pushState) writeHistory('article', articleMode.value, selection, 'push');
     } catch (err) {
-      if (articleRequestToken.value !== currentToken) return;
+      if (articleRequestToken !== currentToken) return;
       console.error('Failed to load article view', err);
       isLoading.value = false;
       loadError.value = 'Unable to load article view';
@@ -549,126 +501,118 @@ export function initRepoHistory() {
     }
   }
 
-  async function switchView(view: ViewKey, options: {
-    selection?: RepoSelection;
-    mode?: string;
-    pushState?: boolean;
-  } = {}) {
-    const targetSelection = options.selection ?? selectedRepo.value;
+  async function switchView(view: ViewKey, options: {mode?: string, pushState?: boolean} = {}) {
     const nextMode = (options.mode ?? articleMode.value) || 'read';
+    // a pending article fetch must not land on (and push over) the view switched to now
+    if (view !== 'article') articleRequestToken++;
 
-    if (activeView.value !== view) {
-      activeView.value = view;
-    }
-
-    if (articleMode.value !== nextMode) {
-      articleMode.value = nextMode;
-    }
+    activeView.value = view;
+    articleMode.value = nextMode;
 
     if (view === 'bubble') {
+      if (options.pushState) writeHistory('bubble', articleMode.value, selectedRepo.value, 'push');
       await ensureBubbleView();
-      if (options.pushState) updateHistoryState('bubble', articleMode.value, selectedRepo.value, false);
       return;
     }
 
     if (view === 'table') {
       bindTableInteractions();
-      if (options.pushState) updateHistoryState('table', articleMode.value, selectedRepo.value, false);
+      updateCheckboxes();
+      if (options.pushState) writeHistory('table', articleMode.value, selectedRepo.value, 'push');
       return;
     }
 
-    if (!targetSelection || !targetSelection.repo) {
-      persistSelection(null);
-      viewLoaded.article = true;
-      if (options.pushState) updateHistoryState('article', articleMode.value, null, false);
+    if (!selectedRepo.value) {
+      const fallback = defaultSelection();
+      if (fallback) setSelection(fallback, 'none');
+    }
+    const selection = selectedRepo.value;
+    if (!selection) {
+      articleRequestToken++;
+      isLoading.value = false;
+      loadError.value = '';
+      if (options.pushState) writeHistory('article', articleMode.value, null, 'push');
       showArticleEmpty();
       updateArticleStatus();
+      updateArchivedNoticeVisibility();
       return;
     }
 
-    if (!matchesSelection(selectedRepo.value, targetSelection)) {
-      persistSelection(targetSelection);
+    if (matchesSelection(loadedArticle, selection) && loadedMode === articleMode.value && !loadError.value) {
+      // the section already holds this article: show it again instead of fetching it
+      articleRequestToken++;
+      isLoading.value = false;
+      showArticleContent();
+      updateArticleStatus();
+      updateArchivedNoticeVisibility();
+      if (options.pushState) writeHistory('article', articleMode.value, selection, 'push');
+      return;
     }
 
-    await loadArticleContent(targetSelection, articleMode.value, options.pushState ?? false);
+    await loadArticleContent(selection, articleMode.value, options.pushState ?? false);
   }
 
   function handleBubbleSelection(event: Event) {
-    const rawDetail = (event as CustomEvent).detail as RepoSelection | null;
-    const detail = normalizeSelection(rawDetail);
-    if (!detail) {
-      clearSelection(false);
-      return;
-    }
-    if (!selectedRepo.value || !matchesSelection(selectedRepo.value, detail)) {
-      persistSelection(detail);
-    }
+    setSelection((event as CustomEvent<RepoSelection | null>).detail, 'replace');
   }
 
   function handleBubbleOpenArticle(event: Event) {
-    const rawDetail = (event as CustomEvent).detail as RepoSelection | null;
-    const detail = normalizeSelection(rawDetail);
+    const detail = normalizeSelection((event as CustomEvent<RepoSelection | null>).detail);
     if (!detail) return;
-    if (!selectedRepo.value || !matchesSelection(selectedRepo.value, detail)) {
-      persistSelection(detail);
-    }
-    switchView('article', {
-      selection: detail,
-      mode: 'read',
-      pushState: true,
-    });
+    setSelection(detail, 'replace');
+    switchView('article', {mode: 'read', pushState: true});
+  }
+
+  function isPlainClick(event: MouseEvent) {
+    return !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0);
   }
 
   function handleNavClick(event: MouseEvent) {
     const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[data-view]');
-    if (!anchor) return;
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (!anchor || !isPlainClick(event)) return;
     const view = anchor.getAttribute('data-view') as ViewKey;
     if (!view) return;
     event.preventDefault();
-    switchView(view, {pushState: true});
+    switchView(view, {mode: view === 'article' ? 'read' : undefined, pushState: true});
   }
 
-  // The URL the article was rendered from does not always carry the archived flag or the
-  // repository name (the subject url resolves those server-side), so the state of the entry
-  // page is rebuilt from what the server rendered instead of from the location.
+  // "Back to bubble view" inside the (possibly reloaded) article section
+  function handleArticleSectionClick(event: MouseEvent) {
+    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[data-role="back-to-bubble"]');
+    if (!anchor || !isPlainClick(event)) return;
+    event.preventDefault();
+    switchView('bubble', {pushState: true});
+  }
+
+  // An entry without a state of ours (one created by an in-page anchor, say) is read
+  // from its url, which carries everything the state would.
   function stateFromLocation(): HistoryState {
-    const canonicalPath = articleCanonical ? new URL(articleCanonical, window.location.origin).pathname : '';
-    if (!canonicalPath || canonicalPath !== window.location.pathname) {
-      return parseLocation(appSubUrl);
+    const loc = parseLocation(appSubUrl);
+    let selection: RepoSelection | null;
+    if (loc.owner) {
+      const pathname = window.location.pathname;
+      const linksHere = (s: RepoSelection | null) => Boolean(s?.link) && new URL(s.link, window.location.origin).pathname === pathname;
+      selection = candidates.find(linksHere) ??
+        (linksHere(renderedArticle) ? renderedArticle : null) ??
+        normalizeSelection({owner: loc.owner, repo: loc.subject, subject: loc.subject});
+    } else {
+      selection = resolveSelection(selectionFromParam(new URL(window.location.href).searchParams.get(SELECTION_PARAM)), candidates);
     }
-    const params = new URL(window.location.href).searchParams;
     return {
-      view: (params.get('view') as ViewKey) || (initialView as ViewKey) || 'bubble',
-      mode: params.get('mode') || initialMode || 'read',
-      owner: initialSelection?.owner ?? null,
-      subject: initialSelection?.subject ?? null,
-      repo: initialSelection?.repo ?? null,
-      archived: initialSelection?.archived === true,
-      link: initialSelection?.link ?? null,
+      view: loc.view,
+      mode: loc.mode,
+      owner: selection?.owner ?? null,
+      subject: selection?.subject ?? null,
+      repo: selection?.repo ?? null,
+      archived: selection?.archived === true,
+      link: selection?.link ?? null,
     };
   }
 
   function handlePopState(event: PopStateEvent) {
-    const state = (event.state as HistoryState) || stateFromLocation();
-    const sel = state.owner && (state.repo || state.subject) ?
-      {
-        owner: state.owner,
-        repo: state.repo || state.subject,
-        subject: state.subject ?? state.repo ?? null,
-        archived: state.archived === true,
-        link: state.link ?? null,
-      } :
-      null;
-    if (!matchesSelection(selectedRepo.value, sel)) {
-      persistSelection(sel);
-    }
-    articleMode.value = state.mode || 'read';
-    switchView(state.view || 'bubble', {
-      selection: sel || undefined,
-      mode: articleMode.value,
-      pushState: false,
-    });
+    const state = (event.state as HistoryState | null)?.view ? event.state as HistoryState : stateFromLocation();
+    setSelection(selectionFromHistoryState(state), 'none');
+    switchView(state.view || 'bubble', {mode: state.mode || 'read', pushState: false});
   }
 
   watch(activeView, () => {
@@ -681,19 +625,41 @@ export function initRepoHistory() {
   watch(selectedRepo, () => {
     updateCheckboxes();
     updateArticleGuidance();
+    updateArchivedNoticeVisibility();
+    syncNavLinks();
   }, {immediate: true});
 
   watch([isLoading, loadError], () => {
     updateArticleStatus();
   }, {immediate: true});
 
-  updateArticleGuidance();
+  // The article section as the page was served: it holds the rendered article only when
+  // that article is the selection; otherwise it says nothing is selected, or the selected
+  // article is fetched into it.
+  collectArticleRefs();
   bindArticleTabs();
-  if (articleMode.value === 'edit') {
-    initArticleEditor();
+  updateArticleGuidance();
+  if (activeView.value === 'article') {
+    if (!selectedRepo.value) {
+      showArticleEmpty();
+    } else if (matchesSelection(renderedArticle, selectedRepo.value)) {
+      showArticleContent();
+      if (articleMode.value === 'edit') initArticleEditor();
+    } else {
+      loadArticleContent(selectedRepo.value, articleMode.value, false);
+    }
+  } else if (!matchesSelection(renderedArticle, selectedRepo.value)) {
+    showArticleEmpty();
   }
+  updateArchivedNoticeVisibility();
 
-  const initialState: HistoryState = {
+  // Record the selection in the entry the page was opened on, so Back/Forward to it and a
+  // reload restore it. An article url is left as it is (it names its article); a subject
+  // url gets the selection parameter, keeping whatever else its query holds.
+  const entryUrl = openedOnArticleUrl ?
+    window.location.pathname + window.location.search :
+    withSelectionParam(window.location.pathname + window.location.search, selectedRepo.value);
+  window.history.replaceState({
     view: activeView.value,
     mode: articleMode.value,
     owner: selectedRepo.value?.owner ?? null,
@@ -701,11 +667,11 @@ export function initRepoHistory() {
     repo: selectedRepo.value?.repo ?? null,
     archived: selectedRepo.value?.archived === true,
     link: selectedRepo.value?.link ?? null,
-  };
-  window.history.replaceState(initialState, '', window.location.pathname + window.location.search);
+  } satisfies HistoryState, '', entryUrl + window.location.hash);
 
   window.addEventListener('repo:bubble-selected', handleBubbleSelection as EventListener);
   window.addEventListener('repo:bubble-open-article', handleBubbleOpenArticle as EventListener);
   if (navEl) navEl.addEventListener('click', handleNavClick as EventListener);
+  articleSection?.addEventListener('click', handleArticleSectionClick);
   window.addEventListener('popstate', handlePopState);
 }

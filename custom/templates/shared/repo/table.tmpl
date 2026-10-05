@@ -50,7 +50,7 @@
                                     <label></label>
                                 </div>
                             </td>
-                            <td class="tw-font-semibold">{{if gt $entry.ContributorCount 0}}{{CountFmt $entry.ContributorCount}}{{else}}-{{end}}</td>
+                            <td class="tw-font-semibold">{{if ge $entry.ContributorCount 0}}{{CountFmt $entry.ContributorCount}}{{else}}-{{end}}</td>
                             <td>{{if $entry.Updated}}{{DateUtils.AbsoluteShort $entry.Updated}}{{else}}-{{end}}</td>
                             <td>
                                 <div class="tw-flex tw-flex-col tw-gap-1">

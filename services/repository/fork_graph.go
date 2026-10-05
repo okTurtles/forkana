@@ -148,11 +148,65 @@ type ForkGraphParams struct {
 	Limit               int
 }
 
+// SubjectForkGraphParams are the parameters the subject page builds its fork graph
+// with. The bubble view requests exactly these from the API (see
+// templates shared/repo/bubble and FishboneGraph.vue) and the table view is built from
+// the same graph on the server, so the two always list the same articles (#405).
+func SubjectForkGraphParams() ForkGraphParams {
+	return ForkGraphParams{
+		IncludeContributors: true,
+		ContributorDays:     90,
+		MaxDepth:            10,
+		Sort:                "updated",
+		Page:                1,
+		Limit:               50,
+	}
+}
+
+// ForkGraphEntry is one article of a fork graph, as a flat list entry.
+type ForkGraphEntry struct {
+	Repo *repo_model.Repository
+	// ContributorCount is -1 when the count could not be computed.
+	ContributorCount int64
+}
+
+// FlattenForkGraph lists the articles of a fork graph in depth-first order: the root,
+// then each fork followed by its own forks, in the graph's sort order.
+func FlattenForkGraph(root *ForkNode) []*ForkGraphEntry {
+	var entries []*ForkGraphEntry
+	var visit func(*ForkNode)
+	visit = func(n *ForkNode) {
+		if n == nil || n.repo == nil {
+			return
+		}
+		count := int64(-1)
+		if n.Contributors != nil {
+			count = int64(n.Contributors.TotalCount)
+		}
+		entries = append(entries, &ForkGraphEntry{Repo: n.repo, ContributorCount: count})
+		for _, child := range n.Children {
+			visit(child)
+		}
+	}
+	visit(root)
+	return entries
+}
+
 // ForkGraphResponse represents the complete fork graph response
 type ForkGraphResponse struct {
 	Root       *ForkNode       `json:"root"`
 	Metadata   GraphMetadata   `json:"metadata"`
 	Pagination *PaginationInfo `json:"pagination,omitempty"`
+
+	// articles is the graph as a flat list (see Articles); never serialized
+	articles []*ForkGraphEntry
+}
+
+// Articles lists the articles of the graph in depth-first order (see FlattenForkGraph).
+// Only a freshly built graph has them: the nodes give their repositories up when they
+// are converted to the API format, and a response read back from a cache has none.
+func (r *ForkGraphResponse) Articles() []*ForkGraphEntry {
+	return r.articles
 }
 
 // ForkNode represents a node in the fork tree
@@ -299,6 +353,9 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 		// Continue anyway - individual loads will happen in convert.ToRepo
 	}
 
+	// The flat list of the articles, taken while the nodes still hold their repositories
+	articles := FlattenForkGraph(rootNode)
+
 	// Convert all nodes to API format (using preloaded data)
 	convertNodesToAPI(ctx, rootNode)
 
@@ -308,7 +365,8 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 
 	// Build response
 	response := &ForkGraphResponse{
-		Root: rootNode,
+		Root:     rootNode,
+		articles: articles,
 		Metadata: GraphMetadata{
 			TotalForks:      totalForks,
 			VisibleForks:    visibleForks,
@@ -350,14 +408,14 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 	// Check depth limit
 	if level >= params.MaxDepth {
 		*maxDepthReached = true
-		return createLeafNode(repo, level, params)
+		return createLeafNode(ctx, repo, level, params)
 	}
 
 	// Get direct forks
 	forks, err := getDirectForks(ctx, repo.ID, doer, params)
 	if err != nil {
 		log.Error("Failed to get forks for repo %d: %v", repo.ID, err)
-		return createLeafNode(repo, level, params)
+		return createLeafNode(ctx, repo, level, params)
 	}
 
 	// Build children
@@ -392,19 +450,14 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 
 	// Add contributor stats if requested
 	if params.IncludeContributors {
-		stats, err := getContributorStats(repo, params.ContributorDays, getForkSinceTime(repo))
-		if err != nil {
-			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
-		} else {
-			node.Contributors = stats
-		}
+		node.Contributors = nodeContributorStats(ctx, repo, params.ContributorDays)
 	}
 
 	return node, nil
 }
 
 // createLeafNode creates a leaf node without children
-func createLeafNode(repo *repo_model.Repository, level int, params ForkGraphParams) (*ForkNode, error) {
+func createLeafNode(ctx context.Context, repo *repo_model.Repository, level int, params ForkGraphParams) (*ForkNode, error) {
 	node := &ForkNode{
 		ID:       fmt.Sprintf("repo_%d", repo.ID),
 		Level:    level,
@@ -413,15 +466,33 @@ func createLeafNode(repo *repo_model.Repository, level int, params ForkGraphPara
 	}
 
 	if params.IncludeContributors {
-		stats, err := getContributorStats(repo, params.ContributorDays, getForkSinceTime(repo))
-		if err != nil {
-			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
-		} else {
-			node.Contributors = stats
-		}
+		node.Contributors = nodeContributorStats(ctx, repo, params.ContributorDays)
 	}
 
 	return node, nil
+}
+
+// nodeContributorStats returns the contributor stats of one node. TotalCount is the
+// article's contributor count exactly as every other view of the subject shows it
+// (ArticleContributorCount), so a bubble, its table row and its article page always
+// carry the same number (#405). It used to be derived from the weekly contributor
+// stats, which are generated asynchronously (reporting 0 until they are ready) and
+// only have week granularity, so a fork created mid-week lost that week's contributors.
+// RecentCount still comes from those stats: it is best effort and 0 until they exist.
+// Returns nil when the count cannot be computed, which the client shows as unknown.
+func nodeContributorStats(ctx context.Context, repo *repo_model.Repository, days int) *ContributorStats {
+	total, err := ArticleContributorCount(ctx, repo)
+	if err != nil {
+		log.Warn("Failed to get contributor count for repo %d: %v", repo.ID, err)
+		return nil
+	}
+	stats := &ContributorStats{TotalCount: int(total)}
+	if recent, err := getContributorStats(repo, days, ArticleContributorSince(repo)); err != nil {
+		log.Warn("Failed to get recent contributor stats for repo %d: %v", repo.ID, err)
+	} else {
+		stats.RecentCount = recent.RecentCount
+	}
+	return stats
 }
 
 // createReadPermission creates a basic read permission for repositories
@@ -494,16 +565,6 @@ func sortRepositories(repos []*repo_model.Repository, sortBy string) {
 			return repos[i].UpdatedUnix > repos[j].UpdatedUnix
 		}
 	})
-}
-
-// getForkSinceTime returns the appropriate since time for contributor filtering.
-// For forks, returns the fork creation time to exclude inherited history from the parent.
-// For non-forks, returns zero time (no filtering).
-func getForkSinceTime(repo *repo_model.Repository) time.Time {
-	if repo.IsFork && repo.CreatedUnix > 0 {
-		return repo.CreatedUnix.AsTime()
-	}
-	return time.Time{}
 }
 
 // hasCommitsAfter checks if a contributor has any commits after the given time.

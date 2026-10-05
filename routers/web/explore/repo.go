@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"path"
 	"strings"
-	"time"
 
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/models/renderhelper"
@@ -20,7 +19,6 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/charset"
 	"code.gitea.io/gitea/modules/git"
-	"code.gitea.io/gitea/modules/git/gitcmd"
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/markup"
@@ -492,85 +490,7 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	ctx.Data["RepoLink"] = ctx.Repo.Repository.LinkCtx(ctx)
 	ctx.Data["CloneButtonOriginLink"] = ctx.Repo.Repository.CloneLink(ctx, ctx.Doer)
 
-	// Build table entries for the base repository and its forks
-	type historyTableEntry struct {
-		Repo             *repo_model.Repository
-		ContributorCount int64
-		Updated          timeutil.TimeStamp
-		Description      string
-	}
-
-	tableEntries := make([]*historyTableEntry, 0, 1)
-	rootRepo := ctx.Repo.Repository
-	if err := rootRepo.LoadAttributes(ctx); err != nil {
-		log.Warn("LoadAttributes root repository %s: %v", rootRepo.FullName(), err)
-	}
-	if err := rootRepo.LoadSubject(ctx); err != nil {
-		log.Warn("LoadSubject root repository %s: %v", rootRepo.FullName(), err)
-	}
-	rootEntry := &historyTableEntry{
-		Repo:        rootRepo,
-		Updated:     rootRepo.UpdatedUnix,
-		Description: rootRepo.Description,
-	}
-	if c, ok := ctx.Data["ContributorCount"].(int64); ok && c > 0 {
-		rootEntry.ContributorCount = c
-	} else {
-		branch := defaultBranch
-		if branch == "" {
-			branch = setting.Repository.DefaultBranch
-		}
-		// Root repo is not a fork, so count all contributors (no since filter)
-		if count, err := gitRepo.GetContributorCount(branch, time.Time{}); err == nil {
-			rootEntry.ContributorCount = count
-		} else {
-			log.Warn("GetContributorCount for %s: %v", rootRepo.FullName(), err)
-		}
-	}
-	tableEntries = append(tableEntries, rootEntry)
-
-	forks, _, err := repo_service.FindForks(ctx, rootRepo, ctx.Doer, db.ListOptions{Page: 1, PageSize: 100})
-	if err != nil {
-		log.Warn("FindForks for %s: %v", rootRepo.FullName(), err)
-	} else if len(forks) > 0 {
-		if err := repo_model.RepositoryList(forks).LoadAttributes(ctx); err != nil {
-			log.Warn("LoadAttributes for forks of %s: %v", rootRepo.FullName(), err)
-		}
-		for _, fork := range forks {
-			if err := fork.LoadSubject(ctx); err != nil {
-				log.Warn("LoadSubject for fork %s: %v", fork.FullName(), err)
-			}
-			entry := &historyTableEntry{
-				Repo:        fork,
-				Updated:     fork.UpdatedUnix,
-				Description: fork.Description,
-			}
-			branch := fork.DefaultBranch
-			if branch == "" {
-				branch = setting.Repository.DefaultBranch
-			}
-			forkGitRepo, err := gitrepo.OpenRepository(ctx, fork)
-			if err != nil {
-				log.Warn("OpenRepository for fork %s: %v", fork.FullName(), err)
-			} else {
-				// For forks, only count contributors who made commits after the fork was created
-				// to exclude inherited history from the parent repository
-				var forkSince time.Time
-				if fork.CreatedUnix > 0 {
-					forkSince = fork.CreatedUnix.AsTime()
-				}
-				if count, err := forkGitRepo.GetContributorCount(branch, forkSince); err == nil {
-					entry.ContributorCount = count
-				} else {
-					log.Warn("GetContributorCount for fork %s: %v", fork.FullName(), err)
-				}
-				forkGitRepo.Close()
-			}
-			tableEntries = append(tableEntries, entry)
-		}
-	}
-
-	ctx.Data["HistoryForkEntries"] = tableEntries
+	ctx.Data["HistoryForkEntries"] = buildHistoryTableEntries(ctx)
 
 	// For Article view, handle mode parameter and load README content
 	if ctx.Data["IsArticleView"] == true {
@@ -591,6 +511,42 @@ func RenderRepositoryHistory(ctx *context.Context) {
 
 	// Render the history view template
 	ctx.HTML(http.StatusOK, "explore/repo_history")
+}
+
+// historyTableEntry is one row of the subject's Table view.
+type historyTableEntry struct {
+	Repo *repo_model.Repository
+	// ContributorCount is -1 when the count is unknown.
+	ContributorCount int64
+	Updated          timeutil.TimeStamp
+	Description      string
+}
+
+// buildHistoryTableEntries lists the articles of the subject for the Table view. The
+// rows are the nodes of the very fork graph the Bubble view draws, built with the same
+// parameters, so the table has exactly one row per bubble, forks of forks included,
+// and each row carries the bubble's contributor count (#405). It used to list the
+// direct forks of the requested repository only, with counts computed differently.
+func buildHistoryTableEntries(ctx *context.Context) []*historyTableEntry {
+	graph, err := repo_service.BuildForkGraph(ctx, ctx.Repo.Repository, repo_service.SubjectForkGraphParams(), ctx.Doer)
+	if err != nil {
+		log.Warn("BuildForkGraph for %s: %v", ctx.Repo.Repository.FullName(), err)
+		return nil
+	}
+	graphEntries := graph.Articles()
+	entries := make([]*historyTableEntry, 0, len(graphEntries))
+	for _, e := range graphEntries {
+		if err := e.Repo.LoadSubject(ctx); err != nil {
+			log.Warn("LoadSubject for %s: %v", e.Repo.FullName(), err)
+		}
+		entries = append(entries, &historyTableEntry{
+			Repo:             e.Repo,
+			ContributorCount: e.ContributorCount,
+			Updated:          e.Repo.UpdatedUnix,
+			Description:      e.Repo.Description,
+		})
+	}
+	return entries
 }
 
 // handleRepoHistoryFeed handles RSS/Atom feed requests for repository history
@@ -672,15 +628,11 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		return
 	}
 
-	// Get contributor count for the readme file (use default branch for contributor count)
-	// For forks, only count contributors who made commits after the fork was created
-	// to exclude inherited history from the parent repository
+	// The article's contributor count, computed exactly as the bubble and the table row of
+	// this article compute it, so the three never disagree (#405). For forks, only the
+	// contributors who committed after the fork was created are counted.
 	defaultBranch := ctx.Repo.Repository.DefaultBranch
-	var contributorSince time.Time
-	if ctx.Repo.Repository.IsFork && ctx.Repo.Repository.CreatedUnix > 0 {
-		contributorSince = ctx.Repo.Repository.CreatedUnix.AsTime()
-	}
-	contributorCount, err := getFileContributorCount(gitRepo, defaultBranch, readmeTreePath, contributorSince)
+	contributorCount, err := repo_service.ArticleContributorCountWithGitRepo(gitRepo, ctx.Repo.Repository)
 	if err != nil {
 		log.Warn("Failed to get contributor count: %v", err)
 		contributorCount = 0
@@ -865,34 +817,6 @@ func processGitCommits(ctx *context.Context, commits []*git.Commit) ([]*user_mod
 		return nil, err
 	}
 	return userCommits, nil
-}
-
-// getFileContributorCount gets the number of unique contributors for a specific file.
-// If since is non-zero, only counts contributors who made commits after that time.
-// This is useful for forks where we only want to count post-fork contributions.
-func getFileContributorCount(gitRepo *git.Repository, branch, filePath string, since time.Time) (int64, error) {
-	// Use git shortlog to get unique contributors for the file
-	cmd := gitcmd.NewCommand("shortlog", "-sn")
-
-	// If since is provided, only count commits after that time
-	// This is used for forks to exclude inherited history from the parent repository
-	if !since.IsZero() {
-		cmd.AddOptionFormat("--since=%s", since.Format(time.RFC3339))
-	}
-
-	stdout, _, err := cmd.AddDynamicArguments(branch).AddDashesAndList(filePath).
-		RunStdString(gitRepo.Ctx, &gitcmd.RunOpts{Dir: gitRepo.Path})
-	if err != nil {
-		return 0, err
-	}
-
-	// Count the number of lines (each line represents a unique contributor)
-	lines := strings.Split(strings.TrimSpace(stdout), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return 0, nil // No contributors
-	}
-
-	return int64(len(lines)), nil
 }
 
 // prepareArticleForkOnEditData sets up context data for fork-on-edit workflow

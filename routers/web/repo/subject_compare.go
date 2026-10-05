@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -19,6 +18,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/gitdiff"
+	repo_service "code.gitea.io/gitea/services/repository"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
@@ -183,6 +183,17 @@ func CompareReadme(ctx *context.Context) {
 	ctx.Data["SplitViewLines"] = splitViewLines
 	ctx.Data["IsSplitStyle"] = true
 	ctx.Data["PageIsSubjectCompare"] = true
+	// Clicking a point of contention in the Bubble view selects the fork it leads to and
+	// opens this page with "?selected={owner}/{repo}". The view tabs and the Back link
+	// carry it on, so the Bubble, Table and Article views come back with that article
+	// selected (#406). Only one of the two compared articles is accepted.
+	if selected := ctx.FormString("selected"); selected != "" {
+		for _, r := range []*repo_model.Repository{repo1, repo2} {
+			if strings.EqualFold(selected, r.OwnerName+"/"+r.Name) {
+				ctx.Data["SubjectSelected"] = r.OwnerName + "/" + r.Name
+			}
+		}
+	}
 
 	// Set Repository data needed by repo/header template for view tabs. This route
 	// does not go through the repository assignment middleware, so the subject name
@@ -246,15 +257,8 @@ func getReadmeContent(gitRepo *git.Repository, repo *repo_model.Repository) (con
 // getContributorCount retrieves the contributor count for a repository
 // It accepts an already-opened git repository handle to avoid redundant I/O operations
 func getContributorCount(gitRepo *git.Repository, repo *repo_model.Repository) int64 {
-	if repo.IsEmpty {
-		return 0
-	}
-
-	var since time.Time
-	if repo.IsFork && repo.CreatedUnix > 0 {
-		since = repo.CreatedUnix.AsTime()
-	}
-	count, err := gitRepo.GetContributorCount(repo.DefaultBranch, since)
+	// the same count the bubble, the table row and the article view show (#405)
+	count, err := repo_service.ArticleContributorCountWithGitRepo(gitRepo, repo)
 	if err != nil {
 		log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
 		return 0
