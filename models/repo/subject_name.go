@@ -7,99 +7,70 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-	"unicode"
 
+	"code.gitea.io/gitea/modules/subjecttitle"
 	"code.gitea.io/gitea/modules/util"
-
-	"golang.org/x/text/unicode/norm"
 )
 
-// Subject title rule (issue #401):
-//
-//   - allowed characters: Unicode letters (accented names such as "Gaudí" are fine, combining
-//     marks are accepted after the first character so scripts that need them keep working),
-//     decimal digits, spaces, hyphens (-) and apostrophes (' and the typographic ’);
-//   - the title must start with a letter or a digit.
-//
-// The HTML pattern used by the subject inputs (SubjectNameHTMLPattern) mirrors this rule.
-
-// SubjectNameHTMLPattern is the HTML `pattern` attribute (evaluated with the `v` flag by
-// browsers) matching what IsValidSubjectName accepts. Leading/trailing whitespace is tolerated
-// because the server trims it before validating.
-const SubjectNameHTMLPattern = `\s*[\p{L}\p{Nd}][\p{L}\p{M}\p{Nd}\s'’\-]*`
-
-// NormalizeSubjectName trims surrounding whitespace, collapses runs of whitespace into a
-// single space and converts the name to Unicode NFC so that "Gaudí" typed with a combining
-// accent is stored the same way as the precomposed form.
-func NormalizeSubjectName(name string) string {
-	return norm.NFC.String(strings.Join(strings.Fields(name), " "))
-}
-
-// IsValidSubjectName reports whether an already normalized subject name follows the subject
-// title rule. It does not check the length; see MaxSubjectNameLength.
-func IsValidSubjectName(name string) bool {
-	if name == "" {
-		return false
-	}
-	for i, r := range name {
-		switch {
-		case unicode.IsLetter(r), unicode.IsDigit(r):
-			// always allowed, including as the first character
-		case i == 0:
-			return false
-		case r == ' ', r == '-', r == '\'', r == '’', unicode.Is(unicode.M, r):
-			// allowed after the first character
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// ValidateSubjectName normalizes the given name and checks it against the subject title
-// rule and the maximum length. It returns the normalized name.
+// ValidateSubjectName normalizes the given name and checks it against the subject title rule
+// (see modules/subjecttitle), including the maximum length. It returns the normalized name, or
+// ErrSubjectNameInvalid.
 func ValidateSubjectName(name string) (string, error) {
-	name = NormalizeSubjectName(name)
-	if name == "" {
-		return "", ErrSubjectNameInvalid{Name: name}
+	name = subjecttitle.Normalize(name)
+	if subjecttitle.IsTooLong(name) {
+		return name, ErrSubjectNameInvalid{Name: name, TooLong: true}
 	}
-	if len(name) > MaxSubjectNameLength {
-		return name, fmt.Errorf("subject name is too long (maximum %d characters)", MaxSubjectNameLength)
-	}
-	if !IsValidSubjectName(name) {
+	if !subjecttitle.IsValid(name) {
 		return name, ErrSubjectNameInvalid{Name: name}
 	}
 	return name, nil
 }
 
-// CheckSubjectNameForCreate normalizes a subject name submitted with a new article and
-// returns the normalized name. A name that follows the subject title rule is accepted (it may
-// match an existing subject by slug or create a new one). A name that breaks the rule is only
-// accepted when it is exactly the name of an existing subject, so that subjects created before
-// the rule existed stay usable; otherwise ErrSubjectNameInvalid is returned.
-func CheckSubjectNameForCreate(ctx context.Context, name string) (string, error) {
-	normalized, err := ValidateSubjectName(name)
-	if err == nil || !IsErrSubjectNameInvalid(err) || normalized == "" {
-		return normalized, err
+// lookupSubjectForCreate normalizes the name and returns the existing subject it resolves to
+// by slug, if any. When there is none, the normalized name must follow the subject title rule
+// because a new subject would be created; ErrSubjectNameInvalid is returned otherwise.
+// Existing subjects are used as-is, so subjects created before the rule stay usable and
+// "Moon!" still resolves to an existing "Moon".
+func lookupSubjectForCreate(ctx context.Context, name string) (string, *Subject, error) {
+	name = subjecttitle.Normalize(name)
+	if name == "" {
+		return "", nil, ErrSubjectNameInvalid{Name: name}
 	}
-	existing, getErr := GetSubjectBySlug(ctx, GenerateSlugFromName(normalized))
-	if getErr != nil {
-		if IsErrSubjectNotExist(getErr) {
-			return normalized, err
-		}
-		return normalized, getErr
+	if subjecttitle.IsTooLong(name) {
+		return name, nil, ErrSubjectNameInvalid{Name: name, TooLong: true}
 	}
-	if existing.Name != normalized {
-		return normalized, err
+
+	existing, err := GetSubjectBySlug(ctx, GenerateSlugFromName(name))
+	if err == nil {
+		return name, existing, nil
 	}
-	return normalized, nil
+	if !IsErrSubjectNotExist(err) {
+		return name, nil, err
+	}
+
+	name, err = ValidateSubjectName(name)
+	return name, nil, err
+}
+
+// ResolveSubjectName returns the subject name to use for a new article: the name of the
+// existing subject the given name resolves to (by slug), or else the normalized name, which
+// must then follow the subject title rule (ErrSubjectNameInvalid otherwise).
+func ResolveSubjectName(ctx context.Context, name string) (string, error) {
+	name, existing, err := lookupSubjectForCreate(ctx, name)
+	if err != nil {
+		return name, err
+	}
+	if existing != nil {
+		return existing.Name, nil
+	}
+	return name, nil
 }
 
 // ErrSubjectNameInvalid is returned when a new subject's title does not follow the subject
-// title rule.
+// title rule, or is too long (TooLong).
 type ErrSubjectNameInvalid struct {
-	Name string
+	Name    string
+	TooLong bool
 }
 
 // IsErrSubjectNameInvalid checks if an error is (or wraps) ErrSubjectNameInvalid
@@ -108,6 +79,12 @@ func IsErrSubjectNameInvalid(err error) bool {
 }
 
 func (err ErrSubjectNameInvalid) Error() string {
+	if err.TooLong {
+		return fmt.Sprintf("subject name is too long (maximum %d characters)", subjecttitle.MaxLength)
+	}
+	if err.Name == "" {
+		return "subject name cannot be empty"
+	}
 	return fmt.Sprintf("subject name %q is invalid: it may only contain letters, digits, spaces, hyphens and apostrophes, and must start with a letter or digit", err.Name)
 }
 

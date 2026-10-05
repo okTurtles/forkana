@@ -5,7 +5,6 @@ package repo_test
 
 import (
 	"errors"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -18,85 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var subjectNameCases = []struct {
-	name  string
-	valid bool
-}{
-	// valid
-	{"Moon", true},
-	{"The Moon", true},
-	{"Gaudí", true},
-	{"Antoni Gaudí", true},
-	{"Zalg'o", true},
-	{"O’Brien", true},
-	{"Jean-Paul Sartre", true},
-	{"1984", true},
-	{"2001 A Space Odyssey", true},
-	{"Ελλάδα", true},
-	{"東京", true},
-	{"Москва", true},
-	{"हिन्दी", true}, // Devanagari needs combining marks after the first letter
-	{"a", true},
-	{"Rock 'n' Roll", true},
-
-	// invalid characters
-	{"Test: Gaudí", false},
-	{"Test: The Gaudí Question", false},
-	{"Moon!", false},
-	{"C++", false},
-	{"AT&T", false},
-	{"Foo/Bar", false},
-	{"Foo_Bar", false},
-	{"Foo.Bar", false},
-	{"<script>", false},
-	{"Hello 😀", false},
-	{"Foo\tBar", false}, // not normalized: tabs are not allowed as such
-
-	// must start with a letter or digit
-	{";alskdjf", false},
-	{"-Moon", false},
-	{"'Moon", false},
-	{"’Moon", false},
-	{" Moon", false},
-	{"́Moon", false}, // a combining mark cannot come first
-	{"", false},
-}
-
-func TestIsValidSubjectName(t *testing.T) {
-	for _, c := range subjectNameCases {
-		assert.Equal(t, c.valid, repo_model.IsValidSubjectName(c.name), "IsValidSubjectName(%q)", c.name)
-	}
-}
-
-// TestSubjectNameHTMLPattern checks that the HTML pattern used by the forms agrees with the
-// server-side rule. Go's RE2 has the same Unicode classes as the browser's `v` flag.
-func TestSubjectNameHTMLPattern(t *testing.T) {
-	re := regexp.MustCompile(`^(?:` + repo_model.SubjectNameHTMLPattern + `)$`)
-	for _, c := range subjectNameCases {
-		normalized := repo_model.NormalizeSubjectName(c.name)
-		if c.name != normalized {
-			// the pattern tolerates whitespace that the server normalizes away
-			continue
-		}
-		assert.Equal(t, c.valid, re.MatchString(c.name), "pattern match %q", c.name)
-	}
-	assert.True(t, re.MatchString("  The   Moon  "), "surrounding and repeated spaces are normalized by the server")
-}
-
-func TestNormalizeSubjectName(t *testing.T) {
-	cases := map[string]string{
-		"Moon":              "Moon",
-		"  The Moon  ":      "The Moon",
-		"The    Moon":       "The Moon",
-		"The \t\n Moon":     "The Moon",
-		"   ":               "",
-		"Gaudí":            "Gaudí", // NFD → NFC
-		" Jean - Paul ":     "Jean - Paul",
-		"Antoni  Gaudí   x": "Antoni Gaudí x",
-	}
-	for in, want := range cases {
-		assert.Equal(t, want, repo_model.NormalizeSubjectName(in), "NormalizeSubjectName(%q)", in)
-	}
+func isTooLongErr(err error) bool {
+	var invalid repo_model.ErrSubjectNameInvalid
+	return errors.As(err, &invalid) && invalid.TooLong
 }
 
 func TestValidateSubjectName(t *testing.T) {
@@ -107,13 +30,17 @@ func TestValidateSubjectName(t *testing.T) {
 	_, err = repo_model.ValidateSubjectName("   ")
 	assert.True(t, repo_model.IsErrSubjectNameInvalid(err))
 
-	_, err = repo_model.ValidateSubjectName(strings.Repeat("a", repo_model.MaxSubjectNameLength+1))
-	assert.Error(t, err)
-	assert.False(t, repo_model.IsErrSubjectNameInvalid(err))
-
 	_, err = repo_model.ValidateSubjectName(";alskdjf")
 	assert.True(t, repo_model.IsErrSubjectNameInvalid(err))
+	assert.False(t, isTooLongErr(err))
 	assert.ErrorIs(t, err, util.ErrInvalidArgument)
+
+	// the limit counts characters, not bytes: 255 "é" (510 bytes) fit, 256 do not
+	_, err = repo_model.ValidateSubjectName(strings.Repeat("é", repo_model.MaxSubjectNameLength))
+	require.NoError(t, err)
+	_, err = repo_model.ValidateSubjectName(strings.Repeat("é", repo_model.MaxSubjectNameLength+1))
+	assert.True(t, repo_model.IsErrSubjectNameInvalid(err))
+	assert.True(t, isTooLongErr(err))
 }
 
 func TestGetOrCreateSubject_TitleRule(t *testing.T) {
@@ -128,8 +55,19 @@ func TestGetOrCreateSubject_TitleRule(t *testing.T) {
 		assert.True(t, repo_model.IsErrSubjectNameInvalid(errors.Join(errors.New("wrapped"), err)))
 	}
 
+	// 200 "é" is 400 bytes but only 200 characters: it is a valid new subject (#401 review)
+	long := strings.Repeat("é", 200)
+	subject, err := repo_model.GetOrCreateSubject(ctx, long)
+	require.NoError(t, err)
+	assert.Equal(t, long, subject.Name)
+	reloaded := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{ID: subject.ID})
+	assert.Equal(t, long, reloaded.Name)
+
+	_, err = repo_model.GetOrCreateSubject(ctx, strings.Repeat("é", repo_model.MaxSubjectNameLength+1))
+	assert.True(t, isTooLongErr(err))
+
 	// the name is normalized before being stored
-	subject, err := repo_model.GetOrCreateSubject(ctx, "  Antoni   Gaudí  ")
+	subject, err = repo_model.GetOrCreateSubject(ctx, "  Antoni   Gaudí  ")
 	require.NoError(t, err)
 	assert.Equal(t, "Antoni Gaudí", subject.Name)
 	assert.Equal(t, "antoni-gaudi", subject.Slug)
@@ -140,27 +78,45 @@ func TestGetOrCreateSubject_TitleRule(t *testing.T) {
 	found, err := repo_model.GetOrCreateSubject(ctx, "Test: Legacy Gaudí")
 	require.NoError(t, err)
 	assert.Equal(t, legacy.ID, found.ID)
+}
 
-	normalized, err := repo_model.CheckSubjectNameForCreate(ctx, "Test: Legacy Gaudí")
+func TestResolveSubjectName(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	moon, err := repo_model.CreateSubject(ctx, "Moon")
 	require.NoError(t, err)
-	assert.Equal(t, "Test: Legacy Gaudí", normalized)
+	legacy := &repo_model.Subject{Name: "Test: Legacy", Slug: repo_model.GenerateSlugFromName("Test: Legacy")}
+	require.NoError(t, db.Insert(ctx, legacy))
 
-	// a valid name with the legacy subject's slug links to it
-	normalized, err = repo_model.CheckSubjectNameForCreate(ctx, "Test Legacy Gaudí")
-	require.NoError(t, err)
-	assert.Equal(t, "Test Legacy Gaudí", normalized)
+	cases := []struct {
+		in, want string
+		invalid  bool
+	}{
+		// an existing subject wins, whatever the spelling
+		{"Moon!", moon.Name, false},
+		{"  moon ", moon.Name, false},
+		{"Test: Legacy", legacy.Name, false},
+		{"test legacy?", legacy.Name, false},
+		// no existing subject: the normalized name must follow the rule
+		{" Brand   New ", "Brand New", false},
+		{"Test: Brand New", "", true},
+		{";alskdjf", "", true},
+		{"   ", "", true},
+	}
+	for _, c := range cases {
+		got, err := repo_model.ResolveSubjectName(ctx, c.in)
+		if c.invalid {
+			assert.True(t, repo_model.IsErrSubjectNameInvalid(err), "ResolveSubjectName(%q): %v", c.in, err)
+			continue
+		}
+		require.NoError(t, err, "ResolveSubjectName(%q)", c.in)
+		assert.Equal(t, c.want, got, "ResolveSubjectName(%q)", c.in)
+	}
 
-	// an invalid name that is not exactly the legacy name is rejected
-	_, err = repo_model.CheckSubjectNameForCreate(ctx, "test: legacy gaudí!")
-	assert.True(t, repo_model.IsErrSubjectNameInvalid(err))
+	_, err = repo_model.ResolveSubjectName(ctx, strings.Repeat("é", repo_model.MaxSubjectNameLength+1))
+	assert.True(t, isTooLongErr(err))
 
-	_, err = repo_model.CheckSubjectNameForCreate(ctx, "   ")
-	assert.True(t, repo_model.IsErrSubjectNameInvalid(err))
-
-	_, err = repo_model.CheckSubjectNameForCreate(ctx, "Test: Brand New")
-	assert.True(t, repo_model.IsErrSubjectNameInvalid(err))
-
-	normalized, err = repo_model.CheckSubjectNameForCreate(ctx, " Brand   New ")
-	require.NoError(t, err)
-	assert.Equal(t, "Brand New", normalized)
+	// resolving never creates a subject
+	unittest.AssertNotExistsBean(t, &repo_model.Subject{Slug: "brand-new"})
 }

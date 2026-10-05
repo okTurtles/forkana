@@ -19,12 +19,14 @@ import (
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/structs"
+	"code.gitea.io/gitea/modules/subjecttitle"
 	"code.gitea.io/gitea/modules/templates"
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/modules/web"
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/forms"
 	"code.gitea.io/gitea/services/migrations"
+	repo_service "code.gitea.io/gitea/services/repository"
 	"code.gitea.io/gitea/services/task"
 )
 
@@ -79,7 +81,7 @@ func handleMigrateError(ctx *context.Context, owner *user_model.User, err error,
 	switch {
 	case repo_model.IsErrSubjectNameInvalid(err):
 		ctx.Data["Err_Subject"] = true
-		ctx.RenderWithErr(ctx.Tr("repo.form.subject_invalid"), tpl, form)
+		ctx.RenderWithErr(subjectNameErrorMessage(ctx, err), tpl, form)
 	case migrations.IsRateLimitError(err):
 		ctx.RenderWithErr(ctx.Tr("form.visit_rate_limit"), tpl, form)
 	case migrations.IsTwoFactorAuthError(err):
@@ -206,24 +208,14 @@ func MigratePost(ctx *context.Context) {
 		}
 	}
 
-	// Normalize the subject title and make sure a new subject follows the subject title rule
-	if form.Subject != "" {
-		subjectName, err := repo_model.CheckSubjectNameForCreate(ctx, form.Subject)
-		if err != nil {
-			handleMigrateError(ctx, ctxUser, err, "MigratePost", tpl, form)
-			return
-		}
-		form.Subject = subjectName
+	// Resolve the subject (an existing one is used as-is, a new one must follow the subject
+	// title rule) and derive the repository name from it
+	subjectName, repoName, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.RepoName)
+	if err != nil {
+		handleMigrateError(ctx, ctxUser, err, "MigratePost", tpl, form)
+		return
 	}
-
-	// Auto-generate repository name from subject if subject is provided
-	// and repository name is empty or matches the generated name
-	if form.Subject != "" {
-		generatedName := repo_model.GenerateRepoNameFromSubject(form.Subject)
-		if form.RepoName == "" || form.RepoName == generatedName {
-			form.RepoName = generatedName
-		}
-	}
+	form.Subject, form.RepoName = subjectName, repoName
 
 	opts := migrations.MigrateOptions{
 		OriginalURL:    form.CloneAddr,
@@ -281,7 +273,7 @@ func setMigrationContextData(ctx *context.Context, serviceType structs.GitServic
 	ctx.Data["LFSActive"] = setting.LFS.StartServer
 	ctx.Data["IsForcedPrivate"] = setting.Repository.ForcePrivate
 	ctx.Data["DisableNewPullMirrors"] = setting.Mirror.DisableNewPull
-	ctx.Data["SubjectNamePattern"] = repo_model.SubjectNameHTMLPattern
+	ctx.Data["SubjectNamePattern"] = subjecttitle.HTMLPattern
 
 	// Plain git should be first
 	ctx.Data["Services"] = append([]structs.GitServiceType{structs.PlainGitService}, structs.SupportedFullGitService...)

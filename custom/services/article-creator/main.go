@@ -28,7 +28,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode"
+
+	"code.gitea.io/gitea/modules/subjecttitle"
 )
 
 // Pre-compiled regexes for createSlug (Issue 5: avoid recompiling in hot path)
@@ -302,8 +303,9 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 
 	// Forkana only accepts subject titles made of letters, digits, spaces, hyphens and
 	// apostrophes, starting with a letter or digit (issue #401), so Wikipedia titles such as
-	// "Python (programming language)" are cleaned up before being used as the subject.
-	subject := sanitizeSubject(description)
+	// "Python (programming language)" are cleaned up with the server's own rule before being
+	// used as the subject.
+	subject := subjecttitle.Clean(description)
 	if subject == "" {
 		fmt.Printf("  ✗ Title %q cannot be turned into a valid subject\n", description)
 		c.stats.failed++
@@ -498,27 +500,6 @@ func extractYAMLTitle(content string) string {
 	}
 
 	return title
-}
-
-// sanitizeSubject turns an article title into a subject title accepted by Forkana: characters
-// other than letters, digits, combining marks, hyphens and apostrophes become spaces, runs of
-// spaces are collapsed, and anything before the first letter or digit is dropped.
-// It mirrors models/repo.IsValidSubjectName in the main module.
-func sanitizeSubject(title string) string {
-	cleaned := strings.Map(func(r rune) rune {
-		switch {
-		case unicode.IsLetter(r), unicode.IsDigit(r), unicode.Is(unicode.M, r),
-			r == '-', r == '\'', r == '’':
-			return r
-		default:
-			return ' '
-		}
-	}, title)
-	cleaned = strings.Join(strings.Fields(cleaned), " ")
-	cleaned = strings.TrimLeftFunc(cleaned, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-	})
-	return strings.TrimSpace(cleaned)
 }
 
 func createSlug(filename string) string {

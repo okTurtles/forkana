@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 
 	auth_model "code.gitea.io/gitea/models/auth"
@@ -14,6 +15,7 @@ import (
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	api "code.gitea.io/gitea/modules/structs"
+	"code.gitea.io/gitea/modules/subjecttitle"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -79,14 +81,60 @@ func TestSubjectTitleRule(t *testing.T) {
 		htmlDoc := NewHTMLParser(t, resp.Body)
 		pattern, ok := htmlDoc.doc.Find("input#subject").Attr("pattern")
 		require.True(t, ok)
-		assert.Equal(t, repo_model.SubjectNameHTMLPattern, pattern)
+		assert.Equal(t, subjecttitle.HTMLPattern, pattern)
 	})
 
 	t.Run("Create first article rejects invalid subject", func(t *testing.T) {
 		req := NewRequest(t, "GET", "/repo/create-first-article?subject="+url.QueryEscape("#hashtag"))
 		resp := session.MakeRequest(t, req, http.StatusSeeOther)
-		assert.Contains(t, resp.Header().Get("Location"), "/subject/")
+		// the subject does not exist, so its page would be a 404: go back to the subject search
+		location := resp.Header().Get("Location")
+		assert.Equal(t, "/explore/subjects?q="+url.QueryEscape("#hashtag"), location)
 		assertNoSubject(t, "#hashtag")
+
+		// ... which offers to create a cleaned-up, valid title instead
+		resp = session.MakeRequest(t, NewRequest(t, "GET", location), http.StatusOK)
+		href, ok := NewHTMLParser(t, resp.Body).Find(`a.ui.primary.button[href^="/repo/create?subject="]`).Attr("href")
+		require.True(t, ok)
+		assert.Equal(t, "/repo/create?subject=hashtag", href)
+	})
+
+	t.Run("Explore create offer uses a cleaned title", func(t *testing.T) {
+		resp := session.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q="+url.QueryEscape(";alskdjf")), http.StatusOK)
+		href, ok := NewHTMLParser(t, resp.Body).Find(`a.ui.primary.button[href^="/repo/create?subject="]`).Attr("href")
+		require.True(t, ok)
+		assert.Equal(t, "/repo/create?subject=alskdjf", href)
+
+		// nothing valid is left: no create offer
+		resp = session.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q="+url.QueryEscape("!!! ???")), http.StatusOK)
+		assert.Equal(t, 0, NewHTMLParser(t, resp.Body).Find(`a[href^="/repo/create?subject="]`).Length())
+	})
+
+	t.Run("Existing subject is used whatever the spelling", func(t *testing.T) {
+		existing, err := repo_model.CreateSubject(t.Context(), "Spelling Moon")
+		require.NoError(t, err)
+
+		req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &api.CreateRepoOption{
+			Name:    "spelling-moon",
+			Subject: "Spelling Moon!",
+		}).AddTokenAuth(token)
+		resp := MakeRequest(t, req, http.StatusCreated)
+		var apiRepo api.Repository
+		DecodeJSON(t, resp, &apiRepo)
+		assert.Equal(t, existing.Name, apiRepo.Subject)
+		assert.Equal(t, "spelling-moon", apiRepo.Name)
+	})
+
+	t.Run("Long accented title is accepted", func(t *testing.T) {
+		long := strings.Repeat("é", 200) // 400 bytes, 200 characters
+		req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &api.CreateRepoOption{
+			Name:    "long-accented-subject",
+			Subject: long,
+		}).AddTokenAuth(token)
+		resp := MakeRequest(t, req, http.StatusCreated)
+		var apiRepo api.Repository
+		DecodeJSON(t, resp, &apiRepo)
+		assert.Equal(t, long, apiRepo.Subject)
 	})
 
 	t.Run("Existing legacy subject stays usable", func(t *testing.T) {

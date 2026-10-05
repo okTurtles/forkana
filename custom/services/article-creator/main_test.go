@@ -206,26 +206,3 @@ title:
 		})
 	}
 }
-
-func TestSanitizeSubject(t *testing.T) {
-	tests := map[string]string{
-		"Moon":                          "Moon",
-		"Antoni Gaudí":                  "Antoni Gaudí",
-		"Python (programming language)": "Python programming language",
-		"St. Louis":                     "St Louis",
-		"Test: The Gaudí Question":      "Test The Gaudí Question",
-		";alskdjf":                      "alskdjf",
-		"'Til Tuesday":                  "Til Tuesday",
-		"Rock 'n' Roll":                 "Rock 'n' Roll",
-		"Jean-Paul Sartre":              "Jean-Paul Sartre",
-		"C++":                           "C",
-		"!!!":                           "",
-		"  Hello,   World!  ":           "Hello World",
-		"- - Dash":                      "Dash",
-	}
-	for in, want := range tests {
-		if got := sanitizeSubject(in); got != want {
-			t.Errorf("sanitizeSubject(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
