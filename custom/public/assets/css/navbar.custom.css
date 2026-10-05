@@ -39,10 +39,23 @@
   background: var(--color-nav-bg);
   border: none;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-  /* A little air between the navbar and the card. */
-  margin-top: 8px;
+  /* #421 item 6: the card opens BELOW the navbar's bottom border, 4px under it,
+     as the layout draws it, instead of over it. The menu hangs from the 36px
+     dropdown item, which is centred in the navbar's 49px row inside its 9px
+     vertical padding: from the item's bottom to below the 1px border is
+     9px + (49px - 36px) / 2 + 1px. */
+  margin-top: var(--navbar-user-menu-offset, calc(9px + (49px - 36px) / 2 + 1px + 4px));
   /* Clip the edge-to-edge hover highlight to the card's rounded corners. */
   overflow: hidden;
+}
+
+/* On a phone the menu hangs from the avatar row, the last of the open navbar's
+   rows, which ends 8px (the open navbar's bottom padding, web_src/css/modules/
+   navbar.css) above the 1px border: the card still opens 4px below it. */
+@media (max-width: 767.98px) {
+  #navbar.navbar-menu-open {
+    --navbar-user-menu-offset: calc(8px + 1px + 4px);
+  }
 }
 
 /* Hovered entries run edge to edge but keep rounded corners, matching the

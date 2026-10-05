@@ -1,17 +1,17 @@
 <div class="secondary-nav">
 {{with .Repository}}
-	{{$canFollow := not (and $.IsSigned (eq $.SignedUser.ID .OwnerID))}}
 	<div class="ui container">
-		<div class="repo-header tw-flex tw-flex-col tw-items-center tw-pt-14 {{if $canFollow}}repo-header-with-follow{{else}}tw-pb-10{{end}}">
+		<div class="repo-header tw-flex tw-flex-col tw-items-center tw-pt-14 repo-header-with-follow">
 			<h1 class="tw-text-40 tw-m-0">{{$.SubjectName}}</h1>
 			<!-- Does header need to be a link?
 				<a class="muted" href="{{$.RepoLink}}"></a>
 			-->
-			{{if $canFollow}}
-				<div class="repo-header-follow">
-					{{template "repo/watch_unwatch" $}}
-				</div>
-			{{end}}
+			{{/* Follow is offered on every subject, to everyone (#421 item 5). It used to be
+			     hidden from the owner of the article shown, so a signed-in reader lost it on
+			     every subject they had created themselves (the recently created ones). */}}
+			<div class="repo-header-follow">
+				{{template "repo/watch_unwatch" $}}
+			</div>
 		</div>
 	</div>
 {{end}}
@@ -31,7 +31,9 @@
 			{{/* Its label and state follow Compare mode (#421 item 1): web_src/js/features/copycontent.ts
 			     swaps the label for data-label-on while it is on, and marks it unavailable, with
 			     data-unavailable as its tooltip, on a subject with a single article. On a page
-			     without the subject views it opens data-bubble-url with the press. */}}
+			     without the subject views it opens data-bubble-url with the press. Its icon is
+			     figma's file-diff-24 drawn at 16px (component 319:1637 in the button 484:188986),
+			     not the 16px octicon, whose glyph differs. */}}
 			<button class="ui button tiny compact tw-h-9" id="compare-mode-button" type="button" aria-pressed="false"
 				data-global-click="onCompareModeToggle"
 				data-bubble-url="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "bubble" "selected" .SubjectSelected}}"
@@ -39,7 +41,7 @@
 				data-label-on="{{ctx.Locale.Tr "repo.compare_mode_on"}}"
 				data-unavailable="{{ctx.Locale.Tr "repo.compare_mode_unavailable"}}"
 				aria-label="{{ctx.Locale.Tr "repo.compare_mode"}}">
-				{{svg "octicon-file-diff" 16}}<span class="not-mobile tw-ml-1" data-role="compare-label">{{ctx.Locale.Tr "repo.compare_mode"}}</span>
+				{{svg "forkana-file-diff-24" 16}}<span class="not-mobile tw-ml-1" data-role="compare-label">{{ctx.Locale.Tr "repo.compare_mode"}}</span>
 			</button>
 		</overflow-menu>
 	</div>

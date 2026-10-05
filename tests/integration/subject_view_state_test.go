@@ -164,3 +164,23 @@ func TestSubjectPagePrivateFork(t *testing.T) {
 	t.Run("Anonymous", func(t *testing.T) { check(t, nil, false) })
 	t.Run("OtherUser", func(t *testing.T) { check(t, loginUser(t, "user5"), false) })
 }
+
+// Follow is offered on every subject, to every reader (#421 item 5): it used to be
+// hidden from the owner of the article shown, so a signed-in reader lost it on every
+// subject they had created.
+func TestSubjectPageFollowButton(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, _, subjectName := loadArticleRepo(t, 1)
+	for _, reader := range []string{"", owner.Name, "user4"} {
+		var session *TestSession
+		if reader != "" {
+			session = loginUser(t, reader)
+		}
+		for _, view := range []string{"bubble", "table", "article"} {
+			_, body := getSubjectPage(t, session, subjectName, "view="+view)
+			doc := NewHTMLParser(t, bytes.NewBufferString(body))
+			assert.Equal(t, 1, doc.Find(".repo-header-follow .follow-article-button").Length(), "Follow for %q on the %s view", reader, view)
+		}
+	}
+}
