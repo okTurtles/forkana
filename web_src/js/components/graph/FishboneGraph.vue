@@ -33,7 +33,7 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
-import { placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
+import { COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
 import CompareAnnouncement, { type CompareAnnouncementMessages, type CompareAnnouncementState } from "./CompareAnnouncement.vue";
 import { takeCompareModeRequest } from "../../modules/compare-mode-request.ts";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
@@ -1652,6 +1652,10 @@ onMounted(async () => {
   /* Initial fetch from API */
   await fetchForkGraphAndSet();
   window.addEventListener('keydown', onGraphKeydown);
+  /* The window can change without the graph's box changing (a centred box of
+     fixed width just moves), and that changes which side of the bubbles has
+     room for the Compare box: re-place it on every resize. */
+  window.addEventListener('resize', updateCompareAnchor);
 });
 
 onBeforeUnmount(() => {
@@ -1668,6 +1672,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
   window.removeEventListener('keydown', onGraphKeydown);
   narrowQuery?.removeEventListener('change', onNarrowChange);
+  window.removeEventListener('resize', updateCompareAnchor);
 });
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -2180,7 +2185,7 @@ function updateHistoryAnchor() {
 /* A phone has no room beside the bubbles: the banner carries the two
    articles and the action there instead of a Compare box. Same breakpoint as
    the rest of the app (767.98px). */
-const narrowQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width: 767.98px)') : null;
+const narrowQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(COMPARE_SHEET_QUERY) : null;
 const isNarrow = ref(narrowQuery?.matches ?? false);
 const onNarrowChange = (ev: MediaQueryListEvent) => { isNarrow.value = ev.matches; };
 narrowQuery?.addEventListener('change', onNarrowChange);
@@ -2188,7 +2193,11 @@ narrowQuery?.addEventListener('change', onNarrowChange);
 const compareLayout = reactive<ComparePopoverLayout>({placement: 'right', left: 0, top: 0, caretY: 0});
 const comparePopoverRef = ref<HTMLElement | null>(null);
 const compareBoxOpen = computed(() => showComparePopup.value && compareSelection.value.length === 2);
-const comparePopoverVisible = computed(() => compareBoxOpen.value && !isNarrow.value && compareLayout.placement !== 'below');
+/* Popover beside the bubbles, bottom sheet (a phone, or no room beside the
+   bubbles), or nothing — see compareBoxMode(). Reactive on the breakpoint, so
+   a resize across 768px swaps one for the other with the box open. */
+const compareMode = computed(() => compareBoxMode({open: compareBoxOpen.value, narrow: isNarrow.value, placement: compareLayout.placement}));
+const comparePopoverVisible = computed(() => compareMode.value === 'popover');
 
 function updateCompareAnchor() {
   if (!compareBoxOpen.value || isNarrow.value) return;
@@ -2360,8 +2369,6 @@ function readAnnouncementMessages(): CompareAnnouncementMessages {
     unavailable: d.msgUnavailable || 'No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.',
     compareNow: d.msgCompareNow || 'Compare now',
     dismiss: d.msgDismiss || 'Exit compare mode',
-    contributors: d.msgContributors || '%d contributors',
-    contributor: d.msgContributor || '%d contributor',
   };
 }
 const announcementMessages = readAnnouncementMessages();
@@ -2372,26 +2379,6 @@ const announcementState = computed<CompareAnnouncementState | null>(() => {
     return n >= 2 ? 'ready' : n === 1 ? 'one' : 'select';
   }
   return compareUnavailableShown.value ? 'unavailable' : null;
-});
-
-/* On a phone the banner is sticky and grows when the second article is
-   picked (it then lists both). If that leaves a picked bubble under it, the
-   page is scrolled by the difference, so the banner never hides the bubbles it
-   is about. */
-watch(announcementState, async (st) => {
-  if (st !== 'ready' || !isNarrow.value) return;
-  await nextTick();
-  const banner = announcementTarget?.querySelector('.compare-announcement');
-  if (!banner) return;
-  const bannerBottom = banner.getBoundingClientRect().bottom;
-  let overlap = 0;
-  for (const n of compareSelection.value) {
-    const el = svgRef.value?.querySelector(`g.node[data-node-id="${cssEscape(n.id)}"]`);
-    if (!el) continue;
-    const top = el.getBoundingClientRect().top;
-    overlap = Math.max(overlap, bannerBottom - top);
-  }
-  if (overlap > 0) window.scrollBy({top: -(overlap + 8)});
 });
 
 function dismissAnnouncement() {
@@ -2668,7 +2655,7 @@ function goToComparison() {
         >
           <ArticleComparePopup
             :articles="compareSelection" :subject="props.subject || ''"
-            :placement="compareLayout.placement" :caret-y="compareLayout.caretY"
+            :placement="compareLayout.placement === 'left' ? 'left' : 'right'" :caret-y="compareLayout.caretY"
             @close="closeComparePopup" @compare="goToComparison"
           />
         </div>
@@ -2683,10 +2670,23 @@ function goToComparison() {
       <Teleport v-if="announcementTarget && announcementState" :to="announcementTarget">
         <CompareAnnouncement
           :state="announcementState" :messages="announcementMessages"
-          :articles="compareSelection" :subject="props.subject || ''"
-          :expanded="!comparePopoverVisible"
+          :show-compare-now="compareMode === 'none'"
           @dismiss="dismissAnnouncement" @compare="goToComparison"
         />
+      </Teleport>
+
+      <!-- The Compare box as a bottom sheet (figma "." 641:63496), on a phone or
+           when neither side of the bubbles has room for it: the page behind it
+           is dimmed, and a tap there closes it. Closing keeps the selection;
+           the banner then offers "Compare now". -->
+      <Teleport v-if="compareMode === 'sheet'" to="body">
+        <div class="compare-sheet-backdrop" @click="closeComparePopup"/>
+        <div class="compare-sheet">
+          <ArticleComparePopup
+            :articles="compareSelection" :subject="props.subject || ''" placement="sheet"
+            @close="closeComparePopup" @compare="goToComparison"
+          />
+        </div>
       </Teleport>
     </div>
   </div>
@@ -2721,6 +2721,24 @@ function goToComparison() {
 .compare-anchor {
   position: absolute;
   z-index: 20;
+}
+
+/* The bottom sheet and the dimmed page behind it. Teleported to <body>, so
+   they are fixed to the window whatever the graph's box does. The backdrop
+   covers the sticky Compare banner too: the sheet is what is being looked at. */
+.compare-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--color-overlay-backdrop);
+}
+
+.compare-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1001;
 }
 
 /* Carries the History card's anchor variables and nothing else. */

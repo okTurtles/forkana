@@ -12,13 +12,11 @@
                    Fork this article to start comparing."           6661:53348
    Every state has the info icon and the dismiss x (both in the brand indigo).
 
-   With two articles picked, figma keeps the banner to its message and lets the
-   Compare box beside the bubbles (ArticleComparePopup) carry the articles and
-   the action — its "Compare now" button is hidden in 641:61937. When that box
-   is not shown (a phone, or no room beside the bubbles, or the user closed
-   it), `expanded` makes the banner carry them instead: "Compare now" (the
-   primary action figma's Announcement has) and a compact line per article. */
-
+   The banner is only ever a message: the two picked articles and the action
+   live in the Compare box (a popover beside the bubbles, or a bottom sheet on
+   a phone). Figma hides the banner's "Compare now" while that box is open
+   (641:61937); once the box is closed, `showCompareNow` brings it back so the
+   comparison is still one tap away. */
 
 export type CompareAnnouncementState = 'select' | 'one' | 'ready' | 'unavailable';
 export type CompareAnnouncementMessages = {
@@ -28,31 +26,15 @@ export type CompareAnnouncementMessages = {
   unavailable: string;
   compareNow: string;
   dismiss: string;
-  contributors: string;   // "%d contributors"
-  contributor: string;    // "%d contributor"
 };
 
 const props = withDefaults(defineProps<{
   state: CompareAnnouncementState;
   messages: CompareAnnouncementMessages;
-  /** The picked articles, shown when `expanded`. */
-  articles?: Array<{
-    id: string;
-    repoOwner?: string;
-    repoName?: string;
-    repoSubject?: string;
-    fullName?: string;
-    articleLink?: string;
-    contributors: number;
-    updatedAt?: string;
-  }>;
-  subject?: string;
-  /** Carry the articles and "Compare now" (see above). */
-  expanded?: boolean;
+  /** Offer "Compare now" (two articles picked and the Compare box closed). */
+  showCompareNow?: boolean;
 }>(), {
-  articles: () => [],
-  subject: '',
-  expanded: false,
+  showCompareNow: false,
 });
 
 const emit = defineEmits<{
@@ -63,28 +45,10 @@ const emit = defineEmits<{
 function message(): string {
   return props.messages[props.state];
 }
-
-function owner(a: {repoOwner?: string; fullName?: string}) {
-  return a.repoOwner || a.fullName?.split('/')[0] || '';
-}
-
-function subjectName(a: {repoSubject?: string; fullName?: string}) {
-  return a.repoSubject || a.fullName?.split('/')[1] || props.subject;
-}
-
-function href(a: {repoOwner?: string; repoName?: string; fullName?: string; articleLink?: string}) {
-  if (a.articleLink) return a.articleLink;
-  const repo = a.repoName || a.fullName?.split('/')[1] || '';
-  return `${window.config.appSubUrl}/${encodeURIComponent(owner(a))}/${encodeURIComponent(repo)}`;
-}
-
-function contributors(n: number) {
-  return (n === 1 ? props.messages.contributor : props.messages.contributors).replace('%d', String(n));
-}
 </script>
 
 <template>
-  <div class="compare-announcement" :class="{'is-expanded': expanded && state === 'ready'}" role="status" aria-live="polite">
+  <div class="compare-announcement" role="status" aria-live="polite">
     <div class="compare-announcement-main">
       <!-- IconWrapper: octicon info, 16px, brand indigo -->
       <span class="compare-announcement-icon" aria-hidden="true">
@@ -93,7 +57,7 @@ function contributors(n: number) {
       <p class="compare-announcement-message">{{ message() }}</p>
       <div class="compare-announcement-actions">
         <button
-          v-if="expanded && state === 'ready'" type="button" class="compare-announcement-primary"
+          v-if="showCompareNow && state === 'ready'" type="button" class="compare-announcement-primary"
           @click="emit('compare')"
         >
           {{ messages.compareNow }}
@@ -103,17 +67,9 @@ function contributors(n: number) {
         </button>
       </div>
     </div>
-    <ul v-if="expanded && state === 'ready' && articles.length" class="compare-announcement-articles">
-      <li v-for="a in articles" :key="a.id">
-        <svg class="compare-announcement-fork" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <path fill="currentColor" d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"/>
-        </svg>
-        <a class="compare-announcement-name" :href="href(a)">{{ owner(a) }} / {{ subjectName(a) }}</a>
-        <span class="compare-announcement-meta">{{ contributors(a.contributors) }}</span>
-      </li>
-    </ul>
   </div>
 </template>
+
 
 <style scoped>
 /* Announcement 484:190672: a tinted strip with a 1px brand border above and
@@ -204,48 +160,9 @@ function contributors(n: number) {
 }
 
 .compare-announcement-primary:focus-visible,
-.compare-announcement-dismiss:focus-visible,
-.compare-announcement-name:focus-visible {
+.compare-announcement-dismiss:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 1px;
-}
-
-/* The picked articles, one compact line each, aligned with the message */
-.compare-announcement-articles {
-  margin: 0;
-  padding: 0 0 4px 24px;
-  list-style: none;
-}
-
-.compare-announcement-articles li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 20px;
-}
-
-.compare-announcement-fork {
-  flex-shrink: 0;
-  color: var(--color-text-primary);
-}
-
-.compare-announcement-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-primary);
-}
-
-.compare-announcement-meta {
-  flex-shrink: 0;
-  font-weight: 600;
-  color: var(--color-muted-text);
-  white-space: nowrap;
 }
 
 /* Phone (figma Mobile frames 641-63036 / 641-63125 / 6484-44441): 8px 8px 8px

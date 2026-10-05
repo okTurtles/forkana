@@ -21,7 +21,7 @@
 
 import { reactive } from 'vue';
 import { formatDateYMD } from '../../utils/time.ts';
-import { COMPARE_CARET_HEIGHT, COMPARE_CARET_WIDTH, type ComparePlacement } from './compare-popover.ts';
+import { COMPARE_CARET_HEIGHT, COMPARE_CARET_WIDTH } from './compare-popover.ts';
 
 const props = withDefaults(defineProps<{
   articles: Array<{
@@ -36,12 +36,12 @@ const props = withDefaults(defineProps<{
     updatedAt?: string;
   }>;
   subject: string;
-  /** Which side of the picked bubbles the box is on ('below': under the graph). */
-  placement?: ComparePlacement;
+  /** Beside the picked bubbles ('right' / 'left'), or the bottom sheet of a phone ('sheet'). */
+  placement?: 'right' | 'left' | 'sheet';
   /** Centre of the caret, from the top of the box (side placements only). */
   caretY?: number;
 }>(), {
-  placement: 'below',
+  placement: 'sheet',
   caretY: 0,
 });
 
@@ -79,11 +79,11 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
 <template>
   <section
     class="compare-popover" :class="`is-${props.placement}`"
-    role="dialog" aria-modal="false" aria-labelledby="compare-popover-title"
+    role="dialog" :aria-modal="props.placement === 'sheet' ? 'true' : 'false'" aria-labelledby="compare-popover-title"
   >
     <!-- Caret 641:62048: a bordered triangle on the box's edge, pointing at the picked bubbles. -->
     <svg
-      v-if="props.placement !== 'below'" class="compare-popover-caret" :style="caretStyle()"
+      v-if="props.placement !== 'sheet'" class="compare-popover-caret" :style="caretStyle()"
       :width="COMPARE_CARET_WIDTH" :height="COMPARE_CARET_HEIGHT" viewBox="0 0 7 14" aria-hidden="true"
     >
       <path class="caret-border" d="M7 0L0 7l7 7z"/>
@@ -119,10 +119,13 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
           </button>
         </div>
         <div v-if="!folded[article.id]" class="compare-popover-details">
+          <!-- One text node in figma (I641:62036;15096:48946;15039:46266, mobile
+               I641:63515;…): the first two lines Inter 600 12/20, the date line
+               Inter 400 italic 12/20, all #59636e. -->
           <div class="compare-article-meta">
-            <div>{{ article.contributors }} Contributor{{ article.contributors === 1 ? '' : 's' }}</div>
-            <div>{{ article.children?.length || 0 }} Fork{{ (article.children?.length || 0) === 1 ? '' : 's' }}</div>
-            <div>Last updated: {{ formatDateYMD(article.updatedAt, 'Unknown') }}</div>
+            <div class="compare-article-count">{{ article.contributors }} Contributor{{ article.contributors === 1 ? '' : 's' }}</div>
+            <div class="compare-article-count">{{ article.children?.length || 0 }} Fork{{ (article.children?.length || 0) === 1 ? '' : 's' }}</div>
+            <div class="compare-article-date">Last updated: {{ formatDateYMD(article.updatedAt, 'Unknown') }}</div>
           </div>
           <button
             type="button" class="compare-popover-icon-button compare-popover-chevron"
@@ -159,9 +162,21 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
   text-align: left;
 }
 
-/* Under the graph on a narrow screen: the full width of the graph. */
-.compare-popover.is-below {
+/* On the sheet the close x sits 13px from the right edge (641:63499), not 11. */
+.compare-popover.is-sheet .compare-popover-header {
+  padding-right: 5px;
+}
+
+/* The bottom sheet of a phone (figma "." 641:63496: 375 wide, white, 8px
+   padding, no radius and no shadow; the backdrop behind it is the parent's).
+   Scrolls on its own if a short screen cannot hold it. */
+.compare-popover.is-sheet {
   width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /* Caret 641:62048 on the edge facing the picked bubbles. It covers the box's
@@ -232,17 +247,18 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
    whole box, through its 8px padding */
 .compare-popover-divider {
   height: 0;
-  margin: 8px -8px;
+  margin: 8px -8px 7px;   /* + the 1px line: 16px, as figma */
   border-top: 1px solid color-mix(in srgb, var(--color-border-light) 70%, transparent);
 }
 
-/* Frame 716 641:62030: the title row (36px: 8px padding, a 20px icon at 32px
-   and the link at 60px) and the details row aligned with the link */
+/* The article's title row, ActionList.Item 641:62035 (desktop) / 641:63508
+   (sheet): 36px tall with 8px all round, the 20px fork icon at the start
+   (16px from the box's edge), 8px to the link (44px). */
 .compare-popover-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  padding: 8px 8px 8px 32px;
+  padding: 8px;
 }
 
 .compare-popover-fork {
@@ -250,6 +266,7 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
   color: var(--color-text-primary);
 }
 
+/* The link: Inter 600 14/20, #4e40fa */
 .compare-article-name {
   flex: 1;
   min-width: 0;
@@ -265,25 +282,51 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
   text-decoration: underline;
 }
 
+/* The details row, ActionList.Item 641:62036 (desktop): 68px tall, the three
+   20px lines starting 6px down and 68px from the box's edge, the chevron
+   (16×20) on the first line, ending 296px from the box's edge — where the
+   frame puts it. */
 .compare-popover-details {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 0 8px 8px 60px;
+  padding: 6px 79px 2px 60px;
+}
+
+/* ...and on the sheet, 641:63509: the lines from the top of the row, aligned
+   with the link (45px from the edge), the chevron 45px from the right. */
+.compare-popover.is-sheet .compare-popover-details {
+  padding: 0 37px 8px;
 }
 
 .compare-article-meta {
   flex: 1;
   min-width: 0;
   font-size: 12px;
-  font-weight: 600;
   line-height: 20px;
   color: var(--color-muted-text);
 }
 
-.compare-popover-chevron {
-  margin-left: auto;
+/* "335 Contributors", "1 Fork": Inter 600 12/20, #59636e */
+.compare-article-count {
+  font-weight: 600;
 }
+
+/* "Last updated: 2025-06-10": Inter 400 italic 12/20, #59636e */
+.compare-article-date {
+  font-weight: 400;
+  font-style: italic;
+}
+
+/* trailingVisual/icon: a 16×20 chevron, #1f2328 */
+.compare-popover-chevron {
+  width: 16px;
+  height: 20px;
+  margin-left: auto;
+  border-radius: 4px;
+  color: var(--color-text-primary);
+}
+
 
 /* Frame 713 641:62040: 12px/8px around a full-width 40px button (Action
    641:62041: #f6f8fa, 1px #d1d9e0, radius 6, Inter 600 14/20) */

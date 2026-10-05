@@ -87,3 +87,19 @@ export function placeComparePopover(input: ComparePopoverInput): ComparePopoverL
   const caretY = clamp(anchorY - top, caretInset, height - caretInset);
   return {placement, left, top, caretY};
 }
+
+/** The breakpoint below which the Compare box is a bottom sheet (the app's
+   mobile breakpoint, see web_src/css/repo/header.css). */
+export const COMPARE_SHEET_QUERY = '(max-width: 767.98px)';
+
+export type CompareBoxMode = 'popover' | 'sheet' | 'none';
+
+/** How the Compare box is shown: beside the bubbles on a desktop, as a bottom
+   sheet on a phone (figma "." 641:63496) or when neither side of the bubbles
+   has room for it, and not at all while it is closed. Pure, so the switch
+   across the breakpoint can be tested. */
+export function compareBoxMode(input: {open: boolean, narrow: boolean, placement: ComparePlacement}): CompareBoxMode {
+  if (!input.open) return 'none';
+  if (input.narrow || input.placement === 'below') return 'sheet';
+  return 'popover';
+}

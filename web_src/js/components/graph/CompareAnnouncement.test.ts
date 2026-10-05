@@ -9,14 +9,7 @@ const messages: CompareAnnouncementMessages = {
   unavailable: 'No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.',
   compareNow: 'Compare now',
   dismiss: 'Exit compare mode',
-  contributors: '%d contributors',
-  contributor: '%d contributor',
 };
-
-const articles = [
-  {id: '1', repoOwner: 'alice', repoName: 'moon', repoSubject: 'Moon', contributors: 335},
-  {id: '2', repoOwner: 'bob', repoName: 'moon', repoSubject: 'Moon', contributors: 1},
-];
 
 function mount(props: Record<string, any>) {
   const root = document.createElement('div');
@@ -45,27 +38,18 @@ test('says what to do in each state, from the figma frames', () => {
   expect(text(mount({state: 'unavailable'}).root)).toBe(messages.unavailable);
 });
 
-test('with the Compare box beside the bubbles, the ready banner is just its message (figma hides "Compare now")', () => {
-  const {root} = mount({state: 'ready', articles});
-  expect(root.querySelector('.compare-announcement-primary')).toBeNull();
-  expect(root.querySelectorAll('li')).toHaveLength(0);
+test('it is only ever a message: the articles live in the Compare box', () => {
+  const {root} = mount({state: 'ready', showCompareNow: true});
+  expect(root.querySelectorAll('li, a')).toHaveLength(0);
 });
 
-test('expanded (a phone, or no room for the box), it carries both articles and "Compare now"', async () => {
-  const {root, events} = mount({state: 'ready', articles, expanded: true});
-  expect(Array.from(root.querySelectorAll('li'), (li) => li.textContent.replace(/\s+/g, ' ').trim())).toEqual([
-    'alice / Moon335 contributors',
-    'bob / Moon1 contributor',
-  ]);
+test('"Compare now" is offered once two are picked and the Compare box is closed (figma hides it while open)', async () => {
+  expect(mount({state: 'ready'}).root.querySelector('.compare-announcement-primary')).toBeNull();
+  expect(mount({state: 'one', showCompareNow: true}).root.querySelector('.compare-announcement-primary')).toBeNull();
+  const {root, events} = mount({state: 'ready', showCompareNow: true});
   root.querySelector<HTMLButtonElement>('.compare-announcement-primary').click();
   await nextTick();
   expect(events).toEqual(['compare']);
-});
-
-test('expanded only matters once two articles are picked', () => {
-  const {root} = mount({state: 'one', articles: articles.slice(0, 1), expanded: true});
-  expect(root.querySelector('.compare-announcement-primary')).toBeNull();
-  expect(root.querySelectorAll('li')).toHaveLength(0);
 });
 
 test('the x dismisses it', async () => {

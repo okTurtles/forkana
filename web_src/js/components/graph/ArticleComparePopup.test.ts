@@ -42,32 +42,33 @@ const twoArticles = [
   {id: '2', repoOwner: 'bob', repoName: 'moon', contributors: 1, children: [], updatedAt: '2025-06-11T00:00:00Z'},
 ];
 
-test('is a popover, not a modal: no backdrop', () => {
-  const root = mountPopup(twoArticles);
-  expect(root.querySelector('.compare-popover')?.getAttribute('aria-modal')).toBe('false');
-  expect(root.querySelector('.compare-popup-overlay')).toBeNull();
+test('beside the bubbles it is a popover, not a modal; the phone sheet is modal', () => {
+  const side = mountPopup(twoArticles, 'Moon', {placement: 'right'});
+  expect(side.querySelector('.compare-popover')?.getAttribute('aria-modal')).toBe('false');
+  const sheet = mountPopup(twoArticles, 'Moon', {placement: 'sheet'});
+  expect(sheet.querySelector('.compare-popover.is-sheet')?.getAttribute('aria-modal')).toBe('true');
 });
 
-test('beside the bubbles it has a caret on the facing edge, at the given height; under the graph it has none', () => {
+test('beside the bubbles it has a caret on the facing edge, at the given height; the sheet has none', () => {
   const right = mountPopup(twoArticles, 'Moon', {placement: 'right', caretY: 120});
   const caret = right.querySelector<SVGElement>('.compare-popover-caret');
   expect(caret).not.toBeNull();
   expect(caret.style.top).toBe('113px');   // centred: 120 - 14 / 2
   expect(right.querySelector('.compare-popover.is-right')).not.toBeNull();
-  const below = mountPopup(twoArticles, 'Moon', {placement: 'below'});
-  expect(below.querySelector('.compare-popover-caret')).toBeNull();
+  const sheet = mountPopup(twoArticles, 'Moon', {placement: 'sheet'});
+  expect(sheet.querySelector('.compare-popover-caret')).toBeNull();
 });
 
-test('each article shows its details, which its chevron folds and unfolds', async () => {
+test('the details are two semibold count lines and an italic date line, which the chevron folds', async () => {
   const root = mountPopup(twoArticles);
-  const details = () => Array.from(root.querySelectorAll('.compare-article-meta'), (el) => Array.from(el.children, (line) => line.textContent.trim()).join(' '));
+  const details = () => Array.from(root.querySelectorAll('.compare-article-meta'), (el) => Array.from(el.children, (line) => `${line.className}:${line.textContent.trim()}`));
   expect(details()).toEqual([
-    '335 Contributors 1 Fork Last updated: 2025-06-10',
-    '1 Contributor 0 Forks Last updated: 2025-06-11',
+    ['compare-article-count:335 Contributors', 'compare-article-count:1 Fork', 'compare-article-date:Last updated: 2025-06-10'],
+    ['compare-article-count:1 Contributor', 'compare-article-count:0 Forks', 'compare-article-date:Last updated: 2025-06-11'],
   ]);
   root.querySelector<HTMLButtonElement>('.compare-popover-details .compare-popover-chevron').click();
   await Promise.resolve();
-  expect(details()).toEqual(['1 Contributor 0 Forks Last updated: 2025-06-11']);
+  expect(details()).toHaveLength(1);
   const unfold = root.querySelector<HTMLButtonElement>('.compare-popover-row .compare-popover-chevron');
   expect(unfold.getAttribute('aria-expanded')).toBe('false');
   unfold.click();

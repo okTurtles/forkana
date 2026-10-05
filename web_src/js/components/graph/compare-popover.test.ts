@@ -1,7 +1,20 @@
 import {
   COMPARE_CARET_HEIGHT, COMPARE_CARET_INSET, COMPARE_CARET_WIDTH, COMPARE_POPOVER_GAP,
-  COMPARE_POPOVER_WIDTH, placeComparePopover,
+  COMPARE_POPOVER_WIDTH, COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover,
 } from './compare-popover.ts';
+
+test('the Compare box is a popover on a desktop and a bottom sheet below 768px, switching live', () => {
+  // the breakpoint the component listens to with matchMedia
+  expect(COMPARE_SHEET_QUERY).toBe('(max-width: 767.98px)');
+  const open = {open: true, placement: 'right' as const};
+  expect(compareBoxMode({...open, narrow: false})).toBe('popover');
+  expect(compareBoxMode({...open, narrow: true})).toBe('sheet');
+  // back across the breakpoint with the box still open
+  expect(compareBoxMode({...open, narrow: false})).toBe('popover');
+  // no room beside the bubbles on a desktop: the sheet as well
+  expect(compareBoxMode({open: true, narrow: false, placement: 'below'})).toBe('sheet');
+  expect(compareBoxMode({open: false, narrow: true, placement: 'right'})).toBe('none');
+});
 
 /* The figma frame 641:61930, in the frame's own coordinates: the picked bubbles
    are 100px at (824,655) and (878,764); the box is 383×372. */
