@@ -139,6 +139,16 @@ func Migrate(ctx *context.APIContext) {
 		}
 	}
 
+	// Normalize the subject title and make sure a new subject follows the subject title rule
+	if form.Subject != "" {
+		subjectName, err := repo_model.CheckSubjectNameForCreate(ctx, form.Subject)
+		if err != nil {
+			handleSubjectNameError(ctx, err)
+			return
+		}
+		form.Subject = subjectName
+	}
+
 	// Auto-generate repository name from subject if subject is provided
 	// and repository name is empty or matches the generated name
 	if form.Subject != "" {

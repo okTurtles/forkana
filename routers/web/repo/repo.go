@@ -149,6 +149,7 @@ func getRepoPrivate(ctx *context.Context) bool {
 
 func createCommon(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("new_repo")
+	ctx.Data["SubjectNamePattern"] = repo_model.SubjectNameHTMLPattern
 	ctx.Data["Gitignores"] = repo_module.Gitignores
 	ctx.Data["LabelTemplateFiles"] = repo_module.LabelTemplateFiles
 	ctx.Data["Licenses"] = repo_module.Licenses
@@ -175,9 +176,16 @@ func Create(ctx *context.Context) {
 	ctx.Data["repo_template_name"] = ctx.Tr("repo.template_select")
 
 	// Prefill subject (and derived repo name) from query parameter if provided
-	if subject := ctx.FormTrim("subject"); subject != "" {
+	if subject := repo_model.NormalizeSubjectName(ctx.FormString("subject")); subject != "" {
 		ctx.Data["subject"] = subject
 		ctx.Data["repo_name"] = repo_model.GenerateRepoNameFromSubject(subject)
+		// An existing subject created before the subject title rule may break it: don't let
+		// the client-side pattern block contributing to it (the server still checks it).
+		if !repo_model.IsValidSubjectName(subject) {
+			if _, err := repo_model.CheckSubjectNameForCreate(ctx, subject); err == nil {
+				ctx.Data["SubjectNamePattern"] = ""
+			}
+		}
 	}
 
 	templateID := ctx.FormInt64("template_id")
@@ -197,6 +205,9 @@ func handleCreateError(ctx *context.Context, owner *user_model.User, err error, 
 	case repo_model.IsErrRepoSubjectGloballyTaken(err):
 		ctx.Data["Err_Subject"] = true
 		ctx.RenderWithErr(ctx.Tr("repo.form.subject_globally_taken"), tpl, form)
+	case repo_model.IsErrSubjectNameInvalid(err):
+		ctx.Data["Err_Subject"] = true
+		ctx.RenderWithErr(ctx.Tr("repo.form.subject_invalid"), tpl, form)
 	case repo_model.IsErrReachLimitOfRepo(err):
 		maxCreationLimit := owner.MaxCreationLimit()
 		msg := ctx.TrN(maxCreationLimit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", maxCreationLimit)
@@ -251,6 +262,14 @@ func CreatePost(ctx *context.Context) {
 		return
 	}
 
+	// Normalize the subject title and make sure a new subject follows the subject title rule
+	subjectName, err := repo_model.CheckSubjectNameForCreate(ctx, form.Subject)
+	if err != nil {
+		handleCreateError(ctx, ctxUser, err, "CreatePost", tplCreate, &form)
+		return
+	}
+	form.Subject = subjectName
+
 	// Auto-generate repository name from subject if subject is provided
 	// and repository name is empty or matches the generated name
 	if form.Subject != "" {
@@ -267,7 +286,6 @@ func CreatePost(ctx *context.Context) {
 	}
 
 	var repo *repo_model.Repository
-	var err error
 	if form.RepoTemplate > 0 {
 		opts := repo_service.GenerateRepoOptions{
 			Name:            form.RepoName,
@@ -658,10 +676,16 @@ func PrepareBranchList(ctx *context.Context) {
 // It checks if the user already has a repository for the given subject,
 // creates an empty repository if not, and redirects to the editor.
 func CreateFirstArticle(ctx *context.Context) {
-	subjectName := ctx.FormString("subject")
+	subjectName := repo_model.NormalizeSubjectName(ctx.FormString("subject"))
 	if subjectName == "" {
 		ctx.Flash.Error(ctx.Tr("repo.subject_required"))
 		ctx.Redirect(setting.AppSubURL + "/")
+		return
+	}
+
+	// A new subject must follow the subject title rule (subjects that predate it stay usable)
+	if _, err := repo_model.CheckSubjectNameForCreate(ctx, subjectName); err != nil {
+		handleCreateFirstArticleError(ctx, err, subjectName)
 		return
 	}
 
@@ -771,6 +795,9 @@ func handleCreateFirstArticleError(ctx *context.Context, err error, subjectName 
 	subjectURL := setting.AppSubURL + "/subject/" + url.PathEscape(subjectName) + "?view=bubble"
 
 	switch {
+	case repo_model.IsErrSubjectNameInvalid(err):
+		ctx.Flash.Error(ctx.Tr("repo.form.subject_invalid"))
+		ctx.Redirect(subjectURL)
 	case repo_model.IsErrReachLimitOfRepo(err):
 		maxCreationLimit := ctx.Doer.MaxCreationLimit()
 		msg := ctx.TrN(maxCreationLimit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", maxCreationLimit)

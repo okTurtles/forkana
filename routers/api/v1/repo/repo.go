@@ -237,6 +237,15 @@ func Search(ctx *context.APIContext) {
 	})
 }
 
+// handleSubjectNameError responds to an error returned by repo_model.CheckSubjectNameForCreate
+func handleSubjectNameError(ctx *context.APIContext, err error) {
+	if repo_model.IsErrSubjectNameInvalid(err) {
+		ctx.APIError(http.StatusUnprocessableEntity, err)
+		return
+	}
+	ctx.APIErrorInternal(err)
+}
+
 // CreateUserRepo create a repository for a user
 func CreateUserRepo(ctx *context.APIContext, owner *user_model.User, opt api.CreateRepoOption) {
 	if opt.AutoInit && opt.Readme == "" {
@@ -247,6 +256,16 @@ func CreateUserRepo(ctx *context.APIContext, owner *user_model.User, opt api.Cre
 	if opt.AutoInit && len(opt.Readme) > 0 && !slices.Contains(repo_module.Readmes, opt.Readme) {
 		ctx.APIError(http.StatusBadRequest, fmt.Errorf("readme template does not exist, available templates: %v", repo_module.Readmes))
 		return
+	}
+
+	// Normalize the subject title and make sure a new subject follows the subject title rule
+	if opt.Subject != "" {
+		subjectName, err := repo_model.CheckSubjectNameForCreate(ctx, opt.Subject)
+		if err != nil {
+			handleSubjectNameError(ctx, err)
+			return
+		}
+		opt.Subject = subjectName
 	}
 
 	// Auto-generate repository name from subject if subject is provided
@@ -278,6 +297,7 @@ func CreateUserRepo(ctx *context.APIContext, owner *user_model.User, opt api.Cre
 			ctx.APIError(http.StatusConflict, "The repository with the same name already exists.")
 		} else if db.IsErrNameReserved(err) ||
 			db.IsErrNamePatternNotAllowed(err) ||
+			repo_model.IsErrSubjectNameInvalid(err) ||
 			label.IsErrTemplateLoad(err) {
 			ctx.APIError(http.StatusUnprocessableEntity, err)
 		} else {
@@ -372,6 +392,16 @@ func Generate(ctx *context.APIContext) {
 	if ctx.Doer.IsOrganization() {
 		ctx.APIError(http.StatusUnprocessableEntity, "not allowed creating repository for organization")
 		return
+	}
+
+	// Normalize the subject title and make sure a new subject follows the subject title rule
+	if form.Subject != "" {
+		subjectName, err := repo_model.CheckSubjectNameForCreate(ctx, form.Subject)
+		if err != nil {
+			handleSubjectNameError(ctx, err)
+			return
+		}
+		form.Subject = subjectName
 	}
 
 	// Auto-generate repository name from subject if subject is provided

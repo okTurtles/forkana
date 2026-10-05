@@ -77,6 +77,9 @@ func handleMigrateError(ctx *context.Context, owner *user_model.User, err error,
 	}
 
 	switch {
+	case repo_model.IsErrSubjectNameInvalid(err):
+		ctx.Data["Err_Subject"] = true
+		ctx.RenderWithErr(ctx.Tr("repo.form.subject_invalid"), tpl, form)
 	case migrations.IsRateLimitError(err):
 		ctx.RenderWithErr(ctx.Tr("form.visit_rate_limit"), tpl, form)
 	case migrations.IsTwoFactorAuthError(err):
@@ -203,6 +206,16 @@ func MigratePost(ctx *context.Context) {
 		}
 	}
 
+	// Normalize the subject title and make sure a new subject follows the subject title rule
+	if form.Subject != "" {
+		subjectName, err := repo_model.CheckSubjectNameForCreate(ctx, form.Subject)
+		if err != nil {
+			handleMigrateError(ctx, ctxUser, err, "MigratePost", tpl, form)
+			return
+		}
+		form.Subject = subjectName
+	}
+
 	// Auto-generate repository name from subject if subject is provided
 	// and repository name is empty or matches the generated name
 	if form.Subject != "" {
@@ -268,6 +281,7 @@ func setMigrationContextData(ctx *context.Context, serviceType structs.GitServic
 	ctx.Data["LFSActive"] = setting.LFS.StartServer
 	ctx.Data["IsForcedPrivate"] = setting.Repository.ForcePrivate
 	ctx.Data["DisableNewPullMirrors"] = setting.Mirror.DisableNewPull
+	ctx.Data["SubjectNamePattern"] = repo_model.SubjectNameHTMLPattern
 
 	// Plain git should be first
 	ctx.Data["Services"] = append([]structs.GitServiceType{structs.PlainGitService}, structs.SupportedFullGitService...)

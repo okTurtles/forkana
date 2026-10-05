@@ -52,7 +52,7 @@
 							{{svg "octicon-info" 14 "info icon"}}
 						</span>
 					</label>
-					<input id="subject" name="subject" value="{{.subject}}" autofocus required maxlength="255" placeholder="{{ctx.Locale.Tr "repo.repo_subject_placeholder"}}">
+					<input id="subject" name="subject" value="{{.subject}}" autofocus required maxlength="255" {{if .SubjectNamePattern}}pattern="{{.SubjectNamePattern}}" title="{{ctx.Locale.Tr "repo.form.subject_invalid"}}"{{end}} placeholder="{{ctx.Locale.Tr "repo.repo_subject_placeholder"}}">
                 </div>
 
 					<div class="tw-hidden field">

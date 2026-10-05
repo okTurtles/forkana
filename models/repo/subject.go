@@ -93,9 +93,12 @@ func GenerateSlugFromName(name string) string {
 
 // CreateSubject creates a new subject with the given name
 // Returns ErrSubjectSlugAlreadyExists if a subject with the same slug already exists
+// The name is normalized (see NormalizeSubjectName) and must follow the subject title rule,
+// otherwise ErrSubjectNameInvalid is returned.
 func CreateSubject(ctx context.Context, name string) (*Subject, error) {
-	if name == "" {
-		return nil, errors.New("subject name cannot be empty")
+	name, err := ValidateSubjectName(name)
+	if err != nil {
+		return nil, err
 	}
 
 	slug := GenerateSlugFromName(name)
@@ -106,7 +109,7 @@ func CreateSubject(ctx context.Context, name string) (*Subject, error) {
 	}
 
 	// Use transaction to prevent race conditions
-	err := db.WithTx(ctx, func(ctx context.Context) error {
+	err = db.WithTx(ctx, func(ctx context.Context) error {
 		// Check if slug already exists
 		existing := &Subject{Slug: slug}
 		has, err := db.GetEngine(ctx).Get(existing)
@@ -136,9 +139,13 @@ func CreateSubject(ctx context.Context, name string) (*Subject, error) {
 }
 
 // GetOrCreateSubject gets an existing subject by slug or creates a new one if it doesn't exist
-// This function is idempotent and safe for concurrent use
+// This function is idempotent and safe for concurrent use.
+// The name is normalized (see NormalizeSubjectName). Existing subjects are matched by slug and
+// returned as-is; a new subject is only created when the name follows the subject title rule,
+// otherwise ErrSubjectNameInvalid is returned.
 func GetOrCreateSubject(ctx context.Context, name string) (*Subject, error) {
 	// Validate subject name
+	name = NormalizeSubjectName(name)
 	if name == "" {
 		return nil, errors.New("subject name cannot be empty")
 	}
@@ -156,6 +163,11 @@ func GetOrCreateSubject(ctx context.Context, name string) (*Subject, error) {
 	}
 	if has {
 		return subject, nil
+	}
+
+	// Only new subjects have to follow the subject title rule
+	if !IsValidSubjectName(name) {
+		return nil, ErrSubjectNameInvalid{Name: name}
 	}
 
 	// Create new subject

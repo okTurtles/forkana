@@ -103,8 +103,10 @@ func TestArticleCommitLink(t *testing.T) {
 	// A subject name is a display name, so the link generation has to escape it and the
 	// route has to resolve the escaped form back to the subject.
 	t.Run("SubjectWithSpecialCharacters", func(t *testing.T) {
-		subject, err := repo_model.GetOrCreateSubject(t.Context(), "Fix 404 & Ünicode")
-		require.NoError(t, err)
+		// inserted directly: the subject title rule (#401) rejects "&" for new subjects, but
+		// subjects created before the rule may still contain it
+		subject := &repo_model.Subject{Name: "Fix 404 & Ünicode", Slug: repo_model.GenerateSlugFromName("Fix 404 & Ünicode")}
+		require.NoError(t, db.Insert(t.Context(), subject))
 
 		originalSubjectID := repo.SubjectID
 		repo.SubjectID = subject.ID
