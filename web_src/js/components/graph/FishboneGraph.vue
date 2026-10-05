@@ -33,6 +33,7 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
+import { placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import { GET } from "../../modules/fetch.ts";
 import { extractArticleSummary } from "./article-summary.ts";
@@ -1015,6 +1016,7 @@ function scheduleRemeasure() {
   syncCanvasHeight();
   /* The opened circle is sized from the container, so it has to follow it. */
   if (openArticle.value) { detailSize.value = computeDetailSize(); updateHistoryAnchor(); }
+  updateCompareAnchor();
   if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
   pendingRaf = requestAnimationFrame(() => {
     pendingRaf = null;
@@ -1574,6 +1576,7 @@ onMounted(async () => {
       worldSel.attr("transform", z.toString());
       /* The History card hangs off a bubble, so it travels with it. */
       if (historyOpen.value) updateHistoryAnchor();
+      updateCompareAnchor();
     });
 
   svgSel.call(zoomBehavior as any);
@@ -1830,8 +1833,10 @@ function reflow() {
       if (!keyboardOwned && under !== hoveredId.value) setHovered(under);
     }
     updateHistoryAnchor();
+    updateCompareAnchor();
   });
   updateHistoryAnchor();
+  updateCompareAnchor();
 }
 
 /** Set (or clear) the hovered bubble, debounced against pointer thrash. */
@@ -2158,6 +2163,61 @@ function updateHistoryAnchor() {
   historyAnchor.y = Math.round(Math.max(halfCard, Math.min(boxRect.height - halfCard, y)));
 }
 
+/* ── COMPARE BOX ──────────────────────────────────────────────────────────
+   Once two bubbles are picked, the Compare box sits beside them with its caret
+   pointing back at them (figma 641:61930), or under the graph when neither
+   side has room for it — see ./compare-popover.ts. Re-placed whenever the
+   bubbles move on screen: a pan or zoom, a reflow, a resize. */
+const compareLayout = reactive<ComparePopoverLayout>({placement: 'right', left: 0, top: 0, caretY: 0});
+const comparePopoverRef = ref<HTMLElement | null>(null);
+const compareBoxOpen = computed(() => showComparePopup.value && compareSelection.value.length === 2);
+
+function updateCompareAnchor() {
+  if (!compareBoxOpen.value) return;
+  const box = containerRef.value?.querySelector('.graph-container') as HTMLElement | null;
+  const svg = svgRef.value;
+  if (!box || !svg) return;
+  const boxRect = box.getBoundingClientRect();
+  const svgBox = svg.getBoundingClientRect();
+  const t = zoomTransform(svg);
+  const bubbles: CompareCircle[] = [];
+  for (const n of compareSelection.value) {
+    const p = framePlacements.get(n.id);
+    if (!p) continue;
+    bubbles.push({
+      cx: (svgBox.left - boxRect.left) + t.applyX(p.x),
+      cy: (svgBox.top - boxRect.top) + t.applyY(p.y),
+      r: p.r * t.k,
+    });
+  }
+  const layout = placeComparePopover({
+    bubbles,
+    containerHeight: boxRect.height,
+    viewportLeft: -boxRect.left,
+    viewportRight: document.documentElement.clientWidth - boxRect.left,
+    boxHeight: comparePopoverRef.value?.offsetHeight || 372,
+  });
+  Object.assign(compareLayout, {
+    placement: layout.placement,
+    left: Math.round(layout.left),
+    top: Math.round(layout.top),
+    caretY: Math.round(layout.caretY),
+  });
+}
+
+/* Place it as it opens, again once it is measured (the details can fold, and
+   a long name can wrap), and bring it into view when it lands under the graph. */
+watch(compareBoxOpen, async (open) => {
+  if (!open) return;
+  updateCompareAnchor();
+  await nextTick();
+  updateCompareAnchor();
+  await nextTick();
+  if (compareLayout.placement === 'below') {
+    comparePopoverRef.value?.scrollIntoView({block: 'nearest'});
+  }
+});
+
 /* The circle is sized from the container, and on a solo subject nothing
    "opens" it — it is simply there once the data lands. Size it whenever an
    article appears, after the DOM has settled so the canvas box is measured. */
@@ -2198,7 +2258,8 @@ function onDetailFullHistory() {
    Escape must not be able to leave that user staring at an empty canvas. */
 function onGraphKeydown(ev: KeyboardEvent) {
   if (ev.key !== 'Escape') return;
-  if (historyOpen.value) historyOpen.value = false;
+  if (compareBoxOpen.value) closeComparePopup();   // the Compare box is not modal, but Escape still closes it
+  else if (historyOpen.value) historyOpen.value = false;
   else if (detailNode.value) { closedByKeyboard = true; closeDetail(); }
   else if (expandedId.value !== null) collapseAll();
 }
@@ -2503,6 +2564,20 @@ function goToComparison() {
             @close="historyOpen = false" @view-full-history="onDetailFullHistory"
           />
         </div>
+        <!-- The Compare box beside the picked bubbles (figma 641:61930). Inside
+             .graph-container so its coordinates are the graph's; it may reach
+             past the container's sides into the page margin, never past the
+             window (see ./compare-popover.ts). -->
+        <div
+          v-if="compareBoxOpen && compareLayout.placement !== 'below'" ref="comparePopoverRef" class="compare-anchor"
+          :style="{ left: compareLayout.left + 'px', top: compareLayout.top + 'px' }"
+        >
+          <ArticleComparePopup
+            :articles="compareSelection" :subject="props.subject || ''"
+            :placement="compareLayout.placement" :caret-y="compareLayout.caretY"
+            @close="closeComparePopup" @compare="goToComparison"
+          />
+        </div>
       </div>
       <!-- End graph-container -->
 
@@ -2510,11 +2585,15 @@ function goToComparison() {
         <LegendFishbone v-if="hasData"/>
       </div>
 
-      <!-- Compare Popup Modal -->
-      <ArticleComparePopup
-        v-if="showComparePopup && compareSelection.length === 2" :articles="compareSelection"
-        :subject="props.subject || ''" @close="closeComparePopup" @compare="goToComparison"
-      />
+      <!-- The Compare box under the graph, when neither side of the picked
+           bubbles has room for it (a phone): in the page flow, so it can
+           never cover them. -->
+      <div v-if="compareBoxOpen && compareLayout.placement === 'below'" ref="comparePopoverRef" class="compare-below">
+        <ArticleComparePopup
+          :articles="compareSelection" :subject="props.subject || ''" placement="below"
+          @close="closeComparePopup" @compare="goToComparison"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -2542,6 +2621,19 @@ function goToComparison() {
 /* Graph container for relative positioning of overlays */
 .graph-container {
   position: relative;
+}
+
+/* The Compare box beside the picked bubbles: placed by updateCompareAnchor(). */
+.compare-anchor {
+  position: absolute;
+  z-index: 20;
+}
+
+/* ...or under the graph on a narrow screen, with the page's 16px side gutter:
+   on a phone the graph's own box is a few px wider than the window, and the
+   box must not be. */
+.compare-below {
+  margin: 16px 16px 0;
 }
 
 /* Carries the History card's anchor variables and nothing else. */
