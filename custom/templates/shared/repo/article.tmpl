@@ -4,13 +4,10 @@
         {{if .IsSubjectContext}}
             <div class="ui info message" id="article-guidance" style="display:none">
                 {{svg "octicon-info" 16}}
-                <span class="tw-ml-2">Select an article in Bubble view or Table view to open its Article page.</span>
+                <span class="tw-ml-2">{{ctx.Locale.Tr "repo.article_select_guidance"}}</span>
             </div>
         {{end}}
-        <div class="ui message" aria-live="polite" data-role="article-empty" {{if .ReadmeRequested}}hidden{{end}}>
-            {{svg "octicon-info" 16}}
-            <span class="tw-ml-2">Please select an article in bubble or table view.</span>
-        </div>
+        {{template "shared/repo/article_empty_message" (dict "Hidden" .ReadmeRequested)}}
         <div data-role="article-content" {{if not .ReadmeRequested}}hidden{{end}}>
         <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
             style="margin-top: -8px; margin-bottom: 28px" data-role="back-to-bubble"

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"path"
+	"sort"
 	"strings"
 
 	"code.gitea.io/gitea/models/db"
@@ -389,6 +390,10 @@ func RepoHistory(ctx *context.Context) {
 		if ctx.Written() {
 			return
 		}
+	} else if repo := selectedSubjectArticle(ctx); repo != nil {
+		// the Bubble and Table views render nothing for the selection, but their links
+		// (the Table view's Sort menu) carry it
+		ctx.Data["SubjectSelected"] = repo.OwnerName + "/" + repo.Name
 	}
 
 	// Call the main repository home logic
@@ -401,8 +406,9 @@ func RepoHistory(ctx *context.Context) {
 //   - the article named by the "selected={owner}/{repo}" parameter (the view tabs of the
 //     compare page and of an article carry it), rendered directly instead of the subject's
 //     main article being rendered and then swapped on the client (#405). It is only
-//     accepted when it is one of the articles of this subject's fork graph, which is the
-//     set the Bubble and Table views offer; anything else falls back to the main article;
+//     accepted when it is one of the live articles of this subject's fork graph, which is
+//     the set the Bubble and Table views offer; anything else is ignored and the rules
+//     below decide;
 //   - otherwise the subject's only article, when it has a single one;
 //   - otherwise none: the view asks the reader to select an article, and the main
 //     article is not rendered for nothing.
@@ -411,31 +417,44 @@ func chooseSubjectArticle(ctx *context.Context) bool {
 	if graph == nil {
 		return true // no graph to choose from: keep the main article, as before
 	}
-	articles := graph.Articles()
 
-	if selected := ctx.FormString("selected"); selected != "" {
-		for _, entry := range articles {
-			repo := entry.Repo
-			if !strings.EqualFold(selected, repo.OwnerName+"/"+repo.Name) || repo.IsTombstone() {
-				continue
+	if repo := selectedSubjectArticle(ctx); repo != nil {
+		if repo.ID != ctx.Repo.Repository.ID {
+			if err := repo.LoadSubject(ctx); err != nil {
+				log.Warn("LoadSubject for %s: %v", repo.FullName(), err)
+				return true
 			}
-			if repo.ID != ctx.Repo.Repository.ID {
-				if err := repo.LoadSubject(ctx); err != nil {
-					log.Warn("LoadSubject for %s: %v", repo.FullName(), err)
-					return true
-				}
-				context.AssignSubjectRepository(ctx, repo)
-				if ctx.Written() {
-					return false
-				}
-				context.RepoRefByDefaultBranch()(ctx)
+			context.AssignSubjectRepository(ctx, repo)
+			if ctx.Written() {
+				return false
 			}
-			ctx.Data["SubjectSelected"] = repo.OwnerName + "/" + repo.Name
-			return true
+			context.RepoRefByDefaultBranch()(ctx)
 		}
+		ctx.Data["SubjectSelected"] = repo.OwnerName + "/" + repo.Name
+		return true
 	}
 
-	return len(articles) == 1
+	return len(graph.Articles()) == 1
+}
+
+// selectedSubjectArticle is the live article of the subject's fork graph that the
+// "selected={owner}/{repo}" parameter names, or nil.
+func selectedSubjectArticle(ctx *context.Context) *repo_model.Repository {
+	selected := ctx.FormString("selected")
+	if selected == "" {
+		return nil
+	}
+	graph := subjectForkGraph(ctx)
+	if graph == nil {
+		return nil
+	}
+	for _, entry := range graph.Articles() {
+		repo := entry.Repo
+		if strings.EqualFold(selected, repo.OwnerName+"/"+repo.Name) && !repo.IsTombstone() {
+			return repo
+		}
+	}
+	return nil
 }
 
 // subjectForkGraphDataKey holds the subject's fork graph for the rest of the request.
@@ -466,6 +485,11 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	if handleRepoHistoryFeed(ctx) {
 		return
 	}
+
+	// The Bubble view's API fallback requests the very graph the page embeds
+	// (custom/templates/shared/repo/bubble.tmpl). A template.URL, or the template would
+	// escape its "&" and "=" as query data.
+	ctx.Data["SubjectForkGraphQuery"] = template.URL(repo_service.SubjectForkGraphQuery()) //nolint:gosec // built by url.Values.Encode from constants
 
 	// Check repository viewability
 	if !ctx.Repo.Repository.UnitEnabled(ctx, unit.TypeCode) {
@@ -592,7 +616,7 @@ func RenderRepositoryHistory(ctx *context.Context) {
 // taken from the request's fork graph when the article is one of its nodes.
 func articleContributorCount(ctx *context.Context, gitRepo *git.Repository) int64 {
 	repo := ctx.Repo.Repository
-	if graph, ok := ctx.Data[subjectForkGraphDataKey].(*repo_service.ForkGraphResponse); ok && graph != nil {
+	if graph := subjectForkGraph(ctx); graph != nil {
 		for _, entry := range graph.Articles() {
 			if entry.Repo.ID == repo.ID && entry.ContributorCount >= 0 {
 				return entry.ContributorCount
@@ -639,7 +663,33 @@ func buildHistoryTableEntries(ctx *context.Context) []*historyTableEntry {
 			Description:      e.Repo.Description,
 		})
 	}
+	sortHistoryTableEntries(entries, ctx.FormString("sort"))
 	return entries
+}
+
+// sortHistoryTableEntries orders the Table view's rows by its Sort menu
+// (custom/templates/shared/repo/table.tmpl): "most_contrib" and "least_contrib" by
+// contributor count, rows whose count is unknown last either way; "latest" by last
+// update, newest first. Anything else keeps the fork graph's own order. Ties keep it too.
+func sortHistoryTableEntries(entries []*historyTableEntry, sortBy string) {
+	switch sortBy {
+	case "most_contrib", "least_contrib":
+		most := sortBy == "most_contrib"
+		sort.SliceStable(entries, func(i, j int) bool {
+			a, b := entries[i].ContributorCount, entries[j].ContributorCount
+			if (a < 0) != (b < 0) {
+				return b < 0 // a known count comes before an unknown one
+			}
+			if most {
+				return a > b
+			}
+			return a < b
+		})
+	case "latest":
+		sort.SliceStable(entries, func(i, j int) bool {
+			return entries[i].Updated > entries[j].Updated
+		})
+	}
 }
 
 // handleRepoHistoryFeed handles RSS/Atom feed requests for repository history

@@ -21,9 +21,11 @@ import (
 // This allows automatic cache invalidation across deployments.
 //
 // Version History:
-// - v1: Initial implementation with basic fork graph traversal
-// - v2: Added cycle detection error handling (ErrCycleDetected)
-// - v3: Changed GetPublicRepositoryBySubject to prioritize non-empty repositories
+//   - v1: Initial implementation with basic fork graph traversal
+//   - v2: Added cycle detection error handling (ErrCycleDetected)
+//   - v3: Changed GetPublicRepositoryBySubject to prioritize non-empty repositories
+//   - v4: Contributor counts come from ArticleContributorCount and are no longer cached in
+//     the response (graphs with include_contributors are never cached); recent_count is 0
 const forkGraphCacheVersion = "v4"
 
 // ForkGraphParams represents the query parameters for fork graph endpoint
@@ -105,12 +107,9 @@ func hashParams(params ForkGraphParams) string {
 }
 
 // getCacheTTL returns the cache TTL based on repository and parameters
-func getCacheTTL(isPrivate, includeContributors bool) time.Duration {
+func getCacheTTL(isPrivate bool) time.Duration {
 	if isPrivate {
 		return 5 * time.Minute
-	}
-	if includeContributors {
-		return 15 * time.Minute
 	}
 	return 30 * time.Minute
 }
@@ -230,12 +229,10 @@ func GetForkGraph(ctx *context.APIContext) {
 	// article view, which are rendered live, already showed the new ones (#405). Each
 	// node's count is cached by its branch head instead (ArticleContributorCount), so a
 	// fresh graph stays cheap and is never stale.
+	cacheGraph := !params.IncludeContributors
 	cacheKey := getCacheKey(ctx.Repo.Repository.ID, ctx.Repo.Repository.IsEmpty, ctx.Repo.Repository.NumForks, params, userID)
 	c := cache.GetCache()
-	if params.IncludeContributors {
-		c = nil
-	}
-	if c != nil {
+	if cacheGraph && c != nil {
 		var cachedResponse repository.ForkGraphResponse
 		found, err := c.GetJSON(cacheKey, &cachedResponse)
 		if err == nil && found {
@@ -267,8 +264,8 @@ func GetForkGraph(ctx *context.APIContext) {
 	graph.Metadata.CacheStatus = "miss"
 
 	// Cache result
-	if c != nil {
-		ttl := getCacheTTL(ctx.Repo.Repository.IsPrivate, params.IncludeContributors)
+	if cacheGraph && c != nil {
+		ttl := getCacheTTL(ctx.Repo.Repository.IsPrivate)
 		_ = c.PutJSON(cacheKey, graph, int64(ttl.Seconds()))
 	}
 

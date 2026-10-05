@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
+	"strconv"
 	"time"
 
 	"code.gitea.io/gitea/models/db"
@@ -60,9 +62,11 @@ type ForkGraphParams struct {
 }
 
 // SubjectForkGraphParams are the parameters the subject page builds its fork graph
-// with. The bubble view requests exactly these from the API (see
-// templates shared/repo/bubble and FishboneGraph.vue) and the table view is built from
-// the same graph on the server, so the two always list the same articles (#405).
+// with: the graph is embedded in the page and drawn by the Bubble view, the Table view
+// is built from it on the server, and it decides the Article view's article, so all
+// three always list the same articles (#405). The Bubble view's API fallback (used for
+// retries) requests the same graph: custom/templates/shared/repo/bubble.tmpl builds its
+// url from SubjectForkGraphQuery, which is derived from these.
 func SubjectForkGraphParams() ForkGraphParams {
 	return ForkGraphParams{
 		IncludeContributors: true,
@@ -72,6 +76,19 @@ func SubjectForkGraphParams() ForkGraphParams {
 		Page:                1,
 		Limit:               50,
 	}
+}
+
+// SubjectForkGraphQuery is SubjectForkGraphParams as the fork-graph API's query string.
+func SubjectForkGraphQuery() string {
+	p := SubjectForkGraphParams()
+	q := url.Values{}
+	q.Set("include_contributors", strconv.FormatBool(p.IncludeContributors))
+	q.Set("contributor_days", strconv.Itoa(p.ContributorDays))
+	q.Set("max_depth", strconv.Itoa(p.MaxDepth))
+	q.Set("sort", p.Sort)
+	q.Set("page", strconv.Itoa(p.Page))
+	q.Set("limit", strconv.Itoa(p.Limit))
+	return q.Encode()
 }
 
 // ForkGraphEntry is one article of a fork graph, as a flat list entry.
@@ -149,12 +166,15 @@ type ContributorStats struct {
 
 // GraphMetadata represents metadata about the fork graph
 type GraphMetadata struct {
-	TotalForks            int       `json:"total_forks"`
-	VisibleForks          int       `json:"visible_forks"`
-	MaxDepthReached       bool      `json:"max_depth_reached"`
-	CacheStatus           string    `json:"cache_status"`
-	GeneratedAt           time.Time `json:"generated_at"`
-	ContributorWindowDays int       `json:"contributor_window_days,omitempty"`
+	TotalForks      int       `json:"total_forks"`
+	VisibleForks    int       `json:"visible_forks"`
+	MaxDepthReached bool      `json:"max_depth_reached"`
+	CacheStatus     string    `json:"cache_status"`
+	GeneratedAt     time.Time `json:"generated_at"`
+	// ContributorWindowDays echoes the request's contributor_days parameter. It no
+	// longer windows the counts: total_count is measured from the fork's creation (see
+	// ContributorStats). Kept so the response keeps its shape.
+	ContributorWindowDays int `json:"contributor_window_days,omitempty"`
 }
 
 // PaginationInfo represents pagination information
@@ -315,14 +335,14 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 	// Check depth limit
 	if level >= params.MaxDepth {
 		*maxDepthReached = true
-		return createLeafNode(ctx, repo, level, params)
+		return createLeafNode(ctx, repo, level, params), nil
 	}
 
 	// Get direct forks
 	forks, err := getDirectForks(ctx, repo.ID, doer, params)
 	if err != nil {
 		log.Error("Failed to get forks for repo %d: %v", repo.ID, err)
-		return createLeafNode(ctx, repo, level, params)
+		return createLeafNode(ctx, repo, level, params), nil
 	}
 
 	// Build children
@@ -347,36 +367,27 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 		}
 	}
 
-	// Create node
+	return newForkNode(ctx, repo, level, children, params), nil
+}
+
+// newForkNode builds the node of repo with its children, and its contributor stats when
+// they are requested.
+func newForkNode(ctx context.Context, repo *repo_model.Repository, level int, children []*ForkNode, params ForkGraphParams) *ForkNode {
 	node := &ForkNode{
 		ID:       fmt.Sprintf("repo_%d", repo.ID),
 		Level:    level,
 		Children: children,
 		repo:     repo, // Store for batch processing
 	}
-
-	// Add contributor stats if requested
 	if params.IncludeContributors {
 		node.Contributors = nodeContributorStats(ctx, repo)
 	}
-
-	return node, nil
+	return node
 }
 
 // createLeafNode creates a leaf node without children
-func createLeafNode(ctx context.Context, repo *repo_model.Repository, level int, params ForkGraphParams) (*ForkNode, error) {
-	node := &ForkNode{
-		ID:       fmt.Sprintf("repo_%d", repo.ID),
-		Level:    level,
-		Children: []*ForkNode{},
-		repo:     repo, // Store for batch processing
-	}
-
-	if params.IncludeContributors {
-		node.Contributors = nodeContributorStats(ctx, repo)
-	}
-
-	return node, nil
+func createLeafNode(ctx context.Context, repo *repo_model.Repository, level int, params ForkGraphParams) *ForkNode {
+	return newForkNode(ctx, repo, level, []*ForkNode{}, params)
 }
 
 // createReadPermission creates a basic read permission for repositories

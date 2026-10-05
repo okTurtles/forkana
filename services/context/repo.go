@@ -1101,7 +1101,8 @@ func RepoAssignmentBySubject(ctx *Context) {
 // its git repository, the doer's permission and the template data. RepoAssignmentBySubject
 // uses it for the subject's main article; the subject page uses it again to switch to the
 // article named by its "selected" parameter, so that article is rendered directly (#405).
-// The caller must have checked that repo is not a tombstone.
+// The caller must have loaded repo's subject (GetPublicRepositoryBySubject does, and so
+// does the subject page before switching) and checked that repo is not a tombstone.
 func AssignSubjectRepository(ctx *Context, repo *repo_model.Repository) {
 	var err error
 
@@ -1111,7 +1112,6 @@ func AssignSubjectRepository(ctx *Context, repo *repo_model.Repository) {
 		return
 	}
 
-	// Subject is already loaded by GetPublicRepositoryBySubject
 	// Set up repository context similar to standard RepoAssignment
 	ctx.Repo = &Repository{
 		Repository: repo,
@@ -1197,6 +1197,14 @@ func AssignSubjectRepository(ctx *Context, repo *repo_model.Repository) {
 		ctx.ServerError("GetReleaseCountByRepoID", err)
 		return
 	}
+
+	// The accept/reject notice of a pending transfer (explore/repo_history.tmpl), as the
+	// article urls show it through repoAssignment: the article the subject page renders
+	// for its "selected" parameter must not come without it — nor with the notice of the
+	// main article it replaces.
+	delete(ctx.Data, "RepoTransfer")
+	delete(ctx.Data, "CanUserAcceptOrRejectTransfer")
+	retrievePendingRepositoryTransfer(ctx)
 }
 
 // RepoAssignmentByOwnerAndSubject assigns repository context by owner name and subject name

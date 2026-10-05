@@ -71,10 +71,16 @@ func ArticleContributorCountWithGitRepo(gitRepo *git.Repository, repo *repo_mode
 // bubble, its table row and its article page always carry the same number (#405).
 // RecentCount is not computed (see ContributorStats). Returns nil when the count cannot
 // be computed, which the client shows as unknown.
+//
+// The count runs off the graph's traversal budget (context.WithoutCancel): BuildForkGraph
+// bounds the whole traversal with a 30s deadline, and a count is best effort — a slow one
+// must show up as "unknown" for that node, not use up the deadline and fail the whole
+// graph with ErrProcessingTimeout. The weekly-stats count it replaced was isolated the
+// same way (it ran with context.Background()).
 func nodeContributorStats(ctx context.Context, repo *repo_model.Repository) *ContributorStats {
-	total, err := ArticleContributorCount(ctx, repo)
+	total, err := ArticleContributorCount(context.WithoutCancel(ctx), repo)
 	if err != nil {
-		log.Warn("Failed to get contributor count for repo %d: %v", repo.ID, err)
+		log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)
 		return nil
 	}
 	return &ContributorStats{TotalCount: int(total)}
