@@ -59,19 +59,21 @@ test('beside the bubbles it has a caret on the facing edge, at the given height;
   expect(sheet.querySelector('.compare-popover-caret')).toBeNull();
 });
 
-test('the details are two semibold count lines and an italic date line, which the chevron folds', async () => {
-  const root = mountPopup(twoArticles);
-  const details = () => Array.from(root.querySelectorAll('.compare-article-meta'), (el) => Array.from(el.children, (line) => `${line.className}:${line.textContent.trim()}`));
-  expect(details()).toEqual([
-    ['compare-article-count:335 Contributors', 'compare-article-count:1 Fork', 'compare-article-date:Last updated: 2025-06-10'],
-    ['compare-article-count:1 Contributor', 'compare-article-count:0 Forks', 'compare-article-date:Last updated: 2025-06-11'],
-  ]);
-  root.querySelector<HTMLButtonElement>('.compare-popover-details .compare-popover-chevron').click();
-  await Promise.resolve();
-  expect(details()).toHaveLength(1);
-  const unfold = root.querySelector<HTMLButtonElement>('.compare-popover-row .compare-popover-chevron');
-  expect(unfold.getAttribute('aria-expanded')).toBe('false');
-  unfold.click();
-  await Promise.resolve();
-  expect(details()).toHaveLength(2);
+test('the details are always shown: two semibold count lines and an italic date line, nothing folds them', () => {
+  for (const placement of ['right', 'sheet']) {
+    const root = mountPopup(twoArticles, 'Moon', {placement});
+    const details = Array.from(root.querySelectorAll('.compare-popover-details'), (el) => Array.from(el.children, (line) => `${line.className}:${line.textContent.trim()}`));
+    expect(details).toEqual([
+      ['compare-article-count:335 Contributors', 'compare-article-count:1 Fork', 'compare-article-date:Last updated: 2025-06-10'],
+      ['compare-article-count:1 Contributor', 'compare-article-count:0 Forks', 'compare-article-date:Last updated: 2025-06-11'],
+    ]);
+    expect(root.querySelector('.compare-popover-chevron, [aria-expanded]')).toBeNull();
+  }
+});
+
+test('the link keeps the stored names and url; only its display is capitalized, in CSS', () => {
+  const root = mountPopup([{id: '1', repoOwner: 'bubble_a5', repoName: 'moon', repoSubject: 'Deep Sea Mining Governance', articleLink: '/subject/Deep%20Sea%20Mining%20Governance/bubble_a5', contributors: 1, children: []}]);
+  const link = root.querySelector('.compare-article-name');
+  expect(link.textContent).toBe('bubble_a5 / Deep Sea Mining Governance');
+  expect(link.getAttribute('href')).toBe('/subject/Deep%20Sea%20Mining%20Governance/bubble_a5');
 });

@@ -15,11 +15,10 @@
      a full-width divider (ActionList.Divider 641:62023, #d1d9e0 @70%);
      per article (641:62030, 641:62034): a 20px fork icon and the owner /
        subject link in the brand indigo, Inter 600 14/20; under it the
-       details in muted Inter 600 12/20, with a chevron that folds them;
+       details (always shown) in muted Inter 600 12/20 and 400 italic;
        then a divider;
      footer 641:62040 — "Compare articles", full width, 40px. */
 
-import { reactive } from 'vue';
 import { formatDateYMD } from '../../utils/time.ts';
 import { COMPARE_CARET_HEIGHT, COMPARE_CARET_WIDTH } from './compare-popover.ts';
 
@@ -49,11 +48,6 @@ const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'compare'): void;
 }>();
-
-/* Each article's details fold away with its chevron, as figma's ActionList
-   items do. Open by default, which is the state figma draws. */
-const folded = reactive<Record<string, boolean>>({});
-function toggle(id: string) { folded[id] = !folded[id]; }
 
 function getOwner(article: { repoOwner?: string; fullName?: string }): string {
   return article.repoOwner || article.fullName?.split('/')[0] || 'Unknown';
@@ -108,31 +102,16 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
           <svg class="compare-popover-fork" viewBox="0 0 16 16" width="20" height="20" aria-hidden="true">
             <path fill="currentColor" d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"/>
           </svg>
-          <a class="compare-article-name" :href="getArticleHref(article)">
-            {{ getOwner(article) }} / {{ getSubjectName(article, subject) }}
-          </a>
-          <button
-            v-if="folded[article.id]" type="button" class="compare-popover-icon-button compare-popover-chevron"
-            :aria-expanded="false" :aria-label="`Show details of ${getOwner(article)}`" @click="toggle(article.id)"
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.939l3.72-3.719a.749.749 0 0 1 1.06 0Z"/></svg>
-          </button>
+          <a class="compare-article-name" :href="getArticleHref(article)">{{ getOwner(article) }} / {{ getSubjectName(article, subject) }}</a>
         </div>
-        <div v-if="!folded[article.id]" class="compare-popover-details">
-          <!-- One text node in figma (I641:62036;15096:48946;15039:46266, mobile
-               I641:63515;…): the first two lines Inter 600 12/20, the date line
-               Inter 400 italic 12/20, all #59636e. -->
-          <div class="compare-article-meta">
-            <div class="compare-article-count">{{ article.contributors }} Contributor{{ article.contributors === 1 ? '' : 's' }}</div>
-            <div class="compare-article-count">{{ article.children?.length || 0 }} Fork{{ (article.children?.length || 0) === 1 ? '' : 's' }}</div>
-            <div class="compare-article-date">Last updated: {{ formatDateYMD(article.updatedAt, 'Unknown') }}</div>
-          </div>
-          <button
-            type="button" class="compare-popover-icon-button compare-popover-chevron"
-            :aria-expanded="true" :aria-label="`Hide details of ${getOwner(article)}`" @click="toggle(article.id)"
-          >
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3.22 10.53a.749.749 0 0 1 0-1.06l4.25-4.25a.749.749 0 0 1 1.06 0l4.25 4.25a.749.749 0 1 1-1.06 1.06L8 6.811 4.28 10.53a.749.749 0 0 1-1.06 0Z"/></svg>
-          </button>
+        <!-- Always shown: the details do not fold. One text node in figma
+             (I641:62036;15096:48946;15039:46266, sheet I641:63515;…): the
+             first two lines Inter 600 12/20, the date line Inter 400 italic
+             12/20, all #59636e. -->
+        <div class="compare-popover-details">
+          <div class="compare-article-count">{{ article.contributors }} Contributor{{ article.contributors === 1 ? '' : 's' }}</div>
+          <div class="compare-article-count">{{ article.children?.length || 0 }} Fork{{ (article.children?.length || 0) === 1 ? '' : 's' }}</div>
+          <div class="compare-article-date">Last updated: {{ formatDateYMD(article.updatedAt, 'Unknown') }}</div>
         </div>
       </article>
       <div class="compare-popover-divider" role="separator"/>
@@ -282,29 +261,31 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
   text-decoration: underline;
 }
 
-/* The details row, ActionList.Item 641:62036 (desktop): 68px tall, the three
-   20px lines starting 6px down and 68px from the box's edge, the chevron
-   (16×20) on the first line, ending 296px from the box's edge — where the
-   frame puts it. */
+/* Display-only capitalization, as the home search suggestions do (#410): the
+   first letter of the owner is uppercased ("bubble_a5 / …" reads
+   "Bubble_a5 / …"); the subject keeps its own casing, and neither the stored
+   name nor the url changes. The link is a flex item, so it is a block box
+   and ::first-letter applies to it. */
+.compare-article-name::first-letter {
+  text-transform: uppercase;
+}
+
+/* The details, always shown. ActionList.Item 641:62036 (desktop): 68px tall,
+   the three 20px lines 6px down, 68px from the box's edge, and the text
+   running to where figma's text node ends, 337px (46px from the right edge;
+   I641:62036;15096:48946;15039:46266 is 269px wide). */
 .compare-popover-details {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 79px 2px 60px;
-}
-
-/* ...and on the sheet, 641:63509: the lines from the top of the row, aligned
-   with the link (45px from the edge), the chevron 45px from the right. */
-.compare-popover.is-sheet .compare-popover-details {
-  padding: 0 37px 8px;
-}
-
-.compare-article-meta {
-  flex: 1;
-  min-width: 0;
+  padding: 6px 38px 2px 60px;
   font-size: 12px;
   line-height: 20px;
   color: var(--color-muted-text);
+}
+
+/* ...and on the sheet, 641:63509: the lines from the top of the row, 45px
+   from the edge (aligned with the link), ending where figma's 261px text node
+   ends, 306px (69px from the right edge). */
+.compare-popover.is-sheet .compare-popover-details {
+  padding: 0 61px 8px 37px;
 }
 
 /* "335 Contributors", "1 Fork": Inter 600 12/20, #59636e */
@@ -318,14 +299,6 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
   font-style: italic;
 }
 
-/* trailingVisual/icon: a 16×20 chevron, #1f2328 */
-.compare-popover-chevron {
-  width: 16px;
-  height: 20px;
-  margin-left: auto;
-  border-radius: 4px;
-  color: var(--color-text-primary);
-}
 
 
 /* Frame 713 641:62040: 12px/8px around a full-width 40px button (Action
