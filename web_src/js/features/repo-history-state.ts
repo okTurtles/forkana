@@ -31,8 +31,11 @@ export function selectionFromHistoryState(state: HistoryState | null | undefined
 }
 
 export type InitialSelectionInput = {
-  /** The article an article url (/subject/{subject}/{owner}[/{n}]) names, if it is one. */
-  urlArticle: RepoSelection | null;
+  /** The Article view's article as the server chose it: the article an article url names,
+     the one the "selected" parameter names, or a subject's only article; null when the
+     server rendered the Article view with no article chosen. Undefined when the page was
+     opened on another view, where the server chooses nothing. */
+  serverArticle: RepoSelection | null | undefined;
   /** What the current history entry recorded (Back/Forward, reload); undefined if none. */
   historySelection: RepoSelection | null | undefined;
   /** The "selected" url parameter, owner and repo only. */
@@ -42,7 +45,8 @@ export type InitialSelectionInput = {
 };
 
 /** The selection a subject page opens with, in order of precedence:
-   1. the article an article url names;
+   1. on the Article view, the article the server rendered, or nothing if it rendered
+      none: the page shows what the server chose, without fetching anything (#405);
    2. what the history entry recorded, which is exactly what the page showed when the
       entry was left, including "nothing selected";
    3. the "selected" url parameter, when it names one of the subject's articles;
@@ -50,7 +54,7 @@ export type InitialSelectionInput = {
    5. nothing. A subject opened afresh (from Explore, say) has no history entry and no
       parameter, so it starts with nothing selected (#402). */
 export function pickInitialSelection(input: InitialSelectionInput): RepoSelection | null {
-  if (input.urlArticle) return normalizeSelection(input.urlArticle);
+  if (input.serverArticle !== undefined) return normalizeSelection(input.serverArticle);
   if (input.historySelection !== undefined) {
     return resolveSelection(input.historySelection, input.candidates) ?? input.historySelection;
   }

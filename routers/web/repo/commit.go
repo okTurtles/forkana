@@ -502,6 +502,8 @@ func renderArticleView(ctx *context.Context) {
 	// view" link carry it as "?selected={owner}/{repo}", so following them (or opening
 	// them in a new tab) keeps it selected in the Bubble and Table views (#405).
 	ctx.Data["SubjectSelected"] = ctx.Repo.Repository.OwnerName + "/" + ctx.Repo.Repository.Name
+	// an article url always renders its article (see explore.chooseSubjectArticle)
+	ctx.Data["ArticleChosen"] = true
 
 	// Check if version parameter is present
 	commitHash := ctx.FormString("version")

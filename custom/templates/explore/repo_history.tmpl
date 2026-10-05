@@ -145,7 +145,7 @@
     mode (read, edit, history, settings); repo-history.ts keeps it in sync when the
     article section is swapped or another view is selected. */}}
     {{/* tw-hidden, not the hidden attribute: tw-flex would otherwise win over the UA [hidden] rule */}}
-    <div class="ui warning message tw-mt-0 tw-flex tw-items-start tw-gap-2{{if not (and .Repository.IsArchived .IsArticleView)}} tw-hidden{{end}}" id="article-archived-notice">
+    <div class="ui warning message tw-mt-0 tw-flex tw-items-start tw-gap-2{{if not (and .Repository.IsArchived .IsArticleView .ArticleChosen)}} tw-hidden{{end}}" id="article-archived-notice">
         {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
         <span data-role="article-archived-text">
             {{- if .Repository.IsArchived -}}
@@ -194,6 +194,10 @@
             class="history-view-app"
             data-initial-view="{{.HistoryView}}"
             data-initial-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}"
+            {{/* set when the article section holds a rendered article: the one an article url
+                 names, the one "selected=" names, or a subject's only article. That article is
+                 then the page's selection. */}}
+            data-initial-article="{{if and .IsArticleView .ArticleChosen}}true{{end}}"
             data-initial-owner="{{.Repository.Owner.Name}}"
             data-initial-repo="{{.Repository.Name}}"
             data-initial-subject="{{.SubjectName}}"
@@ -206,14 +210,14 @@
             {{if .ArticleLink}}data-article-canonical="{{.ArticleLink}}"{{end}}>
             {{template "shared/repo/bubble" .}}
             {{template "shared/repo/table" .}}
-            {{if .IsArticleView}}
+            {{if and .IsArticleView .ArticleChosen}}
                 {{template "shared/repo/article" .}}
             {{else}}
                 {{/* Not rendered as an article yet: the section is filled in when an article is
                      selected. Until then it has to say so, exactly like a rendered article
                      section does when nothing is selected (#405 item 1); the loading
                      placeholder only shows while an article is being fetched. */}}
-                <div class="history-view-section history-view-section--article" data-view="article" hidden>
+                <div class="history-view-section history-view-section--article" data-view="article" {{if not .IsArticleView}}hidden{{end}}>
                     <div class="ui message tw-mt-10" aria-live="polite" data-role="article-empty">
                         {{svg "octicon-info" 16}}
                         <span class="tw-ml-2">Please select an article in bubble or table view.</span>

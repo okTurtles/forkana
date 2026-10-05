@@ -116,8 +116,9 @@ export function initRepoHistory() {
     if (sel) candidates.push(sel);
   }
 
-  // The article the server rendered into the article section, if it rendered one.
-  const renderedArticle: RepoSelection | null = initialView === 'article' && initialOwner && (initialRepo || initialSubject) ?
+  // The article the server rendered into the article section, if it rendered one. It is
+  // the selection when the page opens on the Article view (see pickInitialSelection).
+  const renderedArticle: RepoSelection | null = root.getAttribute('data-initial-article') === 'true' && initialOwner && (initialRepo || initialSubject) ?
     normalizeSelection({
       owner: initialOwner,
       repo: initialRepo || initialSubject,
@@ -139,10 +140,11 @@ export function initRepoHistory() {
   const openedOnArticleUrl = !samePath(window.location.pathname, new URL(subjectUrl, window.location.origin).pathname);
   const initialState = window.history.state as HistoryState | null;
   const initialSelection = pickInitialSelection({
-    // An article url names its article: it is the selection, whatever else says
-    // otherwise. This also makes the article shown after a fork redirect the selected
-    // one (#177).
-    urlArticle: openedOnArticleUrl ? renderedArticle : null,
+    // On the Article view the server has chosen the article (the one an article url names,
+    // the one "selected=" names, or a subject's only one) and rendered it: it is the
+    // selection, whatever else says otherwise. This also makes the article shown after a
+    // fork redirect the selected one (#177).
+    serverArticle: initialView === 'article' ? renderedArticle : undefined,
     historySelection: selectionFromHistoryState(initialState),
     urlSelection: selectionFromParam(new URL(window.location.href).searchParams.get(SELECTION_PARAM)),
     candidates,
@@ -639,14 +641,14 @@ export function initRepoHistory() {
   collectArticleRefs();
   bindArticleTabs();
   updateArticleGuidance();
+  // On the Article view the selection is the rendered article (or none), so nothing has to
+  // be fetched for the first view (#405).
   if (activeView.value === 'article') {
     if (!selectedRepo.value) {
       showArticleEmpty();
-    } else if (matchesSelection(renderedArticle, selectedRepo.value)) {
+    } else {
       showArticleContent();
       if (articleMode.value === 'edit') initArticleEditor();
-    } else {
-      loadArticleContent(selectedRepo.value, articleMode.value, false);
     }
   } else if (!matchesSelection(renderedArticle, selectedRepo.value)) {
     showArticleEmpty();

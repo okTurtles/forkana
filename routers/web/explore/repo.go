@@ -384,9 +384,79 @@ func RepoHistory(ctx *context.Context) {
 	ctx.Data["IsTableView"] = view == "table"
 	ctx.Data["IsArticleView"] = view == "article"
 
+	if view == "article" {
+		ctx.Data["ArticleChosen"] = chooseSubjectArticle(ctx)
+		if ctx.Written() {
+			return
+		}
+	}
+
 	// Call the main repository home logic
 	// This duplicates the functionality of repo.Home but in the explore context
 	RenderRepositoryHistory(ctx)
+}
+
+// chooseSubjectArticle decides which article the Article view of the subject page
+// renders, and reports whether one is chosen at all:
+//   - the article named by the "selected={owner}/{repo}" parameter (the view tabs of the
+//     compare page and of an article carry it), rendered directly instead of the subject's
+//     main article being rendered and then swapped on the client (#405). It is only
+//     accepted when it is one of the articles of this subject's fork graph, which is the
+//     set the Bubble and Table views offer; anything else falls back to the main article;
+//   - otherwise the subject's only article, when it has a single one;
+//   - otherwise none: the view asks the reader to select an article, and the main
+//     article is not rendered for nothing.
+func chooseSubjectArticle(ctx *context.Context) bool {
+	graph := subjectForkGraph(ctx)
+	if graph == nil {
+		return true // no graph to choose from: keep the main article, as before
+	}
+	articles := graph.Articles()
+
+	if selected := ctx.FormString("selected"); selected != "" {
+		for _, entry := range articles {
+			repo := entry.Repo
+			if !strings.EqualFold(selected, repo.OwnerName+"/"+repo.Name) || repo.IsTombstone() {
+				continue
+			}
+			if repo.ID != ctx.Repo.Repository.ID {
+				if err := repo.LoadSubject(ctx); err != nil {
+					log.Warn("LoadSubject for %s: %v", repo.FullName(), err)
+					return true
+				}
+				context.AssignSubjectRepository(ctx, repo)
+				if ctx.Written() {
+					return false
+				}
+				context.RepoRefByDefaultBranch()(ctx)
+			}
+			ctx.Data["SubjectSelected"] = repo.OwnerName + "/" + repo.Name
+			return true
+		}
+	}
+
+	return len(articles) == 1
+}
+
+// subjectForkGraphDataKey holds the subject's fork graph for the rest of the request.
+const subjectForkGraphDataKey = "SubjectForkGraph"
+
+// subjectForkGraph builds the subject's fork graph, once per request: the Table view is
+// built from it, it decides which article the Article view renders, its contributor
+// counts are reused by the article view, and it is embedded in the page for the Bubble
+// view, which used to request the very same graph from the API right after the page
+// loaded. Returns nil when the graph cannot be built.
+func subjectForkGraph(ctx *context.Context) *repo_service.ForkGraphResponse {
+	if graph, ok := ctx.Data[subjectForkGraphDataKey].(*repo_service.ForkGraphResponse); ok {
+		return graph
+	}
+	graph, err := repo_service.BuildForkGraph(ctx, ctx.Repo.Repository, repo_service.SubjectForkGraphParams(), ctx.Doer)
+	if err != nil {
+		log.Warn("BuildForkGraph for %s: %v", ctx.Repo.Repository.FullName(), err)
+		graph = nil
+	}
+	ctx.Data[subjectForkGraphDataKey] = graph
+	return graph
 }
 
 // RenderRepositoryHistory duplicates repo.Home functionality for the history view
@@ -491,9 +561,14 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	ctx.Data["CloneButtonOriginLink"] = ctx.Repo.Repository.CloneLink(ctx, ctx.Doer)
 
 	ctx.Data["HistoryForkEntries"] = buildHistoryTableEntries(ctx)
+	// The Bubble view draws this same graph instead of requesting it from the API again.
+	if graph := subjectForkGraph(ctx); graph != nil {
+		ctx.PageData["subjectForkGraph"] = graph
+	}
 
-	// For Article view, handle mode parameter and load README content
-	if ctx.Data["IsArticleView"] == true {
+	// For Article view, handle mode parameter and load README content. A subject page whose
+	// Article view has no article chosen (see chooseSubjectArticle) renders none.
+	if ctx.Data["IsArticleView"] == true && ctx.Data["ArticleChosen"] == true {
 		// Determine the reference path for rendering (branch or commit)
 		var refPath string
 		if ctx.Repo.BranchName != "" {
@@ -513,6 +588,25 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, "explore/repo_history")
 }
 
+// articleContributorCount returns the contributor count of the article in the context,
+// taken from the request's fork graph when the article is one of its nodes.
+func articleContributorCount(ctx *context.Context, gitRepo *git.Repository) int64 {
+	repo := ctx.Repo.Repository
+	if graph, ok := ctx.Data[subjectForkGraphDataKey].(*repo_service.ForkGraphResponse); ok && graph != nil {
+		for _, entry := range graph.Articles() {
+			if entry.Repo.ID == repo.ID && entry.ContributorCount >= 0 {
+				return entry.ContributorCount
+			}
+		}
+	}
+	count, err := repo_service.ArticleContributorCountWithGitRepo(gitRepo, repo)
+	if err != nil {
+		log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)
+		return 0
+	}
+	return count
+}
+
 // historyTableEntry is one row of the subject's Table view.
 type historyTableEntry struct {
 	Repo *repo_model.Repository
@@ -528,9 +622,8 @@ type historyTableEntry struct {
 // and each row carries the bubble's contributor count (#405). It used to list the
 // direct forks of the requested repository only, with counts computed differently.
 func buildHistoryTableEntries(ctx *context.Context) []*historyTableEntry {
-	graph, err := repo_service.BuildForkGraph(ctx, ctx.Repo.Repository, repo_service.SubjectForkGraphParams(), ctx.Doer)
-	if err != nil {
-		log.Warn("BuildForkGraph for %s: %v", ctx.Repo.Repository.FullName(), err)
+	graph := subjectForkGraph(ctx)
+	if graph == nil {
 		return nil
 	}
 	graphEntries := graph.Articles()
@@ -628,16 +721,12 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		return
 	}
 
-	// The article's contributor count, computed exactly as the bubble and the table row of
-	// this article compute it, so the three never disagree (#405). For forks, only the
-	// contributors who committed after the fork was created are counted.
+	// The article's contributor count, the very number its bubble and table row show
+	// (#405). The fork graph of this request already holds it, so it is only computed
+	// here for an article outside the graph. For forks, only the contributors who
+	// committed after the fork was created are counted.
 	defaultBranch := ctx.Repo.Repository.DefaultBranch
-	contributorCount, err := repo_service.ArticleContributorCountWithGitRepo(gitRepo, ctx.Repo.Repository)
-	if err != nil {
-		log.Warn("Failed to get contributor count: %v", err)
-		contributorCount = 0
-	}
-	ctx.Data["ReadmeContributorCount"] = contributorCount
+	ctx.Data["ReadmeContributorCount"] = articleContributorCount(ctx, gitRepo)
 
 	// Get last commit for the readme file
 	lastCommit, err := gitRepo.GetCommitByPath(readmeTreePath)

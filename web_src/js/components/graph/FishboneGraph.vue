@@ -387,6 +387,9 @@ let pointerCleanup: (() => void) | null = null;
 interface FishboneGraphProps {
   // Core data source
   apiUrl?: string | null;
+  /* The graph already built by the server, in the API's response shape, drawn
+     instead of the first API request. */
+  initialGraph?: Record<string, any> | null;
   owner?: string | null;
   repo?: string | null;
   subject?: string | null;
@@ -402,6 +405,7 @@ interface FishboneGraphProps {
 
 const props = withDefaults(defineProps<FishboneGraphProps>(), {
   apiUrl: null,
+  initialGraph: null,
   owner: null,
   repo: null,
   subject: null,
@@ -412,6 +416,9 @@ const props = withDefaults(defineProps<FishboneGraphProps>(), {
   sortBy: 'updated',
   limit: API_LIMIT,
 });
+
+/* props.initialGraph until it has been drawn once (see fetchForkGraphAndSet). */
+let pendingInitialGraph: Record<string, any> | null = props.initialGraph ?? null;
 
 const selectedNodeId = ref<NodeId | null>(null);
 let pendingExternalSelection: RepoSelectionDetail | null = null;
@@ -475,9 +482,15 @@ function findNodeBySelection(detail: RepoSelectionDetail): Node | null {
       node.repoSubject,
       node.parentId === null ? (props.repo ?? null) : null,
     ].filter(Boolean) as string[];
+    /* The node's OWN owner and name, exactly as getSelectionDetailFromNode()
+       derives them: the first candidate. The props are only a fallback for a
+       root that carries neither. Matching ANY candidate let the root claim
+       every selection whose owner was the page's (the props name the article
+       the page was rendered for, not the root) and whose repository shares
+       the root's slug — which every article of a subject does. */
     if (
-      ownerCandidates.some((c) => normalize(c) === desiredOwner) &&
-      repoCandidates.some((c) => normalize(c) === desiredRepo)
+      normalize(ownerCandidates[0]) === desiredOwner &&
+      normalize(repoCandidates[0]) === desiredRepo
     ) {
       return node;
     }
@@ -561,6 +574,16 @@ async function fetchForkGraphAndSet() {
   cancelStatsRetry();
 
   try {
+    /* The subject page embeds the graph it has just built for its Table view
+       (pageData.subjectForkGraph), so the first draw needs no request: the API
+       used to rebuild the very same graph right after the page loaded. Used
+       once; a retry ("Try Again", or waiting for counts) asks the API. */
+    const embedded = pendingInitialGraph;
+    pendingInitialGraph = null;
+    if (embedded) {
+      await applyGraphResponse(embedded);
+      return;
+    }
     if (!props.apiUrl) {
       console.warn('FishboneGraph: apiUrl not provided');
       errorMessage.value = 'No API URL provided';
@@ -598,49 +621,7 @@ async function fetchForkGraphAndSet() {
       announceToScreenReader(errorText);
       return;
     }
-    const json = await res.json();
-    const graph = buildGraphFromApi(json?.root);
-
-    /* Nothing real to draw yet: stay on the loading state and come back for the
-       numbers rather than rendering a graph of placeholders. state.graph is
-       deliberately NOT set — a half-real graph must never reach the layout. */
-    if (graphIsAllPlaceholder(graph) && statsRetry < STATS_RETRY_DELAYS_MS.length) {
-      const wait = STATS_RETRY_DELAYS_MS[statsRetry];
-      statsRetry++;
-      statsRetryTimer = window.setTimeout(() => {
-        statsRetryTimer = null;
-        void fetchForkGraphAndSet();
-      }, wait);
-      return;                        // isLoading stays true
-    }
-    statsRetry = 0;
-    /* Fresh node objects: what was requested for the old ones no longer
-       says anything about these. */
-    summaryRequested.clear();
-    state.graph = graph;
-
-    // Clear loading state before layout/render
-    isLoading.value = false;
-
-    // Only layout and render if we have data
-    if (Object.keys(graph).length > 0) {
-      // Wait for Vue to update the DOM with the new graph data before calculating layout
-      await nextTick();
-      layoutAndRender();
-      /* One more tick: layoutAndRender() is what makes `hasData` true, so the
-         legend only exists in the DOM after Vue has flushed. resetView() needs
-         its height to know how much canvas the graph actually gets. */
-      await nextTick();
-      resetView();
-      restoreSelectionAfterGraphLoad();
-      announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
-    } else {
-      /* No article yet: the "Create the first article" bubble is centred in the
-         canvas box by CSS, so the box has to be the size of the space it has. */
-      await nextTick();
-      syncCanvasHeight();
-      announceToScreenReader('No fork data available');
-    }
+    await applyGraphResponse(await res.json());
   } catch (err) {
     const errorText = err instanceof Error ? err.message : 'Failed to load fork graph';
     console.error('FishboneGraph: failed to fetch graph', err);
@@ -648,6 +629,52 @@ async function fetchForkGraphAndSet() {
     isLoading.value = false;
     syncCanvasHeight();
     announceToScreenReader(errorText);
+  }
+}
+
+/* Draws a fork-graph response (the API's shape), wherever it came from. */
+async function applyGraphResponse(json: any) {
+  const graph = buildGraphFromApi(json?.root);
+
+  /* Nothing real to draw yet: stay on the loading state and come back for the
+     numbers rather than rendering a graph of placeholders. state.graph is
+     deliberately NOT set — a half-real graph must never reach the layout. */
+  if (graphIsAllPlaceholder(graph) && statsRetry < STATS_RETRY_DELAYS_MS.length) {
+    const wait = STATS_RETRY_DELAYS_MS[statsRetry];
+    statsRetry++;
+    statsRetryTimer = window.setTimeout(() => {
+      statsRetryTimer = null;
+      void fetchForkGraphAndSet();
+    }, wait);
+    return;                        // isLoading stays true
+  }
+  statsRetry = 0;
+  /* Fresh node objects: what was requested for the old ones no longer
+     says anything about these. */
+  summaryRequested.clear();
+  state.graph = graph;
+
+  // Clear loading state before layout/render
+  isLoading.value = false;
+
+  // Only layout and render if we have data
+  if (Object.keys(graph).length > 0) {
+    // Wait for Vue to update the DOM with the new graph data before calculating layout
+    await nextTick();
+    layoutAndRender();
+    /* One more tick: layoutAndRender() is what makes `hasData` true, so the
+       legend only exists in the DOM after Vue has flushed. resetView() needs
+       its height to know how much canvas the graph actually gets. */
+    await nextTick();
+    resetView();
+    restoreSelectionAfterGraphLoad();
+    announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
+  } else {
+    /* No article yet: the "Create the first article" bubble is centred in the
+       canvas box by CSS, so the box has to be the size of the space it has. */
+    await nextTick();
+    syncCanvasHeight();
+    announceToScreenReader('No fork data available');
   }
 }
 

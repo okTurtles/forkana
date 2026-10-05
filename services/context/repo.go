@@ -14,7 +14,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
 	asymkey_model "code.gitea.io/gitea/models/asymkey"
 	"code.gitea.io/gitea/models/db"
@@ -1095,6 +1094,17 @@ func RepoAssignmentBySubject(ctx *Context) {
 		return
 	}
 
+	AssignSubjectRepository(ctx, repo)
+}
+
+// AssignSubjectRepository sets up the repository context of the subject page for repo:
+// its git repository, the doer's permission and the template data. RepoAssignmentBySubject
+// uses it for the subject's main article; the subject page uses it again to switch to the
+// article named by its "selected" parameter, so that article is rendered directly (#405).
+// The caller must have checked that repo is not a tombstone.
+func AssignSubjectRepository(ctx *Context, repo *repo_model.Repository) {
+	var err error
+
 	// Load repository owner
 	if err = repo.LoadOwner(ctx); err != nil {
 		ctx.ServerError("LoadOwner", err)
@@ -1186,23 +1196,6 @@ func RepoAssignmentBySubject(ctx *Context) {
 	if err != nil {
 		ctx.ServerError("GetReleaseCountByRepoID", err)
 		return
-	}
-
-	// Set up contributor count data
-	// For forks, only count contributors who made commits after the fork was created
-	// to avoid including inherited history from the parent repository
-	ctx.Data["ContributorCount"] = int64(0)
-	if !repo.IsEmpty && ctx.Repo.GitRepo != nil {
-		var since time.Time
-		if repo.IsFork && repo.CreatedUnix > 0 {
-			since = repo.CreatedUnix.AsTime()
-		}
-		contributorCount, err := ctx.Repo.GitRepo.GetContributorCount(repo.DefaultBranch, since)
-		if err != nil {
-			log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
-		} else {
-			ctx.Data["ContributorCount"] = contributorCount
-		}
 	}
 }
 

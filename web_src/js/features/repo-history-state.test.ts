@@ -4,14 +4,16 @@ const alice = {owner: 'alice', repo: 'moon', subject: 'Moon', archived: false, l
 const bob = {owner: 'bob', repo: 'moon', subject: 'Moon', archived: true, link: '/subject/Moon/bob/2'};
 const candidates = [alice, bob];
 
-const fresh: InitialSelectionInput = {urlArticle: null, historySelection: undefined, urlSelection: null, candidates};
+const fresh: InitialSelectionInput = {serverArticle: undefined, historySelection: undefined, urlSelection: null, candidates};
 
 test('#402: a subject opened afresh starts with nothing selected', () => {
   expect(pickInitialSelection(fresh)).toBeNull();
 });
 
-test('an article url names the selection', () => {
-  expect(pickInitialSelection({...fresh, urlArticle: bob, historySelection: alice, urlSelection: alice})).toEqual(bob);
+test('on the Article view, the article the server rendered is the selection', () => {
+  expect(pickInitialSelection({...fresh, serverArticle: bob, historySelection: alice, urlSelection: alice})).toEqual(bob);
+  // ...and when it rendered none, nothing is selected (the view asks for a selection)
+  expect(pickInitialSelection({...fresh, serverArticle: null, historySelection: alice, urlSelection: alice})).toBeNull();
 });
 
 test('#405 items 2 and 5: the history entry restores what was selected when it was left', () => {
