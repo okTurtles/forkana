@@ -471,6 +471,12 @@ function onKeyDown(ev: KeyboardEvent) {
   white-space: nowrap;
 }
 
+/* #421 item 4: the bubble's text as figma's Bubble view draws it (641:61415,
+   e.g. the 538 bubble 641:61440-61442), in every mode: the count and
+   "Contributors" in the primary text colour (#1f2328) at weight 600, the
+   date in the same colour at 400 italic. The compare frames use the very same
+   styles (6484:44242-44243), so compare mode needs no override. */
+
 /* Count: always visible, bold and prominent */
 .html-label-wrapper .count {
   color: var(--color-text-primary);
@@ -481,31 +487,19 @@ function onKeyDown(ev: KeyboardEvent) {
 
 /* Label text: "Contributor(s)" */
 .html-label-wrapper .label {
-  color: var(--color-text-secondary);
-  font-weight: 700;
+  color: var(--color-text-primary);
+  font-weight: 600;
   line-height: 1;
   pointer-events: none;
 }
 
 /* Updated date information */
 .html-label-wrapper .updated {
-  color: var(--color-text-tertiary);
-  line-height: 1;
-  pointer-events: none;
-}
-
-/* Compare mode (figma 6484:44255): every line of the bubble is in the primary
-   text colour (#1f2328), the label at weight 600 and the date at 400. The
-   count already is (primary, 600). Outside compare mode the resting greys
-   stay. */
-.node.is-compare .html-label-wrapper .label {
-  color: var(--color-text-primary);
-  font-weight: 600;
-}
-
-.node.is-compare .html-label-wrapper .updated {
   color: var(--color-text-primary);
   font-weight: 400;
+  font-style: italic;
+  line-height: 1;
+  pointer-events: none;
 }
 
 /* The order badge sits over the bubble's edge; a click on it is a click on the
@@ -540,18 +534,21 @@ function onKeyDown(ev: KeyboardEvent) {
   white-space: nowrap;
 }
 
+/* The hovered bubble's text, as figma's "Bubble view - click + zoom" 335
+   bubble (641:61744-61746): count 22px, "Contributors" 12px, both 600; the
+   date 400 italic; all in the primary text colour, like the resting bubble. */
 .expanded-wrapper .expanded-count-label {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.1;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   white-space: nowrap;
 }
 
 .expanded-description {
   font-size: 10px;
   line-height: 1.35;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   /* Three lines: what the circle's height budget allows next to the count and
      the date. The whole excerpt is in the opened (425px) view. */
   display: -webkit-box;
@@ -571,8 +568,9 @@ function onKeyDown(ev: KeyboardEvent) {
   /* #386 item 10: never SMALLER than the resting bubble's 11px "Last updated"
      lines — text must not shrink while the bubble it sits in grows. */
   font-size: 11px;
+  font-style: italic;
   line-height: 1.3;
-  color: var(--color-text-light-2, #6b7280);
+  color: var(--color-text-primary);
   white-space: nowrap;
 }
 </style>

@@ -1722,9 +1722,9 @@ const soloPinned = computed(() => detailNode.value === null && openArticle.value
    with nothing to show, the summary is taken from the article itself: its
    README (the article IS its repository's single README, see AGENTS.md) is
    fetched raw and its first paragraph used. Fetched lazily — only for the
-   article actually opened, never for the whole graph — and written back onto
-   the reactive node, so the paragraph appears in the already-open circle and
-   is never fetched twice. */
+   article actually hovered or opened, never for the whole graph — and written
+   back onto the reactive node, so the paragraph appears in the card already
+   showing and is never fetched twice. */
 const summaryRequested = new Set<NodeId>();
 
 async function fetchArticleSummary(n: Node) {
@@ -1755,11 +1755,17 @@ async function fetchArticleSummary(n: Node) {
   }
 }
 
-watch(openArticle, (n) => {
-  /* An empty repository has no README and a tombstoned one deliberately shows
-     no excerpt (see BubbleNode), so neither is fetched. */
+/* An empty repository has no README and a tombstoned one deliberately shows
+   no excerpt (see BubbleNode), so neither is fetched. */
+function wantArticleSummary(n: Node | null | undefined) {
   if (n && !n.description && !n.isEmpty && !n.isTombstoned) void fetchArticleSummary(n);
-}, {immediate: true});
+}
+
+/* #421 item 7: the summary is wanted by the HOVERED bubble's card too, not only
+   by the opened article: it used to be fetched for the opened one only, so a
+   hovered card showed it only for an article that had been opened before. */
+watch(openArticle, (n) => wantArticleSummary(n), {immediate: true});
+watch(hoveredId, (id) => wantArticleSummary(nodeById(id)));
 
 /** The graph is not merely covered while an article is open: its bubbles and
    connectors are not rendered at all. It comes back the moment the close
@@ -1891,6 +1897,9 @@ function onBubbleHover(id: NodeId, on: boolean, pointerType: string) {
     return;
   }
   if (openArticle.value) return;   // the graph is not on screen to be hovered
+  /* start on the summary as the pointer arrives, so it is there (or nearly) by
+     the time the hover debounce grows the card */
+  if (on) wantArticleSummary(nodeById(id));
   if (on) setHovered(id);
   else if (hoveredId.value === id) setHovered(null);
 }
