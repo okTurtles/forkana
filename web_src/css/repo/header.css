@@ -83,6 +83,14 @@ overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
   color: var(--color-primary-contrast);
 }
 
+/* A subject with a single article has nothing to compare (figma "Bubble view /
+   Comparing disabled", 6661:52942): the button stays clickable, to explain why
+   in the Compare banner, but reads as unavailable. */
+#compare-mode-button.is-unavailable {
+  color: var(--color-text-light-3);
+  cursor: default;
+}
+
 /* ── Mobile ───────────────────────────────────────────────────────────────
    767.98px is this app's mobile breakpoint — 41 of the 43 max-width queries in
    web_src/css use it, so this follows the house convention rather than the
@@ -113,5 +121,25 @@ overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
   .secondary-nav .repo-header h1 {
     font-size: 20px !important;
     text-align: center !important;
+  }
+
+  /* The view tabs row on a phone (figma Mobile 641:63048, UnderNav_Views):
+     the tabs start at the left (the row's 16px gutter is the container's
+     margin here) and the Compare button is a 32×32 icon button on the right.
+     Reserving the button's width on BOTH sides, as the desktop rule above
+     does to keep the tabs centred, made the row 388px wide on a 375px phone
+     and the whole page scroll sideways. Tabs that still do not fit are
+     folded into overflow-menu's own "more" menu, inside the row. */
+  overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
+    justify-content: flex-start !important;
+    margin: 0 40px 0 0;
+  }
+
+  #compare-mode-button {
+    width: 32px;
+    height: 32px !important;
+    min-height: 32px;
+    padding: 0 !important;
+    justify-content: center;
   }
 }

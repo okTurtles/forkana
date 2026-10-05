@@ -91,3 +91,14 @@
   margin-right: -1rem;
   width: calc(100% + 2rem);
 }
+
+/* ...except on a phone, where the container has no padding to bleed over:
+   the bleed pushed the canvas 1rem past both edges of the window, and the
+   whole page scrolled sideways. The graph pans inside its own box instead. */
+@media (max-width: 767.98px) {
+  .history-bubble-root {
+    margin-left: 0;
+    margin-right: 0;
+    width: 100%;
+  }
+}

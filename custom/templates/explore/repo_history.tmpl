@@ -141,6 +141,19 @@
    footer below the fold (#149). */
 </style>
 <div role="main" aria-label="{{.Title}}" class="page-content repository file list">
+    {{/* The Compare mode banner (figma "Announcement" 641:61937 / 641:61765 / 641:61848 /
+         6661:53348) is drawn here, under the navbar and above the subject, by the bubble
+         view (FishboneGraph teleports CompareAnnouncement.vue into it). The strings come
+         from the locale file. */}}
+    <div id="compare-announcement-root"
+        data-msg-select="{{ctx.Locale.Tr "repo.compare_mode_select"}}"
+        data-msg-one="{{ctx.Locale.Tr "repo.compare_mode_one_selected"}}"
+        data-msg-ready="{{ctx.Locale.Tr "repo.compare_mode_ready"}}"
+        data-msg-unavailable="{{ctx.Locale.Tr "repo.compare_mode_no_forks"}}"
+        data-msg-compare-now="{{ctx.Locale.Tr "repo.compare_mode_compare_now"}}"
+        data-msg-dismiss="{{ctx.Locale.Tr "repo.compare_mode_dismiss"}}"
+        data-msg-contributors="{{ctx.Locale.Tr "repo.compare_mode_contributors"}}"
+        data-msg-contributor="{{ctx.Locale.Tr "repo.compare_mode_contributor"}}"></div>
     {{/* Rendered outside the article section so it stays visible on every article
     mode (read, edit, history, settings); repo-history.ts keeps it in sync when the
     article section is swapped or another view is selected. */}}

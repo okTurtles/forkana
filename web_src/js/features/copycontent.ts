@@ -54,8 +54,34 @@ export function initCopyContent() {
 }
 
 export function initCompareModeToggle() {
-  registerGlobalEventFunc('click', 'onCompareModeToggle', (btn: HTMLElement) => {
-    btn.classList.toggle('primary');
+  /* The bubble view owns compare mode; the button only asks for it. Its look
+     follows the state the graph reports below, so the two cannot disagree. */
+  registerGlobalEventFunc('click', 'onCompareModeToggle', () => {
     window.dispatchEvent(new CustomEvent('repo:compare-mode-toggle'));
+  });
+
+  /* #421 item 1 (figma 641:61763 / 641:61930): while compare mode is on the
+     button is filled with the brand colour and reads "Compare on"; on a subject
+     with a single article it is shown unavailable, with figma's tooltip (6661:52942). */
+  window.addEventListener('repo:compare-mode-state', (event: Event) => {
+    const {on, available} = (event as CustomEvent<{on: boolean, available: boolean}>).detail;
+    const btn = document.querySelector<HTMLElement>('#compare-mode-button');
+    if (!btn) return;
+    const label = on ? btn.getAttribute('data-label-on') : btn.getAttribute('data-label-off');
+    btn.classList.toggle('primary', on);
+    btn.classList.toggle('is-unavailable', !available && !on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (label) {
+      btn.setAttribute('aria-label', label);
+      const text = btn.querySelector('[data-role="compare-label"]');
+      if (text) text.textContent = label;
+    }
+    if (!available && !on) {
+      btn.setAttribute('data-tooltip-content', btn.getAttribute('data-unavailable') || '');
+      btn.setAttribute('aria-disabled', 'true');
+    } else {
+      btn.removeAttribute('data-tooltip-content');
+      btn.removeAttribute('aria-disabled');
+    }
   });
 }

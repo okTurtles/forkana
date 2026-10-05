@@ -11,6 +11,7 @@ import {
   type RepoSelection,
 } from '../modules/repo-selection.ts';
 import {pickInitialSelection, selectionFromHistoryState, type HistoryState, type ViewKey} from './repo-history-state.ts';
+import {requestCompareMode} from '../modules/compare-mode-request.ts';
 
 function buildSubjectUrl(base: string, view?: ViewKey): string {
   if (!view) return base;
@@ -673,6 +674,14 @@ export function initRepoHistory() {
 
   window.addEventListener('repo:bubble-selected', handleBubbleSelection as EventListener);
   window.addEventListener('repo:bubble-open-article', handleBubbleOpenArticle as EventListener);
+  // Compare mode lives in the bubble view: pressing Compare on another view goes there.
+  // A graph already mounted (hidden) handles the press itself; one that is not yet gets
+  // it as a request when it mounts.
+  window.addEventListener('repo:compare-mode-toggle', () => {
+    if (activeView.value === 'bubble') return;
+    if (!viewLoaded.bubble) requestCompareMode();
+    switchView('bubble', {pushState: true});
+  });
   if (navEl) navEl.addEventListener('click', handleNavClick as EventListener);
   articleSection?.addEventListener('click', handleArticleSectionClick);
   window.addEventListener('popstate', handlePopState);

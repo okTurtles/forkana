@@ -34,3 +34,17 @@
 .history-view-section--article .ui.message[data-role="article-empty"] {
   margin-top: 0 !important;
 }
+
+/* The Compare mode banner (#421 item 1, CompareAnnouncement.vue) is teleported
+   into this root, under the navbar. The root itself takes no box, so the
+   banner is a direct child of .page-content as far as layout goes: it spans
+   the page edge to edge and, on a phone, sticks to the top of the page for as
+   long as the page scrolls. Compare mode belongs to the Bubble view, so the
+   banner is not shown over the Table or Article view. */
+#compare-announcement-root {
+  display: contents;
+}
+
+.page-content:has(.history-view-section--bubble[hidden]) #compare-announcement-root {
+  display: none;
+}
