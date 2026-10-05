@@ -1,6 +1,6 @@
 {{define "shared/repo/article"}}
 <div class="history-view-section history-view-section--article" data-view="article" {{if not .IsArticleView}}hidden{{end}}>
-    <div class="ui tw-mt-10" id="article-view-root" data-article-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}">
+    <div class="ui" id="article-view-root" data-article-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}">
         {{if .IsSubjectContext}}
             <div class="ui info message" id="article-guidance" style="display:none">
                 {{svg "octicon-info" 16}}

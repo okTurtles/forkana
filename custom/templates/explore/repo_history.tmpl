@@ -218,7 +218,7 @@
                      section does when nothing is selected (#405 item 1); the loading
                      placeholder only shows while an article is being fetched. */}}
                 <div class="history-view-section history-view-section--article" data-view="article" {{if not .IsArticleView}}hidden{{end}}>
-                    <div class="ui message tw-mt-10" aria-live="polite" data-role="article-empty">
+                    <div class="ui message" aria-live="polite" data-role="article-empty">
                         {{svg "octicon-info" 16}}
                         <span class="tw-ml-2">Please select an article in bubble or table view.</span>
                     </div>
