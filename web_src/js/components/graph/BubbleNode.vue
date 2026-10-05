@@ -27,7 +27,7 @@ import { computed, watch, reactive } from "vue";
 import { formatDateYMD } from '../../utils/time.ts';
 import {
   COMPARE_OUTLINE, COMPARE_RING_WIDTH, compareBadgeCenter, compareOrderFor,
-  type BubbleLabelDetail, type CompareBadgeStyle,
+  type BubbleLabelDetail, type CompareBadgeStyle, type ComparePickState,
 } from './bubble-size.ts';
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ const props = defineProps<{
   frozen?: boolean;
   isActive?: boolean;             // selected article (persisted selection)
   isCompareMode?: boolean;        // whether compare mode is active
-  compareState?: 'none' | 'first' | 'second';  // compare selection state
+  compareState?: ComparePickState;  // compare selection state
   /* The order badge of this bubble's rung in Compare mode (bubble-size.ts). */
   compareBadgeStyle?: CompareBadgeStyle;
   /* The author deleted this article. The bubble is kept — the forks below it
@@ -227,7 +227,6 @@ const compareSelected = computed(() => props.compareState === 'first' || props.c
    until it is picked: the figma's compare frames only draw live articles, and the
    compare dashes would make it indistinguishable from them. */
 const compareOutlined = computed(() => props.isCompareMode === true && (compareSelected.value || props.isTombstoned !== true));
-const compareDashed = computed(() => compareOutlined.value && props.compareState === 'none');
 const compareOrder = computed(() => props.isCompareMode === true ? compareOrderFor(props.compareState) : null);
 const compareBadge = computed(() => compareBadgeCenter(props.r));
 
@@ -246,7 +245,9 @@ const circleRadius = computed(() => Math.max(0, props.r - compareStrokeWidth.val
    presentation attributes below, so the focus/hover rules in the stylesheet
    (a 1px primary ring) cannot thin the compare ring of the bubble that was
    just clicked and therefore holds the focus. Null outside compare mode,
-   where nothing changes. */
+   where nothing changes. The compare paint intentionally replaces the selection
+   stroke too: figma's compare frames show only the picked rings, and the mini
+   circle (.joint-parent.is-selected) still marks the selected article. */
 const compareCircleStyle = computed(() => {
   if (!compareOutlined.value) return null;
   if (compareSelected.value) {
@@ -311,11 +312,7 @@ function onKeyDown(ev: KeyboardEvent) {
   >
     <!-- Bubble circle with soft gradient & subtle stroke/shadow -->
     <circle
-      class="node-circle" :class="{
-        'compare-dashed': compareDashed,
-        'compare-selected-first': props.compareState === 'first',
-        'compare-selected-second': props.compareState === 'second'
-      }" :r="circleRadius" fill="url(#bubbleGrad)"
+      class="node-circle" :r="circleRadius" fill="url(#bubbleGrad)"
       :stroke="isActive || expanded ? 'var(--color-primary)' : 'none'"
       stroke-width="1"
       :stroke-dasharray="props.isTombstoned ? '4,4' : 'none'"
@@ -417,12 +414,6 @@ function onKeyDown(ev: KeyboardEvent) {
    to the compare-mode one it has to co-exist with). The stroke is set here
    rather than in the binding so it also wins over the hover/focus rules
    below. */
-/* The order badge sits over the bubble's edge; a click on it is a click on the
-   bubble (to deselect it), so it must not catch the pointer itself. */
-.compare-badge {
-  pointer-events: none;
-}
-
 .node.is-tombstoned {
   opacity: 0.55;
 }
@@ -515,6 +506,12 @@ function onKeyDown(ev: KeyboardEvent) {
 .node.is-compare .html-label-wrapper .updated {
   color: var(--color-text-primary);
   font-weight: 400;
+}
+
+/* The order badge sits over the bubble's edge; a click on it is a click on the
+   bubble (to deselect it), so it must not catch the pointer itself. */
+.compare-badge {
+  pointer-events: none;
 }
 
 /* ── EXPANDED CARD (202px bubble) ────────────────────────────────────────

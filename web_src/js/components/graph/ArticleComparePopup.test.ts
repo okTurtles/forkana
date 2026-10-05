@@ -38,8 +38,8 @@ test('falls back to the permanent repository url, not the subject', () => {
 });
 
 const twoArticles = [
-  {id: '1', repoOwner: 'alice', repoName: 'moon', contributors: 335, children: ['x'], updatedAt: '2025-06-10T00:00:00Z'},
-  {id: '2', repoOwner: 'bob', repoName: 'moon', contributors: 1, children: [], updatedAt: '2025-06-11T00:00:00Z'},
+  {id: '1', repoOwner: 'alice', repoName: 'moon', contributors: 335, children: ['x'], updatedAt: '2025-06-10T00:00:00'},
+  {id: '2', repoOwner: 'bob', repoName: 'moon', contributors: 1, children: [], updatedAt: '2025-06-11T00:00:00'},
 ];
 
 test('beside the bubbles it is a popover, not a modal; the phone sheet is modal', () => {

@@ -10,8 +10,8 @@ import {
   selectionFromParam, setCurrentSelection, withSelectionParam,
   type RepoSelection,
 } from '../modules/repo-selection.ts';
-import {pickInitialSelection, selectionFromHistoryState, type HistoryState, type ViewKey} from './repo-history-state.ts';
-import {requestCompareMode} from '../modules/compare-mode-request.ts';
+import {pickInitialSelection, selectionFromHistoryState, withCarriedQuery, type HistoryState, type ViewKey} from './repo-history-state.ts';
+import {requestCompareMode, takeCompareRequestFromUrl} from '../modules/compare-mode-request.ts';
 
 function buildSubjectUrl(base: string, view?: ViewKey): string {
   if (!view) return base;
@@ -108,6 +108,8 @@ export function initRepoHistory() {
 
   // The selection is no longer kept in localStorage (#402): drop what earlier versions left.
   clearLegacyStoredSelection();
+  // a Compare press made on a page without the bubble view, which sent the reader here
+  takeCompareRequestFromUrl();
 
   const appSubUrl = window.config.appSubUrl || '';
   const subjectUrl = root.getAttribute('data-subject-url') || window.location.pathname;
@@ -192,7 +194,7 @@ export function initRepoHistory() {
   let loadedMode = initialMode || 'read';
 
   // whether the bubble view has been mounted (nothing watches it)
-  const viewLoaded = {bubble: false};
+  let bubbleMounted = false;
 
   let tableBound = false;
   let loaderEl: HTMLElement | null = null;
@@ -294,7 +296,8 @@ export function initRepoHistory() {
     if (view === 'article') {
       return selection ? articleUrlFor(selection, mode) : buildSubjectUrlWithMode(subjectUrl, 'article', mode);
     }
-    return withSelectionParam(view === 'table' ? tableUrl : bubbleUrl, selection);
+    // the rest of the current query (the Table view's sort, say) goes along
+    return withSelectionParam(withCarriedQuery(view === 'table' ? tableUrl : bubbleUrl, window.location.search), selection);
   }
 
   // The view tabs are links: keep their targets on the selection, so opening one in a new
@@ -357,12 +360,11 @@ export function initRepoHistory() {
     const raw = normalizeSelection(next);
     const normalized = resolveSelection(raw, candidates) ?? raw;
     const changed = !(selectedRepo.value === null && normalized === null) && !matchesSelection(selectedRepo.value, normalized);
-    if (changed) {
-      selectedRepo.value = normalized;
-      setCurrentSelection(normalized);
-      window.dispatchEvent(new CustomEvent(SELECTION_UPDATED_EVENT, {detail: normalized}));
-    }
-    if (history === 'replace') writeHistory(activeView.value, articleMode.value, selectedRepo.value, 'replace');
+    if (!changed) return; // every entry this page wrote already records the current selection
+    selectedRepo.value = normalized;
+    setCurrentSelection(normalized);
+    window.dispatchEvent(new CustomEvent(SELECTION_UPDATED_EVENT, {detail: normalized}));
+    if (history === 'replace') writeHistory(activeView.value, articleMode.value, normalized, 'replace');
   }
 
   // A subject with a single article has nothing to choose between: that article is the
@@ -372,11 +374,11 @@ export function initRepoHistory() {
   }
 
   async function ensureBubbleView() {
-    if (!viewLoaded.bubble) {
+    if (!bubbleMounted) {
       /* Claim the mount BEFORE the await. Two callers race on the first switch
          to bubble — switchView() and the activeView watcher — and with the
          flag set after the await both got through the guard. */
-      viewLoaded.bubble = true;
+      bubbleMounted = true;
       await nextTick();
       initRepoBubbleView();
     }
@@ -616,15 +618,7 @@ export function initRepoHistory() {
     } else {
       selection = resolveSelection(selectionFromParam(new URL(window.location.href).searchParams.get(SELECTION_PARAM)), candidates);
     }
-    return {
-      view: loc.view,
-      mode: loc.mode,
-      owner: selection?.owner ?? null,
-      subject: selection?.subject ?? null,
-      repo: selection?.repo ?? null,
-      archived: selection?.archived === true,
-      link: selection?.link ?? null,
-    };
+    return historyStateFor(loc.view, loc.mode, selection);
   }
 
   function handlePopState(event: PopStateEvent) {
@@ -686,7 +680,7 @@ export function initRepoHistory() {
   // it as a request when it mounts.
   window.addEventListener('repo:compare-mode-toggle', () => {
     if (activeView.value === 'bubble') return;
-    if (!viewLoaded.bubble) requestCompareMode();
+    if (!bubbleMounted) requestCompareMode();
     switchView('bubble', {pushState: true});
   });
   if (navEl) navEl.addEventListener('click', handleNavClick as EventListener);

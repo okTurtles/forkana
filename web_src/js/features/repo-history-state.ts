@@ -68,3 +68,19 @@ export function pickInitialSelection(input: InitialSelectionInput): RepoSelectio
   if (input.candidates.length === 1) return normalizeSelection(input.candidates[0]);
   return null;
 }
+
+// The parameters that describe the subject page's state, which each url sets for itself:
+// the view, its article mode, the selection, and a pending Compare press.
+const STATE_PARAMS = new Set(['view', 'mode', 'selected', 'compare']);
+
+/** The Bubble or Table view url `url`, carrying the other parameters of the page's
+   current query (`currentSearch`), such as the Table view's sort, so recording a
+   selection or following a view tab does not drop them. `url`'s own parameters win. */
+export function withCarriedQuery(url: string, currentSearch: string): string {
+  const parsed = new URL(url, 'http://localhost');
+  for (const [key, value] of new URLSearchParams(currentSearch)) {
+    if (STATE_PARAMS.has(key) || parsed.searchParams.has(key)) continue;
+    parsed.searchParams.append(key, value);
+  }
+  return parsed.pathname + parsed.search + parsed.hash;
+}

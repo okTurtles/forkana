@@ -1,4 +1,4 @@
-import {pickInitialSelection, selectionFromHistoryState, type InitialSelectionInput} from './repo-history-state.ts';
+import {pickInitialSelection, selectionFromHistoryState, withCarriedQuery, type InitialSelectionInput} from './repo-history-state.ts';
 
 const alice = {owner: 'alice', repo: 'moon', subject: 'Moon', archived: false, link: '/subject/Moon/alice'};
 const bob = {owner: 'bob', repo: 'moon', subject: 'Moon', archived: true, link: '/subject/Moon/bob/2'};
@@ -39,4 +39,13 @@ test('selectionFromHistoryState tells "no state" from "nothing selected"', () =>
   expect(selectionFromHistoryState({} as any)).toBeUndefined();
   expect(selectionFromHistoryState({view: 'table', owner: null, repo: null})).toBeNull();
   expect(selectionFromHistoryState({view: 'table', owner: 'bob', repo: 'moon', subject: 'Moon', archived: true, link: '/subject/Moon/bob/2'})).toEqual(bob);
+});
+
+test('the view urls keep the rest of the query (the Table view\'s sort), not its state parameters', () => {
+  const tableUrl = '/subject/Moon?view=table';
+  expect(withCarriedQuery(tableUrl, '?view=table&sort=latest&selected=alice%2Fmoon')).toBe('/subject/Moon?view=table&sort=latest');
+  expect(withCarriedQuery('/subject/Moon?view=bubble', '?view=article&mode=edit&compare=1&sort=most_contrib')).toBe('/subject/Moon?view=bubble&sort=most_contrib');
+  // the url's own parameters win
+  expect(withCarriedQuery('/subject/Moon?view=table&sort=latest', '?sort=least_contrib')).toBe('/subject/Moon?view=table&sort=latest');
+  expect(withCarriedQuery(tableUrl, '')).toBe(tableUrl);
 });

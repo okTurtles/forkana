@@ -33,9 +33,9 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
-import { COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
+import { COMPARE_POPOVER_HEIGHT, COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
 import CompareAnnouncement, { type CompareAnnouncementMessages, type CompareAnnouncementState } from "./CompareAnnouncement.vue";
-import { takeCompareModeRequest } from "../../modules/compare-mode-request.ts";
+import { replayCompareModeRequest } from "../../modules/compare-mode-request.ts";
 import type { ForkGraphNode, ForkGraphResponse } from "./fork-graph-api.ts";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import { GET } from "../../modules/fetch.ts";
@@ -43,7 +43,7 @@ import { extractArticleSummary } from "./article-summary.ts";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import {
   BUBBLE_HOVER_RADIUS, BUBBLE_UNKNOWN_RUNG, bubbleRungFor, countTextForRung,
-  maxContributors, type BubbleRung,
+  maxContributors, type BubbleRung, type ComparePickState,
 } from "./bubble-size.ts";
 import {
   DEFAULT_CONTAINER_HEIGHT, DEFAULT_CONTAINER_WIDTH, MAX_LAYOUT_WIDTH,
@@ -314,8 +314,8 @@ const isCompareMode = ref(false);
 const compareSelection = ref<Node[]>([]);
 const showComparePopup = ref(false);
 
-/* Computed: get compare state for a node ('none' | 'first' | 'second') */
-function getCompareState(nodeId: string): 'none' | 'first' | 'second' {
+/* Computed: get compare state for a node */
+function getCompareState(nodeId: string): ComparePickState {
   if (!isCompareMode.value) return 'none';
   const idx = compareSelection.value.findIndex(n => n.id === nodeId);
   if (idx === 0) return 'first';
@@ -1630,13 +1630,14 @@ onMounted(async () => {
      nodes, rather than lost because nobody was listening yet. */
   window.addEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
   /* Before the fetch too: the header's Compare button can be clicked while
-     the graph is loading, or be what mounted it (repo-history.ts switches to
-     the bubble view and replays the click). */
+     the graph is loading. */
   window.addEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
-  if (takeCompareModeRequest()) handleCompareModeToggle();
 
-  /* Initial fetch from API */
-  await fetchForkGraphAndSet();
+  /* Initial fetch from API. A Compare press that mounted the graph
+     (repo-history.ts switches to the bubble view and leaves it as a request)
+     is replayed once the graph is in: replayed before, it would find no
+     article and say "No forks yet" on a subject that has some. */
+  await replayCompareModeRequest(fetchForkGraphAndSet, handleCompareModeToggle);
   window.addEventListener('keydown', onGraphKeydown);
   /* The window can change without the graph's box changing (a centred box of
      fixed width just moves), and that changes which side of the bubbles has
@@ -2208,7 +2209,7 @@ function updateCompareAnchor() {
     containerHeight: boxRect.height,
     viewportLeft: -boxRect.left,
     viewportRight: document.documentElement.clientWidth - boxRect.left,
-    boxHeight: comparePopoverRef.value?.offsetHeight || 372,
+    boxHeight: comparePopoverRef.value?.offsetHeight || COMPARE_POPOVER_HEIGHT,
   });
   Object.assign(compareLayout, {
     placement: layout.placement,
@@ -2352,9 +2353,10 @@ function readAnnouncementMessages(): CompareAnnouncementMessages {
     select: d.msgSelect || 'Select 2 articles to compare (0/2 selected).',
     one: d.msgOne || '1/2 selected – select one more to compare.',
     ready: d.msgReady || '2/2 selected – ready to compare.',
-    unavailable: d.msgUnavailable || 'No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.',
+    unavailable: d.msgNoForks || 'No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.',
     compareNow: d.msgCompareNow || 'Compare now',
     dismiss: d.msgDismiss || 'Exit compare mode',
+    dismissNotice: d.msgDismissNotice || 'Dismiss',
   };
 }
 const announcementMessages = readAnnouncementMessages();

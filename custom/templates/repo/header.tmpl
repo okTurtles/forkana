@@ -30,9 +30,11 @@
 			</div>
 			{{/* Its label and state follow Compare mode (#421 item 1): web_src/js/features/copycontent.ts
 			     swaps the label for data-label-on while it is on, and marks it unavailable, with
-			     data-unavailable as its tooltip, on a subject with a single article. */}}
+			     data-unavailable as its tooltip, on a subject with a single article. On a page
+			     without the subject views it opens data-bubble-url with the press. */}}
 			<button class="ui button tiny compact tw-h-9" id="compare-mode-button" type="button" aria-pressed="false"
 				data-global-click="onCompareModeToggle"
+				data-bubble-url="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "bubble" "selected" .SubjectSelected}}"
 				data-label-off="{{ctx.Locale.Tr "repo.compare_mode"}}"
 				data-label-on="{{ctx.Locale.Tr "repo.compare_mode_on"}}"
 				data-unavailable="{{ctx.Locale.Tr "repo.compare_mode_unavailable"}}"

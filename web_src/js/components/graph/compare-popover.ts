@@ -22,6 +22,8 @@
    pointing at the same place. */
 
 export const COMPARE_POPOVER_WIDTH = 383;
+/** The box's height as figma draws it (641:62019), until the rendered box can be measured. */
+export const COMPARE_POPOVER_HEIGHT = 372;
 /** The caret's size (figma Caret 641:62048): it points sideways. */
 export const COMPARE_CARET_WIDTH = 7;
 export const COMPARE_CARET_HEIGHT = 14;
@@ -53,7 +55,6 @@ export type ComparePopoverInput = {
   viewportRight: number;
   /** The rendered box's height. */
   boxHeight: number;
-  boxWidth?: number;
 };
 
 function clamp(v: number, lo: number, hi: number) {
@@ -61,7 +62,7 @@ function clamp(v: number, lo: number, hi: number) {
 }
 
 export function placeComparePopover(input: ComparePopoverInput): ComparePopoverLayout {
-  const width = input.boxWidth ?? COMPARE_POPOVER_WIDTH;
+  const width = COMPARE_POPOVER_WIDTH;
   const height = input.boxHeight;
   if (!input.bubbles.length) return {placement: 'below', left: 0, top: 0, caretY: 0};
 

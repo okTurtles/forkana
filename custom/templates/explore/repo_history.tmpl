@@ -149,9 +149,10 @@
         data-msg-select="{{ctx.Locale.Tr "repo.compare_mode_select"}}"
         data-msg-one="{{ctx.Locale.Tr "repo.compare_mode_one_selected"}}"
         data-msg-ready="{{ctx.Locale.Tr "repo.compare_mode_ready"}}"
-        data-msg-unavailable="{{ctx.Locale.Tr "repo.compare_mode_no_forks"}}"
+        data-msg-no-forks="{{ctx.Locale.Tr "repo.compare_mode_no_forks"}}"
         data-msg-compare-now="{{ctx.Locale.Tr "repo.compare_mode_compare_now"}}"
-        data-msg-dismiss="{{ctx.Locale.Tr "repo.compare_mode_dismiss"}}"></div>
+        data-msg-dismiss="{{ctx.Locale.Tr "repo.compare_mode_dismiss"}}"
+        data-msg-dismiss-notice="{{ctx.Locale.Tr "repo.compare_mode_dismiss_notice"}}"></div>
     {{/* Rendered outside the article section so it stays visible on every article
     mode (read, edit, history, settings); repo-history.ts keeps it in sync when the
     article section is swapped or another view is selected. */}}
@@ -230,15 +231,22 @@
                      placeholder only shows while an article is being fetched. */}}
                 <div class="history-view-section history-view-section--article" data-view="article" {{if not .IsArticleView}}hidden{{end}}>
                     {{template "shared/repo/article_empty_message" (dict "Hidden" false)}}
-                    <div class="history-view-placeholder ui segment loading placeholder" data-role="article-content" hidden>
-                        <div class="header">
-                            <div class="line"></div>
-                            <div class="line"></div>
+                    {{/* the loader and error roles of a rendered article section too, so a fetch
+                         that fails replaces the skeleton with its error instead of loading forever */}}
+                    <div data-role="article-content" hidden>
+                        <div class="history-view-placeholder ui segment loading placeholder" data-role="article-loader">
+                            <div class="header">
+                                <div class="line"></div>
+                                <div class="line"></div>
+                            </div>
+                            <div class="paragraph">
+                                <div class="line"></div>
+                                <div class="line"></div>
+                                <div class="line"></div>
+                            </div>
                         </div>
-                        <div class="paragraph">
-                            <div class="line"></div>
-                            <div class="line"></div>
-                            <div class="line"></div>
+                        <div class="ui error message tw-mt-4" data-role="article-error" hidden>
+                            <p data-role="article-error-text"></p>
                         </div>
                     </div>
                 </div>

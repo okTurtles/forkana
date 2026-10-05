@@ -23,7 +23,7 @@
     </div>
     <div class="legend-key">
       <!-- #421 item 3: the tombstone of figma's Group 214 (6399:44065): a 14×11
-           outline with a flat base wider than the stone and two 2px eyes in
+           outline with a flat base wider than the stone and two 2.1px eyes in
            #59636e. Figma ships it as an unexported vector, so it is redrawn
            here at the same size and placement. -->
       <svg class="legend-swatch--deleted" viewBox="0 0 14 11.13" width="14" height="11.13" aria-hidden="true">

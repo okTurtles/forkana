@@ -70,7 +70,6 @@ export type BubbleRung = {
      inside the arc. The count itself is never dropped and never shrunk — if it
      is too long it is abbreviated instead (formatContributorCount). */
   labelDetail: BubbleLabelDetail;
-  /** How this rung is drawn in Compare mode (see CompareRingStyle). */
   /** The order badge this rung carries in Compare mode (see CompareBadgeStyle). */
   compareBadge: CompareBadgeStyle;
 };
@@ -109,8 +108,12 @@ export function compareBadgeCenter(radius: number): {x: number, y: number} {
   return {x: d * Math.cos(a), y: -d * Math.sin(a)};
 }
 
+/** Where a bubble stands in the comparison being picked: not picked, or picked first
+   or second. */
+export type ComparePickState = 'none' | 'first' | 'second';
+
 /** The number on a picked bubble's badge: its place in the comparison. */
-export function compareOrderFor(state: 'none' | 'first' | 'second' | undefined): number | null {
+export function compareOrderFor(state: ComparePickState | undefined): number | null {
   if (state === 'first') return 1;
   if (state === 'second') return 2;
   return null;

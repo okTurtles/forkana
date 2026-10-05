@@ -3,6 +3,7 @@ import {showTemporaryTooltip} from '../modules/tippy.ts';
 import {convertImage} from '../utils.ts';
 import {GET} from '../modules/fetch.ts';
 import {registerGlobalEventFunc} from '../modules/observer.ts';
+import {withCompareRequest} from '../modules/compare-mode-request.ts';
 
 const {i18n} = window.config;
 
@@ -56,7 +57,15 @@ export function initCopyContent() {
 export function initCompareModeToggle() {
   /* The bubble view owns compare mode; the button only asks for it. Its look
      follows the state the graph reports below, so the two cannot disagree. */
-  registerGlobalEventFunc('click', 'onCompareModeToggle', () => {
+  registerGlobalEventFunc('click', 'onCompareModeToggle', (btn: HTMLElement) => {
+    /* No subject views on this page (the compare page, a repository page): nothing
+       here can turn compare mode on, so go to the subject's Bubble view and press it
+       there. */
+    if (!document.querySelector('#repo-history-app')) {
+      const bubbleUrl = btn.getAttribute('data-bubble-url');
+      if (bubbleUrl) window.location.assign(withCompareRequest(bubbleUrl));
+      return;
+    }
     window.dispatchEvent(new CustomEvent('repo:compare-mode-toggle'));
   });
 

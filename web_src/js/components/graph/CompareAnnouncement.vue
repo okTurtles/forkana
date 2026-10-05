@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {computed} from 'vue';
+
 /* CompareAnnouncement.vue
    The Compare mode banner (#421 item 1): figma "Announcement" (component
    484:190672), drawn under the navbar and above the subject. One component for
@@ -11,6 +13,8 @@
      unavailable  "No forks yet. Compare needs at least 2 articles.
                    Fork this article to start comparing."           6661:53348
    Every state has the info icon and the dismiss x (both in the brand indigo).
+   The x exits compare mode, except in `unavailable`, which is shown while
+   compare mode is off: there it only dismisses the notice, and says so.
 
    The banner is only ever a message: the two picked articles and the action
    live in the Compare box (a popover beside the bubbles, or a bottom sheet on
@@ -25,7 +29,10 @@ export type CompareAnnouncementMessages = {
   ready: string;
   unavailable: string;
   compareNow: string;
+  /** The x's label while compare mode is on: it exits compare mode. */
   dismiss: string;
+  /** The x's label on the `unavailable` notice, which it only hides. */
+  dismissNotice: string;
 };
 
 const props = withDefaults(defineProps<{
@@ -42,30 +49,28 @@ const emit = defineEmits<{
   (e: 'compare'): void;
 }>();
 
-function message(): string {
-  return props.messages[props.state];
-}
+const message = computed(() => props.messages[props.state]);
+const dismissLabel = computed(() => props.state === 'unavailable' ? props.messages.dismissNotice : props.messages.dismiss);
 </script>
 
 <template>
-  <div class="compare-announcement" role="status" aria-live="polite">
-    <div class="compare-announcement-main">
-      <!-- IconWrapper: octicon info, 16px, brand indigo -->
-      <span class="compare-announcement-icon" aria-hidden="true">
-        <svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
-      </span>
-      <p class="compare-announcement-message">{{ message() }}</p>
-      <div class="compare-announcement-actions">
-        <button
-          v-if="showCompareNow && state === 'ready'" type="button" class="compare-announcement-primary"
-          @click="emit('compare')"
-        >
-          {{ messages.compareNow }}
-        </button>
-        <button type="button" class="compare-announcement-dismiss" :aria-label="messages.dismiss" @click="emit('dismiss')">
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>
-        </button>
-      </div>
+  <!-- role="status" is a polite live region already -->
+  <div class="compare-announcement" role="status">
+    <!-- IconWrapper: octicon info, 16px, brand indigo -->
+    <span class="compare-announcement-icon" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
+    </span>
+    <p class="compare-announcement-message">{{ message }}</p>
+    <div class="compare-announcement-actions">
+      <button
+        v-if="showCompareNow && state === 'ready'" type="button" class="compare-announcement-primary"
+        @click="emit('compare')"
+      >
+        {{ messages.compareNow }}
+      </button>
+      <button type="button" class="compare-announcement-dismiss" :aria-label="dismissLabel" @click="emit('dismiss')">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>
+      </button>
     </div>
   </div>
 </template>
@@ -92,9 +97,6 @@ function message(): string {
   border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
   background: color-mix(in srgb, var(--color-primary) 12%, var(--color-body));
   color: var(--color-text-primary);
-}
-
-.compare-announcement-main {
   display: flex;
   align-items: flex-start;
 }

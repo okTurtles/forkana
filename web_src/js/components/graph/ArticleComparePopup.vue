@@ -20,7 +20,7 @@
      footer 641:62040 — "Compare articles", full width, 40px. */
 
 import { formatDateYMD } from '../../utils/time.ts';
-import { COMPARE_CARET_HEIGHT, COMPARE_CARET_WIDTH } from './compare-popover.ts';
+import { COMPARE_CARET_HEIGHT, COMPARE_CARET_WIDTH, COMPARE_POPOVER_WIDTH } from './compare-popover.ts';
 
 const props = withDefaults(defineProps<{
   articles: Array<{
@@ -68,11 +68,17 @@ function getArticleHref(article: { repoOwner?: string; repoName?: string; fullNa
 }
 
 const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`});
+/* The box's geometry comes from compare-popover.ts, which places it: the CSS reads it
+   from these properties, so the painted box and the placement math cannot drift. */
+const geometryStyle = {
+  '--compare-popover-width': `${COMPARE_POPOVER_WIDTH}px`,
+  '--compare-caret-width': `${COMPARE_CARET_WIDTH}px`,
+};
 </script>
 
 <template>
   <section
-    class="compare-popover" :class="`is-${props.placement}`"
+    class="compare-popover" :class="`is-${props.placement}`" :style="geometryStyle"
     role="dialog" :aria-modal="props.placement === 'sheet' ? 'true' : 'false'" aria-labelledby="compare-popover-title"
   >
     <!-- Caret 641:62048: a bordered triangle on the box's edge, pointing at the picked bubbles. -->
@@ -128,7 +134,7 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
 .compare-popover {
   position: relative;
   box-sizing: border-box;
-  width: 383px;
+  width: var(--compare-popover-width);
   padding: 8px;
   border-radius: 12px;
   background: var(--color-surface);
@@ -162,12 +168,12 @@ const caretStyle = () => ({top: `${props.caretY - COMPARE_CARET_HEIGHT / 2}px`})
    1px ring where it meets it, so the two read as one outline. */
 .compare-popover-caret {
   position: absolute;
-  left: -7px;
+  left: calc(-1 * var(--compare-caret-width));
 }
 
 .compare-popover.is-left .compare-popover-caret {
   left: auto;
-  right: -7px;
+  right: calc(-1 * var(--compare-caret-width));
   transform: scaleX(-1);
 }
 

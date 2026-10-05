@@ -1,4 +1,4 @@
-/* The fork-graph response, as GET /api/v1/repos/{owner}/{repo}/fork-graph returns it and
+/* The fork-graph response, as GET /api/v1/repos/{owner}/{repo}/forks/graph returns it and
    as the subject page embeds it (pageData.subjectForkGraph). Only the fields the bubble
    view reads are listed; every one is optional because the view tolerates their absence. */
 
