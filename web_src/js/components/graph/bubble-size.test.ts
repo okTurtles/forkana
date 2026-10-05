@@ -4,6 +4,9 @@ import {
   BUBBLE_SIZE_LADDER,
   BUBBLE_UNKNOWN_RUNG,
   COMPARE_BADGE_ANGLE_DEG,
+  COMPARE_BADGE_DISTANCE,
+  COMPARE_OUTLINE,
+  COMPARE_RING_WIDTH,
   compareBadgeCenter,
   compareOrderFor,
   bubbleDiameterFor,
@@ -242,33 +245,37 @@ test('the count still fits when it is written from a rung the caller already has
   expect(countTextForRung(4, BUBBLE_UNKNOWN_RUNG)).toBe('4');
 });
 
-describe('compare mode drawing (#405 item 6)', () => {
-  test('the design values: thin 1.25px outline with 4/4 dashes, 2px ring, 22px badge with a 14px digit', () => {
-    const xl = BUBBLE_SIZE_LADDER.find((r) => r.name === 'XL').compare;
-    expect(xl).toEqual({outlineWidth: 1.25, dash: 4, gap: 4, ringWidth: 2, badgeDiameter: 22, badgeFontSize: 14});
-    const m = BUBBLE_SIZE_LADDER.find((r) => r.name === 'M').compare;
-    expect([m.outlineWidth, m.dash, m.gap]).toEqual([1.25, 4, 4]);
+describe('compare mode drawing (#405 item 6, figma 641:61930)', () => {
+  test('the outline and the ring are the figma constants, the same on every rung', () => {
+    expect(COMPARE_OUTLINE).toEqual({width: 1, dash: 3, gap: 3});
+    expect(COMPARE_RING_WIDTH).toBe(2);
   });
 
-  test('scales with the rung: never shrinks as the bubble grows, and the badge never outgrows the bubble', () => {
-    for (let i = 1; i < BUBBLE_SIZE_LADDER.length; i++) {
-      const prev = BUBBLE_SIZE_LADDER[i - 1].compare;
-      const cur = BUBBLE_SIZE_LADDER[i].compare;
-      for (const key of Object.keys(cur) as (keyof typeof cur)[]) {
-        expect(cur[key]).toBeGreaterThanOrEqual(prev[key]);
-      }
-    }
+  test('the badge is the 18px CounterLabel with a 12px number wherever it fits', () => {
     for (const rung of BUBBLE_SIZE_LADDER) {
-      expect(rung.compare.badgeDiameter).toBeLessThan(rung.diameter);
-      expect(rung.compare.ringWidth).toBeGreaterThan(rung.compare.outlineWidth);
+      if (rung.diameter >= 58) expect(rung.compareBadge).toEqual({diameter: 18, fontSize: 12});
     }
   });
 
-  test('the badge is centred on the ring, top right', () => {
-    const {x, y} = compareBadgeCenter(63);
-    expect(Math.hypot(x, y)).toBeCloseTo(63);
-    expect(x).toBeGreaterThan(0);
-    expect(y).toBeLessThan(0);
+  test('only the two smallest rungs shrink the badge, never below a readable size', () => {
+    const xs = BUBBLE_SIZE_LADDER.find((r) => r.name === 'XS').compareBadge;
+    const s = BUBBLE_SIZE_LADDER.find((r) => r.name === 'S').compareBadge;
+    expect(xs.diameter).toBeLessThan(s.diameter);
+    expect(s.diameter).toBeLessThan(18);
+    for (const rung of BUBBLE_SIZE_LADDER) {
+      // an 18px disc would cover over half of a 34px bubble: keep every badge below that
+      expect(rung.compareBadge.diameter).toBeLessThanOrEqual(rung.diameter / 2 + 3);
+      expect(rung.compareBadge.fontSize).toBeGreaterThanOrEqual(8);
+      expect(rung.compareBadge.fontSize).toBeLessThan(rung.compareBadge.diameter);
+    }
+  });
+
+  test('the badge sits where figma puts it: (87, 20) in a 100px bubble', () => {
+    const {x, y} = compareBadgeCenter(50);
+    // from the top-left corner of the 100px bubble
+    expect(50 + x).toBeCloseTo(87, 0);
+    expect(50 + y).toBeCloseTo(20, 0);
+    expect(Math.hypot(x, y)).toBeCloseTo(50 * COMPARE_BADGE_DISTANCE);
     expect(Math.atan2(-y, x) * 180 / Math.PI).toBeCloseTo(COMPARE_BADGE_ANGLE_DEG);
   });
 

@@ -17,13 +17,6 @@
   --bubble-dark-joint-stroke: #818b98;
   --bubble-dark-shadow-color: #000000;
   --bubble-dark-overlay-bg: rgba(27, 31, 35, 0.98);
-  /* Compare mode mirrors: the flat disc takes the joint fill (a white disc
-     would glare on the dark body), the near-black outline becomes a near-white
-     one, and the indigo ring and badge keep the brand colour. */
-  --bubble-dark-compare-fill: #1b1f23;
-  --bubble-dark-compare-outline: #d1d9e0;
-  --bubble-dark-compare-selected: var(--color-primary);
-  --bubble-dark-compare-badge-text: #ffffff;
 
   /* Same single-source treatment for the dark colorblind diff palette: bright orange
      (removed) vs clear blue (added), higher opacity than the light theme because dark
@@ -148,10 +141,6 @@
   --bubble-joint-stroke: var(--bubble-dark-joint-stroke);
   --bubble-shadow-color: var(--bubble-dark-shadow-color);
   --bubble-overlay-bg: var(--bubble-dark-overlay-bg);
-  --bubble-compare-fill: var(--bubble-dark-compare-fill);
-  --bubble-compare-outline: var(--bubble-dark-compare-outline);
-  --bubble-compare-selected: var(--bubble-dark-compare-selected);
-  --bubble-compare-badge-text: var(--bubble-dark-compare-badge-text);
 }
 
 /* "gitea-auto" keeps data-theme="gitea-auto" on <html>, so the selectors above never match it.
@@ -261,10 +250,6 @@
     --bubble-joint-stroke: var(--bubble-dark-joint-stroke);
     --bubble-shadow-color: var(--bubble-dark-shadow-color);
     --bubble-overlay-bg: var(--bubble-dark-overlay-bg);
-    --bubble-compare-fill: var(--bubble-dark-compare-fill);
-    --bubble-compare-outline: var(--bubble-dark-compare-outline);
-    --bubble-compare-selected: var(--bubble-dark-compare-selected);
-    --bubble-compare-badge-text: var(--bubble-dark-compare-badge-text);
   }
 }
 

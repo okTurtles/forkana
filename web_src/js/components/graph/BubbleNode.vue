@@ -25,7 +25,10 @@
 
 import { computed, watch, reactive } from "vue";
 import { formatDateYMD } from '../../utils/time.ts';
-import { compareBadgeCenter, compareOrderFor, type BubbleLabelDetail, type CompareRingStyle } from './bubble-size.ts';
+import {
+  COMPARE_OUTLINE, COMPARE_RING_WIDTH, compareBadgeCenter, compareOrderFor,
+  type BubbleLabelDetail, type CompareBadgeStyle,
+} from './bubble-size.ts';
 
 /* ──────────────────────────────────────────────────────────────────────────────
    LABEL LAYOUT CONSTANTS (all values explained to avoid "magic numbers")
@@ -91,8 +94,8 @@ const props = defineProps<{
   isActive?: boolean;             // selected article (persisted selection)
   isCompareMode?: boolean;        // whether compare mode is active
   compareState?: 'none' | 'first' | 'second';  // compare selection state
-  /* This bubble's rung's Compare-mode drawing (bubble-size.ts). */
-  compareStyle?: CompareRingStyle;
+  /* The order badge of this bubble's rung in Compare mode (bubble-size.ts). */
+  compareBadgeStyle?: CompareBadgeStyle;
   /* The author deleted this article. The bubble is kept — the forks below it
      need the ancestry — and stays interactive; it is drawn muted and dashed
      and says so in the expanded card. */
@@ -216,11 +219,24 @@ const gTransform = computed(() => `translate(${props.x},${props.y})`);
 const compareSelected = computed(() => props.compareState === 'first' || props.compareState === 'second');
 /* #405 item 6: in compare mode every bubble not (yet) picked is outlined with a
    thin dark dashed line, and a picked one gets a solid indigo ring and an
-   order badge instead — as the figma draws them. Both sit on a flat fill
-   (white in the light theme) rather than the resting gradient. */
+   order badge instead — as the figma draws them (values and node ids in
+   bubble-size.ts). Both are unfilled in figma, over the white page; here the
+   disc takes the page colour, which reads the same and still hides the
+   connectors behind it, and drops the resting gradient and shadow. */
 const compareDashed = computed(() => props.isCompareMode === true && props.compareState === 'none');
 const compareOrder = computed(() => props.isCompareMode === true ? compareOrderFor(props.compareState) : null);
 const compareBadge = computed(() => compareBadgeCenter(props.r));
+
+/* The compare stroke's width, or 0 outside compare mode. */
+const compareStrokeWidth = computed(() => {
+  if (props.isCompareMode !== true) return 0;
+  return compareSelected.value ? COMPARE_RING_WIDTH : COMPARE_OUTLINE.width;
+});
+
+/* Figma draws both strokes INSIDE the bubble, so the circle is inset by half
+   a stroke: the stroke's outer edge is then the bubble's edge, where the
+   connectors end. */
+const circleRadius = computed(() => Math.max(0, props.r - compareStrokeWidth.value / 2));
 
 /* The circle's paint in compare mode. An inline style rather than the
    presentation attributes below, so the focus/hover rules in the stylesheet
@@ -228,21 +244,20 @@ const compareBadge = computed(() => compareBadgeCenter(props.r));
    just clicked and therefore holds the focus. Null outside compare mode,
    where nothing changes. */
 const compareCircleStyle = computed(() => {
-  if (props.isCompareMode !== true || !props.compareStyle) return null;
-  const s = props.compareStyle;
+  if (props.isCompareMode !== true) return null;
   if (compareSelected.value) {
     return {
       fill: 'var(--bubble-compare-fill)',
       stroke: 'var(--bubble-compare-selected)',
-      strokeWidth: `${s.ringWidth}px`,
+      strokeWidth: `${COMPARE_RING_WIDTH}px`,
       strokeDasharray: 'none',
     };
   }
   return {
     fill: 'var(--bubble-compare-fill)',
     stroke: 'var(--bubble-compare-outline)',
-    strokeWidth: `${s.outlineWidth}px`,
-    strokeDasharray: `${s.dash} ${s.gap}`,
+    strokeWidth: `${COMPARE_OUTLINE.width}px`,
+    strokeDasharray: `${COMPARE_OUTLINE.dash} ${COMPARE_OUTLINE.gap}`,
   };
 });
 
@@ -281,7 +296,7 @@ function onKeyDown(ev: KeyboardEvent) {
   <!-- One node group at (x,y); we let the parent group receive the world transform -->
   <g
     class="node cursor-pointer select-none"
-    :class="{ 'is-expanded': expanded, 'is-frozen': frozen, 'is-tombstoned': isTombstoned }"
+    :class="{ 'is-expanded': expanded, 'is-frozen': frozen, 'is-tombstoned': isTombstoned, 'is-compare': isCompareMode === true }"
     :transform="gTransform" :data-node-id="id" role="button"
     :aria-label="isTombstoned
       ? `Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}, deleted by its author. Press Enter to select.`
@@ -296,7 +311,7 @@ function onKeyDown(ev: KeyboardEvent) {
         'compare-dashed': compareDashed,
         'compare-selected-first': props.compareState === 'first',
         'compare-selected-second': props.compareState === 'second'
-      }" :r="r" fill="url(#bubbleGrad)"
+      }" :r="circleRadius" fill="url(#bubbleGrad)"
       :stroke="isActive || expanded ? 'var(--color-primary)' : 'none'"
       stroke-width="1"
       :stroke-dasharray="props.isTombstoned ? '4,4' : 'none'"
@@ -354,13 +369,13 @@ function onKeyDown(ev: KeyboardEvent) {
     <!-- Compare mode: the picked bubble's place in the comparison, on its ring
          and over everything else in the bubble. -->
     <g
-      v-if="compareOrder !== null && compareStyle" class="compare-badge" aria-hidden="true"
+      v-if="compareOrder !== null && compareBadgeStyle" class="compare-badge" aria-hidden="true"
       :transform="`translate(${compareBadge.x},${compareBadge.y})`"
     >
-      <circle :r="compareStyle.badgeDiameter / 2" fill="var(--bubble-compare-selected)"/>
+      <circle :r="compareBadgeStyle.diameter / 2" fill="var(--bubble-compare-selected)"/>
       <text
         text-anchor="middle" dominant-baseline="central" fill="var(--bubble-compare-badge-text)"
-        :font-size="compareStyle.badgeFontSize" font-weight="700"
+        :font-size="compareBadgeStyle.fontSize" font-weight="600"
       >
         {{ compareOrder }}
       </text>
@@ -482,6 +497,20 @@ function onKeyDown(ev: KeyboardEvent) {
   color: var(--color-text-tertiary);
   line-height: 1;
   pointer-events: none;
+}
+
+/* Compare mode (figma 6484:44255): every line of the bubble is in the primary
+   text colour (#1f2328), the label at weight 600 and the date at 400. The
+   count already is (primary, 600). Outside compare mode the resting greys
+   stay. */
+.node.is-compare .html-label-wrapper .label {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.node.is-compare .html-label-wrapper .updated {
+  color: var(--color-text-primary);
+  font-weight: 400;
 }
 
 /* ── EXPANDED CARD (202px bubble) ────────────────────────────────────────
