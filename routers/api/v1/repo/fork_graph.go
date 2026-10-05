@@ -141,7 +141,7 @@ func GetForkGraph(ctx *context.APIContext) {
 	//   default: false
 	// - name: contributor_days
 	//   in: query
-	//   description: Days to look back for contributor activity (1-365)
+	//   description: "Accepted and validated (1-365) for compatibility; it no longer affects the response, since recent_count is no longer computed"
 	//   type: integer
 	//   default: 90
 	// - name: max_depth

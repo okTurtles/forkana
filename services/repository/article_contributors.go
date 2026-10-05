@@ -66,6 +66,20 @@ func ArticleContributorCountWithGitRepo(gitRepo *git.Repository, repo *repo_mode
 	return count, nil
 }
 
+// nodeContributorStats returns the contributor stats of one fork graph node: the
+// article's contributor count exactly as every other view of the subject shows it, so a
+// bubble, its table row and its article page always carry the same number (#405).
+// RecentCount is not computed (see ContributorStats). Returns nil when the count cannot
+// be computed, which the client shows as unknown.
+func nodeContributorStats(ctx context.Context, repo *repo_model.Repository) *ContributorStats {
+	total, err := ArticleContributorCount(ctx, repo)
+	if err != nil {
+		log.Warn("Failed to get contributor count for repo %d: %v", repo.ID, err)
+		return nil
+	}
+	return &ContributorStats{TotalCount: int(total)}
+}
+
 // ArticleContributorCount is ArticleContributorCountWithGitRepo for a caller that has
 // no git repository open.
 func ArticleContributorCount(ctx context.Context, repo *repo_model.Repository) (int64, error) {
