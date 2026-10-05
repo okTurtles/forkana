@@ -20,6 +20,8 @@ import (
 	"code.gitea.io/gitea/modules/log"
 	api "code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/services/convert"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // Error definitions
@@ -67,22 +69,33 @@ type ForkGraphParams struct {
 // three always list the same articles (#405). The Bubble view's API fallback (used for
 // retries) requests the same graph: custom/templates/shared/repo/bubble.tmpl builds its
 // url from SubjectForkGraphQuery, which is derived from these.
+//
+// IncludePrivate does not show anyone a private article they may not read: the forks
+// come from FindForks, which keeps only the repositories the doer can access, so an
+// anonymous reader still gets the public ones only, and a private article's owner (or a
+// collaborator) gets it too, as the Table view did before it was built from this graph.
+// Limit is per tree level; 100 keeps the old table's page size (the table has no pager).
 func SubjectForkGraphParams() ForkGraphParams {
 	return ForkGraphParams{
 		IncludeContributors: true,
 		ContributorDays:     90,
 		MaxDepth:            10,
+		IncludePrivate:      true,
 		Sort:                "updated",
 		Page:                1,
-		Limit:               50,
+		Limit:               100,
 	}
 }
 
 // SubjectForkGraphQuery is SubjectForkGraphParams as the fork-graph API's query string.
+// The parameter names are the API's (routers/api/v1/repo ForkGraphParams and
+// parseForkGraphParams); TestSubjectForkGraphQueryContract there parses this query with
+// the API's own parser and checks it gives back SubjectForkGraphParams.
 func SubjectForkGraphQuery() string {
 	p := SubjectForkGraphParams()
 	q := url.Values{}
 	q.Set("include_contributors", strconv.FormatBool(p.IncludeContributors))
+	q.Set("include_private", strconv.FormatBool(p.IncludePrivate))
 	q.Set("contributor_days", strconv.Itoa(p.ContributorDays))
 	q.Set("max_depth", strconv.Itoa(p.MaxDepth))
 	q.Set("sort", p.Sort)
@@ -271,6 +284,11 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 		return nil, err
 	}
 
+	// The contributor counts, once the tree is known (see attachContributorStats)
+	if params.IncludeContributors {
+		attachContributorStats(ctx, rootNode)
+	}
+
 	// Collect all repositories from the tree for batch loading
 	allRepos := collectRepositories(rootNode)
 
@@ -335,14 +353,14 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 	// Check depth limit
 	if level >= params.MaxDepth {
 		*maxDepthReached = true
-		return createLeafNode(ctx, repo, level, params), nil
+		return createLeafNode(repo, level), nil
 	}
 
 	// Get direct forks
 	forks, err := getDirectForks(ctx, repo.ID, doer, params)
 	if err != nil {
 		log.Error("Failed to get forks for repo %d: %v", repo.ID, err)
-		return createLeafNode(ctx, repo, level, params), nil
+		return createLeafNode(repo, level), nil
 	}
 
 	// Build children
@@ -367,27 +385,55 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 		}
 	}
 
-	return newForkNode(ctx, repo, level, children, params), nil
+	return newForkNode(repo, level, children), nil
 }
 
-// newForkNode builds the node of repo with its children, and its contributor stats when
-// they are requested.
-func newForkNode(ctx context.Context, repo *repo_model.Repository, level int, children []*ForkNode, params ForkGraphParams) *ForkNode {
-	node := &ForkNode{
+// newForkNode builds the node of repo with its children. The contributor stats are
+// attached once the whole tree is built (attachContributorStats).
+func newForkNode(repo *repo_model.Repository, level int, children []*ForkNode) *ForkNode {
+	return &ForkNode{
 		ID:       fmt.Sprintf("repo_%d", repo.ID),
 		Level:    level,
 		Children: children,
 		repo:     repo, // Store for batch processing
 	}
-	if params.IncludeContributors {
-		node.Contributors = nodeContributorStats(ctx, repo)
-	}
-	return node
 }
 
 // createLeafNode creates a leaf node without children
-func createLeafNode(ctx context.Context, repo *repo_model.Repository, level int, params ForkGraphParams) *ForkNode {
-	return newForkNode(ctx, repo, level, []*ForkNode{}, params)
+func createLeafNode(repo *repo_model.Repository, level int) *ForkNode {
+	return newForkNode(repo, level, []*ForkNode{})
+}
+
+// contributorCountWorkers is how many contributor counts of a graph run at once.
+const contributorCountWorkers = 4
+
+// attachContributorStats counts the contributors of every node of the tree, a few at a
+// time rather than one after the other. Each count has its own budget
+// (nodeContributorStats), and one that fails or runs out leaves its node without stats,
+// which the client shows as unknown.
+func attachContributorStats(ctx context.Context, root *ForkNode) {
+	var nodes []*ForkNode
+	var collect func(*ForkNode)
+	collect = func(n *ForkNode) {
+		if n == nil || n.repo == nil {
+			return
+		}
+		nodes = append(nodes, n)
+		for _, child := range n.Children {
+			collect(child)
+		}
+	}
+	collect(root)
+
+	var g errgroup.Group
+	g.SetLimit(contributorCountWorkers)
+	for _, n := range nodes {
+		g.Go(func() error {
+			n.Contributors = nodeContributorStats(ctx, n.repo) // each goroutine writes its own node
+			return nil
+		})
+	}
+	_ = g.Wait() // the workers never fail: a failed count is an unknown one
 }
 
 // createReadPermission creates a basic read permission for repositories

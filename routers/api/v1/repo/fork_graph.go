@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"code.gitea.io/gitea/modules/cache"
@@ -28,7 +30,9 @@ import (
 //     the response (graphs with include_contributors are never cached); recent_count is 0
 const forkGraphCacheVersion = "v4"
 
-// ForkGraphParams represents the query parameters for fork graph endpoint
+// ForkGraphParams represents the query parameters for fork graph endpoint. The subject
+// page requests the graph it embeds with the same names (services/repository
+// SubjectForkGraphQuery); TestSubjectForkGraphQueryContract keeps the two in step.
 type ForkGraphParams struct {
 	IncludeContributors bool   `form:"include_contributors"`
 	ContributorDays     int    `form:"contributor_days"`
@@ -178,35 +182,8 @@ func GetForkGraph(ctx *context.APIContext) {
 	//   "404":
 	//     "$ref": "#/responses/notFound"
 
-	// Parse query parameters with defaults
-	params := ForkGraphParams{
-		IncludeContributors: ctx.FormBool("include_contributors"),
-		ContributorDays:     90, // default
-		MaxDepth:            10, // default
-		IncludePrivate:      ctx.FormBool("include_private"),
-		Sort:                "updated", // default
-		Page:                1,         // default
-		Limit:               50,        // default
-	}
-
-	// Override defaults if parameters are explicitly provided
-	if ctx.FormString("contributor_days") != "" {
-		params.ContributorDays = ctx.FormInt("contributor_days")
-	}
-	if ctx.FormString("max_depth") != "" {
-		params.MaxDepth = ctx.FormInt("max_depth")
-	}
-	if ctx.FormString("sort") != "" {
-		params.Sort = ctx.FormString("sort")
-	}
-	if ctx.FormString("page") != "" {
-		params.Page = ctx.FormInt("page")
-	}
-	if ctx.FormString("limit") != "" {
-		params.Limit = ctx.FormInt("limit")
-	}
-
-	if err := params.validate(); err != nil {
+	params, err := parseForkGraphParams(ctx.Req.URL.Query())
+	if err != nil {
 		ctx.APIError(http.StatusBadRequest, err)
 		return
 	}
@@ -230,9 +207,10 @@ func GetForkGraph(ctx *context.APIContext) {
 	// node's count is cached by its branch head instead (ArticleContributorCount), so a
 	// fresh graph stays cheap and is never stale.
 	cacheGraph := !params.IncludeContributors
-	cacheKey := getCacheKey(ctx.Repo.Repository.ID, ctx.Repo.Repository.IsEmpty, ctx.Repo.Repository.NumForks, params, userID)
+	cacheKey := ""
 	c := cache.GetCache()
 	if cacheGraph && c != nil {
+		cacheKey = getCacheKey(ctx.Repo.Repository.ID, ctx.Repo.Repository.IsEmpty, ctx.Repo.Repository.NumForks, params, userID)
 		var cachedResponse repository.ForkGraphResponse
 		found, err := c.GetJSON(cacheKey, &cachedResponse)
 		if err == nil && found {
@@ -242,19 +220,8 @@ func GetForkGraph(ctx *context.APIContext) {
 		}
 	}
 
-	// Convert params to service params
-	serviceParams := repository.ForkGraphParams{
-		IncludeContributors: params.IncludeContributors,
-		ContributorDays:     params.ContributorDays,
-		MaxDepth:            params.MaxDepth,
-		IncludePrivate:      params.IncludePrivate,
-		Sort:                params.Sort,
-		Page:                params.Page,
-		Limit:               params.Limit,
-	}
-
 	// Generate graph
-	graph, err := repository.BuildForkGraph(ctx, ctx.Repo.Repository, serviceParams, ctx.Doer)
+	graph, err := repository.BuildForkGraph(ctx, ctx.Repo.Repository, params.serviceParams(), ctx.Doer)
 	if err != nil {
 		handleForkGraphError(ctx, err)
 		return
@@ -264,12 +231,58 @@ func GetForkGraph(ctx *context.APIContext) {
 	graph.Metadata.CacheStatus = "miss"
 
 	// Cache result
-	if cacheGraph && c != nil {
+	if cacheKey != "" {
 		ttl := getCacheTTL(ctx.Repo.Repository.IsPrivate)
 		_ = c.PutJSON(cacheKey, graph, int64(ttl.Seconds()))
 	}
 
 	ctx.JSON(http.StatusOK, graph)
+}
+
+// parseForkGraphParams reads the endpoint's query parameters, with their defaults, and
+// validates them. A parameter that does not parse counts as given with its zero value
+// (as ctx.FormBool and ctx.FormInt read it), which validation then refuses.
+func parseForkGraphParams(query url.Values) (ForkGraphParams, error) {
+	parseBool := func(name string) bool {
+		v, _ := strconv.ParseBool(query.Get(name))
+		return v
+	}
+	parseInt := func(name string, def int) int {
+		if query.Get(name) == "" {
+			return def
+		}
+		v, _ := strconv.Atoi(query.Get(name))
+		return v
+	}
+	params := ForkGraphParams{
+		IncludeContributors: parseBool("include_contributors"),
+		ContributorDays:     parseInt("contributor_days", 90),
+		MaxDepth:            parseInt("max_depth", 10),
+		IncludePrivate:      parseBool("include_private"),
+		Sort:                query.Get("sort"),
+		Page:                parseInt("page", 1),
+		Limit:               parseInt("limit", 50),
+	}
+	if params.Sort == "" {
+		params.Sort = "updated"
+	}
+	if err := params.validate(); err != nil {
+		return params, err
+	}
+	return params, nil
+}
+
+// serviceParams converts the endpoint's parameters for BuildForkGraph.
+func (p ForkGraphParams) serviceParams() repository.ForkGraphParams {
+	return repository.ForkGraphParams{
+		IncludeContributors: p.IncludeContributors,
+		ContributorDays:     p.ContributorDays,
+		MaxDepth:            p.MaxDepth,
+		IncludePrivate:      p.IncludePrivate,
+		Sort:                p.Sort,
+		Page:                p.Page,
+		Limit:               p.Limit,
+	}
 }
 
 // handleForkGraphError handles errors from fork graph generation

@@ -254,14 +254,15 @@ func getReadmeContent(gitRepo *git.Repository, repo *repo_model.Repository) (con
 	return "", "", ErrReadmeNotFound
 }
 
-// getContributorCount retrieves the contributor count for a repository
+// getContributorCount retrieves the contributor count for a repository, or -1 when it
+// cannot be computed (shown as unknown, like the bubble and the table row).
 // It accepts an already-opened git repository handle to avoid redundant I/O operations
 func getContributorCount(gitRepo *git.Repository, repo *repo_model.Repository) int64 {
 	// the same count the bubble, the table row and the article view show (#405)
 	count, err := repo_service.ArticleContributorCountWithGitRepo(gitRepo, repo)
 	if err != nil {
 		log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
-		return 0
+		return -1
 	}
 	return count
 }

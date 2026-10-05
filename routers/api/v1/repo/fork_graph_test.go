@@ -5,10 +5,12 @@ package repo
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 
 	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/services/contexttest"
+	repo_service "code.gitea.io/gitea/services/repository"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -232,4 +234,24 @@ func TestForkGraphDefaults(t *testing.T) {
 	assert.Equal(t, "updated", params.Sort)
 	assert.Equal(t, 1, params.Page)
 	assert.Equal(t, 50, params.Limit)
+}
+
+// The subject page embeds the graph it builds with SubjectForkGraphParams and points the
+// Bubble view's API fallback at SubjectForkGraphQuery: read by the API, that query must
+// give back the very same parameters, or a retry would draw a different graph.
+func TestSubjectForkGraphQueryContract(t *testing.T) {
+	query, err := url.ParseQuery(repo_service.SubjectForkGraphQuery())
+	assert.NoError(t, err)
+	params, err := parseForkGraphParams(query)
+	assert.NoError(t, err)
+	assert.Equal(t, repo_service.SubjectForkGraphParams(), params.serviceParams())
+}
+
+func TestParseForkGraphParamsDefaults(t *testing.T) {
+	params, err := parseForkGraphParams(url.Values{})
+	assert.NoError(t, err)
+	assert.Equal(t, ForkGraphParams{ContributorDays: 90, MaxDepth: 10, Sort: "updated", Page: 1, Limit: 50}, params)
+
+	_, err = parseForkGraphParams(url.Values{"limit": {"abc"}})
+	assert.Error(t, err)
 }

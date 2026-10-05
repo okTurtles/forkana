@@ -434,7 +434,19 @@ func chooseSubjectArticle(ctx *context.Context) bool {
 		return true
 	}
 
-	return len(graph.Articles()) == 1
+	return liveArticleCount(graph) == 1
+}
+
+// liveArticleCount is the number of articles of the graph that are not tombstones: the
+// graph keeps a deleted article for the ancestry of its forks, but it cannot be read.
+func liveArticleCount(graph *repo_service.ForkGraphResponse) int {
+	live := 0
+	for _, entry := range graph.Articles() {
+		if !entry.Repo.IsTombstone() {
+			live++
+		}
+	}
+	return live
 }
 
 // selectedSubjectArticle is the live article of the subject's fork graph that the
@@ -473,6 +485,8 @@ func subjectForkGraph(ctx *context.Context) *repo_service.ForkGraphResponse {
 	if err != nil {
 		log.Warn("BuildForkGraph for %s: %v", ctx.Repo.Repository.FullName(), err)
 		graph = nil
+		// the Table view then says the articles could not be listed, not that there are none
+		ctx.Data["SubjectForkGraphFailed"] = true
 	}
 	ctx.Data[subjectForkGraphDataKey] = graph
 	return graph
@@ -532,13 +546,14 @@ func RenderRepositoryHistory(ctx *context.Context) {
 		return
 	}
 
-	// Initialize git repository
-	gitRepo, err := gitrepo.OpenRepository(ctx, ctx.Repo.Repository)
+	// The request's own handle of the repository (shared with the rest of the request,
+	// closed when it ends), not one more of its own
+	gitRepo, closer, err := gitrepo.RepositoryFromContextOrOpen(ctx, ctx.Repo.Repository)
 	if err != nil {
 		ctx.ServerError("OpenRepository", err)
 		return
 	}
-	defer gitRepo.Close()
+	defer closer.Close()
 
 	// Get default branch
 	defaultBranch := ctx.Repo.Repository.DefaultBranch
@@ -613,7 +628,8 @@ func RenderRepositoryHistory(ctx *context.Context) {
 }
 
 // articleContributorCount returns the contributor count of the article in the context,
-// taken from the request's fork graph when the article is one of its nodes.
+// taken from the request's fork graph when the article is one of its nodes, or -1 when
+// it cannot be computed (shown as unknown, like the bubble and the table row).
 func articleContributorCount(ctx *context.Context, gitRepo *git.Repository) int64 {
 	repo := ctx.Repo.Repository
 	if graph := subjectForkGraph(ctx); graph != nil {
@@ -626,7 +642,7 @@ func articleContributorCount(ctx *context.Context, gitRepo *git.Repository) int6
 	count, err := repo_service.ArticleContributorCountWithGitRepo(gitRepo, repo)
 	if err != nil {
 		log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)
-		return 0
+		return -1
 	}
 	return count
 }

@@ -26,7 +26,7 @@
 				<a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> /
 				<a href="{{$Repo1.LinkCtx ctx}}">{{$Subject.Name}}</a>
 			</strong>
-			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}} · Last update: {{$Repo1.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
+			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{if ge $Repo1ContributorCount 0}}{{$Repo1ContributorCount}}{{else}}-{{end}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}} · Last update: {{$Repo1.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
 		</div>
 	</td>
 	<td colspan="3" class="diff-repo-header-cell diff-repo-header-right tw-border-l tw-border-[#d1d9e0]">
@@ -36,7 +36,7 @@
 				<a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> /
 				<a href="{{$Repo2.LinkCtx ctx}}">{{$Subject.Name}}</a>
 			</strong>
-			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}} · Last update: {{$Repo2.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
+			<div class="tw-text-[var(--color-text-light-3)] tw-text-[12px] tw-italic tw-mt-1 tw-ml-5">{{if ge $Repo2ContributorCount 0}}{{$Repo2ContributorCount}}{{else}}-{{end}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}} · Last update: {{$Repo2.UpdatedUnix.AsTime.Format "2006-01-02"}}</div>
 		</div>
 	</td>
 </tr>
@@ -91,7 +91,7 @@
 					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
 						{{svg "octicon-repo-forked" 14}}
 						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> / {{$Subject.Name}}</strong>
-						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}}</span>
+						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{if ge $Repo1ContributorCount 0}}{{$Repo1ContributorCount}}{{else}}-{{end}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}}</span>
 					</div>
 				</td>
 			</tr>
@@ -113,7 +113,7 @@
 					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
 						{{svg "octicon-repo-forked" 14}}
 						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> / {{$Subject.Name}}</strong>
-						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}}</span>
+						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{if ge $Repo2ContributorCount 0}}{{$Repo2ContributorCount}}{{else}}-{{end}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}}</span>
 					</div>
 				</td>
 			</tr>
@@ -137,7 +137,7 @@
 					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
 						{{svg "octicon-repo-forked" 14}}
 						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo1.Owner.Name}}">{{$Repo1.Owner.Name}}</a> / {{$Subject.Name}}</strong>
-						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo1ContributorCount}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}}</span>
+						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{if ge $Repo1ContributorCount 0}}{{$Repo1ContributorCount}}{{else}}-{{end}} Contributor{{if ne $Repo1ContributorCount 1}}s{{end}}</span>
 					</div>
 				</td>
 			</tr>
@@ -165,7 +165,7 @@
 					<div class="tw-flex tw-items-center tw-gap-1 tw-px-2 tw-py-1">
 						{{svg "octicon-repo-forked" 14}}
 						<strong><a href="{{AppSubUrl}}/{{PathEscape $Repo2.Owner.Name}}">{{$Repo2.Owner.Name}}</a> / {{$Subject.Name}}</strong>
-						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{$Repo2ContributorCount}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}}</span>
+						<span class="tw-text-[var(--color-text-light-3)] tw-text-[11px] tw-ml-auto">{{if ge $Repo2ContributorCount 0}}{{$Repo2ContributorCount}}{{else}}-{{end}} Contributor{{if ne $Repo2ContributorCount 1}}s{{end}}</span>
 					</div>
 				</td>
 			</tr>

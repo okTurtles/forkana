@@ -15,10 +15,15 @@ import (
 	"code.gitea.io/gitea/modules/log"
 )
 
-// articleContributorCountCacheTTL is how long a count is cached. The key carries the
-// branch head, so a push makes a new key rather than serving a stale count; the TTL
-// only bounds how long unused keys linger.
-const articleContributorCountCacheTTL int64 = 60 * 60
+// articleContributorCountCacheTTL is how long a count is cached. A count is immutable:
+// the key carries the branch head (and the "since" time), so a push makes a new key
+// rather than serving a stale count. The TTL therefore only has to bound how many keys
+// pile up (one per push, not per view); a short one would just make the first visitor
+// after each expiry recount every article of the subject.
+const articleContributorCountCacheTTL int64 = 7 * 24 * 60 * 60
+
+// nodeContributorCountTimeout is the budget of one fork graph node's count.
+const nodeContributorCountTimeout = 5 * time.Second
 
 // ArticleContributorSince returns the time from which commits count towards an
 // article's contributors. A fork only counts the contributors who committed after it
@@ -72,13 +77,14 @@ func ArticleContributorCountWithGitRepo(gitRepo *git.Repository, repo *repo_mode
 // RecentCount is not computed (see ContributorStats). Returns nil when the count cannot
 // be computed, which the client shows as unknown.
 //
-// The count runs off the graph's traversal budget (context.WithoutCancel): BuildForkGraph
-// bounds the whole traversal with a 30s deadline, and a count is best effort — a slow one
-// must show up as "unknown" for that node, not use up the deadline and fail the whole
-// graph with ErrProcessingTimeout. The weekly-stats count it replaced was isolated the
-// same way (it ran with context.Background()).
+// Each count has a budget of its own (nodeContributorCountTimeout), detached from the
+// request's cancellation (context.WithoutCancel) so that it cannot be cut short by
+// anything but that budget: a count is best effort, and a slow one shows up as "unknown"
+// for that node instead of holding the page or failing the whole graph.
 func nodeContributorStats(ctx context.Context, repo *repo_model.Repository) *ContributorStats {
-	total, err := ArticleContributorCount(context.WithoutCancel(ctx), repo)
+	countCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nodeContributorCountTimeout)
+	defer cancel()
+	total, err := ArticleContributorCount(countCtx, repo)
 	if err != nil {
 		log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)
 		return nil

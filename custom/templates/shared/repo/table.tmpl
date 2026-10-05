@@ -88,6 +88,15 @@
                             </td>
                         </tr>
                         {{end}}
+                        {{else if .SubjectForkGraphFailed}}
+                        {{/* the fork graph failed to build (a timeout, say): there may well be articles */}}
+                        <tr data-role="history-table-error">
+                            <td colspan="5" class="tw-text-center tw-text-sm">
+                                <span class="tw-text-red">{{ctx.Locale.Tr "repo.subject_articles_failed"}}</span>
+                                {{/* an empty href reloads the page as it is: same view, sort and selection */}}
+                                <a class="tw-ml-2" href="">{{ctx.Locale.Tr "repo.subject_articles_retry"}}</a>
+                            </td>
+                        </tr>
                         {{else}}
                         <tr>
                             <td colspan="5" class="tw-text-center tw-text-sm tw-text-gray-500">No forks available.</td>

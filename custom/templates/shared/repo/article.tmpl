@@ -29,7 +29,8 @@
             <div class="tw-flex tw-items-center tw-gap-2">
                 <span class="pill">
                     {{svg "octicon-person" 16 "tw-mr-1"}}
-                    {{.ReadmeContributorCount}} {{if eq .ReadmeContributorCount 1}}contributor{{else}}contributors{{end}}
+                    {{/* -1: the count could not be computed, shown as unknown like the table row */}}
+                    {{if ge .ReadmeContributorCount 0}}{{.ReadmeContributorCount}}{{else}}-{{end}} {{if eq .ReadmeContributorCount 1}}contributor{{else}}contributors{{end}}
                 </span>
                 {{if and .ReadmeLastCommit .ReadmeLastCommit.Committer}}
                     <span class="pill">
