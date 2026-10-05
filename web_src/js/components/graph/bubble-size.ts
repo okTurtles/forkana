@@ -133,11 +133,11 @@ export const BUBBLE_SIZE_LADDER: readonly BubbleRung[] = [
   {name: 'XL', minRatio: 0.75, diameter: 126, countFontSize: 22, labelDetail: 'full', compareBadge: COMPARE_BADGE},
 ] as const;
 
-/* THE STATS ARE NOT IN YET. The API reports a repository whose contributor
-   stats are still being computed as 0 contributors (see the `statsPending`
-   handling in FishboneGraph), and a ratio needs a real maximum to mean
-   anything. When NOTHING in the graph has a real count there is no comparison
-   to draw, so every bubble sits on the bottom rung until the numbers arrive —
+/* NO COUNT TO COMPARE. The API leaves out the contributor count of a repository
+   it could not count (FishboneGraph marks such a node `statsPending`; a real 0 is
+   a count like any other), and a ratio needs a real maximum to mean anything.
+   When NOTHING in the graph has a real count there is no comparison to draw, so
+   every bubble sits on the bottom rung —
    deliberately the SMALLEST, not the largest: `contributorRatio(0, 0)` answers
    1 ("everything ties for biggest"), which would otherwise paint every bubble
    at 126px, the single most misleading picture available. */

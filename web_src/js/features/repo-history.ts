@@ -1,11 +1,11 @@
-import {nextTick, reactive, ref, watch} from 'vue';
+import {nextTick, ref, watch} from 'vue';
 import {initRepoBubbleView} from './repo-bubble-view.ts';
 import {initArticleEditor} from './article-editor.ts';
 import {initArticleSettings} from './article-settings.ts';
 import {GET} from '../modules/fetch.ts';
 import {BUBBLE_VISIBLE_EVENT} from '../components/graph/graph-viewport.ts';
 import {
-  SELECTION_PARAM, SELECTION_UPDATED_EVENT,
+  BUBBLE_OPEN_ARTICLE_EVENT, BUBBLE_SELECTED_EVENT, SELECTION_PARAM, SELECTION_UPDATED_EVENT,
   clearLegacyStoredSelection, matchesSelection, normalizeSelection, resolveSelection,
   selectionFromParam, setCurrentSelection, withSelectionParam,
   type RepoSelection,
@@ -64,6 +64,28 @@ function parseLocation(appSubUrl: string | undefined): {view: ViewKey, mode: str
     return {view: 'article', mode, owner: decodeURIComponent(segments[2]), subject: decodeURIComponent(segments[1])};
   }
   return {view, mode, owner: null, subject: null};
+}
+
+// Do two url paths name the same page? Percent-encoding and trailing slashes aside.
+function samePath(a: string, b: string): boolean {
+  try {
+    return decodeURIComponent(a).replace(/\/+$/, '') === decodeURIComponent(b).replace(/\/+$/, '');
+  } catch {
+    return a === b;
+  }
+}
+
+// The state a history entry of the subject page records.
+function historyStateFor(view: ViewKey, mode: string, selection: RepoSelection | null): HistoryState {
+  return {
+    view,
+    mode,
+    owner: selection?.owner ?? null,
+    subject: selection?.subject ?? null,
+    repo: selection?.repo ?? null,
+    archived: selection?.archived === true,
+    link: selection?.link ?? null,
+  };
 }
 
 function selectionFromElement(el: Element): RepoSelection | null {
@@ -131,13 +153,6 @@ export function initRepoHistory() {
 
   // Was the page opened on an article url (the vanity "/subject/{subject}/{owner}[/{n}]" or
   // the permanent repository url) rather than on the subject url itself?
-  const samePath = (a: string, b: string) => {
-    try {
-      return decodeURIComponent(a).replace(/\/+$/, '') === decodeURIComponent(b).replace(/\/+$/, '');
-    } catch {
-      return a === b;
-    }
-  };
   const openedOnArticleUrl = !samePath(window.location.pathname, new URL(subjectUrl, window.location.origin).pathname);
   const initialState = window.history.state as HistoryState | null;
   const initialSelection = pickInitialSelection({
@@ -176,9 +191,8 @@ export function initRepoHistory() {
   let loadedArticle: RepoSelection | null = renderedArticle;
   let loadedMode = initialMode || 'read';
 
-  const viewLoaded = reactive({
-    bubble: false,
-  });
+  // whether the bubble view has been mounted (nothing watches it)
+  const viewLoaded = {bubble: false};
 
   let tableBound = false;
   let loaderEl: HTMLElement | null = null;
@@ -286,23 +300,21 @@ export function initRepoHistory() {
   // The view tabs are links: keep their targets on the selection, so opening one in a new
   // tab (or with JavaScript unavailable to intercept it) lands on the same article.
   function syncNavLinks() {
-    if (!navEl) return;
-    for (const anchor of navEl.querySelectorAll<HTMLAnchorElement>('a[data-view]')) {
-      const view = anchor.getAttribute('data-view') as ViewKey;
-      if (view) anchor.setAttribute('href', urlFor(view, 'read', selectedRepo.value));
+    if (navEl) {
+      for (const anchor of navEl.querySelectorAll<HTMLAnchorElement>('a[data-view]')) {
+        const view = anchor.getAttribute('data-view') as ViewKey;
+        if (view) anchor.setAttribute('href', urlFor(view, 'read', selectedRepo.value));
+      }
+    }
+    // the Table view's Sort menu reloads the page, so its links carry the selection too
+    for (const anchor of root.querySelectorAll<HTMLAnchorElement>('a.history-table-sort')) {
+      const href = anchor.getAttribute('href');
+      if (href) anchor.setAttribute('href', withSelectionParam(href, selectedRepo.value));
     }
   }
 
   function writeHistory(view: ViewKey, mode: string, selection: RepoSelection | null, how: 'push' | 'replace') {
-    const state: HistoryState = {
-      view,
-      mode,
-      owner: selection?.owner ?? null,
-      subject: selection?.subject ?? null,
-      repo: selection?.repo ?? null,
-      archived: selection?.archived === true,
-      link: selection?.link ?? null,
-    };
+    const state = historyStateFor(view, mode, selection);
     const url = urlFor(view, mode, selection);
     if (how === 'replace') {
       window.history.replaceState(state, '', url);
@@ -342,7 +354,8 @@ export function initRepoHistory() {
   // so Back/Forward and a reload restore it), 'none' leaves the history alone (the caller
   // is restoring an entry, or is about to push a new one).
   function setSelection(next: RepoSelection | null | undefined, history: 'replace' | 'none') {
-    const normalized = resolveSelection(normalizeSelection(next), candidates) ?? normalizeSelection(next);
+    const raw = normalizeSelection(next);
+    const normalized = resolveSelection(raw, candidates) ?? raw;
     const changed = !(selectedRepo.value === null && normalized === null) && !matchesSelection(selectedRepo.value, normalized);
     if (changed) {
       selectedRepo.value = normalized;
@@ -594,10 +607,12 @@ export function initRepoHistory() {
     let selection: RepoSelection | null;
     if (loc.owner) {
       const pathname = window.location.pathname;
-      const linksHere = (s: RepoSelection | null) => Boolean(s?.link) && new URL(s.link, window.location.origin).pathname === pathname;
+      const linksHere = (s: RepoSelection | null) => Boolean(s?.link) && samePath(new URL(s.link, window.location.origin).pathname, pathname);
+      // An article url no row links to (say, one from before the owner's articles were
+      // renumbered): keep the url itself as the link, so its article index is not lost.
       selection = candidates.find(linksHere) ??
         (linksHere(renderedArticle) ? renderedArticle : null) ??
-        normalizeSelection({owner: loc.owner, repo: loc.subject, subject: loc.subject});
+        normalizeSelection({owner: loc.owner, repo: loc.subject, subject: loc.subject, link: pathname});
     } else {
       selection = resolveSelection(selectionFromParam(new URL(window.location.href).searchParams.get(SELECTION_PARAM)), candidates);
     }
@@ -662,18 +677,10 @@ export function initRepoHistory() {
   const entryUrl = openedOnArticleUrl ?
     window.location.pathname + window.location.search :
     withSelectionParam(window.location.pathname + window.location.search, selectedRepo.value);
-  window.history.replaceState({
-    view: activeView.value,
-    mode: articleMode.value,
-    owner: selectedRepo.value?.owner ?? null,
-    subject: selectedRepo.value?.subject ?? null,
-    repo: selectedRepo.value?.repo ?? null,
-    archived: selectedRepo.value?.archived === true,
-    link: selectedRepo.value?.link ?? null,
-  } satisfies HistoryState, '', entryUrl + window.location.hash);
+  window.history.replaceState(historyStateFor(activeView.value, articleMode.value, selectedRepo.value), '', entryUrl + window.location.hash);
 
-  window.addEventListener('repo:bubble-selected', handleBubbleSelection as EventListener);
-  window.addEventListener('repo:bubble-open-article', handleBubbleOpenArticle as EventListener);
+  window.addEventListener(BUBBLE_SELECTED_EVENT, handleBubbleSelection as EventListener);
+  window.addEventListener(BUBBLE_OPEN_ARTICLE_EVENT, handleBubbleOpenArticle as EventListener);
   // Compare mode lives in the bubble view: pressing Compare on another view goes there.
   // A graph already mounted (hidden) handles the press itself; one that is not yet gets
   // it as a request when it mounts.

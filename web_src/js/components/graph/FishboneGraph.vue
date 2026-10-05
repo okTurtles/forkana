@@ -36,6 +36,7 @@ import ArticleComparePopup from "./ArticleComparePopup.vue";
 import { COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
 import CompareAnnouncement, { type CompareAnnouncementMessages, type CompareAnnouncementState } from "./CompareAnnouncement.vue";
 import { takeCompareModeRequest } from "../../modules/compare-mode-request.ts";
+import type { ForkGraphNode, ForkGraphResponse } from "./fork-graph-api.ts";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import { GET } from "../../modules/fetch.ts";
 import { extractArticleSummary } from "./article-summary.ts";
@@ -52,7 +53,7 @@ import {
   type ContainerSize,
 } from "./graph-viewport.ts";
 import {
-  SELECTION_PARAM, SELECTION_UPDATED_EVENT, getCurrentSelection, selectionToParam,
+  BUBBLE_OPEN_ARTICLE_EVENT, BUBBLE_SELECTED_EVENT, SELECTION_PARAM, SELECTION_UPDATED_EVENT, getCurrentSelection, selectionToParam,
   type RepoSelection as RepoSelectionDetail,
 } from "../../modules/repo-selection.ts";
 
@@ -392,7 +393,7 @@ interface FishboneGraphProps {
   apiUrl?: string | null;
   /* The graph already built by the server, in the API's response shape, drawn
      instead of the first API request. */
-  initialGraph?: Record<string, any> | null;
+  initialGraph?: ForkGraphResponse | null;
   owner?: string | null;
   repo?: string | null;
   subject?: string | null;
@@ -421,7 +422,7 @@ const props = withDefaults(defineProps<FishboneGraphProps>(), {
 });
 
 /* props.initialGraph until it has been drawn once (see fetchForkGraphAndSet). */
-let pendingInitialGraph: Record<string, any> | null = props.initialGraph ?? null;
+let pendingInitialGraph: ForkGraphResponse | null = props.initialGraph ?? null;
 
 const selectedNodeId = ref<NodeId | null>(null);
 let pendingExternalSelection: RepoSelectionDetail | null = null;
@@ -474,27 +475,14 @@ function findNodeBySelection(detail: RepoSelectionDetail): Node | null {
   const desiredRepo = normalize(detail.repo || detail.subject || '');
   if (!desiredOwner || !desiredRepo) return null;
   for (const node of Object.values(state.graph)) {
-    const ownerCandidates = [
-      node.repoOwner,
-      node.fullName?.split('/')?.[0],
-      node.parentId === null ? (props.owner ?? null) : null,
-    ].filter(Boolean) as string[];
-    const repoCandidates = [
-      node.repoName,
-      node.fullName?.split('/')?.[1],
-      node.repoSubject,
-      node.parentId === null ? (props.repo ?? null) : null,
-    ].filter(Boolean) as string[];
-    /* The node's OWN owner and name, exactly as getSelectionDetailFromNode()
-       derives them: the first candidate. The props are only a fallback for a
-       root that carries neither. Matching ANY candidate let the root claim
-       every selection whose owner was the page's (the props name the article
-       the page was rendered for, not the root) and whose repository shares
-       the root's slug — which every article of a subject does. */
-    if (
-      normalize(ownerCandidates[0]) === desiredOwner &&
-      normalize(repoCandidates[0]) === desiredRepo
-    ) {
+    /* The node's OWN owner and name, the very selection clicking it would make.
+       The props are only a fallback for a root that carries neither. Matching
+       ANY candidate let the root claim every selection whose owner was the
+       page's (the props name the article the page was rendered for, not the
+       root) and whose repository shares the root's slug — which every article
+       of a subject does. */
+    const own = getSelectionDetailFromNode(node);
+    if (own && normalize(own.owner) === desiredOwner && normalize(own.repo) === desiredRepo) {
       return node;
     }
   }
@@ -540,21 +528,19 @@ function handleExternalSelection(event: Event) {
   setSelectionFromDetail(normalized);
 }
 
-/* WAITING FOR THE CONTRIBUTOR STATS.
+/* NO CONTRIBUTOR COUNT AT ALL.
 
-   The server computes contributor stats asynchronously and, until they are
-   ready, reports every repository as 0 contributors. Sizes here are RATIOS
-   against the biggest article, so a graph of all-zeros has no scale to draw:
-   rendering it anyway paints every bubble at the top rung (126px) and — since
-   the graph is fetched exactly once, on mount — leaves it that way until the
-   user reloads the page.
+   Every count comes from the server (services/repository ArticleContributorCount),
+   and a real 0 is drawn as 0. A node arrives WITHOUT a count only when the server
+   failed to compute it (a git error, a timeout); buildGraphFromApi marks it
+   `statsPending`. Sizes here are RATIOS against the biggest article, so a graph in
+   which no node has a count has no scale to draw.
 
-   So a graph that is entirely placeholders is not drawn. The loading state is
-   held and the fetch is repeated, backing off, for as long as it is worth
-   waiting. The delays are bounded: stats generation can fail, and a spinner
-   that never resolves is worse than a rough picture. When they run out the
-   graph is drawn from the placeholders, with `statsUnknown` putting every
-   bubble on the bottom rung rather than the top. */
+   Such a graph is not drawn straight away: the loading state is held and the fetch
+   is repeated, backing off, in case the failure was transient. The delays are
+   bounded, since a spinner that never resolves is worse than a rough picture. When
+   they run out the graph is drawn from the placeholders, with BUBBLE_UNKNOWN_RUNG
+   putting every bubble on the bottom rung rather than the top. */
 const STATS_RETRY_DELAYS_MS = [1500, 2500, 4000, 6000] as const;
 let statsRetry = 0;
 let statsRetryTimer: number | null = null;
@@ -624,7 +610,7 @@ async function fetchForkGraphAndSet() {
       announceToScreenReader(errorText);
       return;
     }
-    await applyGraphResponse(await res.json());
+    await applyGraphResponse(await res.json() as ForkGraphResponse);
   } catch (err) {
     const errorText = err instanceof Error ? err.message : 'Failed to load fork graph';
     console.error('FishboneGraph: failed to fetch graph', err);
@@ -636,7 +622,7 @@ async function fetchForkGraphAndSet() {
 }
 
 /* Draws a fork-graph response (the API's shape), wherever it came from. */
-async function applyGraphResponse(json: any) {
+async function applyGraphResponse(json: ForkGraphResponse | null) {
   const graph = buildGraphFromApi(json?.root);
 
   /* Nothing real to draw yet: stay on the loading state and come back for the
@@ -681,14 +667,14 @@ async function applyGraphResponse(json: any) {
   }
 }
 
-function buildGraphFromApi(root: any): Graph {
+function buildGraphFromApi(root: ForkGraphNode | null | undefined): Graph {
   const g: Graph = {};
   if (!root) return g;
 
   // Store the root API data so we can check repository.empty flag
   let rootApiData = root;
 
-  const visit = (n: any, parentId: string | null): string => {
+  const visit = (n: ForkGraphNode | null | undefined, parentId: string | null): string => {
     if (!n) return '';
     const id: string = n?.id ?? (n?.repository?.full_name ?? Math.random().toString(36).slice(2));
     /* total_count is the article's contributor count exactly as the Table and
@@ -1595,7 +1581,7 @@ onMounted(async () => {
       applySelection(null, null);
       pendingExternalSelection = null;
       /* repo-history.ts records the change and broadcasts it back. */
-      window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: null }));
+      window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: null }));
     }
   });
 
@@ -1929,7 +1915,7 @@ function onBubbleClick(n: Node) {
   const payload = { ...detail };
   applySelection(n, payload);
   announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
-  window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: payload }));
+  window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: payload }));
 }
 
 /* ── THE OPENED ARTICLE (425px, centred) ──────────────────────────────────
@@ -2292,7 +2278,7 @@ function onBubbleView(n: Node) {
   if (!detail) return;
   const payload = { ...detail };
   applySelection(n, payload);
-  window.dispatchEvent(new CustomEvent('repo:bubble-open-article', { detail: payload }));
+  window.dispatchEvent(new CustomEvent(BUBBLE_OPEN_ARTICLE_EVENT, { detail: payload }));
 }
 
 /* Click handler for joint-parent (a "mini circle", the point of contention
@@ -2317,7 +2303,7 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
   const detail = target ? getSelectionDetailFromNode(target) : null;
   if (target && detail) {
     applySelection(target, detail);
-    window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: { ...detail } }));
+    window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: { ...detail } }));
     compareUrl.searchParams.set(SELECTION_PARAM, selectionToParam(detail));
   }
   window.location.href = compareUrl.pathname + compareUrl.search;

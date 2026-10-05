@@ -34,6 +34,12 @@ export const SELECTION_PARAM = 'selected';
 /** Broadcast whenever the selection changes; the detail is the new selection or null. */
 export const SELECTION_UPDATED_EVENT = 'repo:selection-updated';
 
+/** Sent by the bubble view when a bubble is selected (detail: the selection) or cleared (null). */
+export const BUBBLE_SELECTED_EVENT = 'repo:bubble-selected';
+
+/** Sent by the bubble view when a bubble asks for its article to be opened; the detail is its selection. */
+export const BUBBLE_OPEN_ARTICLE_EVENT = 'repo:bubble-open-article';
+
 // keys of the localStorage selection used by earlier versions, only ever removed now
 const LEGACY_STORAGE_KEYS = [
   'selectedArticleOwner',

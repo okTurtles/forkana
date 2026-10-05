@@ -223,13 +223,17 @@ const compareSelected = computed(() => props.compareState === 'first' || props.c
    bubble-size.ts). Both are unfilled in figma, over the white page; here the
    disc takes the page colour, which reads the same and still hides the
    connectors behind it, and drops the resting gradient and shadow. */
-const compareDashed = computed(() => props.isCompareMode === true && props.compareState === 'none');
+/* A deleted article keeps its own look (faded, grey 4/4 dashes) in compare mode
+   until it is picked: the figma's compare frames only draw live articles, and the
+   compare dashes would make it indistinguishable from them. */
+const compareOutlined = computed(() => props.isCompareMode === true && (compareSelected.value || props.isTombstoned !== true));
+const compareDashed = computed(() => compareOutlined.value && props.compareState === 'none');
 const compareOrder = computed(() => props.isCompareMode === true ? compareOrderFor(props.compareState) : null);
 const compareBadge = computed(() => compareBadgeCenter(props.r));
 
-/* The compare stroke's width, or 0 outside compare mode. */
+/* The compare stroke's width, or 0 where there is no compare outline. */
 const compareStrokeWidth = computed(() => {
-  if (props.isCompareMode !== true) return 0;
+  if (!compareOutlined.value) return 0;
   return compareSelected.value ? COMPARE_RING_WIDTH : COMPARE_OUTLINE.width;
 });
 
@@ -244,7 +248,7 @@ const circleRadius = computed(() => Math.max(0, props.r - compareStrokeWidth.val
    just clicked and therefore holds the focus. Null outside compare mode,
    where nothing changes. */
 const compareCircleStyle = computed(() => {
-  if (props.isCompareMode !== true) return null;
+  if (!compareOutlined.value) return null;
   if (compareSelected.value) {
     return {
       fill: 'var(--bubble-compare-fill)',

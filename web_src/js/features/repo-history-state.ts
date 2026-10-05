@@ -56,6 +56,11 @@ export type InitialSelectionInput = {
 export function pickInitialSelection(input: InitialSelectionInput): RepoSelection | null {
   if (input.serverArticle !== undefined) return normalizeSelection(input.serverArticle);
   if (input.historySelection !== undefined) {
+    /* Unlike the url parameter, a recorded selection is kept even when no candidate
+       matches it: an entry made on an article url (an archived article, or one
+       outside the candidate list) recorded what the page really showed, link
+       included, and dropping it would forget that article on Back/Forward. The url
+       parameter is typed or shared by people, so an unknown one is ignored. */
     return resolveSelection(input.historySelection, input.candidates) ?? input.historySelection;
   }
   const fromUrl = resolveSelection(input.urlSelection, input.candidates);
