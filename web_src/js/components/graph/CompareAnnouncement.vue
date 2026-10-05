@@ -75,11 +75,19 @@ function message(): string {
 /* Announcement 484:190672: a tinted strip with a 1px brand border above and
    below (#e9e7ff and #4e40fa @40% in figma). The tint is the brand colour at
    12% over the page, which is #e9e7ff in the light theme and stays a tint of
-   the brand on the dark one. 8px 48px of padding on a desktop. */
+   the brand on the dark one. */
 .compare-announcement {
   box-sizing: border-box;
   width: 100%;
-  padding: 7px 48px;   /* + the 1px borders: 48px tall, as figma (its strokes are inside) */
+  /* Vertically 7px + the 1px borders: 48px tall, as figma (its strokes are
+     inside). Horizontally the content lines up with the navbar, not with
+     figma's 48px (figma's navbar is inset 48px, the app's is not): the info
+     icon starts where the logo does (--navbar-content-inset-x), and the x's
+     glyph ends where the navbar's last item does (--navbar-end-inset-x,
+     web_src/css/modules/navbar.css). The x glyph ends 11.5px inside its
+     button: 8px of padding plus 3.5px inside the 16px octicon (its rounded
+     ends reach 12.5). */
+  padding: 7px calc(var(--navbar-end-inset-x) - 11.5px) 7px var(--navbar-content-inset-x);
   border-top: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
   background: color-mix(in srgb, var(--color-primary) 12%, var(--color-body));
@@ -165,15 +173,15 @@ function message(): string {
   outline-offset: 1px;
 }
 
-/* Phone (figma Mobile frames 641-63036 / 641-63125 / 6484-44441): 8px 8px 8px
-   16px of padding, edge to edge, and sticky at the top of the page so the
-   selection stays in sight while the graph is scrolled. */
+/* Phone (figma Mobile frames 641-63036 / 641-63125 / 6484-44441): edge to
+   edge (the side padding follows the navbar, as above) and sticky at the
+   top of the page, so the selection stays in sight while the graph is
+   scrolled. */
 @media (max-width: 767.98px) {
   .compare-announcement {
     position: sticky;
     top: 0;
     z-index: 30;
-    padding: 7px 8px 7px 16px;
   }
 }
 </style>

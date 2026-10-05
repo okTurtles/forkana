@@ -16,6 +16,37 @@
      (see "#navbar .item.ui.dropdown" below) and the mobile menu toggle is a
      Fomantic ".ui.icon.button" carrying that component's own padding. */
   --navbar-content-inset-x: calc(var(--navbar-padding-x) + var(--navbar-item-padding-x));
+  /* right padding of the avatar dropdown, the last item when signed in */
+  --navbar-dropdown-padding-right: 5px;
+  /* horizontal padding of the mobile menu toggle (a Fomantic icon button) */
+  --navbar-toggle-padding-x: 10px;
+  /* distance from the viewport's RIGHT edge to the visible right edge of the
+     navbar's last item: the "Sign Up" label when signed out (the content
+     inset), the avatar menu's ▾ when signed in, the ☰ toggle on a phone (both
+     set below). Elements outside the navbar that must end where the navbar
+     ends (the Compare banner's dismiss x) use it. */
+  --navbar-end-inset-x: var(--navbar-content-inset-x);
+}
+
+/* Signed in, the navbar ends with the avatar menu: its ▾ glyph (octicon
+   triangle-down, 16px, drawn from 4.427 to 11.573) ends 4.427px inside the
+   item's content box. */
+:root:has(#navbar .navbar-right > .item.ui.dropdown:last-child) {
+  --navbar-end-inset-x: calc(var(--navbar-padding-x) + var(--navbar-dropdown-padding-right) + 4.427px);
+}
+
+/* On a phone the navbar ends with the ☰ toggle: its glyph (octicon
+   three-bars, 16px, drawn from 1 to 15) ends 1px inside the button's padding. */
+@media (max-width: 767.98px) {
+  :root,
+  :root:has(#navbar .navbar-right > .item.ui.dropdown:last-child) {
+    --navbar-end-inset-x: calc(var(--navbar-padding-x) + var(--navbar-toggle-padding-x) + 1px);
+  }
+
+  #navbar #navbar-expand-toggle {
+    padding-right: var(--navbar-toggle-padding-x);
+    padding-left: var(--navbar-toggle-padding-x);
+  }
 }
 
 #navbar {
@@ -88,7 +119,7 @@
 }
 
 #navbar .item.ui.dropdown {
-  padding-right: 5px;
+  padding-right: var(--navbar-dropdown-padding-right);
 }
 
 @media (max-width: 767.98px) {
