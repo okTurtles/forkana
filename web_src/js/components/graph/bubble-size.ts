@@ -70,7 +70,54 @@ export type BubbleRung = {
      inside the arc. The count itself is never dropped and never shrunk — if it
      is too long it is abbreviated instead (formatContributorCount). */
   labelDetail: BubbleLabelDetail;
+  /** How this rung is drawn in Compare mode (see CompareRingStyle). */
+  compare: CompareRingStyle;
 };
+
+/* COMPARE MODE. Read off the design (a crop of the figma at ~1.69x, in which
+   the 335-contributor bubble is the 126px rung and the 119 one the 58px rung):
+   an unpicked bubble has a THIN dark dashed outline (2.2px wide, 6.3px dashes
+   and 6.5px gaps in the crop → 1.25 / 4 / 4 px); a picked one has a solid
+   indigo ring (3.6px → 2px) and a 38px indigo badge (→ 22px) whose number is
+   ~10.6px tall (→ a 14px bold font). Those are the M..XL values below; the
+   two small rungs scale them down, as their count type is scaled down, so a
+   badge never outgrows the bubble it marks. All values are world px, so they
+   also follow the zoom with the bubble. */
+export type CompareRingStyle = {
+  /** Width of the dashed outline of a bubble not picked for the comparison. */
+  outlineWidth: number;
+  /** Dash and gap of that outline. */
+  dash: number;
+  gap: number;
+  /** Width of the solid ring of a picked bubble. */
+  ringWidth: number;
+  /** Diameter of the order badge of a picked bubble, and the size of its digit. */
+  badgeDiameter: number;
+  badgeFontSize: number;
+};
+
+const COMPARE_XS: CompareRingStyle = {outlineWidth: 1, dash: 2.5, gap: 2.5, ringWidth: 1.5, badgeDiameter: 12, badgeFontSize: 8};
+const COMPARE_S: CompareRingStyle = {outlineWidth: 1, dash: 3, gap: 3, ringWidth: 1.5, badgeDiameter: 14, badgeFontSize: 9};
+const COMPARE_M: CompareRingStyle = {outlineWidth: 1.25, dash: 4, gap: 4, ringWidth: 2, badgeDiameter: 16, badgeFontSize: 10};
+const COMPARE_L: CompareRingStyle = {outlineWidth: 1.25, dash: 4, gap: 4, ringWidth: 2, badgeDiameter: 20, badgeFontSize: 12};
+const COMPARE_XL: CompareRingStyle = {outlineWidth: 1.25, dash: 4, gap: 4, ringWidth: 2, badgeDiameter: 22, badgeFontSize: 14};
+
+/** Where the order badge of a picked bubble sits, relative to the bubble's
+   centre: ON the ring, at 40° above the horizontal on the right — where the
+   design puts it (both badges in the crop are centred on the ring at ~39-40°).
+   Taken from the radius on screen, so it rides the ring through a hover. */
+export const COMPARE_BADGE_ANGLE_DEG = 40;
+export function compareBadgeCenter(radius: number): {x: number, y: number} {
+  const a = COMPARE_BADGE_ANGLE_DEG * Math.PI / 180;
+  return {x: radius * Math.cos(a), y: -radius * Math.sin(a)};
+}
+
+/** The number on a picked bubble's badge: its place in the comparison. */
+export function compareOrderFor(state: 'none' | 'first' | 'second' | undefined): number | null {
+  if (state === 'first') return 1;
+  if (state === 'second') return 2;
+  return null;
+}
 
 /* THE LADDER. Five diameters, five thresholds — the only thing anyone should
    need to edit. Ordered smallest → largest; `bubbleRungFor` takes the LAST
@@ -82,11 +129,11 @@ export type BubbleRung = {
    was confirmed as wanted. The issue text is therefore NOT the spec here —
    do not "correct" this back to four on the strength of it. */
 export const BUBBLE_SIZE_LADDER: readonly BubbleRung[] = [
-  {name: 'XS', minRatio: 0, diameter: 22, countFontSize: 9, labelDetail: 'count'},
-  {name: 'S', minRatio: 0.07, diameter: 34, countFontSize: 12, labelDetail: 'count'},
-  {name: 'M', minRatio: 0.2, diameter: 58, countFontSize: 14, labelDetail: 'count'},
-  {name: 'L', minRatio: 0.45, diameter: 90, countFontSize: 22, labelDetail: 'label'},
-  {name: 'XL', minRatio: 0.75, diameter: 126, countFontSize: 22, labelDetail: 'full'},
+  {name: 'XS', minRatio: 0, diameter: 22, countFontSize: 9, labelDetail: 'count', compare: COMPARE_XS},
+  {name: 'S', minRatio: 0.07, diameter: 34, countFontSize: 12, labelDetail: 'count', compare: COMPARE_S},
+  {name: 'M', minRatio: 0.2, diameter: 58, countFontSize: 14, labelDetail: 'count', compare: COMPARE_M},
+  {name: 'L', minRatio: 0.45, diameter: 90, countFontSize: 22, labelDetail: 'label', compare: COMPARE_L},
+  {name: 'XL', minRatio: 0.75, diameter: 126, countFontSize: 22, labelDetail: 'full', compare: COMPARE_XL},
 ] as const;
 
 /* THE STATS ARE NOT IN YET. The API reports a repository whose contributor

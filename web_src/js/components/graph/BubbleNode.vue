@@ -25,7 +25,7 @@
 
 import { computed, watch, reactive } from "vue";
 import { formatDateYMD } from '../../utils/time.ts';
-import type { BubbleLabelDetail } from './bubble-size.ts';
+import { compareBadgeCenter, compareOrderFor, type BubbleLabelDetail, type CompareRingStyle } from './bubble-size.ts';
 
 /* ──────────────────────────────────────────────────────────────────────────────
    LABEL LAYOUT CONSTANTS (all values explained to avoid "magic numbers")
@@ -91,6 +91,8 @@ const props = defineProps<{
   isActive?: boolean;             // selected article (persisted selection)
   isCompareMode?: boolean;        // whether compare mode is active
   compareState?: 'none' | 'first' | 'second';  // compare selection state
+  /* This bubble's rung's Compare-mode drawing (bubble-size.ts). */
+  compareStyle?: CompareRingStyle;
   /* The author deleted this article. The bubble is kept — the forks below it
      need the ancestry — and stays interactive; it is drawn muted and dashed
      and says so in the expanded card. */
@@ -213,12 +215,36 @@ const gTransform = computed(() => `translate(${props.x},${props.y})`);
    the ring. */
 const compareSelected = computed(() => props.compareState === 'first' || props.compareState === 'second');
 /* #405 item 6: in compare mode every bubble not (yet) picked is outlined with a
-   dashed line, as the figma draws it. The dash pattern was already set, but the
-   stroke itself had been removed with the resting borders (#386 item 8), so
-   the outline never showed. Its colour is the muted grey the points of
-   contention are drawn in (--bubble-joint-stroke); --bubble-compare-outline
-   is the hook to give it its own colour once the figma value is confirmed. */
+   thin dark dashed line, and a picked one gets a solid indigo ring and an
+   order badge instead — as the figma draws them. Both sit on a flat fill
+   (white in the light theme) rather than the resting gradient. */
 const compareDashed = computed(() => props.isCompareMode === true && props.compareState === 'none');
+const compareOrder = computed(() => props.isCompareMode === true ? compareOrderFor(props.compareState) : null);
+const compareBadge = computed(() => compareBadgeCenter(props.r));
+
+/* The circle's paint in compare mode. An inline style rather than the
+   presentation attributes below, so the focus/hover rules in the stylesheet
+   (a 1px primary ring) cannot thin the compare ring of the bubble that was
+   just clicked and therefore holds the focus. Null outside compare mode,
+   where nothing changes. */
+const compareCircleStyle = computed(() => {
+  if (props.isCompareMode !== true || !props.compareStyle) return null;
+  const s = props.compareStyle;
+  if (compareSelected.value) {
+    return {
+      fill: 'var(--bubble-compare-fill)',
+      stroke: 'var(--bubble-compare-selected)',
+      strokeWidth: `${s.ringWidth}px`,
+      strokeDasharray: 'none',
+    };
+  }
+  return {
+    fill: 'var(--bubble-compare-fill)',
+    stroke: 'var(--bubble-compare-outline)',
+    strokeWidth: `${s.outlineWidth}px`,
+    strokeDasharray: `${s.dash} ${s.gap}`,
+  };
+});
 
 /* Pointer handlers relay events upward (so the parent can grow this bubble and
    reflow the graph around it). `pointerType` travels with the event because
@@ -271,10 +297,11 @@ function onKeyDown(ev: KeyboardEvent) {
         'compare-selected-first': props.compareState === 'first',
         'compare-selected-second': props.compareState === 'second'
       }" :r="r" fill="url(#bubbleGrad)"
-      :stroke="compareSelected || isActive || expanded ? 'var(--color-primary)' : compareDashed ? 'var(--bubble-compare-outline, var(--bubble-joint-stroke, #818b98))' : 'none'"
-      :stroke-width="compareSelected ? 3 : compareDashed ? 1.5 : 1"
-      :stroke-dasharray="compareDashed ? '8,4' : props.isTombstoned ? '4,4' : 'none'"
-      filter="url(#softShadow)"
+      :stroke="isActive || expanded ? 'var(--color-primary)' : 'none'"
+      stroke-width="1"
+      :stroke-dasharray="props.isTombstoned ? '4,4' : 'none'"
+      :filter="compareCircleStyle ? undefined : 'url(#softShadow)'"
+      :style="compareCircleStyle ?? undefined"
     />
 
     <!-- HTML Labels: using foreignObject for efficient text rendering -->
@@ -323,6 +350,21 @@ function onKeyDown(ev: KeyboardEvent) {
         </div>
       </div>
     </foreignObject>
+
+    <!-- Compare mode: the picked bubble's place in the comparison, on its ring
+         and over everything else in the bubble. -->
+    <g
+      v-if="compareOrder !== null && compareStyle" class="compare-badge" aria-hidden="true"
+      :transform="`translate(${compareBadge.x},${compareBadge.y})`"
+    >
+      <circle :r="compareStyle.badgeDiameter / 2" fill="var(--bubble-compare-selected)"/>
+      <text
+        text-anchor="middle" dominant-baseline="central" fill="var(--bubble-compare-badge-text)"
+        :font-size="compareStyle.badgeFontSize" font-weight="700"
+      >
+        {{ compareOrder }}
+      </text>
+    </g>
   </g>
 </template>
 
@@ -356,6 +398,12 @@ function onKeyDown(ev: KeyboardEvent) {
    to the compare-mode one it has to co-exist with). The stroke is set here
    rather than in the binding so it also wins over the hover/focus rules
    below. */
+/* The order badge sits over the bubble's edge; a click on it is a click on the
+   bubble (to deselect it), so it must not catch the pointer itself. */
+.compare-badge {
+  pointer-events: none;
+}
+
 .node.is-tombstoned {
   opacity: 0.55;
 }

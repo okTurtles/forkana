@@ -3,6 +3,9 @@ import {
   BUBBLE_HOVER_RADIUS,
   BUBBLE_SIZE_LADDER,
   BUBBLE_UNKNOWN_RUNG,
+  COMPARE_BADGE_ANGLE_DEG,
+  compareBadgeCenter,
+  compareOrderFor,
   bubbleDiameterFor,
   bubbleLabelDetailFor,
   bubbleRadiusFor,
@@ -237,4 +240,42 @@ test('the count still fits when it is written from a rung the caller already has
     );
   }
   expect(countTextForRung(4, BUBBLE_UNKNOWN_RUNG)).toBe('4');
+});
+
+describe('compare mode drawing (#405 item 6)', () => {
+  test('the design values: thin 1.25px outline with 4/4 dashes, 2px ring, 22px badge with a 14px digit', () => {
+    const xl = BUBBLE_SIZE_LADDER.find((r) => r.name === 'XL').compare;
+    expect(xl).toEqual({outlineWidth: 1.25, dash: 4, gap: 4, ringWidth: 2, badgeDiameter: 22, badgeFontSize: 14});
+    const m = BUBBLE_SIZE_LADDER.find((r) => r.name === 'M').compare;
+    expect([m.outlineWidth, m.dash, m.gap]).toEqual([1.25, 4, 4]);
+  });
+
+  test('scales with the rung: never shrinks as the bubble grows, and the badge never outgrows the bubble', () => {
+    for (let i = 1; i < BUBBLE_SIZE_LADDER.length; i++) {
+      const prev = BUBBLE_SIZE_LADDER[i - 1].compare;
+      const cur = BUBBLE_SIZE_LADDER[i].compare;
+      for (const key of Object.keys(cur) as (keyof typeof cur)[]) {
+        expect(cur[key]).toBeGreaterThanOrEqual(prev[key]);
+      }
+    }
+    for (const rung of BUBBLE_SIZE_LADDER) {
+      expect(rung.compare.badgeDiameter).toBeLessThan(rung.diameter);
+      expect(rung.compare.ringWidth).toBeGreaterThan(rung.compare.outlineWidth);
+    }
+  });
+
+  test('the badge is centred on the ring, top right', () => {
+    const {x, y} = compareBadgeCenter(63);
+    expect(Math.hypot(x, y)).toBeCloseTo(63);
+    expect(x).toBeGreaterThan(0);
+    expect(y).toBeLessThan(0);
+    expect(Math.atan2(-y, x) * 180 / Math.PI).toBeCloseTo(COMPARE_BADGE_ANGLE_DEG);
+  });
+
+  test('the badge number is the place in the comparison', () => {
+    expect(compareOrderFor('first')).toBe(1);
+    expect(compareOrderFor('second')).toBe(2);
+    expect(compareOrderFor('none')).toBeNull();
+    expect(compareOrderFor(undefined)).toBeNull();
+  });
 });

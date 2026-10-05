@@ -797,6 +797,11 @@ function countTextFor(n: number) {
   return countTextForRung(n, rungFor(n));
 }
 
+/* How the bubble is drawn in Compare mode — from the same rung, like its type. */
+function compareStyleFor(n: number) {
+  return rungFor(n).compare;
+}
+
 function countFontFor(n: number) {
   return rungFor(n).countFontSize;
 }
@@ -2401,6 +2406,7 @@ function goToComparison() {
                 :detail="detailFor(f.node.contributors)"
                 :count-text="countTextFor(f.node.contributors)"
                 :count-font-size="countFontFor(f.node.contributors)"
+                :compare-style="compareStyleFor(f.node.contributors)"
                 :expanded="expandedId === f.node.id" :frozen="labelFrozen.has(f.node.id)"
                 :is-active="selectedNodeId === f.node.id" :is-compare-mode="isCompareMode"
                 :compare-state="getCompareState(f.node.id)"
