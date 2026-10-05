@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -76,12 +77,59 @@ func TestSubjectTitleRule(t *testing.T) {
 		unittest.AssertNotExistsBean(t, &repo_model.Repository{OwnerID: user2.ID, LowerName: "leading-hyphen"})
 	})
 
-	t.Run("Web create form has the client-side pattern", func(t *testing.T) {
-		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create"), http.StatusOK)
+	t.Run("Subject inputs get a non-blocking hint, not a blocking pattern", func(t *testing.T) {
+		for _, link := range []string{
+			"/repo/create",
+			fmt.Sprintf("/repo/migrate?service_type=%d", api.PlainGitService),
+			fmt.Sprintf("/repo/migrate?service_type=%d", api.GithubService),
+			fmt.Sprintf("/repo/migrate?service_type=%d", api.GitlabService),
+		} {
+			resp := session.MakeRequest(t, NewRequest(t, "GET", link), http.StatusOK)
+			htmlDoc := NewHTMLParser(t, resp.Body)
+			_, hasPattern := htmlDoc.doc.Find("input#subject").Attr("pattern")
+			assert.False(t, hasPattern, "%s: existing subjects may break the rule, the browser must not block them", link)
+			pattern, ok := htmlDoc.doc.Find("input#subject").Closest(".field").Find("[data-subject-title-hint]").Attr("data-pattern")
+			require.True(t, ok, "%s: missing subject title hint", link)
+			assert.Equal(t, subjecttitle.Pattern, pattern)
+		}
+	})
+
+	t.Run("Web migrate form rejects invalid subject", func(t *testing.T) {
+		req := NewRequestWithValues(t, "POST", "/repo/migrate", map[string]string{
+			"_csrf":      GetUserCSRFToken(t, session),
+			"uid":        strconv.FormatInt(user2.ID, 10),
+			"clone_addr": "https://github.com/go-gitea/test_repo.git",
+			"service":    strconv.Itoa(int(api.PlainGitService)),
+			"repo_name":  "subject-title-rule-web-migrate",
+			"subject":    ";alskdjf",
+		})
+		resp := session.MakeRequest(t, req, http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
-		pattern, ok := htmlDoc.doc.Find("input#subject").Attr("pattern")
-		require.True(t, ok)
-		assert.Equal(t, subjecttitle.HTMLPattern, pattern)
+		assert.Equal(t, 1, htmlDoc.doc.Find(".field.error input#subject").Length(), "the subject field should be flagged")
+		unittest.AssertNotExistsBean(t, &repo_model.Repository{OwnerID: user2.ID, LowerName: "subject-title-rule-web-migrate"})
+	})
+
+	t.Run("API migrate rejects invalid subject", func(t *testing.T) {
+		req := NewRequestWithJSON(t, "POST", "/api/v1/repos/migrate", &api.MigrateRepoOptions{
+			CloneAddr:   "https://github.com/go-gitea/test_repo.git",
+			RepoOwnerID: user2.ID,
+			RepoName:    "subject-title-rule-api-migrate",
+			Subject:     ";alskdjf",
+		}).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusUnprocessableEntity)
+		unittest.AssertNotExistsBean(t, &repo_model.Repository{OwnerID: user2.ID, LowerName: "subject-title-rule-api-migrate"})
+	})
+
+	t.Run("API generate rejects invalid subject", func(t *testing.T) {
+		templateRepo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 44, IsTemplate: true})
+		req := NewRequestWithJSON(t, "POST", fmt.Sprintf("/api/v1/repos/%s/%s/generate", templateRepo.OwnerName, templateRepo.Name), &api.GenerateRepoOption{
+			Owner:      user2.Name,
+			Name:       "subject-title-rule-generate",
+			Subject:    ";alskdjf",
+			GitContent: true,
+		}).AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusUnprocessableEntity)
+		unittest.AssertNotExistsBean(t, &repo_model.Repository{OwnerID: user2.ID, LowerName: "subject-title-rule-generate"})
 	})
 
 	t.Run("Create first article rejects invalid subject", func(t *testing.T) {

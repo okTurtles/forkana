@@ -61,10 +61,11 @@ func TestIsValid(t *testing.T) {
 	}
 }
 
-// TestHTMLPattern checks that the HTML pattern used by the forms agrees with IsValid. Go's
-// RE2 has the same Unicode classes as the browser's `v` flag.
-func TestHTMLPattern(t *testing.T) {
-	re := regexp.MustCompile(`^(?:` + HTMLPattern + `)$`)
+// TestPattern checks that the pattern used by the forms' hint agrees with IsValid. Go's RE2
+// has the same Unicode classes as JavaScript's `u` flag; web_src/js/features/subject-title-hint.test.ts
+// checks the same pattern on the JavaScript side.
+func TestPattern(t *testing.T) {
+	re := regexp.MustCompile(`^(?:` + Pattern + `)$`)
 	for _, c := range validityCases {
 		if c.title != Normalize(c.title) {
 			// the pattern tolerates whitespace that the server normalizes away
@@ -107,7 +108,8 @@ func TestClean(t *testing.T) {
 		"'Til Tuesday":                  "Til Tuesday",
 		"Rock 'n' Roll":                 "Rock 'n' Roll",
 		"Jean-Paul Sartre":              "Jean-Paul Sartre",
-		"C++":                           "C",
+		"C++":                           "C plus plus",
+		"Notepad++":                     "Notepad plus plus",
 		"!!!":                           "",
 		"":                              "",
 		"  Hello,   World!  ":           "Hello World",

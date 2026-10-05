@@ -101,21 +101,8 @@ export function initRepoNew() {
     }
   };
 
-  // Show the localized subject title rule (kept in the input's title) instead of the browser's
-  // generic "match the requested format" message when the subject breaks the pattern
-  const updateSubjectValidity = () => {
-    inputSubject.setCustomValidity('');
-    if (inputSubject.validity.patternMismatch) {
-      inputSubject.setCustomValidity(inputSubject.title);
-    }
-  };
-
   // Handle subject input changes
-  inputSubject.addEventListener('input', () => {
-    updateSubjectValidity();
-    updateRepoNameFromSubject();
-  });
-  updateSubjectValidity();
+  inputSubject.addEventListener('input', updateRepoNameFromSubject);
 
   // Handle manual repo name changes
   inputRepoName.addEventListener('input', () => {

@@ -25,10 +25,15 @@ import (
 // VARCHAR(255) subject.name column, which counts characters on the supported databases.
 const MaxLength = 255
 
-// HTMLPattern is the HTML `pattern` attribute (evaluated with the `v` flag by browsers)
-// matching what IsValid accepts. Leading/trailing whitespace is tolerated because the server
-// trims it before validating.
-const HTMLPattern = `\s*[\p{L}\p{Nd}][\p{L}\p{M}\p{Nd}\s'’\-]*`
+// Pattern is an unanchored regular expression matching what IsValid accepts, valid both in
+// Go (RE2) and in JavaScript with the `u` flag. Leading/trailing whitespace is tolerated
+// because the server trims it before validating.
+//
+// The forms use it only for a non-blocking hint (see templates/repo/subject_title_hint.tmpl),
+// never as a blocking HTML `pattern`: a title that breaks the rule is still accepted when it
+// resolves to an existing subject (models/repo.ResolveSubjectName), and only the server knows
+// that.
+const Pattern = `\s*[\p{L}\p{Nd}][\p{L}\p{M}\p{Nd}\s'’\-]*`
 
 // Normalize trims surrounding whitespace, collapses runs of whitespace into a single space and
 // converts the title to Unicode NFC, so that "Gaudí" typed with a combining accent is stored
@@ -66,19 +71,22 @@ func IsTooLong(title string) bool {
 }
 
 // Clean turns arbitrary text (a search keyword, a Wikipedia title) into a valid subject title:
-// disallowed characters become spaces, the result is normalized, anything before the first
-// letter or digit is dropped and the title is cut to MaxLength characters. It returns "" when
-// nothing valid is left.
+// "+" is spelled out as "plus" (so "C++" does not collapse into "C"), other disallowed
+// characters become spaces, the result is normalized, anything before the first letter or
+// digit is dropped and the title is cut to MaxLength characters. It returns "" when nothing
+// valid is left.
 //
 //	";alskdjf"                      → "alskdjf"
 //	"Python (programming language)" → "Python programming language"
+//	"C++"                           → "C plus plus"
 func Clean(text string) string {
-	cleaned := strings.Map(func(r rune) rune {
+	cleaned := strings.ReplaceAll(text, "+", " plus ")
+	cleaned = strings.Map(func(r rune) rune {
 		if isAllowedAfterFirst(r) {
 			return r
 		}
 		return ' '
-	}, text)
+	}, cleaned)
 	cleaned = Normalize(cleaned)
 	cleaned = strings.TrimLeftFunc(cleaned, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)

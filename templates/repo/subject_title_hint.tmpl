@@ -1,0 +1,5 @@
+{{/* Non-blocking hint shown under a subject input while the typed title breaks the subject
+	title rule (modules/subjecttitle). It never blocks submitting: a title that breaks the rule is
+	still accepted when it resolves to an existing subject, which only the server knows.
+	See web_src/js/features/subject-title-hint.ts. */}}
+<span class="help text red tw-hidden" data-subject-title-hint data-pattern="{{.SubjectTitlePattern}}">{{ctx.Locale.Tr "repo.form.subject_title_hint"}}</span>

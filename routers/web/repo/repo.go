@@ -151,7 +151,7 @@ func getRepoPrivate(ctx *context.Context) bool {
 
 func createCommon(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("new_repo")
-	ctx.Data["SubjectNamePattern"] = subjecttitle.HTMLPattern
+	ctx.Data["SubjectTitlePattern"] = subjecttitle.Pattern
 	ctx.Data["Gitignores"] = repo_module.Gitignores
 	ctx.Data["LabelTemplateFiles"] = repo_module.LabelTemplateFiles
 	ctx.Data["Licenses"] = repo_module.Licenses
@@ -179,14 +179,14 @@ func Create(ctx *context.Context) {
 
 	// Prefill subject (and derived repo name) from query parameter if provided
 	if subject := subjecttitle.Normalize(ctx.FormString("subject")); subject != "" {
-		// Prefill the name of the existing subject it resolves to, if any. Such a subject may
-		// predate the subject title rule: don't let the client-side pattern block contributing
-		// to it (the server resolves it the same way).
+		// Prefill the name of the existing subject it resolves to, if any (it may predate the
+		// subject title rule). An invalid new title is prefilled as typed: the form's hint
+		// explains the rule and the POST rejects it.
 		if resolved, err := repo_model.ResolveSubjectName(ctx, subject); err == nil {
 			subject = resolved
-			if !subjecttitle.IsValid(subject) {
-				ctx.Data["SubjectNamePattern"] = ""
-			}
+		} else if !repo_model.IsErrSubjectNameInvalid(err) {
+			ctx.ServerError("ResolveSubjectName", err)
+			return
 		}
 		ctx.Data["subject"] = subject
 		ctx.Data["repo_name"] = repo_model.GenerateRepoNameFromSubject(subject)
