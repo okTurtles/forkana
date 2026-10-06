@@ -37,10 +37,13 @@ func ArticleContributorSince(repo *repo_model.Repository) time.Time {
 	return time.Time{}
 }
 
-// articleContributorCountCacheKey is the cache key of the count of repo at the commit
-// head, counted since `since`.
+// articleContributorCountCacheKey is the cache key of the count of repo whose default
+// branch was at head, counted since `since`. The head only detects a change of the
+// branch: the count itself is always made on the real branch tip (see
+// countArticleContributors). "v2": the first scheme counted on the head itself, which
+// gave wrong counts for a stale head (see nodeContributorStats); none of them is reused.
 func articleContributorCountCacheKey(repoID int64, head string, since time.Time) string {
-	return fmt.Sprintf("ArticleContributorCount/%d/%s/%d", repoID, head, since.Unix())
+	return fmt.Sprintf("ArticleContributorCount/v2/%d/%s/%d", repoID, head, since.Unix())
 }
 
 // cachedArticleContributorCount returns the cached count of repo at head, if any.
@@ -54,14 +57,21 @@ func cachedArticleContributorCount(repo *repo_model.Repository, head string) (in
 	return cached, exist && err == nil
 }
 
-// countArticleContributorsAt counts the contributors of repo at the commit head (the
-// head itself, so a push in between cannot store a newer count under an older key),
-// and caches the count.
-func countArticleContributorsAt(gitRepo *git.Repository, repo *repo_model.Repository, head string) (int64, error) {
+// countArticleContributors counts the contributors of repo on its default branch, as
+// git has it now, and caches the count under head.
+//
+// The count is made on the branch, never on head: head may come from the database
+// (nodeContributorStats), whose branch table is updated asynchronously after a push
+// and can lag behind, or be stale for good in data written straight into the
+// repositories. Counting on a stale head gives the count of an old commit (0 for a
+// fork whose head is still its fork point). head only keys the cache. The price is a
+// small race: a push between reading head and counting stores the newer count under
+// the older head, which the next push's new head replaces.
+func countArticleContributors(gitRepo *git.Repository, repo *repo_model.Repository, head string) (int64, error) {
 	since := ArticleContributorSince(repo)
 	// git shortlog groups the commits by author NAME, on purpose: the count is the
 	// number of people the article credits, as its history shows them.
-	count, err := gitRepo.GetContributorCount(head, since)
+	count, err := gitRepo.GetContributorCount(repo.DefaultBranch, since)
 	if err != nil {
 		return 0, err
 	}
@@ -88,7 +98,7 @@ func ArticleContributorCountWithGitRepo(gitRepo *git.Repository, repo *repo_mode
 	if count, ok := cachedArticleContributorCount(repo, head); ok {
 		return count, nil
 	}
-	return countArticleContributorsAt(gitRepo, repo, head)
+	return countArticleContributors(gitRepo, repo, head)
 }
 
 // ArticleContributorCountOrUnknown is ArticleContributorCountWithGitRepo for a view: -1
@@ -142,11 +152,13 @@ func branchHeads(ctx context.Context, repos []*repo_model.Repository) map[int64]
 // RecentCount is not computed (see ContributorStats). Returns nil when the count cannot
 // be computed, which the client shows as unknown.
 //
-// head is the branch head recorded in the database (empty if unknown): with it, a
-// cached count is answered without opening the repository. Otherwise the count gets
-// its own budget (nodeContributorCountTimeout) inside ctx, which carries the whole
-// counting phase's deadline and the request's cancellation: once that is spent, no
-// count starts, and the node is unknown.
+// head is the branch head recorded in the database (empty if there is no branch row):
+// with it, a cached count is answered without opening the repository. It is only a
+// cache key: a count is always made on the real branch tip (countArticleContributors),
+// and without it the head is read from git. A count gets its own budget
+// (nodeContributorCountTimeout) inside ctx, which carries the whole counting phase's
+// deadline and the request's cancellation: once that is spent, no count starts, and
+// the node is unknown.
 func nodeContributorStats(ctx context.Context, repo *repo_model.Repository, head string) *ContributorStats {
 	if repo.IsEmpty {
 		return &ContributorStats{TotalCount: 0}
@@ -168,7 +180,7 @@ func nodeContributorStats(ctx context.Context, repo *repo_model.Repository, head
 		if head == "" {
 			return ArticleContributorCountWithGitRepo(gitRepo, repo)
 		}
-		return countArticleContributorsAt(gitRepo, repo, head)
+		return countArticleContributors(gitRepo, repo, head)
 	}()
 	if err != nil {
 		log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)

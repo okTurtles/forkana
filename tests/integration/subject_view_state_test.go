@@ -9,14 +9,19 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/setting"
 	repo_service "code.gitea.io/gitea/services/repository"
+	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -276,4 +281,54 @@ func TestSubjectPageBrandNewSubject(t *testing.T) {
 			assert.Equal(t, 1, strings.Count(body, "<title>"), "%s renders one page", path)
 		}
 	}
+}
+
+// The branch table is updated asynchronously after a push (and not at all for commits
+// written straight into a repository), so its head can be behind the repository's. The
+// counts must still come from the real branch tip: counted on a stale head (a fork's
+// fork point), a fork with contributors of its own showed 0 in every bubble and row.
+func TestSubjectPageCountsFromTheBranchNotAStaleHead(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	_, repo, subjectName := loadArticleRepo(t, 1)
+	fork := forkArticle(t, repo)
+	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+
+	gitRepo, err := gitrepo.OpenRepository(t.Context(), fork)
+	require.NoError(t, err)
+	forkPoint, err := gitRepo.GetBranchCommitID(fork.DefaultBranch)
+	gitRepo.Close()
+	require.NoError(t, err)
+
+	// user4 edits the fork after it was created
+	later := time.Now().Add(time.Hour)
+	_, err = files_service.ChangeRepoFiles(t.Context(), fork, user4, &files_service.ChangeRepoFilesOptions{
+		Files: []*files_service.ChangeRepoFile{{
+			Operation:     "create",
+			TreePath:      "notes.md",
+			ContentReader: strings.NewReader("user4's notes"),
+		}},
+		Message:   "notes",
+		OldBranch: fork.DefaultBranch,
+		Author:    &files_service.IdentityOptions{GitUserName: user4.Name, GitUserEmail: user4.Email},
+		Committer: &files_service.IdentityOptions{GitUserName: user4.Name, GitUserEmail: user4.Email},
+		Dates:     &files_service.CommitDateOptions{Author: later, Committer: later},
+		// no hooks: like a commit written straight into the repository, the branch
+		// table does not learn about it (and no server is running to run them)
+		InternalPush: true,
+	})
+	require.NoError(t, err)
+
+	// ...but the branch table still has the fork point as the head
+	_, err = db.GetEngine(t.Context()).Exec("UPDATE branch SET commit_id = ? WHERE repo_id = ? AND name = ?", forkPoint, fork.ID, fork.DefaultBranch)
+	require.NoError(t, err)
+
+	want, err := repo_service.ArticleContributorCount(t.Context(), fork)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), want, "user4 is the fork's one contributor since it was created")
+
+	resp := MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape(subjectName)+"?view=table"), http.StatusOK)
+	row := NewHTMLParser(t, resp.Body).Find(`#articles-table tr.article-row[data-owner="user4"]`)
+	require.Equal(t, 1, row.Length())
+	assert.Equal(t, strconv.FormatInt(want, 10), strings.TrimSpace(row.Find("td.tw-font-semibold").First().Text()))
 }
