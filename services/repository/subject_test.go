@@ -30,12 +30,15 @@ func TestPrepareSubjectAndRepoName(t *testing.T) {
 		// an existing subject is used as-is, whatever the spelling
 		{"Prepare Moon!", "", "Prepare Moon", "prepare-moon", false},
 		{"Prepare Moon!", "prepare-moon", "Prepare Moon", "prepare-moon", false},
-		// a new subject is normalized
-		{"  Brand   New ", "", "Brand New", "brand-new", false},
+		// a new subject is normalized, its first letter capitalized
+		{"  brand_New ", "", "Brand New", "brand-new", false},
+		// punctuation is allowed
+		{"AC/DC", "", "AC/DC", "acdc", false},
 		// a repo name chosen by the user is kept
 		{"Brand New", "my-article", "Brand New", "my-article", false},
 		// a new subject must follow the rule
-		{";alskdjf", "", "", "", true},
+		{"a#b", "", "", "", true},
+		{":Colon", "", "", "", true},
 		{"   ", "", "", "", true},
 	}
 	for _, c := range cases {

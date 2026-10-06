@@ -151,7 +151,7 @@ func getRepoPrivate(ctx *context.Context) bool {
 
 func createCommon(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("new_repo")
-	ctx.Data["SubjectTitlePattern"] = subjecttitle.Pattern
+	ctx.Data["SubjectTitleMaxBytes"] = subjecttitle.MaxBytes
 	ctx.Data["Gitignores"] = repo_module.Gitignores
 	ctx.Data["LabelTemplateFiles"] = repo_module.LabelTemplateFiles
 	ctx.Data["Licenses"] = repo_module.Licenses
@@ -178,13 +178,12 @@ func Create(ctx *context.Context) {
 	ctx.Data["repo_template_name"] = ctx.Tr("repo.template_select")
 
 	// Prefill subject (and derived repo name) from query parameter if provided
-	if subject := subjecttitle.Normalize(ctx.FormString("subject")); subject != "" {
+	if typed := ctx.FormString("subject"); subjecttitle.Normalize(typed) != "" {
 		// Prefill the name of the existing subject it resolves to, if any (it may predate the
-		// subject title rule). An invalid new title is prefilled as typed: the form's hint
-		// explains the rule and the POST rejects it.
-		if resolved, err := repo_model.ResolveSubjectName(ctx, subject); err == nil {
-			subject = resolved
-		} else if !repo_model.IsErrSubjectNameInvalid(err) {
+		// subject title rule), or else the normalized title. An invalid new title is prefilled
+		// normalized too: the form's hint explains the rule and the POST rejects it.
+		subject, err := repo_model.ResolveSubjectName(ctx, typed)
+		if err != nil && !repo_model.IsErrSubjectNameInvalid(err) {
 			ctx.ServerError("ResolveSubjectName", err)
 			return
 		}
@@ -672,15 +671,16 @@ func PrepareBranchList(ctx *context.Context) {
 // It checks if the user already has a repository for the given subject,
 // creates an empty repository if not, and redirects to the editor.
 func CreateFirstArticle(ctx *context.Context) {
-	subjectName := subjecttitle.Normalize(ctx.FormString("subject"))
-	if subjectName == "" {
+	typed := ctx.FormString("subject")
+	if subjecttitle.Normalize(typed) == "" {
 		ctx.Flash.Error(ctx.Tr("repo.subject_required"))
 		ctx.Redirect(setting.AppSubURL + "/")
 		return
 	}
 
-	// An existing subject is used as-is; a new one must follow the subject title rule
-	subjectName, err := repo_model.ResolveSubjectName(ctx, subjectName)
+	// An existing subject is used as-is; a new one is normalized and must follow the subject
+	// title rule
+	subjectName, err := repo_model.ResolveSubjectName(ctx, typed)
 	if err != nil {
 		handleCreateFirstArticleError(ctx, err, subjectName)
 		return
@@ -788,10 +788,24 @@ func getRepositoryByOwnerIDAndSubjectID(ctx *context.Context, ownerID, subjectID
 // subjectNameErrorMessage returns the localized message for a repo_model.ErrSubjectNameInvalid
 func subjectNameErrorMessage(ctx *context.Context, err error) template.HTML {
 	var invalid repo_model.ErrSubjectNameInvalid
-	if errors.As(err, &invalid) && invalid.TooLong {
-		return ctx.Tr("repo.form.subject_too_long", subjecttitle.MaxLength)
+	errors.As(err, &invalid)
+	switch invalid.Problem {
+	case subjecttitle.ProblemEmpty:
+		return ctx.Tr("repo.form.subject_title_empty")
+	case subjecttitle.ProblemPercentEncoding:
+		return ctx.Tr("repo.form.subject_title_percent_encoding")
+	case subjecttitle.ProblemHTMLEntity:
+		return ctx.Tr("repo.form.subject_title_html_entity")
+	case subjecttitle.ProblemTildes:
+		return ctx.Tr("repo.form.subject_title_tildes")
+	case subjecttitle.ProblemRelativePath:
+		return ctx.Tr("repo.form.subject_title_relative_path")
+	case subjecttitle.ProblemLeadingColon:
+		return ctx.Tr("repo.form.subject_title_leading_colon")
+	case subjecttitle.ProblemTooLong:
+		return ctx.Tr("repo.form.subject_title_too_long", subjecttitle.MaxBytes)
 	}
-	return ctx.Tr("repo.form.subject_invalid")
+	return ctx.Tr("repo.form.subject_title_forbidden_char")
 }
 
 // handleCreateFirstArticleError handles errors during the CreateFirstArticle flow.

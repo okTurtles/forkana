@@ -1,15 +1,19 @@
-import {isNewSubjectTitleValid} from './subject-title-hint.ts';
+import {subjectTitleHint} from './subject-title-hint.ts';
 
-// Copy of modules/subjecttitle.Pattern; the Go test TestPattern checks the same cases with RE2.
-const pattern = String.raw`\s*[\p{L}\p{Nd}][\p{L}\p{M}\p{Nd}\s'’\-]*`;
-
-test('isNewSubjectTitleValid', () => {
-  for (const title of ['Moon', 'The Moon', 'Gaudí', 'Zalg\'o', 'O’Brien', 'Jean-Paul Sartre', '1984',
-    'Ελλάδα', '東京', 'Москва', 'हिन्दी', 'Rock \'n\' Roll', '  The   Moon  ', '']) {
-    expect(isNewSubjectTitleValid(title, pattern)).toBe(true);
+test('subjectTitleHint', () => {
+  // valid titles that are stored as typed: no hint
+  for (const title of ['Moon', ';alskdjf', 'Test: Gaudí', 'AC/DC', 'C++', 'Python (programming language)', '  Moon  ', '']) {
+    expect({title, ...subjectTitleHint(title)}).toEqual({title, problem: '', normalized: ''});
   }
-  for (const title of [';alskdjf', 'Test: Gaudí', 'Moon!', 'C++', 'AT&T', 'Foo/Bar', 'Foo_Bar',
-    'Foo.Bar', '<script>', 'Hello 😀', '-Moon', '\'Moon', '’Moon', '\u0301Moon']) {
-    expect(isNewSubjectTitleValid(title, pattern)).toBe(false);
-  }
+  // valid titles that a new subject stores normalized
+  expect(subjectTitleHint('iPhone')).toEqual({problem: '', normalized: 'IPhone'});
+  expect(subjectTitleHint('Foo_Bar')).toEqual({problem: '', normalized: 'Foo Bar'});
+  // invalid titles
+  expect(subjectTitleHint('a#b').problem).toBe('forbidden_char');
+  expect(subjectTitleHint('%41').problem).toBe('percent_encoding');
+  expect(subjectTitleHint('AT&amp;T').problem).toBe('html_entity');
+  expect(subjectTitleHint('~~~').problem).toBe('tildes');
+  expect(subjectTitleHint('../Foo').problem).toBe('relative_path');
+  expect(subjectTitleHint(':Foo').problem).toBe('leading_colon');
+  expect(subjectTitleHint('é'.repeat(200)).problem).toBe('too_long');
 });

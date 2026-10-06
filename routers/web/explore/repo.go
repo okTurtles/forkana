@@ -288,7 +288,7 @@ func Subjects(ctx *context.Context) {
 			return
 		}
 		// The "create new subject" offer prefills a title that follows the subject title rule
-		// (";alskdjf" → "alskdjf"); it is hidden when nothing valid is left.
+		// ("C# basics" → "C basics", "iPhone" → "IPhone"); it is hidden when nothing valid is left.
 		ctx.Data["NewSubjectTitle"] = subjecttitle.Clean(keyword)
 
 		// For pagination total, we count exact + similar

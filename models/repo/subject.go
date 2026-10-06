@@ -24,9 +24,9 @@ import (
 	"xorm.io/builder"
 )
 
-// MaxSubjectNameLength is the maximum allowed length (in characters) for a subject name.
-// This matches the VARCHAR(255) database column size.
-const MaxSubjectNameLength = subjecttitle.MaxLength
+// MaxSubjectNameLength is the maximum length of a new subject name in bytes (UTF-8), as on
+// Wikipedia. Such a name always fits the VARCHAR(255) column, which counts characters.
+const MaxSubjectNameLength = subjecttitle.MaxBytes
 
 // Subject represents a repository subject that can be shared across repositories
 type Subject struct {

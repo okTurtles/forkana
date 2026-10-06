@@ -7,21 +7,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"code.gitea.io/gitea/modules/subjecttitle"
 	"code.gitea.io/gitea/modules/util"
 )
+
+// maxSubjectLookupBytes bounds the input looked up as an existing subject: names are stored in
+// a VARCHAR(255) column, so an existing name has at most 255 characters of up to 4 bytes.
+const maxSubjectLookupBytes = 4 * 255
 
 // ValidateSubjectName normalizes the given name and checks it against the subject title rule
 // (see modules/subjecttitle), including the maximum length. It returns the normalized name, or
 // ErrSubjectNameInvalid.
 func ValidateSubjectName(name string) (string, error) {
 	name = subjecttitle.Normalize(name)
-	if subjecttitle.IsTooLong(name) {
-		return name, ErrSubjectNameInvalid{Name: name, TooLong: true}
-	}
-	if !subjecttitle.IsValid(name) {
-		return name, ErrSubjectNameInvalid{Name: name}
+	if problem := subjecttitle.Check(name); problem != subjecttitle.ProblemNone {
+		return name, ErrSubjectNameInvalid{Name: name, Problem: problem}
 	}
 	return name, nil
 }
@@ -30,25 +32,35 @@ func ValidateSubjectName(name string) (string, error) {
 // by slug, if any. When there is none, the normalized name must follow the subject title rule
 // because a new subject would be created; ErrSubjectNameInvalid is returned otherwise.
 // Existing subjects are used as-is, so subjects created before the rule stay usable and
-// "Moon!" still resolves to an existing "Moon".
+// "Moon~~~" still resolves to an existing "Moon".
+//
+// The slug of the name as typed is tried first, so that the normalization of new titles
+// (underscores, Unicode spaces, first letter) never changes which existing subject is found.
 func lookupSubjectForCreate(ctx context.Context, name string) (string, *Subject, error) {
+	typed := strings.TrimSpace(name)
 	name = subjecttitle.Normalize(name)
 	if name == "" {
-		return "", nil, ErrSubjectNameInvalid{Name: name}
+		return "", nil, ErrSubjectNameInvalid{Name: name, Problem: subjecttitle.ProblemEmpty}
 	}
-	if subjecttitle.IsTooLong(name) {
-		return name, nil, ErrSubjectNameInvalid{Name: name, TooLong: true}
-	}
-
-	existing, err := GetSubjectBySlug(ctx, GenerateSlugFromName(name))
-	if err == nil {
-		return name, existing, nil
-	}
-	if !IsErrSubjectNotExist(err) {
-		return name, nil, err
+	if len(typed) > maxSubjectLookupBytes {
+		return name, nil, ErrSubjectNameInvalid{Name: name, Problem: subjecttitle.ProblemTooLong}
 	}
 
-	name, err = ValidateSubjectName(name)
+	slugs := []string{GenerateSlugFromName(typed)}
+	if slug := GenerateSlugFromName(name); slug != slugs[0] {
+		slugs = append(slugs, slug)
+	}
+	for _, slug := range slugs {
+		existing, err := GetSubjectBySlug(ctx, slug)
+		if err == nil {
+			return name, existing, nil
+		}
+		if !IsErrSubjectNotExist(err) {
+			return name, nil, err
+		}
+	}
+
+	name, err := ValidateSubjectName(name)
 	return name, nil, err
 }
 
@@ -67,10 +79,10 @@ func ResolveSubjectName(ctx context.Context, name string) (string, error) {
 }
 
 // ErrSubjectNameInvalid is returned when a new subject's title does not follow the subject
-// title rule, or is too long (TooLong).
+// title rule; Problem says why.
 type ErrSubjectNameInvalid struct {
 	Name    string
-	TooLong bool
+	Problem subjecttitle.Problem
 }
 
 // IsErrSubjectNameInvalid checks if an error is (or wraps) ErrSubjectNameInvalid
@@ -79,13 +91,25 @@ func IsErrSubjectNameInvalid(err error) bool {
 }
 
 func (err ErrSubjectNameInvalid) Error() string {
-	if err.TooLong {
-		return fmt.Sprintf("subject name is too long (maximum %d characters)", subjecttitle.MaxLength)
-	}
-	if err.Name == "" {
+	switch err.Problem {
+	case subjecttitle.ProblemEmpty:
 		return "subject name cannot be empty"
+	case subjecttitle.ProblemTooLong:
+		return fmt.Sprintf("subject name is too long (maximum %d bytes in UTF-8)", subjecttitle.MaxBytes)
+	case subjecttitle.ProblemForbiddenChar:
+		return fmt.Sprintf("subject name %q is invalid: it cannot contain # < > [ ] | { }, control characters, U+FFFD, U+FFFE or U+FFFF", err.Name)
+	case subjecttitle.ProblemPercentEncoding:
+		return fmt.Sprintf("subject name %q is invalid: it cannot contain %% followed by two hexadecimal digits", err.Name)
+	case subjecttitle.ProblemHTMLEntity:
+		return fmt.Sprintf("subject name %q is invalid: it cannot contain HTML character references such as &amp;", err.Name)
+	case subjecttitle.ProblemTildes:
+		return fmt.Sprintf("subject name %q is invalid: it cannot contain three or more consecutive tildes", err.Name)
+	case subjecttitle.ProblemRelativePath:
+		return fmt.Sprintf("subject name %q is invalid: it cannot be . or .., start with ./ or ../, contain /./ or /../, or end with /. or /..", err.Name)
+	case subjecttitle.ProblemLeadingColon:
+		return fmt.Sprintf("subject name %q is invalid: it cannot start with a colon", err.Name)
 	}
-	return fmt.Sprintf("subject name %q is invalid: it may only contain letters, digits, spaces, hyphens and apostrophes, and must start with a letter or digit", err.Name)
+	return fmt.Sprintf("subject name %q is invalid", err.Name)
 }
 
 // Unwrap lets callers treat the error as an invalid argument

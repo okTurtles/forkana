@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/tests"
@@ -292,10 +291,8 @@ func TestArticleLegacyRedirect(t *testing.T) {
 func TestArticleSubjectWithSlash(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	// inserted directly: the subject title rule (#401) rejects "/" for new subjects, but
-	// subjects created before the rule may still contain it
-	subject := &repo_model.Subject{Name: "AC/DC", Slug: repo_model.GenerateSlugFromName("AC/DC")}
-	require.NoError(t, db.Insert(t.Context(), subject))
+	subject, err := repo_model.GetOrCreateSubject(t.Context(), "AC/DC")
+	require.NoError(t, err)
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	repo.SubjectID, repo.SubjectRelation = subject.ID, nil
 	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "subject_id"))

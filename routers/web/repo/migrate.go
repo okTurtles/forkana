@@ -273,7 +273,7 @@ func setMigrationContextData(ctx *context.Context, serviceType structs.GitServic
 	ctx.Data["LFSActive"] = setting.LFS.StartServer
 	ctx.Data["IsForcedPrivate"] = setting.Repository.ForcePrivate
 	ctx.Data["DisableNewPullMirrors"] = setting.Mirror.DisableNewPull
-	ctx.Data["SubjectTitlePattern"] = subjecttitle.Pattern
+	ctx.Data["SubjectTitleMaxBytes"] = subjecttitle.MaxBytes
 
 	// Plain git should be first
 	ctx.Data["Services"] = append([]structs.GitServiceType{structs.PlainGitService}, structs.SupportedFullGitService...)

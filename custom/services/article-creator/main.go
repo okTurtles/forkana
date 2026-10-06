@@ -301,10 +301,10 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 		return false
 	}
 
-	// Forkana only accepts subject titles made of letters, digits, spaces, hyphens and
-	// apostrophes, starting with a letter or digit (issue #401), so Wikipedia titles such as
-	// "Python (programming language)" are cleaned up with the server's own rule before being
-	// used as the subject.
+	// Forkana's subject titles follow Wikipedia's title restrictions (issue #401), so a
+	// Wikipedia title such as "Python (programming language)" or "C++" is used as is. The
+	// server's own cleaner still normalizes it (e.g. underscores become spaces) and removes
+	// anything the rule forbids, so the subject is never rejected.
 	subject := subjecttitle.Clean(description)
 	if subject == "" {
 		fmt.Printf("  ✗ Title %q cannot be turned into a valid subject\n", description)

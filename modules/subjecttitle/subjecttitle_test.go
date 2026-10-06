@@ -4,127 +4,146 @@
 package subjecttitle
 
 import (
-	"regexp"
+	"os"
 	"strings"
 	"testing"
 
+	"code.gitea.io/gitea/modules/json"
+
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-var validityCases = []struct {
-	title string
-	valid bool
-}{
-	// valid
-	{"Moon", true},
-	{"The Moon", true},
-	{"Gaudí", true},
-	{"Antoni Gaudí", true},
-	{"Zalg'o", true},
-	{"O’Brien", true},
-	{"Jean-Paul Sartre", true},
-	{"1984", true},
-	{"2001 A Space Odyssey", true},
-	{"Ελλάδα", true},
-	{"東京", true},
-	{"Москва", true},
-	{"हिन्दी", true}, // Devanagari needs combining marks after the first letter
-	{"a", true},
-	{"Rock 'n' Roll", true},
-
-	// invalid characters
-	{"Test: Gaudí", false},
-	{"Test: The Gaudí Question", false},
-	{"Moon!", false},
-	{"C++", false},
-	{"AT&T", false},
-	{"Foo/Bar", false},
-	{"Foo_Bar", false},
-	{"Foo.Bar", false},
-	{"<script>", false},
-	{"Hello 😀", false},
-	{"Foo\tBar", false}, // not normalized: tabs are not allowed as such
-
-	// must start with a letter or digit
-	{";alskdjf", false},
-	{"-Moon", false},
-	{"'Moon", false},
-	{"’Moon", false},
-	{" Moon", false},
-	{"́Moon", false}, // a combining mark cannot come first
-	{"", false},
+// sharedCases are the cases of testdata/cases.json, which web_src/js/features/subject-title.test.ts
+// also runs against the JavaScript mirror of the rule.
+type sharedCases struct {
+	Normalize []struct {
+		In  string `json:"in"`
+		Out string `json:"out"`
+	} `json:"normalize"`
+	Check []struct {
+		Title   string  `json:"title"`
+		Repeat  int     `json:"repeat"`
+		Problem Problem `json:"problem"`
+	} `json:"check"`
 }
 
-func TestIsValid(t *testing.T) {
-	for _, c := range validityCases {
-		assert.Equal(t, c.valid, IsValid(c.title), "IsValid(%q)", c.title)
+func loadSharedCases(t *testing.T) sharedCases {
+	data, err := os.ReadFile("testdata/cases.json")
+	require.NoError(t, err)
+	var cases sharedCases
+	require.NoError(t, json.Unmarshal(data, &cases))
+	require.NotEmpty(t, cases.Normalize)
+	require.NotEmpty(t, cases.Check)
+	return cases
+}
+
+func TestNormalizeSharedCases(t *testing.T) {
+	for _, c := range loadSharedCases(t).Normalize {
+		assert.Equal(t, c.Out, Normalize(c.In), "Normalize(%q)", c.In)
 	}
 }
 
-// TestPattern checks that the pattern used by the forms' hint agrees with IsValid. Go's RE2
-// has the same Unicode classes as JavaScript's `u` flag; web_src/js/features/subject-title-hint.test.ts
-// checks the same pattern on the JavaScript side.
-func TestPattern(t *testing.T) {
-	re := regexp.MustCompile(`^(?:` + Pattern + `)$`)
-	for _, c := range validityCases {
-		if c.title != Normalize(c.title) {
-			// the pattern tolerates whitespace that the server normalizes away
-			continue
+func TestCheckSharedCases(t *testing.T) {
+	for _, c := range loadSharedCases(t).Check {
+		title := c.Title
+		if c.Repeat > 0 {
+			title = strings.Repeat(title, c.Repeat)
 		}
-		assert.Equal(t, c.valid, re.MatchString(c.title), "pattern match %q", c.title)
+		require.Equal(t, title, Normalize(title), "check cases must be normalized: %q", title)
+		assert.Equal(t, c.Problem, Check(title), "Check(%q)", title)
+		assert.Equal(t, c.Problem == ProblemNone, IsValid(title), "IsValid(%q)", title)
 	}
-	assert.True(t, re.MatchString("  The   Moon  "), "surrounding and repeated spaces are normalized by the server")
 }
 
-func TestNormalize(t *testing.T) {
-	cases := map[string]string{
-		"Moon":              "Moon",
-		"  The Moon  ":      "The Moon",
-		"The    Moon":       "The Moon",
-		"The \t\n Moon":     "The Moon",
-		"   ":               "",
-		"Gaudí":            "Gaudí", // NFD → NFC
-		" Jean - Paul ":     "Jean - Paul",
-		"Antoni  Gaudí   x": "Antoni Gaudí x",
-	}
-	for in, want := range cases {
-		assert.Equal(t, want, Normalize(in), "Normalize(%q)", in)
+func TestCheckInvalidUTF8(t *testing.T) {
+	// Wikipedia: "Titles cannot contain invalid UTF-8 sequences", such as the encoding of the
+	// unpaired surrogate U+D800 or of U+180000 (beyond U+10FFFF). JSON cannot hold them, so
+	// they are tested here only; the JavaScript test checks lone surrogates.
+	for _, title := range []string{"Foo\xed\xa0\x80", "Foo\xf6\x80\x80\x80", "Foo\xff"} {
+		assert.Equal(t, ProblemForbiddenChar, Check(title), "Check(%q)", title)
 	}
 }
 
 func TestIsTooLong(t *testing.T) {
-	assert.False(t, IsTooLong(strings.Repeat("é", MaxLength)), "255 two-byte characters fit")
-	assert.True(t, IsTooLong(strings.Repeat("a", MaxLength+1)))
+	// fewer than 256 bytes in UTF-8, as on Wikipedia
+	assert.False(t, IsTooLong(strings.Repeat("a", 255)))
+	assert.True(t, IsTooLong(strings.Repeat("a", 256)))
+	assert.False(t, IsTooLong(strings.Repeat("é", 127)), "254 bytes")
+	assert.True(t, IsTooLong(strings.Repeat("é", 128)), "256 bytes")
+}
+
+func TestNormalizeIsIdempotent(t *testing.T) {
+	for _, c := range loadSharedCases(t).Normalize {
+		once := Normalize(c.In)
+		assert.Equal(t, once, Normalize(once), "Normalize(Normalize(%q))", c.In)
+	}
 }
 
 func TestClean(t *testing.T) {
 	cases := map[string]string{
+		// valid titles only get normalized
 		"Moon":                          "Moon",
-		"Antoni Gaudí":                  "Antoni Gaudí",
-		"Python (programming language)": "Python programming language",
-		"St. Louis":                     "St Louis",
-		"Test: The Gaudí Question":      "Test The Gaudí Question",
-		";alskdjf":                      "alskdjf",
-		"'Til Tuesday":                  "Til Tuesday",
-		"Rock 'n' Roll":                 "Rock 'n' Roll",
-		"Jean-Paul Sartre":              "Jean-Paul Sartre",
-		"C++":                           "C plus plus",
-		"Notepad++":                     "Notepad plus plus",
-		"!!!":                           "",
-		"":                              "",
-		"  Hello,   World!  ":           "Hello World",
-		"- - Dash":                      "Dash",
-		"😀😀":                            "",
+		";alskdjf":                      ";alskdjf",
+		"Test: Gaudí":                   "Test: Gaudí",
+		"Python (programming language)": "Python (programming language)",
+		"C++":                           "C++",
+		"Notepad++":                     "Notepad++",
+		"AC/DC":                         "AC/DC",
+		"St. Louis":                     "St. Louis",
+		"'Til Tuesday":                  "'Til Tuesday",
+		"iPhone":                        "IPhone",
+		"  Hello_World  ":               "Hello World",
+		"100% Pure":                     "100% Pure",
+		"AT&T":                          "AT&T",
+		// forbidden characters are removed, control characters become spaces
+		"C#":                 "C",
+		"Song #3":            "Song 3",
+		"M|A|R|R|S":          "MARRS",
+		"[title of show]":    "Title of show",
+		"Red {an orchestra}": "Red an orchestra",
+		"While(1<2)":         "While(12)",
+		"Foo\tBar\nBaz":      "Foo Bar Baz",
+		"Foo\ufffdBar":       "FooBar",
+		"Foo\xffBar":         "FooBar",
+		// forbidden sequences are broken up
+		"%41":               "% 41",
+		"50%Fee":            "50% Fee",
+		"50%Off":            "50%Off", // "Of" is not hexadecimal
+		"AT&amp;T":          "AT&ampT",
+		"&#47;pol/":         "&47pol/", // "#" is removed first
+		"&#x2F;pol/":        "&x2Fpol/",
+		"&a;b;":             "&ab",
+		"~~~":               "~~",
+		"Tilde ~~~~~ Tilde": "Tilde ~~ Tilde",
+		// relative paths and leading colons are removed
+		"./Foo":            "Foo",
+		"../../Foo":        "Foo",
+		"Foo/./Bar/../Baz": "Foo/Bar/Baz",
+		"Foo/..":           "Foo",
+		"/.":               "",
+		".":                "",
+		"..":               "",
+		":Foo":             "Foo",
+		":: : Foo":         "Foo",
+		// nothing valid left
+		"":         "",
+		"   ":      "",
+		"#<>[]|{}": "",
 	}
 	for in, want := range cases {
 		got := Clean(in)
 		assert.Equal(t, want, got, "Clean(%q)", in)
 		if got != "" {
-			assert.True(t, IsValid(got), "Clean(%q) must be valid", in)
+			assert.True(t, IsValid(got), "Clean(%q) = %q must be valid", in, got)
 		}
 	}
 
-	long := Clean(strings.Repeat("ab ", 200))
-	assert.False(t, IsTooLong(long))
+	// cut at MaxBytes without splitting a character
+	long := Clean(strings.Repeat("É", 200))
+	assert.Equal(t, strings.Repeat("É", 127), long)
+	assert.True(t, IsValid(long))
+	long = Clean(strings.Repeat("ab ", 200))
+	assert.LessOrEqual(t, len(long), MaxBytes)
 	assert.True(t, IsValid(long))
 }
