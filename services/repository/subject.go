@@ -19,7 +19,8 @@ import (
 // (repo_model.ErrSubjectNameInvalid otherwise).
 //
 // The repository name is generated from the resolved subject when it is empty or equals the
-// name generated from the submitted subject (i.e. the user did not choose one).
+// name generated from the submitted or the resolved subject (i.e. the user did not choose one).
+// The two can differ: "foo bar" gives "foobar", its resolved "Foo bar" gives "foo-bar".
 func PrepareSubjectAndRepoName(ctx context.Context, subject, repoName string) (string, string, error) {
 	if subject == "" {
 		return subject, repoName, nil

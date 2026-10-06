@@ -167,6 +167,18 @@ func TestResolveSubjectName(t *testing.T) {
 	_, err = repo_model.ResolveSubjectName(ctx, strings.Repeat("É", 128))
 	assert.Equal(t, subjecttitle.ProblemTooLong, subjectNameProblem(err))
 
+	// the length applies to the normalized name, so long input that normalizes to a valid
+	// title, or that resolves to an existing subject, is not "too long"
+	got, err := repo_model.ResolveSubjectName(ctx, strings.Repeat(" ", 1500)+"Brand Moon"+strings.Repeat("_", 1500))
+	require.NoError(t, err)
+	assert.Equal(t, "Brand Moon", got)
+	got, err = repo_model.ResolveSubjectName(ctx, "Moon"+strings.Repeat("~", 2000))
+	require.NoError(t, err)
+	assert.Equal(t, moon.Name, got)
+	// beyond the abuse guard, the input is too long without any lookup
+	_, err = repo_model.ResolveSubjectName(ctx, "Moon"+strings.Repeat("~", 9000))
+	assert.Equal(t, subjecttitle.ProblemTooLong, subjectNameProblem(err))
+
 	// resolving never creates a subject
 	unittest.AssertNotExistsBean(t, &repo_model.Subject{Slug: "brand-new-thing"})
 }

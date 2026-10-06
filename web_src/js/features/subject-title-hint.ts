@@ -27,7 +27,7 @@ export function initSubjectTitleHint() {
       if (problem) {
         elHint.textContent = elHint.getAttribute(`data-msg-${problem.replaceAll('_', '-')}`) ?? '';
       } else if (normalized) {
-        elHint.textContent = (elHint.getAttribute('data-msg-normalized') ?? '').replace('%s', normalized);
+        elHint.textContent = (elHint.getAttribute('data-msg-normalized') ?? '').replace('%s', () => normalized);
       }
       elHint.classList.toggle('red', Boolean(problem));
       toggleElem(elHint, Boolean(problem || normalized));

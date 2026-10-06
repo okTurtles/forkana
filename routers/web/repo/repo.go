@@ -678,20 +678,18 @@ func CreateFirstArticle(ctx *context.Context) {
 		return
 	}
 
-	// An existing subject is used as-is; a new one is normalized and must follow the subject
-	// title rule
-	subjectName, err := repo_model.ResolveSubjectName(ctx, typed)
+	// Get or create the subject: an existing one is used as-is; a new one is normalized and
+	// must follow the subject title rule
+	subject, err := repo_model.GetOrCreateSubject(ctx, typed)
 	if err != nil {
-		handleCreateFirstArticleError(ctx, err, subjectName)
+		if repo_model.IsErrSubjectNameInvalid(err) {
+			handleCreateFirstArticleError(ctx, err, subjecttitle.Normalize(typed))
+		} else {
+			ctx.ServerError("GetOrCreateSubject", err)
+		}
 		return
 	}
-
-	// Get or create the subject
-	subject, err := repo_model.GetOrCreateSubject(ctx, subjectName)
-	if err != nil {
-		ctx.ServerError("GetOrCreateSubject", err)
-		return
-	}
+	subjectName := subject.Name
 
 	// Check if the user already has a repository for this subject
 	existingRepo, err := getRepositoryByOwnerIDAndSubjectID(ctx, ctx.Doer.ID, subject.ID)

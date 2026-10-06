@@ -13,9 +13,12 @@ import (
 	"code.gitea.io/gitea/modules/util"
 )
 
-// maxSubjectLookupBytes bounds the input looked up as an existing subject: names are stored in
-// a VARCHAR(255) column, so an existing name has at most 255 characters of up to 4 bytes.
-const maxSubjectLookupBytes = 4 * 255
+// maxSubjectLookupBytes only guards the slug lookup against abusive input (the forms limit the
+// subject to 255 characters, so only API clients can go beyond it). It applies to the
+// normalized name and is far above any real title, so a title that normalizes to a valid one
+// ("   …   Moon"), or that resolves to an existing subject ("Moon~~~…~~~"), is never rejected
+// by it. A normalized name above it would be too long for a new subject anyway.
+const maxSubjectLookupBytes = 8 * 1024
 
 // ValidateSubjectName normalizes the given name and checks it against the subject title rule
 // (see modules/subjecttitle), including the maximum length. It returns the normalized name, or
@@ -42,7 +45,7 @@ func lookupSubjectForCreate(ctx context.Context, name string) (string, *Subject,
 	if name == "" {
 		return "", nil, ErrSubjectNameInvalid{Name: name, Problem: subjecttitle.ProblemEmpty}
 	}
-	if len(typed) > maxSubjectLookupBytes {
+	if len(name) > maxSubjectLookupBytes {
 		return name, nil, ErrSubjectNameInvalid{Name: name, Problem: subjecttitle.ProblemTooLong}
 	}
 

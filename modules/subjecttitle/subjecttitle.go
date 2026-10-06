@@ -30,9 +30,10 @@ package subjecttitle
 import (
 	"regexp"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -70,6 +71,8 @@ var (
 	// marks it strips.
 	spacesRe      = regexp.MustCompile(`[ _\x{00A0}\x{1680}\x{180E}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}]+`)
 	directionalRe = regexp.MustCompile(`[\x{200E}\x{200F}\x{202A}-\x{202E}]`)
+
+	upperCaser = cases.Upper(language.Und)
 )
 
 // Normalize applies MediaWiki's title normalization: NFC, directional marks (U+200E, U+200F,
@@ -84,8 +87,10 @@ func Normalize(title string) string {
 	title = directionalRe.ReplaceAllString(title, "")
 	title = strings.Trim(spacesRe.ReplaceAllString(title, " "), " ")
 	if r, size := utf8.DecodeRuneInString(title); r != utf8.RuneError {
-		if upper := unicode.ToUpper(r); upper != r {
-			title = string(upper) + title[size:]
+		// the full Unicode mapping, as JavaScript's toUpperCase, applied only when it is one
+		// character: "ß" ("SS") and "ᾳ" ("ΑΙ") stay as they are on both sides
+		if upper := upperCaser.String(string(r)); utf8.RuneCountInString(upper) == 1 {
+			title = upper + title[size:]
 		}
 	}
 	return norm.NFC.String(title)
@@ -184,7 +189,10 @@ func truncateBytes(s string, n int) string {
 //	"iPhone"                        → "IPhone"
 func Clean(text string) string {
 	s := strings.ToValidUTF8(text, "")
-	for range 10 { // each pass only removes characters, a few passes reach a fixed point
+	// Each pass removes characters, or breaks a percent-encoding by inserting a space, which
+	// can never form a new forbidden sequence; every pass that changes the title therefore
+	// leaves fewer violations, and the loop stops at its fixed point after a few passes.
+	for {
 		before := s
 		s = strings.Map(func(r rune) rune {
 			switch {

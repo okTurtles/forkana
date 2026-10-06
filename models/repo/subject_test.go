@@ -318,6 +318,7 @@ func TestCreateSubject_UniqueSlug(t *testing.T) {
 
 	// A title breaking the subject title rule is rejected before the slug check
 	_, err = repo_model.CreateSubject(t.Context(), "the moon #")
+	assert.Error(t, err)
 	assert.True(t, repo_model.IsErrSubjectNameInvalid(err))
 
 	// Create subject with different slug should work
