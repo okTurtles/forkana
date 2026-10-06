@@ -341,3 +341,51 @@ func TestSubjectTitleURLs(t *testing.T) {
 		})
 	}
 }
+
+// TestSubjectFirstLetterRedirect covers the MediaWiki-style redirect: new subjects are stored
+// with their first letter capitalized, so "/subject/iPhone…" redirects to "/subject/IPhone…",
+// keeping the rest of the path and the query string.
+func TestSubjectFirstLetterRedirect(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	session2 := loginUser(t, "user2")
+	session4 := loginUser(t, "user4")
+	for _, session := range []*TestSession{session2, session4} {
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository, auth_model.AccessTokenScopeWriteUser)
+		req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &api.CreateRepoOption{
+			Name:     "iphone-redirect-test",
+			Subject:  "iPhone redirect test",
+			AutoInit: true,
+			Readme:   "Default",
+		}).AddTokenAuth(token)
+		var apiRepo api.Repository
+		DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &apiRepo)
+		require.Equal(t, "IPhone redirect test", apiRepo.Subject)
+	}
+
+	lower, canonical := url.PathEscape("iPhone redirect test"), url.PathEscape("IPhone redirect test")
+	for from, to := range map[string]string{
+		"/subject/" + lower:                                  "/subject/" + canonical,
+		"/subject/" + lower + "?view=table":                  "/subject/" + canonical + "?view=table",
+		"/subject/" + lower + "/user2":                       "/subject/" + canonical + "/user2",
+		"/subject/" + lower + "/user2?mode=history":          "/subject/" + canonical + "/user2?mode=history",
+		"/subject/" + lower + "/user2/issues":                "/subject/" + canonical + "/user2/issues",
+		"/subject/" + lower + "/compare/user2...user4":       "/subject/" + canonical + "/compare/user2...user4",
+		"/subject/" + url.PathEscape("iPhone_redirect_test"): "/subject/" + canonical, // underscores too
+	} {
+		resp := session2.MakeRequest(t, NewRequest(t, "GET", from), http.StatusMovedPermanently)
+		assert.Equal(t, to, resp.Header().Get("Location"), "redirect of %s", from)
+		session2.MakeRequest(t, NewRequest(t, "GET", to), http.StatusOK)
+	}
+
+	// no subject under the normalized title either: still a 404
+	session2.MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape("nothing like this")), http.StatusNotFound)
+
+	// an existing subject is served under its own name, even with a lowercase first letter
+	legacy := &repo_model.Subject{Name: "eBay legacy", Slug: repo_model.GenerateSlugFromName("eBay legacy")}
+	require.NoError(t, db.Insert(t.Context(), legacy))
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	repo.SubjectID, repo.SubjectRelation = legacy.ID, nil
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "subject_id"))
+	session2.MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape("eBay legacy")), http.StatusOK)
+}

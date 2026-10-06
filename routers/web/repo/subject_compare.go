@@ -57,7 +57,9 @@ func CompareReadme(ctx *context.Context) {
 	subject, err := repo_model.GetSubjectByName(ctx, subjectName)
 	if err != nil {
 		if repo_model.IsErrSubjectNotExist(err) {
-			ctx.NotFound(err)
+			if !context.RedirectToCanonicalSubject(ctx, subjectName) {
+				ctx.NotFound(err)
+			}
 		} else {
 			ctx.ServerError("GetSubjectByName", err)
 		}

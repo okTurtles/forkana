@@ -1080,6 +1080,9 @@ func RepoAssignmentBySubject(ctx *Context) {
 	// Find repository by subject name (prioritizes root repositories)
 	repo, err := repo_model.GetPublicRepositoryBySubject(ctx, subjectName)
 	if err != nil {
+		if repo_model.IsErrSubjectNotExist(err) && RedirectToCanonicalSubject(ctx, subjectName) {
+			return
+		}
 		if repo_model.IsErrRepoWithSubjectNotExist(err) || repo_model.IsErrSubjectNotExist(err) {
 			ctx.NotFound(err)
 		} else {
@@ -1236,7 +1239,9 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	}
 	if err != nil {
 		if repo_model.IsErrRepoNotExist(err) || repo_model.IsErrSubjectNotExist(err) {
-			ctx.NotFound(err)
+			if !RedirectToCanonicalSubject(ctx, subjectName) {
+				ctx.NotFound(err)
+			}
 		} else {
 			ctx.ServerError("RepoAssignmentByOwnerAndSubject", err)
 		}

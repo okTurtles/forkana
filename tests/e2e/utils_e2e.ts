@@ -4,6 +4,10 @@ import {isAbsolute, join, resolve} from 'node:path';
 import {cwd, env} from 'node:process';
 import type {Browser, Page, WorkerInfo} from '@playwright/test';
 
+// A new subject is stored under its normalized title, with its first letter capitalized
+// ("e2e-…" becomes "E2e-…"), so tests that create subjects expect that spelling.
+export {normalizeSubjectTitle} from '../../web_src/js/features/subject-title.ts';
+
 const ARTIFACTS_PATH = `tests/e2e/test-artifacts`;
 const LOGIN_PASSWORD = 'password';
 
