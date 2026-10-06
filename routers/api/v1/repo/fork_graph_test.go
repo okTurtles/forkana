@@ -187,13 +187,21 @@ func TestForkGraphCacheKey(t *testing.T) {
 	}
 
 	params3 := ForkGraphParams{
-		IncludeContributors: false,
+		IncludeContributors: true,
 		ContributorDays:     90,
 		MaxDepth:            10,
+		IncludePrivate:      true,
 		Sort:                "updated",
 		Page:                1,
 		Limit:               50,
 	}
+
+	// contributor_days does not change the graph, and only graphs without contributors
+	// are cached, so neither field is part of the key
+	params4 := params1
+	params4.ContributorDays = 30
+	params4.IncludeContributors = false
+	assert.Equal(t, getCacheKey(1, false, 0, params1, 1), getCacheKey(1, false, 0, params4, 1))
 
 	key1 := getCacheKey(1, false, 0, params1, 1)
 	key2 := getCacheKey(1, false, 0, params2, 1)
@@ -254,4 +262,10 @@ func TestParseForkGraphParamsDefaults(t *testing.T) {
 
 	_, err = parseForkGraphParams(url.Values{"limit": {"abc"}})
 	assert.Error(t, err)
+
+	// "on", as an HTML checkbox sends it, is true, as ctx.FormBool reads it
+	params, err = parseForkGraphParams(url.Values{"include_contributors": {"on"}, "include_private": {"true"}})
+	assert.NoError(t, err)
+	assert.True(t, params.IncludeContributors)
+	assert.True(t, params.IncludePrivate)
 }

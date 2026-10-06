@@ -385,15 +385,23 @@ func RepoHistory(ctx *context.Context) {
 	ctx.Data["IsTableView"] = view == "table"
 	ctx.Data["IsArticleView"] = view == "article"
 
-	if view == "article" {
+	switch {
+	case view == "article" && ctx.PathParam("reponame") != "":
+		// /explore/articles/history/{username}/{reponame} names its article in the path
+		// (RepoAssignment), like an article url: that article is the one rendered
+		ctx.Data["ArticleChosen"] = true
+		ctx.Data["SubjectSelected"] = SubjectSelectedValue(ctx.Repo.Repository)
+	case view == "article":
 		ctx.Data["ArticleChosen"] = chooseSubjectArticle(ctx)
 		if ctx.Written() {
 			return
 		}
-	} else if repo := selectedSubjectArticle(ctx); repo != nil {
-		// the Bubble and Table views render nothing for the selection, but their links
-		// (the Table view's Sort menu) carry it
-		ctx.Data["SubjectSelected"] = repo.OwnerName + "/" + repo.Name
+	default:
+		if repo := selectedSubjectArticle(ctx); repo != nil {
+			// the Bubble and Table views render nothing for the selection, but their
+			// links (the Table view's Sort menu) carry it
+			ctx.Data["SubjectSelected"] = SubjectSelectedValue(repo)
+		}
 	}
 
 	// Call the main repository home logic
@@ -419,29 +427,40 @@ func chooseSubjectArticle(ctx *context.Context) bool {
 	}
 
 	if repo := selectedSubjectArticle(ctx); repo != nil {
-		if repo.ID != ctx.Repo.Repository.ID {
-			if err := repo.LoadSubject(ctx); err != nil {
-				log.Warn("LoadSubject for %s: %v", repo.FullName(), err)
-				return true
-			}
+		if repo.ID == ctx.Repo.Repository.ID {
+			ctx.Data["SubjectSelected"] = SubjectSelectedValue(repo)
+			return true
+		}
+		// A selection that cannot be set up (a broken repository, no default branch, no
+		// access) is ignored like any other bad one, instead of failing the whole page.
+		if err := repo.LoadSubject(ctx); err != nil {
+			log.Warn("LoadSubject for %s: %v", repo.FullName(), err)
+		} else if !context.SubjectRepositoryAssignable(ctx, repo) {
+			log.Warn("The selected article %s cannot be rendered; ignoring the selection", repo.FullName())
+		} else {
 			context.AssignSubjectRepository(ctx, repo)
 			if ctx.Written() {
 				return false
 			}
 			context.RepoRefByDefaultBranch()(ctx)
+			ctx.Data["SubjectSelected"] = SubjectSelectedValue(repo)
+			return true
 		}
-		ctx.Data["SubjectSelected"] = repo.OwnerName + "/" + repo.Name
-		return true
 	}
 
-	return liveArticleCount(graph) == 1
+	return liveArticleCount(graph.Articles()) == 1
 }
 
-// liveArticleCount is the number of articles of the graph that are not tombstones: the
-// graph keeps a deleted article for the ancestry of its forks, but it cannot be read.
-func liveArticleCount(graph *repo_service.ForkGraphResponse) int {
+// SubjectSelectedValue is repo as the "selected={owner}/{repo}" parameter names it.
+func SubjectSelectedValue(repo *repo_model.Repository) string {
+	return repo.OwnerName + "/" + repo.Name
+}
+
+// liveArticleCount is the number of articles that are not tombstones: the graph keeps a
+// deleted article for the ancestry of its forks, but it cannot be read.
+func liveArticleCount(articles []*repo_service.ForkGraphEntry) int {
 	live := 0
-	for _, entry := range graph.Articles() {
+	for _, entry := range articles {
 		if !entry.Repo.IsTombstone() {
 			live++
 		}
@@ -484,7 +503,6 @@ func subjectForkGraph(ctx *context.Context) *repo_service.ForkGraphResponse {
 	graph, err := repo_service.BuildForkGraph(ctx, ctx.Repo.Repository, repo_service.SubjectForkGraphParams(), ctx.Doer)
 	if err != nil {
 		log.Warn("BuildForkGraph for %s: %v", ctx.Repo.Repository.FullName(), err)
-		graph = nil
 		// the Table view then says the articles could not be listed, not that there are none
 		ctx.Data["SubjectForkGraphFailed"] = true
 	}
@@ -524,6 +542,17 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	// article (a brand-new subject's first one) or a tombstone renders the header without
 	// reaching the count below, so it starts as the empty article's real count, 0.
 	ctx.Data["ReadmeContributorCount"] = int64(0)
+
+	// The subject's articles, for every page of it (a tombstone's and an empty
+	// article's too, which return early below): neither needs the git repository.
+	ctx.Data["HistoryForkEntries"] = buildHistoryTableEntries(ctx)
+	// The Bubble view draws this same graph instead of requesting it from the API
+	// again. A page opened on the Article view (an article url, the editor, a version)
+	// does not embed it: the Bubble view is not on screen there, and if the reader
+	// switches to it, it asks the API once.
+	if graph := subjectForkGraph(ctx); graph != nil && ctx.Data["IsArticleView"] != true {
+		ctx.PageData["subjectForkGraph"] = graph
+	}
 
 	// A tombstone keeps its git data on disk only so that its forks retain a valid
 	// ancestor. The git repository is deliberately left unopened, so no file, README or
@@ -604,12 +633,6 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	ctx.Data["RepoLink"] = ctx.Repo.Repository.LinkCtx(ctx)
 	ctx.Data["CloneButtonOriginLink"] = ctx.Repo.Repository.CloneLink(ctx, ctx.Doer)
 
-	ctx.Data["HistoryForkEntries"] = buildHistoryTableEntries(ctx)
-	// The Bubble view draws this same graph instead of requesting it from the API again.
-	if graph := subjectForkGraph(ctx); graph != nil {
-		ctx.PageData["subjectForkGraph"] = graph
-	}
-
 	// For Article view, handle mode parameter and load README content. A subject page whose
 	// Article view has no article chosen (see chooseSubjectArticle) renders none.
 	if ctx.Data["IsArticleView"] == true && ctx.Data["ArticleChosen"] == true {
@@ -644,12 +667,7 @@ func articleContributorCount(ctx *context.Context, gitRepo *git.Repository) int6
 			}
 		}
 	}
-	count, err := repo_service.ArticleContributorCountWithGitRepo(gitRepo, repo)
-	if err != nil {
-		log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)
-		return -1
-	}
-	return count
+	return repo_service.ArticleContributorCountOrUnknown(gitRepo, repo)
 }
 
 // historyTableEntry is one row of the subject's Table view.
@@ -674,9 +692,7 @@ func buildHistoryTableEntries(ctx *context.Context) []*historyTableEntry {
 	graphEntries := graph.Articles()
 	entries := make([]*historyTableEntry, 0, len(graphEntries))
 	for _, e := range graphEntries {
-		if err := e.Repo.LoadSubject(ctx); err != nil {
-			log.Warn("LoadSubject for %s: %v", e.Repo.FullName(), err)
-		}
+		// (their subjects are loaded with the graph: batchLoadRepositoryAttributes)
 		entries = append(entries, &historyTableEntry{
 			Repo:             e.Repo,
 			ContributorCount: e.ContributorCount,

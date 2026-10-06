@@ -501,7 +501,7 @@ func renderArticleView(ctx *context.Context) {
 	// The article on screen is the selected one: the view tabs and the "Back to bubble
 	// view" link carry it as "?selected={owner}/{repo}", so following them (or opening
 	// them in a new tab) keeps it selected in the Bubble and Table views (#405).
-	ctx.Data["SubjectSelected"] = ctx.Repo.Repository.OwnerName + "/" + ctx.Repo.Repository.Name
+	ctx.Data["SubjectSelected"] = explore.SubjectSelectedValue(ctx.Repo.Repository)
 	// an article url always renders its article (see explore.chooseSubjectArticle)
 	ctx.Data["ArticleChosen"] = true
 

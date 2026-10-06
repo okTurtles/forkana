@@ -1097,6 +1097,21 @@ func RepoAssignmentBySubject(ctx *Context) {
 	AssignSubjectRepository(ctx, repo)
 }
 
+// SubjectRepositoryAssignable reports whether AssignSubjectRepository can set up repo
+// without failing the request: its owner loads, it has a default branch and an
+// openable git repository, and the doer may read it. It writes nothing, so a caller can
+// ignore a repository that does not pass.
+func SubjectRepositoryAssignable(ctx *Context, repo *repo_model.Repository) bool {
+	if repo.LoadOwner(ctx) != nil || repo.DefaultBranch == "" {
+		return false
+	}
+	if _, err := gitrepo.RepositoryFromRequestContextOrOpen(ctx, repo); err != nil {
+		return false
+	}
+	perm, err := access_model.GetUserRepoPermission(ctx, repo, ctx.Doer)
+	return err == nil && perm.HasAnyUnitAccessOrPublicAccess()
+}
+
 // AssignSubjectRepository sets up the repository context of the subject page for repo:
 // its git repository, the doer's permission and the template data. RepoAssignmentBySubject
 // uses it for the subject's main article; the subject page uses it again to switch to the

@@ -14,8 +14,8 @@ import (
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/gitrepo"
-	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/routers/web/explore"
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/gitdiff"
 	repo_service "code.gitea.io/gitea/services/repository"
@@ -190,7 +190,7 @@ func CompareReadme(ctx *context.Context) {
 	if selected := ctx.FormString("selected"); selected != "" {
 		for _, r := range []*repo_model.Repository{repo1, repo2} {
 			if strings.EqualFold(selected, r.OwnerName+"/"+r.Name) {
-				ctx.Data["SubjectSelected"] = r.OwnerName + "/" + r.Name
+				ctx.Data["SubjectSelected"] = explore.SubjectSelectedValue(r)
 			}
 		}
 	}
@@ -259,12 +259,7 @@ func getReadmeContent(gitRepo *git.Repository, repo *repo_model.Repository) (con
 // It accepts an already-opened git repository handle to avoid redundant I/O operations
 func getContributorCount(gitRepo *git.Repository, repo *repo_model.Repository) int64 {
 	// the same count the bubble, the table row and the article view show (#405)
-	count, err := repo_service.ArticleContributorCountWithGitRepo(gitRepo, repo)
-	if err != nil {
-		log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
-		return -1
-	}
-	return count
+	return repo_service.ArticleContributorCountOrUnknown(gitRepo, repo)
 }
 
 // generateReadmeDiff generates a diff between two README contents

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	git_model "code.gitea.io/gitea/models/git"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/cache"
 	"code.gitea.io/gitea/modules/git"
@@ -36,6 +37,42 @@ func ArticleContributorSince(repo *repo_model.Repository) time.Time {
 	return time.Time{}
 }
 
+// articleContributorCountCacheKey is the cache key of the count of repo at the commit
+// head, counted since `since`.
+func articleContributorCountCacheKey(repoID int64, head string, since time.Time) string {
+	return fmt.Sprintf("ArticleContributorCount/%d/%s/%d", repoID, head, since.Unix())
+}
+
+// cachedArticleContributorCount returns the cached count of repo at head, if any.
+func cachedArticleContributorCount(repo *repo_model.Repository, head string) (int64, bool) {
+	c := cache.GetCache()
+	if c == nil || head == "" {
+		return 0, false
+	}
+	var cached int64
+	exist, err := c.GetJSON(articleContributorCountCacheKey(repo.ID, head, ArticleContributorSince(repo)), &cached)
+	return cached, exist && err == nil
+}
+
+// countArticleContributorsAt counts the contributors of repo at the commit head (the
+// head itself, so a push in between cannot store a newer count under an older key),
+// and caches the count.
+func countArticleContributorsAt(gitRepo *git.Repository, repo *repo_model.Repository, head string) (int64, error) {
+	since := ArticleContributorSince(repo)
+	// git shortlog groups the commits by author NAME, on purpose: the count is the
+	// number of people the article credits, as its history shows them.
+	count, err := gitRepo.GetContributorCount(head, since)
+	if err != nil {
+		return 0, err
+	}
+	if c := cache.GetCache(); c != nil {
+		if err := c.PutJSON(articleContributorCountCacheKey(repo.ID, head, since), count, articleContributorCountCacheTTL); err != nil {
+			log.Warn("Failed to cache the contributor count of %s: %v", repo.FullName(), err)
+		}
+	}
+	return count, nil
+}
+
 // ArticleContributorCountWithGitRepo returns the number of contributors of an article:
 // the distinct authors on its default branch since ArticleContributorSince. It is the
 // one count every view of the subject shows (the bubbles, the table, the article view
@@ -44,52 +81,25 @@ func ArticleContributorCountWithGitRepo(gitRepo *git.Repository, repo *repo_mode
 	if repo.IsEmpty {
 		return 0, nil
 	}
-	branch := repo.DefaultBranch
-	since := ArticleContributorSince(repo)
-
-	c := cache.GetCache()
-	cacheKey := ""
-	if c != nil {
-		if head, err := gitRepo.GetBranchCommitID(branch); err == nil {
-			cacheKey = fmt.Sprintf("ArticleContributorCount/%d/%s/%d", repo.ID, head, since.Unix())
-			var cached int64
-			if exist, getErr := c.GetJSON(cacheKey, &cached); exist && getErr == nil {
-				return cached, nil
-			}
-		}
-	}
-
-	count, err := gitRepo.GetContributorCount(branch, since)
+	head, err := gitRepo.GetBranchCommitID(repo.DefaultBranch)
 	if err != nil {
 		return 0, err
 	}
-	if cacheKey != "" {
-		if err := c.PutJSON(cacheKey, count, articleContributorCountCacheTTL); err != nil {
-			log.Warn("Failed to cache the contributor count of %s: %v", repo.FullName(), err)
-		}
+	if count, ok := cachedArticleContributorCount(repo, head); ok {
+		return count, nil
 	}
-	return count, nil
+	return countArticleContributorsAt(gitRepo, repo, head)
 }
 
-// nodeContributorStats returns the contributor stats of one fork graph node: the
-// article's contributor count exactly as every other view of the subject shows it, so a
-// bubble, its table row and its article page always carry the same number (#405).
-// RecentCount is not computed (see ContributorStats). Returns nil when the count cannot
-// be computed, which the client shows as unknown.
-//
-// Each count has a budget of its own (nodeContributorCountTimeout), detached from the
-// request's cancellation (context.WithoutCancel) so that it cannot be cut short by
-// anything but that budget: a count is best effort, and a slow one shows up as "unknown"
-// for that node instead of holding the page or failing the whole graph.
-func nodeContributorStats(ctx context.Context, repo *repo_model.Repository) *ContributorStats {
-	countCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nodeContributorCountTimeout)
-	defer cancel()
-	total, err := ArticleContributorCount(countCtx, repo)
+// ArticleContributorCountOrUnknown is ArticleContributorCountWithGitRepo for a view: -1
+// when the count cannot be computed, which the views show as unknown ("-").
+func ArticleContributorCountOrUnknown(gitRepo *git.Repository, repo *repo_model.Repository) int64 {
+	count, err := ArticleContributorCountWithGitRepo(gitRepo, repo)
 	if err != nil {
 		log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)
-		return nil
+		return -1
 	}
-	return &ContributorStats{TotalCount: int(total)}
+	return count
 }
 
 // ArticleContributorCount is ArticleContributorCountWithGitRepo for a caller that has
@@ -104,4 +114,65 @@ func ArticleContributorCount(ctx context.Context, repo *repo_model.Repository) (
 	}
 	defer gitRepo.Close()
 	return ArticleContributorCountWithGitRepo(gitRepo, repo)
+}
+
+// branchHeads reads the head commit of each repository's default branch from the
+// database, in one query. A repository missing from the result has no recorded head.
+func branchHeads(ctx context.Context, repos []*repo_model.Repository) map[int64]string {
+	want := make(map[int64]string, len(repos))
+	for _, repo := range repos {
+		if !repo.IsEmpty && repo.DefaultBranch != "" {
+			want[repo.ID] = repo.DefaultBranch
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	heads, err := git_model.FindBranchesByRepoAndBranchName(ctx, want)
+	if err != nil {
+		log.Warn("Failed to read the branch heads of the fork graph: %v", err)
+		return nil
+	}
+	return heads
+}
+
+// nodeContributorStats returns the contributor stats of one fork graph node: the
+// article's contributor count exactly as every other view of the subject shows it, so a
+// bubble, its table row and its article page always carry the same number (#405).
+// RecentCount is not computed (see ContributorStats). Returns nil when the count cannot
+// be computed, which the client shows as unknown.
+//
+// head is the branch head recorded in the database (empty if unknown): with it, a
+// cached count is answered without opening the repository. Otherwise the count gets
+// its own budget (nodeContributorCountTimeout) inside ctx, which carries the whole
+// counting phase's deadline and the request's cancellation: once that is spent, no
+// count starts, and the node is unknown.
+func nodeContributorStats(ctx context.Context, repo *repo_model.Repository, head string) *ContributorStats {
+	if repo.IsEmpty {
+		return &ContributorStats{TotalCount: 0}
+	}
+	if count, ok := cachedArticleContributorCount(repo, head); ok {
+		return &ContributorStats{TotalCount: int(count)}
+	}
+	if ctx.Err() != nil {
+		return nil // the counting phase is over (deadline or client gone): unknown
+	}
+	countCtx, cancel := context.WithTimeout(ctx, nodeContributorCountTimeout)
+	defer cancel()
+	total, err := func() (int64, error) {
+		gitRepo, err := gitrepo.OpenRepository(countCtx, repo)
+		if err != nil {
+			return 0, err
+		}
+		defer gitRepo.Close()
+		if head == "" {
+			return ArticleContributorCountWithGitRepo(gitRepo, repo)
+		}
+		return countArticleContributorsAt(gitRepo, repo, head)
+	}()
+	if err != nil {
+		log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)
+		return nil
+	}
+	return &ContributorStats{TotalCount: int(total)}
 }

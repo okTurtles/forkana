@@ -5,6 +5,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -41,7 +42,13 @@ func getSubjectPage(t *testing.T, session *TestSession, subjectName, query strin
 	} else {
 		body = MakeRequest(t, req, http.StatusOK).Body.String()
 	}
-	assert.Contains(t, body, "subjectForkGraph", "the fork graph is embedded for the Bubble view")
+	// the Bubble view draws the embedded graph; a page opened on the Article view does
+	// not embed it (the Bubble view is not on screen there)
+	if strings.Contains(query, "view=article") {
+		assert.NotContains(t, body, "subjectForkGraph", "no fork graph is embedded on the Article view")
+	} else {
+		assert.Contains(t, body, "subjectForkGraph", "the fork graph is embedded for the Bubble view")
+	}
 	doc := NewHTMLParser(t, bytes.NewBufferString(body))
 	app := doc.Find("#repo-history-app")
 	initialOwner, _ := app.Attr("data-initial-owner")
@@ -97,6 +104,16 @@ func TestSubjectPageArticleViewSelection(t *testing.T) {
 		assert.Equal(t, owner.Name, got.owner)
 		assert.False(t, got.chosen)
 		assert.False(t, got.hasReader)
+	})
+
+	// the legacy history route names its article in the path: that one is rendered
+	t.Run("LegacyHistoryRouteRendersItsArticle", func(t *testing.T) {
+		resp := MakeRequest(t, NewRequest(t, "GET", "/explore/articles/history/"+fork+"?view=article"), http.StatusOK)
+		app := NewHTMLParser(t, resp.Body).Find("#repo-history-app")
+		chosen, _ := app.Attr("data-initial-article")
+		initialOwner, _ := app.Attr("data-initial-owner")
+		assert.Equal(t, "true", chosen)
+		assert.Equal(t, "user4", initialOwner)
 	})
 
 	t.Run("OtherViewsRenderNoArticle", func(t *testing.T) {
@@ -168,6 +185,37 @@ func TestSubjectPagePrivateFork(t *testing.T) {
 	t.Run("OtherUser", func(t *testing.T) { check(t, loginUser(t, "user5"), false) })
 }
 
+// The subject root is found by subject, not through the access-checked fork listing: a
+// root made private after it was forked must not reach the readers who may not read it,
+// neither in the table nor in the embedded graph. It stays in the graph as a nameless
+// node, so its forks stay connected.
+func TestSubjectPagePrivateRoot(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	forkArticle(t, repo)
+	repo.IsPrivate = true
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "is_private"))
+	rootJSON := `"full_name":"` + repo.FullName() + `"`
+
+	check := func(t *testing.T, session *TestSession, visible bool) {
+		t.Helper()
+		got, body := getSubjectPage(t, session, subjectName, "view=table")
+		rows := 1
+		if visible {
+			rows = 2
+		}
+		assert.Equal(t, rows, got.rows, "table rows")
+		assert.Equal(t, visible, strings.Contains(body, rootJSON), "the private root in the embedded graph")
+		assert.Equal(t, !visible, strings.Contains(body, `"id":"hidden_root"`), "the root's place in the graph")
+		assert.Contains(t, body, "user4-fork-of-repo1", "its fork stays in the graph")
+	}
+
+	t.Run("Owner", func(t *testing.T) { check(t, loginUser(t, owner.Name), true) })
+	t.Run("Anonymous", func(t *testing.T) { check(t, nil, false) })
+	t.Run("OtherUser", func(t *testing.T) { check(t, loginUser(t, "user5"), false) })
+}
+
 // Follow is offered on every subject, to every reader (#421 item 5): it used to be
 // hidden from the owner of the article shown, so a signed-in reader lost it on every
 // subject they had created.
@@ -203,7 +251,10 @@ func TestSubjectPageBrandNewSubject(t *testing.T) {
 		AutoInit:      false,
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = repo_service.DeleteRepositoryDirectly(t.Context(), repo.ID) })
+	t.Cleanup(func() {
+		// t.Context() is already cancelled when cleanups run
+		assert.NoError(t, repo_service.DeleteRepositoryDirectly(context.Background(), repo.ID))
+	})
 
 	paths := []string{
 		"/user2/" + repo.Name,
@@ -217,9 +268,9 @@ func TestSubjectPageBrandNewSubject(t *testing.T) {
 			req := NewRequest(t, "GET", path)
 			var body string
 			if session != nil {
-				body = session.MakeRequest(t, req, NoExpectedStatus).Body.String()
+				body = session.MakeRequest(t, req, http.StatusOK).Body.String()
 			} else {
-				body = MakeRequest(t, req, NoExpectedStatus).Body.String()
+				body = MakeRequest(t, req, http.StatusOK).Body.String()
 			}
 			assert.NotContains(t, body, "Internal Server Error", path)
 			assert.Equal(t, 1, strings.Count(body, "<title>"), "%s renders one page", path)

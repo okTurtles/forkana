@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"code.gitea.io/gitea/modules/cache"
@@ -102,10 +103,11 @@ func getCacheKey(repoID int64, isEmpty bool, numForks int, params ForkGraphParam
 }
 
 // hashParams creates a hash of the parameters
+// Only a graph without contributors is cached, and contributor_days does not change
+// the graph, so neither is part of the hash.
 func hashParams(params ForkGraphParams) string {
-	data := fmt.Sprintf("%t:%d:%d:%t:%s:%d:%d",
-		params.IncludeContributors, params.ContributorDays, params.MaxDepth,
-		params.IncludePrivate, params.Sort, params.Page, params.Limit)
+	data := fmt.Sprintf("%d:%t:%s:%d:%d",
+		params.MaxDepth, params.IncludePrivate, params.Sort, params.Page, params.Limit)
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:8]) // First 8 bytes for brevity
 }
@@ -144,7 +146,7 @@ func GetForkGraph(ctx *context.APIContext) {
 	//   default: false
 	// - name: contributor_days
 	//   in: query
-	//   description: "Accepted and validated (1-365) for compatibility; it no longer affects the response, since recent_count is no longer computed"
+	//   description: "Accepted and validated (1-365) for compatibility and echoed as metadata.contributor_window_days; it no longer affects the counts"
 	//   type: integer
 	//   default: 90
 	// - name: max_depth
@@ -205,7 +207,9 @@ func GetForkGraph(ctx *context.APIContext) {
 	// counts (and the forks of forks) of up to 15 minutes ago while the table and the
 	// article view, which are rendered live, already showed the new ones (#405). Each
 	// node's count is cached by its branch head instead (ArticleContributorCount), so a
-	// fresh graph stays cheap and is never stale.
+	// fresh graph stays cheap and is never stale. The trade-off: every such request
+	// rebuilds the graph, a few database queries per level, while the counts themselves
+	// come from that cache (heads read in one query) under one bounded budget.
 	cacheGraph := !params.IncludeContributors
 	cacheKey := ""
 	c := cache.GetCache()
@@ -244,8 +248,9 @@ func GetForkGraph(ctx *context.APIContext) {
 // (as ctx.FormBool and ctx.FormInt read it), which validation then refuses.
 func parseForkGraphParams(query url.Values) (ForkGraphParams, error) {
 	parseBool := func(name string) bool {
-		v, _ := strconv.ParseBool(query.Get(name))
-		return v
+		s := query.Get(name)
+		v, _ := strconv.ParseBool(s)
+		return v || strings.EqualFold(s, "on") // as ctx.FormBool reads it
 	}
 	parseInt := func(name string, def int) int {
 		if query.Get(name) == "" {
@@ -266,10 +271,7 @@ func parseForkGraphParams(query url.Values) (ForkGraphParams, error) {
 	if params.Sort == "" {
 		params.Sort = "updated"
 	}
-	if err := params.validate(); err != nil {
-		return params, err
-	}
-	return params, nil
+	return params, params.validate()
 }
 
 // serviceParams converts the endpoint's parameters for BuildForkGraph.

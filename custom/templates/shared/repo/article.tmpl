@@ -1,12 +1,7 @@
 {{define "shared/repo/article"}}
 <div class="history-view-section history-view-section--article" data-view="article" {{if not .IsArticleView}}hidden{{end}}>
     <div class="ui" id="article-view-root" data-article-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}">
-        {{if .IsSubjectContext}}
-            <div class="ui info message" id="article-guidance" style="display:none">
-                {{svg "octicon-info" 16}}
-                <span class="tw-ml-2">{{ctx.Locale.Tr "repo.article_select_guidance"}}</span>
-            </div>
-        {{end}}
+        {{/* the one "nothing selected" message, shared with the placeholder section */}}
         {{template "shared/repo/article_empty_message" (dict "Hidden" .ReadmeRequested)}}
         <div data-role="article-content" {{if not .ReadmeRequested}}hidden{{end}}>
         <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
@@ -29,11 +24,7 @@
             <div class="tw-flex tw-items-center tw-gap-2">
                 <span class="pill">
                     {{svg "octicon-person" 16 "tw-mr-1"}}
-                    {{/* -1: the count could not be computed, shown as unknown like the table row.
-                         A missing count is the empty article's 0; "and" stops before comparing it,
-                         which would fail the whole page. */}}
-                    {{$count := .ReadmeContributorCount}}
-                    {{if and $count (lt $count 0)}}-{{else}}{{or $count 0}}{{end}} {{if and $count (eq $count 1)}}contributor{{else}}contributors{{end}}
+                    {{template "shared/repo/contributor_count" (dict "Count" .ReadmeContributorCount "Label" "lower")}}
                 </span>
                 {{if and .ReadmeLastCommit .ReadmeLastCommit.Committer}}
                     <span class="pill">

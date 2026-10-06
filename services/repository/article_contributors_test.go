@@ -63,16 +63,56 @@ func TestBuildForkGraphUsesArticleContributorCount(t *testing.T) {
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
-	ctx := context.Background()
+	ctx := t.Context()
 	graph, err := BuildForkGraph(ctx, repo, SubjectForkGraphParams(), user)
 	require.NoError(t, err)
 	require.NotNil(t, graph.Root)
+	require.NotEmpty(t, graph.Articles())
 
 	for _, entry := range graph.Articles() {
 		want, err := ArticleContributorCount(ctx, entry.Repo)
 		require.NoError(t, err, entry.Repo.FullName())
 		assert.Equal(t, want, entry.ContributorCount, entry.Repo.FullName())
 	}
-	require.NotEmpty(t, graph.Articles())
 	assert.Positive(t, graph.Articles()[0].ContributorCount)
+}
+
+// A count is cached under the branch head and the "since" time: answered from the cache
+// without git while the head is the same, and counted again for a new head.
+func TestArticleContributorCountCache(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+	count, err := ArticleContributorCount(ctx, repo)
+	require.NoError(t, err)
+
+	heads := branchHeads(ctx, []*repo_model.Repository{repo})
+	head := heads[repo.ID]
+	require.NotEmpty(t, head, "the default branch head comes from the database")
+
+	cached, ok := cachedArticleContributorCount(repo, head)
+	require.True(t, ok, "the count is cached under its head")
+	assert.Equal(t, count, cached)
+
+	// a new head is a new key: nothing cached for it yet
+	_, ok = cachedArticleContributorCount(repo, "0000000000000000000000000000000000000001")
+	assert.False(t, ok)
+
+	// "since" is part of the key: the same repository counted as a fork is another count
+	fork := *repo
+	fork.IsFork = true
+	fork.CreatedUnix = timeutil.TimeStamp(1_700_000_000)
+	assert.NotEqual(t,
+		articleContributorCountCacheKey(repo.ID, head, ArticleContributorSince(repo)),
+		articleContributorCountCacheKey(fork.ID, head, ArticleContributorSince(&fork)))
+
+	// a node whose head is cached is answered without git, even once the counting
+	// phase is over; one whose head is not cached is unknown then
+	done, cancel := context.WithCancel(ctx)
+	cancel()
+	stats := nodeContributorStats(done, repo, head)
+	require.NotNil(t, stats)
+	assert.Equal(t, int(count), stats.TotalCount)
+	assert.Nil(t, nodeContributorStats(done, repo, "0000000000000000000000000000000000000001"))
 }

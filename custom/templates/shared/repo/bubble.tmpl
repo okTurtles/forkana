@@ -7,7 +7,7 @@
         data-subject="{{.SubjectName}}"
         data-default-branch="{{.Repository.DefaultBranch}}"
         {{/* the same parameters the page's embedded graph is built with (repo_service.SubjectForkGraphQuery) */}}
-        data-api-url="{{AppSubUrl}}/api/v1/repos/{{.Repository.Owner.Name}}/{{.Repository.Name}}/forks/graph?{{if .SubjectForkGraphQuery}}{{.SubjectForkGraphQuery}}{{else}}include_contributors=true&contributor_days=90{{end}}">
+        data-api-url="{{AppSubUrl}}/api/v1/repos/{{.Repository.Owner.Name}}/{{.Repository.Name}}/forks/graph?{{.SubjectForkGraphQuery}}">
     </div>
 </div>
 {{end}}

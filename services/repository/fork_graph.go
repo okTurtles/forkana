@@ -16,6 +16,7 @@ import (
 	perm_model "code.gitea.io/gitea/models/perm"
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unit"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/log"
 	api "code.gitea.io/gitea/modules/structs"
@@ -75,6 +76,8 @@ type ForkGraphParams struct {
 // anonymous reader still gets the public ones only, and a private article's owner (or a
 // collaborator) gets it too, as the Table view did before it was built from this graph.
 // Limit is per tree level; 100 keeps the old table's page size (the table has no pager).
+// ContributorDays is only echoed back (GraphMetadata.ContributorWindowDays); it no
+// longer windows the counts.
 func SubjectForkGraphParams() ForkGraphParams {
 	return ForkGraphParams{
 		IncludeContributors: true,
@@ -117,7 +120,14 @@ func FlattenForkGraph(root *ForkNode) []*ForkGraphEntry {
 	var entries []*ForkGraphEntry
 	var visit func(*ForkNode)
 	visit = func(n *ForkNode) {
-		if n == nil || n.repo == nil {
+		if n == nil {
+			return
+		}
+		if n.hidden || n.repo == nil {
+			// a root the reader may not see is no article of theirs; its forks are
+			for _, child := range n.Children {
+				visit(child)
+			}
 			return
 		}
 		count := int64(-1)
@@ -164,7 +174,15 @@ type ForkNode struct {
 
 	// Internal field for batch processing (not exported to JSON)
 	repo *repo_model.Repository `json:"-"`
+	// hidden marks a root the reader may not read (a subject root made private after it
+	// was forked): it is drawn like a tombstone, structure only, so its forks stay
+	// connected, and nothing of the repository is sent (see hideNode).
+	hidden bool `json:"-"`
 }
+
+// hiddenNodeID is the id of a node the reader may not see: it must not carry the
+// repository's id either.
+const hiddenNodeID = "hidden_root"
 
 // ContributorStats represents contributor statistics
 type ContributorStats struct {
@@ -284,9 +302,19 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 		return nil, err
 	}
 
-	// The contributor counts, once the tree is known (see attachContributorStats)
+	// The subject root is found by subject, not through FindForks, so it has not been
+	// checked against the reader's access like the forks: one made private after it was
+	// forked must not be shown to readers who may not read it.
+	if !canReadForkGraphRoot(ctx, rootRepo, doer) {
+		hideNode(rootNode)
+	}
+
+	// The contributor counts, once the tree is known (see attachContributorStats). The
+	// whole phase has one budget, which also ends with the request.
 	if params.IncludeContributors {
-		attachContributorStats(ctx, rootNode)
+		statsCtx, cancelStats := context.WithTimeout(ctx, contributorStatsBudget)
+		attachContributorStats(statsCtx, rootNode)
+		cancelStats()
 	}
 
 	// Collect all repositories from the tree for batch loading
@@ -407,29 +435,61 @@ func createLeafNode(repo *repo_model.Repository, level int) *ForkNode {
 // contributorCountWorkers is how many contributor counts of a graph run at once.
 const contributorCountWorkers = 4
 
+// contributorStatsBudget bounds the whole counting phase of a graph: counts still
+// queued when it is spent are not started, and their nodes show as unknown.
+const contributorStatsBudget = 10 * time.Second
+
+// canReadForkGraphRoot reports whether doer may read the root of a fork graph.
+func canReadForkGraphRoot(ctx context.Context, root *repo_model.Repository, doer *user_model.User) bool {
+	perm, err := access_model.GetUserRepoPermission(ctx, root, doer)
+	if err != nil {
+		log.Warn("GetUserRepoPermission for the fork graph root %d: %v", root.ID, err)
+		return false
+	}
+	return perm.CanRead(unit.TypeCode)
+}
+
+// hideNode turns n into a node the reader may not see (see ForkNode.hidden).
+func hideNode(n *ForkNode) {
+	n.hidden = true
+	n.ID = hiddenNodeID
+	n.repo = nil
+	n.Contributors = nil
+}
+
 // attachContributorStats counts the contributors of every node of the tree, a few at a
-// time rather than one after the other. Each count has its own budget
-// (nodeContributorStats), and one that fails or runs out leaves its node without stats,
-// which the client shows as unknown.
+// time rather than one after the other. The branch heads come from the database in one
+// query, so a cached count needs no git at all. ctx carries the phase's budget: a count
+// is only started while it lasts, each has its own budget (nodeContributorStats), and
+// one that fails or is not started leaves its node without stats, which the client
+// shows as unknown.
 func attachContributorStats(ctx context.Context, root *ForkNode) {
 	var nodes []*ForkNode
 	var collect func(*ForkNode)
 	collect = func(n *ForkNode) {
-		if n == nil || n.repo == nil {
+		if n == nil {
 			return
 		}
-		nodes = append(nodes, n)
+		if n.repo != nil && !n.hidden {
+			nodes = append(nodes, n)
+		}
 		for _, child := range n.Children {
 			collect(child)
 		}
 	}
 	collect(root)
 
+	repos := make([]*repo_model.Repository, 0, len(nodes))
+	for _, n := range nodes {
+		repos = append(repos, n.repo)
+	}
+	heads := branchHeads(ctx, repos)
+
 	var g errgroup.Group
 	g.SetLimit(contributorCountWorkers)
 	for _, n := range nodes {
 		g.Go(func() error {
-			n.Contributors = nodeContributorStats(ctx, n.repo) // each goroutine writes its own node
+			n.Contributors = nodeContributorStats(ctx, n.repo, heads[n.repo.ID]) // each goroutine writes its own node
 			return nil
 		})
 	}
@@ -601,8 +661,12 @@ func convertNodesToAPI(ctx context.Context, node *ForkNode) {
 		return
 	}
 
-	// Convert this node's repository to API format
-	if node.repo != nil {
+	if node.hidden {
+		// structure only: no repository, drawn as a tombstone
+		node.Repository = nil
+		node.IsTombstoned = true
+	} else if node.repo != nil {
+		// Convert this node's repository to API format
 		permission := createReadPermission(ctx, node.repo)
 		node.Repository = convert.ToRepo(ctx, node.repo, permission)
 		node.IsTombstoned = node.repo.IsTombstone()
@@ -613,5 +677,10 @@ func convertNodesToAPI(ctx context.Context, node *ForkNode) {
 	// Recursively convert children
 	for _, child := range node.Children {
 		convertNodesToAPI(ctx, child)
+		// a fork's api.Repository embeds its parent repository: not one the reader
+		// may not see
+		if node.hidden && child.Repository != nil {
+			child.Repository.Parent = nil
+		}
 	}
 }

@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -31,7 +32,8 @@ func forkArticle(t *testing.T, repo *repo_model.Repository) *repo_model.Reposito
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = repo_service.DeleteRepositoryDirectly(t.Context(), fork.ID)
+		// t.Context() is already cancelled when cleanups run
+		_ = repo_service.DeleteRepositoryDirectly(context.Background(), fork.ID)
 	})
 	return fork
 }

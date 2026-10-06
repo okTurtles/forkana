@@ -15,16 +15,18 @@
 		</div>
 	</div>
 {{end}}
+	{{$subjectUrl := printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)}}
+	{{$bubbleUrl := QueryBuild $subjectUrl "view" "bubble" "selected" .SubjectSelected}}
 	<div class="ui container">
 		<overflow-menu class="ui secondary pointing menu">
 			<div class="overflow-menu-items tw-justify-center" id="subject-view-tabs" data-owner="{{.Repository.Owner.Name}}" data-subject="{{.SubjectName}}">
-				<a class="{{if .IsBubbleView}}active {{end}}item" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "bubble" "selected" .SubjectSelected}}" data-view="bubble">
+				<a class="{{if .IsBubbleView}}active {{end}}item" href="{{$bubbleUrl}}" data-view="bubble">
 					{{svg "bubble"}} Bubble<span class="not-mobile tw-ml-1">view</span>
 				</a>
-				<a class="{{if .IsTableView}}active {{end}}item" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "selected" .SubjectSelected}}" data-view="table">
+				<a class="{{if .IsTableView}}active {{end}}item" href="{{QueryBuild $subjectUrl "view" "table" "selected" .SubjectSelected}}" data-view="table">
 					{{svg "octicon-table"}} Table<span class="not-mobile tw-ml-1">view</span>
 				</a>
-				<a class="{{if .IsArticleView}}active {{end}}item" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "article" "selected" .SubjectSelected}}" data-view="article" id="article-view-link">
+				<a class="{{if .IsArticleView}}active {{end}}item" href="{{QueryBuild $subjectUrl "view" "article" "selected" .SubjectSelected}}" data-view="article" id="article-view-link">
 					{{svg "octicon-file"}} Article<span class="not-mobile tw-ml-1">view</span>
 				</a>
 			</div>
@@ -36,7 +38,7 @@
 			     not the 16px octicon, whose glyph differs. */}}
 			<button class="ui button tiny compact" id="compare-mode-button" type="button" aria-pressed="false"
 				data-global-click="onCompareModeToggle"
-				data-bubble-url="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "bubble" "selected" .SubjectSelected}}"
+				data-bubble-url="{{$bubbleUrl}}"
 				data-label-off="{{ctx.Locale.Tr "repo.compare_mode"}}"
 				data-label-on="{{ctx.Locale.Tr "repo.compare_mode_on"}}"
 				data-unavailable="{{ctx.Locale.Tr "repo.compare_mode_unavailable"}}"

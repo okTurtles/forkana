@@ -123,6 +123,8 @@
 {{end}}
 
 {{template "base/head" .}}
+{{/* the Article view is rendered with its article (see explore.chooseSubjectArticle) */}}
+{{$articleRendered := and .IsArticleView .ArticleChosen}}
 <style>
 /* Temporary Fork hierarchy level styling until we agree on design */
 .fork-level-0 { margin-left: 0px !important; }
@@ -157,7 +159,7 @@
     mode (read, edit, history, settings); repo-history.ts keeps it in sync when the
     article section is swapped or another view is selected. */}}
     {{/* tw-hidden, not the hidden attribute: tw-flex would otherwise win over the UA [hidden] rule */}}
-    <div class="ui warning message tw-mt-0 tw-flex tw-items-start tw-gap-2{{if not (and .Repository.IsArchived .IsArticleView .ArticleChosen)}} tw-hidden{{end}}" id="article-archived-notice">
+    <div class="ui warning message tw-mt-0 tw-flex tw-items-start tw-gap-2{{if not (and .Repository.IsArchived $articleRendered)}} tw-hidden{{end}}" id="article-archived-notice">
         {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
         <span data-role="article-archived-text">
             {{- if .Repository.IsArchived -}}
@@ -209,7 +211,7 @@
             {{/* set when the article section holds a rendered article: the one an article url
                  names, the one "selected=" names, or a subject's only article. That article is
                  then the page's selection. */}}
-            data-initial-article="{{if and .IsArticleView .ArticleChosen}}true{{end}}"
+            data-initial-article="{{if $articleRendered}}true{{end}}"
             data-initial-owner="{{.Repository.Owner.Name}}"
             data-initial-repo="{{.Repository.Name}}"
             data-initial-subject="{{.SubjectName}}"
@@ -222,7 +224,7 @@
             {{if .ArticleLink}}data-article-canonical="{{.ArticleLink}}"{{end}}>
             {{template "shared/repo/bubble" .}}
             {{template "shared/repo/table" .}}
-            {{if and .IsArticleView .ArticleChosen}}
+            {{if $articleRendered}}
                 {{template "shared/repo/article" .}}
             {{else}}
                 {{/* Not rendered as an article yet: the section is filled in when an article is
