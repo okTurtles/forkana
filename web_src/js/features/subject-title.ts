@@ -22,8 +22,8 @@ const directionalRe = /[\u200e\u200f\u202a-\u202e]/gu;
 export function normalizeSubjectTitle(title: string): string {
   let s = title.normalize('NFC').replace(directionalRe, '').replace(spacesRe, ' ');
   s = s.replace(/^ +| +$/g, '');
-  const first = String.fromCodePoint(s.codePointAt(0) ?? 0);
   if (s) {
+    const first = String.fromCodePoint(s.codePointAt(0));
     const upper = first.toUpperCase();
     if (Array.from(upper).length === 1) s = upper + s.slice(first.length);
   }

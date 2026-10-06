@@ -260,13 +260,16 @@ func TestSubjectTitleURLs(t *testing.T) {
 	}
 
 	// visitSubjectLinks follows every link of the page that points into the subject
-	visitSubjectLinks := func(t *testing.T, session *TestSession, page, escaped string) {
+	visitSubjectLinks := func(t *testing.T, session *TestSession, page, subject string) {
+		escaped := url.PathEscape(subject)
 		resp := session.MakeRequest(t, NewRequest(t, "GET", page), http.StatusOK)
 		links := NewHTMLParser(t, resp.Body).Find(`a[href^="/subject/"]`)
 		visited := 0
 		for i := range links.Length() {
 			href := links.Eq(i).AttrOr("href", "")
-			if !strings.HasPrefix(href, "/subject/"+escaped[:min(len(escaped), 2)]) {
+			// decoded, a link into the subject starts with the subject, whether or not it was
+			// escaped correctly ("/subject/AC/DC/user2" would be a broken one)
+			if decoded, err := url.PathUnescape(strings.TrimPrefix(href, "/subject/")); err == nil && !strings.HasPrefix(decoded, subject) {
 				continue // a link to another subject
 			}
 			assert.True(t, strings.HasPrefix(href, "/subject/"+escaped+"/") || strings.HasPrefix(href, "/subject/"+escaped+"?") ||
@@ -320,9 +323,9 @@ func TestSubjectTitleURLs(t *testing.T) {
 			} {
 				session2.MakeRequest(t, NewRequest(t, "GET", page), http.StatusOK)
 			}
-			visitSubjectLinks(t, session2, "/subject/"+escaped+"?view=table", escaped)
-			visitSubjectLinks(t, session2, "/subject/"+escaped+"/user2", escaped)
-			visitSubjectLinks(t, session2, "/subject/"+escaped+"/compare/user2...user4", escaped)
+			visitSubjectLinks(t, session2, "/subject/"+escaped+"?view=table", subject)
+			visitSubjectLinks(t, session2, "/subject/"+escaped+"/user2", subject)
+			visitSubjectLinks(t, session2, "/subject/"+escaped+"/compare/user2...user4", subject)
 
 			// Explore lists the subject with a working link
 			resp := session2.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q="+url.QueryEscape(subject)), http.StatusOK)
