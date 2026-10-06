@@ -276,12 +276,11 @@ const geometryStyle = {
   text-transform: uppercase;
 }
 
-/* The details, always shown. ActionList.Item 641:62036 (desktop): 68px tall,
-   the three 20px lines 6px down, 68px from the box's edge, and the text
-   running to where figma's text node ends, 337px (46px from the right edge;
-   I641:62036;15096:48946;15039:46266 is 269px wide). */
+/* The details, always shown. On desktop the lines start right under the link and
+   line up with its text (38px in, past the fork icon), with 6px below the last
+   line (Pierre's layout check of the popover, #425). */
 .compare-popover-details {
-  padding: 6px 38px 2px 60px;
+  padding: 0 38px 6px;
   font-size: 12px;
   line-height: 20px;
   color: var(--color-muted-text);
