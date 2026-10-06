@@ -154,6 +154,47 @@ func (repo *Repository) GetCodeActivityStats(fromTime time.Time, branch string) 
 	return stats, nil
 }
 
+// GetContributorAuthorEmails returns the distinct author emails of the non-merge
+// commits on branch (since `since`, when it is not zero), as the contributors graph
+// (services/repository GetContributorStats) identifies a contributor: by the author
+// email with .mailmap applied (%aE), case kept, skipping a commit whose author name or
+// email is empty or which changes no file (it has no --shortstat line). Matching an
+// email to a Gitea account is the caller's: it needs the database.
+func (repo *Repository) GetContributorAuthorEmails(branch string, since time.Time) ([]string, error) {
+	if len(branch) == 0 {
+		branch = "HEAD"
+	}
+	cmd := gitcmd.NewCommand("log", "--no-merges", "--shortstat", "--format=%x1e%aN%x1f%aE")
+	if !since.IsZero() {
+		cmd.AddOptionFormat("--since=%s", since.Format(time.RFC3339))
+	}
+	stdout, _, err := cmd.AddDynamicArguments(branch).RunStdString(repo.Ctx, &gitcmd.RunOpts{Dir: repo.Path})
+	if err != nil {
+		return nil, err
+	}
+	return parseContributorAuthorEmails(stdout), nil
+}
+
+// parseContributorAuthorEmails reads the output of GetContributorAuthorEmails' git log:
+// one record per commit, "\x1e{name}\x1f{email}" followed by its --shortstat line.
+func parseContributorAuthorEmails(out string) []string {
+	seen := make(map[string]bool)
+	emails := make([]string, 0)
+	for _, record := range strings.Split(out, "\x1e") {
+		header, stats, _ := strings.Cut(record, "\n")
+		name, email, ok := strings.Cut(header, "\x1f")
+		name, email = strings.TrimSpace(name), strings.TrimSpace(email)
+		if !ok || name == "" || email == "" || strings.TrimSpace(stats) == "" {
+			continue
+		}
+		if !seen[email] {
+			seen[email] = true
+			emails = append(emails, email)
+		}
+	}
+	return emails
+}
+
 // GetContributorCount returns the number of unique contributors for the given branch.
 // If since is non-zero, only counts contributors who made commits after that time.
 // This is useful for forks where we only want to count post-fork contributions.
