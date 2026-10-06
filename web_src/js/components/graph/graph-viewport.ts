@@ -85,6 +85,10 @@ export function sizeChanged(prev: ContainerSize, next: ContainerSize, epsilon = 
    and the listener cannot drift apart. */
 export const BUBBLE_VISIBLE_EVENT = 'repo:bubble-visible';
 
+/** Sent by repo-history.ts when the Bubble view is left for another view: what the graph
+   shows outside its box (the Compare bottom sheet) goes with it. */
+export const BUBBLE_HIDDEN_EVENT = 'repo:bubble-hidden';
+
 /** Register every re-measure trigger the ResizeObserver cannot serve, and
    return the cleanup.
 

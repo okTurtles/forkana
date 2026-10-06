@@ -79,9 +79,10 @@ export function initCompareModeToggle() {
     const label = on ? btn.getAttribute('data-label-on') : btn.getAttribute('data-label-off');
     btn.classList.toggle('primary', on);
     btn.classList.toggle('is-unavailable', !available && !on);
+    /* A toggle button keeps one name ("Compare", its aria-label) and says its state
+       through aria-pressed; only the visible text reads "Compare on". */
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     if (label) {
-      btn.setAttribute('aria-label', label);
       const text = btn.querySelector('[data-role="compare-label"]');
       if (text) text.textContent = label;
     }

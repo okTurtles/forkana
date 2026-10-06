@@ -3,7 +3,7 @@ import {initRepoBubbleView} from './repo-bubble-view.ts';
 import {initArticleEditor} from './article-editor.ts';
 import {initArticleSettings} from './article-settings.ts';
 import {GET} from '../modules/fetch.ts';
-import {BUBBLE_VISIBLE_EVENT} from '../components/graph/graph-viewport.ts';
+import {BUBBLE_HIDDEN_EVENT, BUBBLE_VISIBLE_EVENT} from '../components/graph/graph-viewport.ts';
 import {
   BUBBLE_OPEN_ARTICLE_EVENT, BUBBLE_SELECTED_EVENT, SELECTION_PARAM, SELECTION_UPDATED_EVENT,
   clearLegacyStoredSelection, matchesSelection, normalizeSelection, resolveSelection,
@@ -47,8 +47,6 @@ function buildArticleUrl(appSubUrl: string, articleBase: string, selection: Repo
   return url.pathname + url.search;
 }
 
-// "/subject/{subject}/{owner}" and "/subject/{subject}/{owner}/{index}" are article urls;
-// "/subject/{subject}" alone is the subject page, whose view is in the query.
 // Do two url paths name the same page? Percent-encoding and trailing slashes aside.
 function samePath(a: string, b: string): boolean {
   try {
@@ -259,6 +257,8 @@ export function initRepoHistory() {
     // and it only describes the article on screen: the one loaded into the article section
     const showsLoaded = activeView.value === 'article' && Boolean(selectedRepo.value) && matchesSelection(loadedArticle, selectedRepo.value);
     archivedNoticeEl.classList.toggle('tw-hidden', !isArchivedArticle || !showsLoaded);
+    // the pending transfer's notice too: it is about the loaded article only
+    document.querySelector('#article-transfer-notice')?.classList.toggle('tw-hidden', !showsLoaded);
   }
 
   function syncNavActive() {
@@ -454,7 +454,11 @@ export function initRepoHistory() {
     isLoading.value = true;
     loadError.value = '';
     updateArticleStatus();
-    showArticleContent();
+    /* The content on screen is another article's: hidden while this one is fetched
+       (the loader is outside it), so a failed fetch cannot leave article A under the
+       selection of B. The same article in another mode stays until it is replaced. */
+    toggleHidden(articleEmptyEl, true);
+    toggleHidden(articleContentEl, !matchesSelection(loadedArticle, selection));
     const url = articleUrlFor(selection, mode);
     try {
       const response = await GET(url);
@@ -611,11 +615,17 @@ export function initRepoHistory() {
 
   function handlePopState(event: PopStateEvent) {
     const state = (event.state as HistoryState | null)?.view ? event.state as HistoryState : stateFromLocation();
+    // a version of an article is rendered by the server only: that entry is reloaded
+    if (state.version) {
+      window.location.reload();
+      return;
+    }
     setSelection(selectionFromHistoryState(state), 'none');
     switchView(state.view || 'bubble', {mode: state.mode || 'read', pushState: false});
   }
 
-  watch(activeView, () => {
+  watch(activeView, (view, previous) => {
+    if (previous === 'bubble' && view !== 'bubble') window.dispatchEvent(new CustomEvent(BUBBLE_HIDDEN_EVENT));
     updateSectionVisibility();
     syncNavActive();
     if (activeView.value === 'bubble') ensureBubbleView();
@@ -657,7 +667,10 @@ export function initRepoHistory() {
   const entryUrl = openedOnArticleUrl ?
     window.location.pathname + window.location.search :
     withSelectionParam(window.location.pathname + window.location.search, selectedRepo.value);
-  window.history.replaceState(historyStateFor(activeView.value, articleMode.value, selectedRepo.value), '', entryUrl + window.location.hash);
+  window.history.replaceState({
+    ...historyStateFor(activeView.value, articleMode.value, selectedRepo.value),
+    version: new URL(window.location.href).searchParams.get('version'),
+  } satisfies HistoryState, '', entryUrl + window.location.hash);
 
   window.addEventListener(BUBBLE_SELECTED_EVENT, handleBubbleSelection as EventListener);
   window.addEventListener(BUBBLE_OPEN_ARTICLE_EVENT, handleBubbleOpenArticle as EventListener);

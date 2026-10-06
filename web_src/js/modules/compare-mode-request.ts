@@ -20,6 +20,18 @@ export function compareAvailableFor(graph: {loading: boolean, failed: boolean, l
   return graph.loading || graph.failed || graph.liveArticles >= 2;
 }
 
+/** Can this bubble be picked for a comparison? A deleted article has nothing to
+   compare (the compare page is a 404 for it), and a hidden root is no article. */
+export function canPickForCompare(node: {isTombstoned?: boolean, isHidden?: boolean}): boolean {
+  return node.isTombstoned !== true && node.isHidden !== true;
+}
+
+/** What a screen reader hears after a compare action: the banner's (localized) message,
+   led by the article the action was about, if any. */
+export function compareAnnouncementFor(article: string | null, message: string): string {
+  return article ? `${article}: ${message}` : message;
+}
+
 /** Forgets a pending request (tests). */
 export function resetCompareModeRequest() {
   pending = false;

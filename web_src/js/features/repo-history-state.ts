@@ -14,6 +14,8 @@ export type HistoryState = {
   repo?: string | null;
   archived?: boolean;
   link?: string | null;
+  /** The version (commit) of the article an entry shows, for "?version=" pages. */
+  version?: string | null;
 };
 
 /** The selection a history entry recorded: null when it recorded none, undefined when
@@ -71,7 +73,8 @@ export function pickInitialSelection(input: InitialSelectionInput): RepoSelectio
 
 // The parameters that describe the subject page's state, which each url sets for itself:
 // the view, its article mode, the selection, and a pending Compare press.
-const STATE_PARAMS = new Set(['view', 'mode', 'selected', 'compare']);
+// (version is an article page's, never a subject view's: it must not stick to them)
+const STATE_PARAMS = new Set(['view', 'mode', 'selected', 'compare', 'version']);
 
 /** The Bubble or Table view url `url`, carrying the other parameters of the page's
    current query (`currentSearch`), such as the Table view's sort, so recording a
@@ -116,8 +119,11 @@ export function parseSubjectLocation(href: string, appSubUrl: string | undefined
     return {view: (params.get('view') as ViewKey) || 'bubble', mode, owner: null, subject: null, repo: null};
   }
   if (segments[0] === 'explore' && segments[1] === 'articles' && segments[2] === 'history' && segments.length >= 5) {
-    // the legacy /explore/articles/history/{owner}/{repo}: the subject page of that article
-    return {view: (params.get('view') as ViewKey) || 'bubble', mode, owner: segments[3], subject: null, repo: segments[4]};
+    // the legacy /explore/articles/history/{owner}/{repo}: the subject page of that
+    // article, which it shows (and so selects) on the Article view only
+    const view = (params.get('view') as ViewKey) || 'bubble';
+    if (view !== 'article') return {view, mode, owner: null, subject: null, repo: null};
+    return {view, mode, owner: segments[3], subject: null, repo: segments[4]};
   }
   if (segments.length >= 2) {
     return {view: (params.get('view') as ViewKey) || 'article', mode, owner: segments[0], subject: null, repo: segments[1]};

@@ -177,8 +177,9 @@ const geometryStyle = {
   transform: scaleX(-1);
 }
 
+/* the same 50% as the box's ring, which the caret's edge continues */
 .caret-border {
-  fill: var(--color-border-light);
+  fill: color-mix(in srgb, var(--color-border-light) 50%, transparent);
 }
 
 .caret-fill {

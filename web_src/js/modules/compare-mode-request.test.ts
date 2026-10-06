@@ -1,5 +1,6 @@
 import {
-  compareAvailableFor, replayCompareModeRequest, requestCompareMode, resetCompareModeRequest, takeCompareModeRequest,
+  canPickForCompare, compareAnnouncementFor, compareAvailableFor, replayCompareModeRequest, requestCompareMode,
+  resetCompareModeRequest, takeCompareModeRequest,
 } from './compare-mode-request.ts';
 
 // the request is module state: every test starts without one
@@ -43,4 +44,17 @@ test('compare mode is offered while loading, after a failed load, and with two l
   expect(compareAvailableFor({loading: false, failed: false, liveArticles: 2})).toBe(true);
   // one live article (a deleted root and one fork, say) has nothing to compare
   expect(compareAvailableFor({loading: false, failed: false, liveArticles: 1})).toBe(false);
+});
+
+test('a deleted article or the hidden root cannot be picked for a comparison', () => {
+  expect(canPickForCompare({})).toBe(true);
+  expect(canPickForCompare({isTombstoned: true})).toBe(false);
+  expect(canPickForCompare({isHidden: true, isTombstoned: true})).toBe(false);
+});
+
+test('a compare action is announced once, the picked article first, then the banner\'s message', () => {
+  expect(compareAnnouncementFor('alice/moon', '1/2 selected – select one more to compare.'))
+    .toBe('alice/moon: 1/2 selected – select one more to compare.');
+  expect(compareAnnouncementFor(null, 'Select 2 articles to compare (0/2 selected).'))
+    .toBe('Select 2 articles to compare (0/2 selected).');
 });

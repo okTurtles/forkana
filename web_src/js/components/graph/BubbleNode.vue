@@ -100,6 +100,9 @@ const props = defineProps<{
      need the ancestry — and stays interactive; it is drawn muted and dashed
      and says so in the expanded card. */
   isTombstoned?: boolean;
+  /* the subject root the reader may not see: drawn like a tombstone for its forks'
+     sake, but no article, so neither a control nor anything a screen reader names */
+  isHidden?: boolean;
 }>();
 
 /* Emits so the parent can wire up interactions without D3 binding. The parent
@@ -313,10 +316,11 @@ function onKeyDown(ev: KeyboardEvent) {
   <!-- One node group at (x,y); we let the parent group receive the world transform -->
   <g
     class="node cursor-pointer select-none"
-    :class="{ 'is-expanded': expanded, 'is-frozen': frozen, 'is-tombstoned': isTombstoned, 'is-compare': isCompareMode === true }"
-    :transform="gTransform" :data-node-id="id" role="button"
-    :aria-label="ariaLabel"
-    :aria-pressed="(isCompareMode === true ? compareSelected : isActive) ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
+    :class="{ 'is-expanded': expanded, 'is-frozen': frozen, 'is-tombstoned': isTombstoned }"
+    :transform="gTransform" :data-node-id="id" :role="isHidden ? undefined : 'button'"
+    :aria-label="isHidden ? undefined : ariaLabel" :aria-hidden="isHidden ? 'true' : undefined"
+    :aria-pressed="isHidden ? undefined : (isCompareMode === true ? compareSelected : isActive) ? 'true' : 'false'"
+    :tabindex="isHidden ? -1 : 0" @click="onClick" @keydown="onKeyDown"
     @pointerdown="onPointerDown" @pointerenter="onPointerEnter" @pointerleave="onPointerLeave"
     @focusin="onFocusIn" @focusout="onFocusOut"
   >

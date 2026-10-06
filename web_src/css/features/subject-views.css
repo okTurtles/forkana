@@ -25,12 +25,10 @@
    (`.ui.message { margin-top: -1px !important }` in
    custom/public/assets/css/message.custom.css, so stacked messages share a
    border). That is also what made the old tw-mt-10 on this box a no-op. Here
-   the box stands alone under the gap, which has to be the full 3rem, and
-   Fomantic would otherwise give it a 1em margin whenever it is not its
-   container's first child (the hidden guidance note precedes it in a rendered
-   article section). Hence the !important, scoped to this one box, with a
-   selector more specific than `.ui.message` because that stylesheet loads
-   after this one. */
+   the box stands alone under the gap, which has to be the full 3rem. The
+   !important is what beats that stylesheet's own `-1px !important`, scoped to
+   this one box, with a selector more specific than `.ui.message` because that
+   stylesheet loads after this one. */
 .history-view-section--article .ui.message[data-role="article-empty"] {
   margin-top: 0 !important;
 }

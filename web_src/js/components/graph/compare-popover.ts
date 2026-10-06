@@ -70,12 +70,18 @@ export function placeComparePopover(input: ComparePopoverInput): ComparePopoverL
   const rightmost = Math.max(...input.bubbles.map((b) => b.cx + b.r));
   const leftmost = Math.min(...input.bubbles.map((b) => b.cx - b.r));
 
+  /* The WHOLE box must be in the window, not just its outer edge: with the picked
+     bubbles panned off one side, the box beside them would follow them out of view,
+     its button with it. Then it is the bottom sheet. */
+  const minLeft = input.viewportLeft + COMPARE_POPOVER_MARGIN;
+  const maxRight = input.viewportRight - COMPARE_POPOVER_MARGIN;
+  const fits = (l: number) => l >= minLeft && l + width <= maxRight;
   let placement: ComparePlacement;
   let left: number;
-  if (rightmost + reach + width <= input.viewportRight - COMPARE_POPOVER_MARGIN) {
+  if (fits(rightmost + reach)) {
     placement = 'right';
     left = rightmost + reach;
-  } else if (leftmost - reach - width >= input.viewportLeft + COMPARE_POPOVER_MARGIN) {
+  } else if (fits(leftmost - reach - width)) {
     placement = 'left';
     left = leftmost - reach - width;
   } else {

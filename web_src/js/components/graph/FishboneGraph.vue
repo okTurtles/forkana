@@ -35,7 +35,10 @@ import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
 import { COMPARE_POPOVER_HEIGHT, COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
 import CompareAnnouncement, { type CompareAnnouncementMessages, type CompareAnnouncementState } from "./CompareAnnouncement.vue";
-import { COMPARE_MODE_STATE_EVENT, COMPARE_MODE_TOGGLE_EVENT, compareAvailableFor, replayCompareModeRequest, type CompareModeState } from "../../modules/compare-mode-request.ts";
+import {
+  COMPARE_MODE_STATE_EVENT, COMPARE_MODE_TOGGLE_EVENT, canPickForCompare, compareAnnouncementFor, compareAvailableFor,
+  replayCompareModeRequest, type CompareModeState,
+} from "../../modules/compare-mode-request.ts";
 import type { ForkGraphNode, ForkGraphResponse } from "./fork-graph-api.ts";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import { GET } from "../../modules/fetch.ts";
@@ -46,6 +49,7 @@ import {
   maxContributors, type BubbleRung, type ComparePickState,
 } from "./bubble-size.ts";
 import {
+  BUBBLE_HIDDEN_EVENT,
   DEFAULT_CONTAINER_HEIGHT, DEFAULT_CONTAINER_WIDTH, MAX_LAYOUT_WIDTH,
   SIZE_EPSILON,
   canvasHeightFor, isMeasurable, layoutWidthFor, observeContainerResize,
@@ -291,7 +295,7 @@ type EdgeGeom = {
 const nodesList = ref<FrameNode[]>([]);
 const edgesList = ref<EdgeGeom[]>([]);
 const trunksList = ref<{ x: number; y1: number; y2: number; id: string }[]>([]);
-const jointDots = ref<{ x: number; y: number; id: string; sourceId: NodeId; targetId: NodeId; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
+const jointDots = ref<{ x: number; y: number; id: string; sourceId: NodeId; targetId: NodeId; sourceOwner: string; targetOwner: string; subject: string; inert: boolean }[]>([]);
 
 /* SVG/zoom plumbing */
 const svgHeight = ref(DEFAULT_CONTAINER_HEIGHT);
@@ -689,13 +693,11 @@ function buildGraphFromApi(root: ForkGraphNode | null | undefined): Graph {
     const baseContrib = Number(n?.contributors?.total_count);
     const hasCount = n?.contributors != null && Number.isFinite(baseContrib);
     let contributors: number = hasCount ? baseContrib : 0;
-    const updatedAt: string | undefined = n?.repository?.updated_at ?? n?.repository?.updated ?? undefined;
+    const updatedAt: string | undefined = n?.repository?.updated_at ?? undefined;
     const repo = n?.repository ?? {};
-    const ownerName: string | null =
-      repo?.owner?.name ?? repo?.owner_name ?? repo?.owner?.username ?? null;
-    const repoName: string | null = repo?.name ?? repo?.repo_name ?? null;
-    const repoSubject: string | null =
-      repo?.subject ?? repo?.subject_slug ?? repo?.subject_name ?? repoName ?? null;
+    const ownerName: string | null = repo?.owner?.login ?? repo?.owner?.username ?? null;
+    const repoName: string | null = repo?.name ?? null;
+    const repoSubject: string | null = repo?.subject ?? repoName ?? null;
     const fullName: string | null = repo?.full_name ?? (ownerName && repoName ? `${ownerName}/${repoName}` : null);
     const isEmpty: boolean = repo?.empty === true;
     const isArchived: boolean = repo?.archived === true;
@@ -1235,6 +1237,9 @@ function setFrame(g: Graph, placements: Placements) {
     sourceOwner: e.source.node.repoOwner || e.source.node.fullName?.split('/')[0] || '',
     targetOwner: e.target.node.repoOwner || e.target.node.fullName?.split('/')[0] || '',
     subject: e.source.node.repoSubject || e.target.node.repoSubject || props.subject || '',
+    /* a point of contention with a hidden root or a deleted article on one side
+       compares nothing: drawn, but not a control */
+    inert: !canPickForCompare(e.source.node) || !canPickForCompare(e.target.node),
   }));
 
   /* The canvas is the VIEWPORT, not the content. It used to be sized from the
@@ -1640,6 +1645,7 @@ onMounted(async () => {
   /* Before the await, like every listener here: onBeforeUnmount may run while
      the graph is still loading, and must find them to remove them. */
   window.addEventListener('keydown', onGraphKeydown);
+  window.addEventListener(BUBBLE_HIDDEN_EVENT, onBubbleViewHidden);
   /* The window can change without the graph's box changing (a centred box of
      fixed width just moves), and that changes which side of the bubbles has
      room for the Compare box: re-place it on every resize. */
@@ -1665,6 +1671,7 @@ onBeforeUnmount(() => {
   window.removeEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
   window.removeEventListener(COMPARE_MODE_TOGGLE_EVENT, handleCompareModeToggle as EventListener);
   window.removeEventListener('keydown', onGraphKeydown);
+  window.removeEventListener(BUBBLE_HIDDEN_EVENT, onBubbleViewHidden);
   narrowQuery?.removeEventListener('change', onNarrowChange);
   window.removeEventListener('resize', updateCompareAnchor);
 });
@@ -1710,7 +1717,7 @@ const historyOpen = ref(false);
    fork and the subject becomes an ordinary graph on the next load of the data,
    with no flag left set from before. (`hasData` keeps the no-article state out
    of this: that one belongs to CreateFirstArticleBubble.) */
-const isSoloSubject = computed(() => hasData.value && Object.keys(state.graph).length === 1);
+const isSoloSubject = computed(() => hasData.value && Object.keys(state.graph).length === 1 && !getRoot(state.graph)?.isHidden);
 
 /** The article on screen: the one that was clicked, or — on a solo subject —
    the only one there is. */
@@ -1905,9 +1912,6 @@ function onBubbleHover(id: NodeId, on: boolean, pointerType: string) {
   }
   if (openArticle.value) return;   // the graph is not on screen to be hovered
   if (on && nodeById(id)?.isHidden) return;   // no card: there is no article to describe
-  /* start on the summary as the pointer arrives, so it is there (or nearly) by
-     the time the hover debounce grows the card */
-  if (on) wantArticleSummary(nodeById(id));
   if (on) setHovered(id);
   else if (hoveredId.value === id) setHovered(null);
 }
@@ -2308,8 +2312,8 @@ function onBubbleView(n: Node) {
    as "?selected=", whose view tabs carry it on: the Article view then shows
    that article and the Table view checks its row, in whatever order the views
    are visited. */
-function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string; targetId: NodeId }) {
-  if (!joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
+function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string; targetId: NodeId; inert: boolean }) {
+  if (joint.inert || !joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
   const suburl = window.config?.suburl || '';
   const compareUrl = new URL(
     `${suburl}/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`,
@@ -2338,7 +2342,8 @@ function toggleCompareMode() {
     compareSelection.value = [];
     showComparePopup.value = false;
   }
-  announceToScreenReader(isCompareMode.value ? 'Compare mode activated. Select two articles to compare.' : 'Compare mode deactivated.');
+  /* entering is announced with the banner's first message (announcementState);
+     leaving is the reader's own press of "Exit compare mode" */
 }
 
 /* Handle compare mode toggle from external event (header button). A subject
@@ -2361,7 +2366,7 @@ function handleCompareModeToggle() {
 const compareUnavailableShown = ref(false);
 /* Two live articles to compare. A deleted article cannot be compared, and a graph
    that failed to load says nothing about the subject: that is not "No forks yet". */
-const liveArticleCount = computed(() => Object.values(state.graph).filter((n) => !n.isTombstoned).length);
+const liveArticleCount = computed(() => Object.values(state.graph).filter((n) => canPickForCompare(n)).length);
 const compareAvailable = computed(() => compareAvailableFor({loading: isLoading.value, failed: errorMessage.value !== null, liveArticles: liveArticleCount.value}));
 const announcementTarget = typeof document !== 'undefined' ? document.querySelector<HTMLElement>('#compare-announcement-root') : null;
 
@@ -2389,8 +2394,13 @@ const announcementState = computed<CompareAnnouncementState | null>(() => {
 
 /* The banner is mounted with its first message, which a live region inside it would
    not announce: the graph's own status region (srAnnouncement) says each one. */
+/* One announcement per compare action: the localized banner message, led by the
+   article the action was about (compareActionArticle, set by the action). Two writes
+   in one tick would leave only the last one to be heard. */
+let compareActionArticle: string | null = null;
 watch(announcementState, (state) => {
-  if (state) announceToScreenReader(announcementMessages[state]);
+  if (state) announceToScreenReader(compareAnnouncementFor(compareActionArticle, announcementMessages[state]));
+  compareActionArticle = null;
 });
 
 function dismissAnnouncement() {
@@ -2415,24 +2425,20 @@ watch([isCompareMode, compareAvailable], () => {
 
 /* Handle bubble click in compare mode */
 function onBubbleClickCompare(n: Node) {
+  // a deleted article (or a hidden root) has nothing to compare: refused, as its look says
+  if (!canPickForCompare(n)) return;
   const existingIdx = compareSelection.value.findIndex(node => node.id === n.id);
+  compareActionArticle = n.fullName || null;
 
   if (existingIdx !== -1) {
     // Node already selected: remove it
     compareSelection.value.splice(existingIdx, 1);
     showComparePopup.value = false;
-    announceToScreenReader(`Deselected ${n.fullName || n.id}. ${compareSelection.value.length} article${compareSelection.value.length === 1 ? '' : 's'} selected.`);
   } else if (compareSelection.value.length < 2) {
     // Add node to selection
     compareSelection.value.push(n);
-
-    if (compareSelection.value.length === 2) {
-      // Two nodes selected: show popup
-      showComparePopup.value = true;
-      announceToScreenReader('Two articles selected. Compare popup opened.');
-    } else {
-      announceToScreenReader(`Selected ${n.fullName || n.id}. Select one more article to compare.`);
-    }
+    // Two nodes selected: show popup
+    if (compareSelection.value.length === 2) showComparePopup.value = true;
   }
 }
 
@@ -2443,7 +2449,10 @@ let focusBeforeSheet: HTMLElement | SVGElement | null = null;
 watch(() => compareMode.value === 'sheet', async (sheet) => {
   if (sheet) {
     const active = document.activeElement;
-    focusBeforeSheet = active instanceof HTMLElement || active instanceof SVGElement ? active : null;
+    /* only a keyboard focus is given back: after a touch, refocusing the bubble
+       would grow its hover card */
+    const keyboard = active instanceof Element && active.matches(':focus-visible');
+    focusBeforeSheet = keyboard && (active instanceof HTMLElement || active instanceof SVGElement) ? active : null;
     await nextTick();
     compareSheetRef.value?.querySelector<HTMLElement>('button, a[href]')?.focus();
   } else if (focusBeforeSheet) {
@@ -2451,6 +2460,28 @@ watch(() => compareMode.value === 'sheet', async (sheet) => {
     focusBeforeSheet = null;
   }
 });
+
+/* aria-modal: Tab stays inside the sheet, wrapping at either end. */
+function onCompareSheetKeydown(ev: KeyboardEvent) {
+  if (ev.key !== 'Tab' || !compareSheetRef.value) return;
+  const focusables = [...compareSheetRef.value.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])')];
+  if (!focusables.length) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (ev.shiftKey && document.activeElement === first) {
+    ev.preventDefault();
+    last.focus();
+  } else if (!ev.shiftKey && document.activeElement === last) {
+    ev.preventDefault();
+    first.focus();
+  }
+}
+
+/* The sheet is teleported to <body>, outside the Bubble view: when that view is left
+   (another view, Back on a phone), the sheet goes too. */
+function onBubbleViewHidden() {
+  closeComparePopup();
+}
 
 /* Close compare popup */
 function closeComparePopup() {
@@ -2563,7 +2594,9 @@ function goToComparison() {
                 :cx="j.x" :cy="j.y" r="5.5"
                 fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="1"
                 style="cursor: pointer;"
-                role="button" tabindex="0" :aria-label="`Compare ${j.sourceOwner} with ${j.targetOwner}`"
+                :role="j.inert ? undefined : 'button'" :tabindex="j.inert ? -1 : 0"
+                :aria-hidden="j.inert ? 'true' : undefined"
+                :aria-label="j.inert ? undefined : `Compare ${j.sourceOwner} with ${j.targetOwner}`"
                 @click.stop="() => onJointClick(j)" @keydown.enter.stop="() => onJointClick(j)"
                 @keydown.space.stop="() => onJointClick(j)"
               />
@@ -2583,6 +2616,7 @@ function goToComparison() {
                 :is-active="selectedNodeId === f.node.id" :is-compare-mode="isCompareMode"
                 :compare-state="getCompareState(f.node.id)"
                 :is-tombstoned="f.node.isTombstoned === true"
+                :is-hidden="f.node.isHidden === true"
                 @click="() => onBubbleClick(f.node)" @hover="(id, on, pt) => onBubbleHover(id, on, pt)"
               />
             </template>
@@ -2711,7 +2745,7 @@ function goToComparison() {
            the banner then offers "Compare now". -->
       <Teleport v-if="compareMode === 'sheet'" to="body">
         <div class="compare-sheet-backdrop" @click="closeComparePopup"/>
-        <div ref="compareSheetRef" class="compare-sheet">
+        <div ref="compareSheetRef" class="compare-sheet" @keydown="onCompareSheetKeydown">
           <ArticleComparePopup
             :articles="compareSelection" :subject="props.subject || ''" placement="sheet"
             @close="closeComparePopup" @compare="goToComparison"

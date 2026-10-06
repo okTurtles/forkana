@@ -55,3 +55,15 @@ test('goes under the graph when neither side has room (a phone)', () => {
   const phone = {bubbles: [{cx: 150, cy: 300, r: 45}, {cx: 220, cy: 420, r: 17}], containerHeight: 700, viewportLeft: 0, viewportRight: 375, boxHeight: 372};
   expect(placeComparePopover(phone).placement).toBe('below');
 });
+
+test('a box that would leave the window with its bubbles panned off-screen becomes the sheet', () => {
+  // the picked bubbles are panned past the left edge: "right" of them starts off-screen
+  const layout = placeComparePopover({
+    bubbles: [{cx: -600, cy: 200, r: 30}, {cx: -500, cy: 260, r: 30}],
+    containerHeight: 600,
+    viewportLeft: 0,
+    viewportRight: 1400,
+    boxHeight: 372,
+  });
+  expect(layout.placement).toBe('below');
+});

@@ -56,6 +56,12 @@ test('the urls of the subject page say which view and which article they show', 
   // the permanent article url (an archived article's) names its repository, on the
   // Article view unless the url says otherwise (#425 review 4)
   expect(parseSubjectLocation('/alice/moon-landing', '')).toEqual({view: 'article', mode: 'read', owner: 'alice', subject: null, repo: 'moon-landing'});
-  expect(parseSubjectLocation('/explore/articles/history/alice/moon-landing', '')).toEqual({view: 'bubble', mode: 'read', owner: 'alice', subject: null, repo: 'moon-landing'});
+  // the legacy history path selects its article on the Article view only, as page load does
+  expect(parseSubjectLocation('/explore/articles/history/alice/moon-landing', '')).toEqual({view: 'bubble', mode: 'read', owner: null, subject: null, repo: null});
+  expect(parseSubjectLocation('/explore/articles/history/alice/moon-landing?view=article', '')).toEqual({view: 'article', mode: 'read', owner: 'alice', subject: null, repo: 'moon-landing'});
   expect(parseSubjectLocation('/sub/alice/moon-landing?view=article&mode=history', '/sub')).toEqual({view: 'article', mode: 'history', owner: 'alice', subject: null, repo: 'moon-landing'});
+});
+
+test('a "version" of an article page does not stick to the subject views', () => {
+  expect(withCarriedQuery('/subject/Moon?view=table', '?version=abc123&sort=latest')).toBe('/subject/Moon?view=table&sort=latest');
 });
