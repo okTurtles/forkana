@@ -1,4 +1,4 @@
-import {pickInitialSelection, selectionFromHistoryState, withCarriedQuery, type InitialSelectionInput} from './repo-history-state.ts';
+import {parseSubjectLocation, pickInitialSelection, selectionFromHistoryState, withCarriedQuery, type InitialSelectionInput} from './repo-history-state.ts';
 
 const alice = {owner: 'alice', repo: 'moon', subject: 'Moon', archived: false, link: '/subject/Moon/alice'};
 const bob = {owner: 'bob', repo: 'moon', subject: 'Moon', archived: true, link: '/subject/Moon/bob/2'};
@@ -48,4 +48,14 @@ test('the view urls keep the rest of the query (the Table view\'s sort), not its
   // the url's own parameters win
   expect(withCarriedQuery('/subject/Moon?view=table&sort=latest', '?sort=least_contrib')).toBe('/subject/Moon?view=table&sort=latest');
   expect(withCarriedQuery(tableUrl, '')).toBe(tableUrl);
+});
+
+test('the urls of the subject page say which view and which article they show', () => {
+  expect(parseSubjectLocation('/subject/Moon%20Landing?view=table', '')).toEqual({view: 'table', mode: 'read', owner: null, subject: null, repo: null});
+  expect(parseSubjectLocation('/subject/Moon%20Landing/alice/2?mode=edit', '')).toEqual({view: 'article', mode: 'edit', owner: 'alice', subject: 'Moon Landing', repo: null});
+  // the permanent article url (an archived article's) names its repository, on the
+  // Article view unless the url says otherwise (#425 review 4)
+  expect(parseSubjectLocation('/alice/moon-landing', '')).toEqual({view: 'article', mode: 'read', owner: 'alice', subject: null, repo: 'moon-landing'});
+  expect(parseSubjectLocation('/explore/articles/history/alice/moon-landing', '')).toEqual({view: 'bubble', mode: 'read', owner: 'alice', subject: null, repo: 'moon-landing'});
+  expect(parseSubjectLocation('/sub/alice/moon-landing?view=article&mode=history', '/sub')).toEqual({view: 'article', mode: 'history', owner: 'alice', subject: null, repo: 'moon-landing'});
 });

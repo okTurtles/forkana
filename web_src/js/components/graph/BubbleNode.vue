@@ -230,6 +230,18 @@ const compareOutlined = computed(() => props.isCompareMode === true && (compareS
 const compareOrder = computed(() => props.isCompareMode === true ? compareOrderFor(props.compareState) : null);
 const compareBadge = computed(() => compareBadgeCenter(props.r));
 
+/* What a screen reader hears. In compare mode the order badge (aria-hidden: it is
+   drawn) is said in words, and aria-pressed follows the pick, not the page's
+   selection. */
+const ariaLabel = computed(() => {
+  const count = `${props.contributors} contributor${props.contributors === 1 ? '' : 's'}`;
+  const base = props.isTombstoned ?
+    `Repository node with ${count}, deleted by its author` :
+    `Repository node with ${count}${props.updatedAt ? `, last updated ${props.updatedAt}` : ''}`;
+  const pick = compareOrder.value !== null ? `, selected for comparison (${compareOrder.value} of 2)` : '';
+  return `${base}${pick}. Press Enter to select.`;
+});
+
 /* The compare stroke's width, or 0 where there is no compare outline. */
 const compareStrokeWidth = computed(() => {
   if (!compareOutlined.value) return 0;
@@ -303,10 +315,8 @@ function onKeyDown(ev: KeyboardEvent) {
     class="node cursor-pointer select-none"
     :class="{ 'is-expanded': expanded, 'is-frozen': frozen, 'is-tombstoned': isTombstoned, 'is-compare': isCompareMode === true }"
     :transform="gTransform" :data-node-id="id" role="button"
-    :aria-label="isTombstoned
-      ? `Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}, deleted by its author. Press Enter to select.`
-      : `Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
-    :aria-pressed="isActive ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
+    :aria-label="ariaLabel"
+    :aria-pressed="(isCompareMode === true ? compareSelected : isActive) ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
     @pointerdown="onPointerDown" @pointerenter="onPointerEnter" @pointerleave="onPointerLeave"
     @focusin="onFocusIn" @focusout="onFocusOut"
   >
@@ -410,10 +420,10 @@ function onKeyDown(ev: KeyboardEvent) {
 /* ── TOMBSTONE ───────────────────────────────────────────────────────────
    A deleted article keeps its place in the graph so its forks keep their
    ancestry, and it stays selectable like any other bubble; it is only drawn
-   faded with a dashed outline (the dash pattern itself is on the circle, next
-   to the compare-mode one it has to co-exist with). The stroke is set here
-   rather than in the binding so it also wins over the hover/focus rules
-   below. */
+   faded with a dashed outline (the dash pattern itself is on the circle). In
+   compare mode it keeps this look until it is picked (compareOutlined). The
+   stroke is set here rather than in the binding so it also wins over the
+   hover/focus rules below. */
 .node.is-tombstoned {
   opacity: 0.55;
 }

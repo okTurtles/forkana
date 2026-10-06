@@ -43,10 +43,11 @@
    Item 2: the tabs are centred in the CONTAINER, not in the space left over
    next to the Compare button — the button is lifted out of the flow and pinned
    to the right edge, so it no longer pushes the tabs left of centre. */
-/* Item 5 lives here too: the Compare button reads as a button — bold label, a
-   hover you can see, and (via the `primary` class copycontent.ts toggles) a
-   filled active state with white text. The ID alone outweighs Fomantic's
-   class-only button rules, so no !important is needed. */
+/* The Compare button's place and size are here; all its colours and states
+   (hover, the `primary` fill copycontent.ts toggles while compare mode is on,
+   unavailable) are in custom/public/assets/css/repo.custom.css, with the
+   Forkana palette they use. The ID alone outweighs Fomantic's class-only
+   button rules, so no !important is needed. */
 #compare-mode-button {
   position: absolute;
   right: 0;
@@ -84,22 +85,6 @@ overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
   color: inherit;
 }
 
-#compare-mode-button:hover:not(.primary) {
-  background: var(--color-secondary);
-}
-
-#compare-mode-button.primary {
-  background: var(--color-primary);
-  color: var(--color-primary-contrast);
-}
-
-/* A subject with a single article has nothing to compare (figma "Bubble view /
-   Comparing disabled", 6661:52942): the button stays clickable, to explain why
-   in the Compare banner, but reads as unavailable. */
-#compare-mode-button.is-unavailable {
-  cursor: default;
-}
-
 /* ── Mobile ───────────────────────────────────────────────────────────────
    767.98px is this app's mobile breakpoint — 41 of the 43 max-width queries in
    web_src/css use it, so this follows the house convention rather than the
@@ -107,9 +92,8 @@ overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
    way the CSS here spells it).
 
    On a phone the subject header eats the top of the screen: the template gives
-   it `tw-pt-14` (56px) and `tw-pb-10` (40px), or 38px from
-   .repo-header-with-follow, under a 40px title. 1rem each way and a 20px title
-   leave room for the article itself.
+   it `tw-pt-14` (56px) and .repo-header-with-follow's 38px below, under a 40px
+   title. 1rem each way and a 20px title leave room for the article itself.
 
    THE SELECTORS ARE DELIBERATELY TWO DEEP. Tailwind's utilities are generated
    with !important in this repo (`.tw-pt-14{padding-top:3.5rem!important}`) and
@@ -144,11 +128,10 @@ overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
     margin: 0 40px 0 0;
   }
 
+  /* (32px tall at every width, see above) */
   #compare-mode-button {
     width: 32px;
-    height: 32px !important;
-    min-height: 32px;
-    padding: 0 !important;
+    padding: 0;
     justify-content: center;
   }
 }

@@ -1,6 +1,5 @@
 import {createApp, nextTick} from 'vue';
 import CompareAnnouncement, {type CompareAnnouncementMessages} from './CompareAnnouncement.vue';
-import {replayCompareModeRequest, requestCompareMode, takeCompareModeRequest} from '../../modules/compare-mode-request.ts';
 
 const messages: CompareAnnouncementMessages = {
   select: 'Select 2 articles to compare (0/2 selected).',
@@ -62,13 +61,6 @@ test('the x dismisses it', async () => {
   expect(events).toEqual(['dismiss']);
 });
 
-test('a Compare press made before the bubble view mounted is taken exactly once', () => {
-  expect(takeCompareModeRequest()).toBe(false);
-  requestCompareMode();
-  expect(takeCompareModeRequest()).toBe(true);
-  expect(takeCompareModeRequest()).toBe(false);
-});
-
 test('on the "no forks" notice, shown while compare mode is off, the x only dismisses', async () => {
   const {root, events} = mount({state: 'unavailable'});
   const x = root.querySelector<HTMLButtonElement>('.compare-announcement-dismiss');
@@ -79,26 +71,4 @@ test('on the "no forks" notice, shown while compare mode is off, the x only dism
   for (const state of ['select', 'one', 'ready']) {
     expect(mount({state}).root.querySelector('.compare-announcement-dismiss').getAttribute('aria-label')).toBe('Exit compare mode');
   }
-});
-
-test('a Compare press that mounted the graph is replayed once the graph is loaded, not before', async () => {
-  const calls: string[] = [];
-  let loaded = false;
-  const load = async () => {
-    calls.push('load');
-    await Promise.resolve();
-    loaded = true;
-  };
-  const press = () => calls.push(loaded ? 'press after load' : 'press before load');
-
-  requestCompareMode();
-  await replayCompareModeRequest(load, press);
-  expect(calls).toEqual(['load', 'press after load']);
-  expect(takeCompareModeRequest()).toBe(false);
-
-  // no request, no press
-  calls.length = 0;
-  loaded = false;
-  await replayCompareModeRequest(load, press);
-  expect(calls).toEqual(['load']);
 });

@@ -10,8 +10,8 @@ import {
   selectionFromParam, setCurrentSelection, withSelectionParam,
   type RepoSelection,
 } from '../modules/repo-selection.ts';
-import {pickInitialSelection, selectionFromHistoryState, withCarriedQuery, type HistoryState, type ViewKey} from './repo-history-state.ts';
-import {requestCompareMode, takeCompareRequestFromUrl} from '../modules/compare-mode-request.ts';
+import {parseSubjectLocation, pickInitialSelection, selectionFromHistoryState, withCarriedQuery, type HistoryState, type ViewKey} from './repo-history-state.ts';
+import {COMPARE_MODE_TOGGLE_EVENT, requestCompareMode, takeCompareRequestFromUrl} from '../modules/compare-mode-request.ts';
 
 function buildSubjectUrl(base: string, view?: ViewKey): string {
   if (!view) return base;
@@ -49,23 +49,6 @@ function buildArticleUrl(appSubUrl: string, articleBase: string, selection: Repo
 
 // "/subject/{subject}/{owner}" and "/subject/{subject}/{owner}/{index}" are article urls;
 // "/subject/{subject}" alone is the subject page, whose view is in the query.
-function parseLocation(appSubUrl: string | undefined): {view: ViewKey, mode: string, owner: string | null, subject: string | null} {
-  const url = new URL(window.location.href);
-  const params = url.searchParams;
-  const view = (params.get('view') as ViewKey) || 'bubble';
-  const mode = params.get('mode') || 'read';
-
-  const basePrefix = (appSubUrl || '').replace(/\/+$/, '');
-  const pathname = url.pathname;
-  const trimmedPath = pathname.startsWith(basePrefix) ? pathname.slice(basePrefix.length) : pathname;
-  const segments = trimmedPath.replace(/^\/+/, '').split('/');
-
-  if (segments[0] === 'subject' && segments.length >= 3 && segments[2]) {
-    return {view: 'article', mode, owner: decodeURIComponent(segments[2]), subject: decodeURIComponent(segments[1])};
-  }
-  return {view, mode, owner: null, subject: null};
-}
-
 // Do two url paths name the same page? Percent-encoding and trailing slashes aside.
 function samePath(a: string, b: string): boolean {
   try {
@@ -201,7 +184,6 @@ export function initRepoHistory() {
   let errorEl: HTMLElement | null = null;
   let errorTextEl: HTMLElement | null = null;
   let articleTabs: HTMLElement | null = null;
-  let articleGuidance: HTMLElement | null = null;
   let articleEmptyEl: HTMLElement | null = null;
   let articleContentEl: HTMLElement | null = null;
   const archivedNoticeEl = document.querySelector<HTMLElement>('#article-archived-notice');
@@ -218,7 +200,6 @@ export function initRepoHistory() {
     errorEl = articleSection.querySelector('[data-role="article-error"]');
     errorTextEl = articleSection.querySelector('[data-role="article-error-text"]');
     articleTabs = articleSection.querySelector('#article-tabs');
-    articleGuidance = articleSection.querySelector('#article-guidance');
     articleEmptyEl = articleSection.querySelector('[data-role="article-empty"]');
     articleContentEl = articleSection.querySelector('[data-role="article-content"]');
   }
@@ -227,11 +208,6 @@ export function initRepoHistory() {
     if (!el) return;
     if (hidden) el.setAttribute('hidden', '');
     else el.removeAttribute('hidden');
-  }
-
-  function updateArticleGuidance() {
-    if (!articleGuidance) return;
-    articleGuidance.style.display = selectedRepo.value ? 'none' : '';
   }
 
   function showArticleEmpty() {
@@ -505,7 +481,6 @@ export function initRepoHistory() {
         loadedArticle = selection;
         loadedMode = articleMode.value;
         bindArticleTabs();
-        updateArticleGuidance();
         if (articleMode.value === 'edit') {
           initArticleEditor();
         } else if (articleMode.value === 'settings') {
@@ -611,10 +586,17 @@ export function initRepoHistory() {
   // An entry without a state of ours (one created by an in-page anchor, say) is read
   // from its url, which carries everything the state would.
   function stateFromLocation(): HistoryState {
-    const loc = parseLocation(appSubUrl);
+    const loc = parseSubjectLocation(window.location.href, appSubUrl);
+    const pathname = window.location.pathname;
     let selection: RepoSelection | null;
-    if (loc.owner) {
-      const pathname = window.location.pathname;
+    if (loc.owner && loc.repo) {
+      // the permanent article url /{owner}/{repo} (an archived article's, say): that
+      // article, or one only known by its url
+      const named: RepoSelection = {owner: loc.owner, repo: loc.repo, subject: null};
+      selection = candidates.find((c) => matchesSelection(c, named)) ??
+        (matchesSelection(renderedArticle, named) ? renderedArticle : null) ??
+        normalizeSelection({owner: loc.owner, repo: loc.repo, subject: renderedArticle?.subject ?? loc.repo, archived: true, link: pathname});
+    } else if (loc.owner) {
       const linksHere = (s: RepoSelection | null) => Boolean(s?.link) && samePath(new URL(s.link, window.location.origin).pathname, pathname);
       // An article url no row links to (say, one from before the owner's articles were
       // renumbered): keep the url itself as the link, so its article index is not lost.
@@ -642,7 +624,6 @@ export function initRepoHistory() {
 
   watch(selectedRepo, () => {
     updateCheckboxes();
-    updateArticleGuidance();
     updateArchivedNoticeVisibility();
     syncNavLinks();
   }, {immediate: true});
@@ -656,7 +637,6 @@ export function initRepoHistory() {
   // article is fetched into it.
   collectArticleRefs();
   bindArticleTabs();
-  updateArticleGuidance();
   // On the Article view the selection is the rendered article (or none), so nothing has to
   // be fetched for the first view (#405).
   if (activeView.value === 'article') {
@@ -684,7 +664,7 @@ export function initRepoHistory() {
   // Compare mode lives in the bubble view: pressing Compare on another view goes there.
   // A graph already mounted (hidden) handles the press itself; one that is not yet gets
   // it as a request when it mounts.
-  window.addEventListener('repo:compare-mode-toggle', () => {
+  window.addEventListener(COMPARE_MODE_TOGGLE_EVENT, () => {
     if (activeView.value === 'bubble') return;
     if (!bubbleMounted) requestCompareMode();
     switchView('bubble', {pushState: true});

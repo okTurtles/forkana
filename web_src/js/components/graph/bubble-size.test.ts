@@ -263,7 +263,9 @@ describe('compare mode drawing (#405 item 6, figma 641:61930)', () => {
     expect(xs.diameter).toBeLessThan(s.diameter);
     expect(s.diameter).toBeLessThan(18);
     for (const rung of BUBBLE_SIZE_LADDER) {
-      // an 18px disc would cover over half of a 34px bubble: keep every badge below that
+      // an 18px disc would cover over half of a 34px bubble: no badge is wider than half
+      // its bubble plus 3px (the slack the XS rung needs: its 22px bubble keeps a 12px,
+      // still readable, disc)
       expect(rung.compareBadge.diameter).toBeLessThanOrEqual(rung.diameter / 2 + 3);
       expect(rung.compareBadge.fontSize).toBeGreaterThanOrEqual(8);
       expect(rung.compareBadge.fontSize).toBeLessThan(rung.compareBadge.diameter);

@@ -482,6 +482,11 @@ onBeforeUnmount(() => {
   color: var(--color-button-text);
 }
 
+/* as deep as the rule above, or the shared .btn-neutral:hover loses to it */
+.detail-content > .detail-read:hover {
+  background: var(--color-hover);
+}
+
 /* A button that reads as bold text: no border, no background. */
 .detail-history {
   padding: 6px 12px;

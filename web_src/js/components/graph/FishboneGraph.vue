@@ -35,7 +35,7 @@ import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
 import { COMPARE_POPOVER_HEIGHT, COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
 import CompareAnnouncement, { type CompareAnnouncementMessages, type CompareAnnouncementState } from "./CompareAnnouncement.vue";
-import { replayCompareModeRequest } from "../../modules/compare-mode-request.ts";
+import { COMPARE_MODE_STATE_EVENT, COMPARE_MODE_TOGGLE_EVENT, compareAvailableFor, replayCompareModeRequest, type CompareModeState } from "../../modules/compare-mode-request.ts";
 import type { ForkGraphNode, ForkGraphResponse } from "./fork-graph-api.ts";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import { GET } from "../../modules/fetch.ts";
@@ -93,6 +93,9 @@ type Node = {
      below it need the ancestry — and stays interactive; the bubble is only
      drawn as a tombstone so the deletion is visible. */
   isTombstoned?: boolean;
+  /* A node without a repository: the subject root the reader may not see (the server
+     sends its place only). Drawn like a tombstone, it is not an article to select. */
+  isHidden?: boolean;
   /* The API answered 0 contributors for a repository that HAS content, which
      means the stats are still being generated server-side, not that nobody
      wrote it (see buildGraphFromApi). `contributors` carries a placeholder 1
@@ -432,6 +435,7 @@ function normalize(value?: string | null) {
 }
 
 function getSelectionDetailFromNode(n: Node): RepoSelectionDetail | null {
+  if (n.isHidden) return null;   // it would otherwise borrow the page's own article (props)
   const ownerCandidates = [
     n.repoOwner,
     n.fullName?.split('/')?.[0],
@@ -729,6 +733,7 @@ function buildGraphFromApi(root: ForkGraphNode | null | undefined): Graph {
       isArchived,
       articleLink: articleLink ?? undefined,
       isTombstoned,
+      isHidden: n?.repository == null,
       statsPending,
     };
     if (!node.repoSubject && parentId === null && props.subject) {
@@ -1631,18 +1636,20 @@ onMounted(async () => {
   window.addEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
   /* Before the fetch too: the header's Compare button can be clicked while
      the graph is loading. */
-  window.addEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
+  window.addEventListener(COMPARE_MODE_TOGGLE_EVENT, handleCompareModeToggle as EventListener);
+  /* Before the await, like every listener here: onBeforeUnmount may run while
+     the graph is still loading, and must find them to remove them. */
+  window.addEventListener('keydown', onGraphKeydown);
+  /* The window can change without the graph's box changing (a centred box of
+     fixed width just moves), and that changes which side of the bubbles has
+     room for the Compare box: re-place it on every resize. */
+  window.addEventListener('resize', updateCompareAnchor);
 
   /* Initial fetch from API. A Compare press that mounted the graph
      (repo-history.ts switches to the bubble view and leaves it as a request)
      is replayed once the graph is in: replayed before, it would find no
      article and say "No forks yet" on a subject that has some. */
   await replayCompareModeRequest(fetchForkGraphAndSet, handleCompareModeToggle);
-  window.addEventListener('keydown', onGraphKeydown);
-  /* The window can change without the graph's box changing (a centred box of
-     fixed width just moves), and that changes which side of the bubbles has
-     room for the Compare box: re-place it on every resize. */
-  window.addEventListener('resize', updateCompareAnchor);
 });
 
 onBeforeUnmount(() => {
@@ -1656,7 +1663,7 @@ onBeforeUnmount(() => {
   cancelStatsRetry();
   if (hoverTimer !== null) window.clearTimeout(hoverTimer);
   window.removeEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
-  window.removeEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
+  window.removeEventListener(COMPARE_MODE_TOGGLE_EVENT, handleCompareModeToggle as EventListener);
   window.removeEventListener('keydown', onGraphKeydown);
   narrowQuery?.removeEventListener('change', onNarrowChange);
   window.removeEventListener('resize', updateCompareAnchor);
@@ -1897,6 +1904,7 @@ function onBubbleHover(id: NodeId, on: boolean, pointerType: string) {
     return;
   }
   if (openArticle.value) return;   // the graph is not on screen to be hovered
+  if (on && nodeById(id)?.isHidden) return;   // no card: there is no article to describe
   /* start on the summary as the pointer arrives, so it is there (or nearly) by
      the time the hover debounce grows the card */
   if (on) wantArticleSummary(nodeById(id));
@@ -1905,6 +1913,7 @@ function onBubbleHover(id: NodeId, on: boolean, pointerType: string) {
 }
 
 function onBubbleClick(n: Node) {
+  if (n.isHidden) return;   // not an article the reader may open or compare
   // In compare mode, use compare selection logic instead
   if (isCompareMode.value) {
     onBubbleClickCompare(n);
@@ -2175,12 +2184,10 @@ function updateHistoryAnchor() {
    Once two bubbles are picked, the Compare box sits beside them with its caret
    pointing back at them (figma 641:61930) — see ./compare-popover.ts.
    Re-placed whenever the bubbles move on screen: a pan or zoom, a reflow, a
-   resize. On a phone, or when neither side has room for it, there is no box:
-   the sticky Compare banner carries the articles and the action instead
-   (CompareAnnouncement `expanded`), at the top, where it covers nothing. */
-/* A phone has no room beside the bubbles: the banner carries the two
-   articles and the action there instead of a Compare box. Same breakpoint as
-   the rest of the app (767.98px). */
+   resize. On a phone, or when neither side has room for it, the box is a
+   bottom sheet instead (compareBoxMode). */
+/* A phone has no room beside the bubbles: the box is a bottom sheet there.
+   Same breakpoint as the rest of the app (767.98px). */
 const narrowQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(COMPARE_SHEET_QUERY) : null;
 const isNarrow = ref(narrowQuery?.matches ?? false);
 const onNarrowChange = (ev: MediaQueryListEvent) => { isNarrow.value = ev.matches; };
@@ -2228,8 +2235,7 @@ function updateCompareAnchor() {
   });
 }
 
-/* Place it as it opens, and again once it is measured (the details can fold,
-   and a long name can wrap). */
+/* Place it as it opens, and again once it is measured (a long name can wrap). */
 watch([compareBoxOpen, isNarrow], async ([open]) => {
   if (!open) return;
   updateCompareAnchor();
@@ -2350,10 +2356,13 @@ function handleCompareModeToggle() {
 /* ── COMPARE MODE BANNER (#421 item 1) ─────────────────────────────────────
    CompareAnnouncement.vue, teleported under the navbar. Its state follows the
    selection; the header's Compare button follows compare mode (and whether
-   the subject has anything to compare) through `repo:compare-mode-state`,
+   the subject has anything to compare) through COMPARE_MODE_STATE_EVENT,
    which web_src/js/features/copycontent.ts applies to it. */
 const compareUnavailableShown = ref(false);
-const compareAvailable = computed(() => isLoading.value || Object.keys(state.graph).length >= 2);
+/* Two live articles to compare. A deleted article cannot be compared, and a graph
+   that failed to load says nothing about the subject: that is not "No forks yet". */
+const liveArticleCount = computed(() => Object.values(state.graph).filter((n) => !n.isTombstoned).length);
+const compareAvailable = computed(() => compareAvailableFor({loading: isLoading.value, failed: errorMessage.value !== null, liveArticles: liveArticleCount.value}));
 const announcementTarget = typeof document !== 'undefined' ? document.querySelector<HTMLElement>('#compare-announcement-root') : null;
 
 function readAnnouncementMessages(): CompareAnnouncementMessages {
@@ -2378,6 +2387,12 @@ const announcementState = computed<CompareAnnouncementState | null>(() => {
   return compareUnavailableShown.value ? 'unavailable' : null;
 });
 
+/* The banner is mounted with its first message, which a live region inside it would
+   not announce: the graph's own status region (srAnnouncement) says each one. */
+watch(announcementState, (state) => {
+  if (state) announceToScreenReader(announcementMessages[state]);
+});
+
 function dismissAnnouncement() {
   if (isCompareMode.value) toggleCompareMode();
   else compareUnavailableShown.value = false;
@@ -2393,7 +2408,7 @@ watch(compareAvailable, (available) => {
 });
 
 watch([isCompareMode, compareAvailable], () => {
-  window.dispatchEvent(new CustomEvent('repo:compare-mode-state', {
+  window.dispatchEvent(new CustomEvent<CompareModeState>(COMPARE_MODE_STATE_EVENT, {
     detail: {on: isCompareMode.value, available: compareAvailable.value},
   }));
 }, {immediate: true});
@@ -2420,6 +2435,22 @@ function onBubbleClickCompare(n: Node) {
     }
   }
 }
+
+/* The bottom sheet is a modal dialog: it takes the focus when it opens, and gives
+   it back to what had it (the bubble just picked) when it closes. */
+const compareSheetRef = ref<HTMLElement | null>(null);
+let focusBeforeSheet: HTMLElement | SVGElement | null = null;
+watch(() => compareMode.value === 'sheet', async (sheet) => {
+  if (sheet) {
+    const active = document.activeElement;
+    focusBeforeSheet = active instanceof HTMLElement || active instanceof SVGElement ? active : null;
+    await nextTick();
+    compareSheetRef.value?.querySelector<HTMLElement>('button, a[href]')?.focus();
+  } else if (focusBeforeSheet) {
+    if (focusBeforeSheet.isConnected) focusBeforeSheet.focus();
+    focusBeforeSheet = null;
+  }
+});
 
 /* Close compare popup */
 function closeComparePopup() {
@@ -2528,7 +2559,7 @@ function goToComparison() {
               <circle
                 v-for="j in jointDots" :key="`joint-${j.id}`" :data-edge="j.id" class="joint-parent"
                 :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId, 'is-selected': selectedNodeId === j.targetId}"
-                :aria-pressed="selectedNodeId === j.targetId ? 'true' : 'false'"
+                :aria-current="selectedNodeId === j.targetId ? 'true' : undefined"
                 :cx="j.x" :cy="j.y" r="5.5"
                 fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="1"
                 style="cursor: pointer;"
@@ -2680,7 +2711,7 @@ function goToComparison() {
            the banner then offers "Compare now". -->
       <Teleport v-if="compareMode === 'sheet'" to="body">
         <div class="compare-sheet-backdrop" @click="closeComparePopup"/>
-        <div class="compare-sheet">
+        <div ref="compareSheetRef" class="compare-sheet">
           <ArticleComparePopup
             :articles="compareSelection" :subject="props.subject || ''" placement="sheet"
             @close="closeComparePopup" @compare="goToComparison"

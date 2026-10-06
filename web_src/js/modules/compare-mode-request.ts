@@ -4,6 +4,27 @@
 // it listens for the button.
 let pending = false;
 
+/** Sent by the header's Compare button: compare mode is to be turned on or off. */
+export const COMPARE_MODE_TOGGLE_EVENT = 'repo:compare-mode-toggle';
+
+/** Sent by the bubble view whenever compare mode changes; the button follows it. */
+export const COMPARE_MODE_STATE_EVENT = 'repo:compare-mode-state';
+
+/** The detail of COMPARE_MODE_STATE_EVENT. */
+export type CompareModeState = {on: boolean, available: boolean};
+
+/** Can compare mode be offered? While the graph loads it is assumed so (a press then is
+   checked once it is in), and a graph that failed to load says nothing about the
+   subject; otherwise it takes two live articles (a deleted one cannot be compared). */
+export function compareAvailableFor(graph: {loading: boolean, failed: boolean, liveArticles: number}): boolean {
+  return graph.loading || graph.failed || graph.liveArticles >= 2;
+}
+
+/** Forgets a pending request (tests). */
+export function resetCompareModeRequest() {
+  pending = false;
+}
+
 export function requestCompareMode() {
   pending = true;
 }

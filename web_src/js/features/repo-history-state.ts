@@ -20,12 +20,12 @@ export type HistoryState = {
    the state is not one of ours (no entry was recorded by this page yet). */
 export function selectionFromHistoryState(state: HistoryState | null | undefined): RepoSelection | null | undefined {
   if (!state || typeof state !== 'object' || !state.view) return undefined;
-  if (!state.owner || !(state.repo || state.subject)) return null;
+  // normalizeSelection makes every other check (an owner, and a repository or subject)
   return normalizeSelection({
-    owner: state.owner,
-    repo: state.repo || state.subject,
-    subject: state.subject ?? state.repo ?? null,
-    archived: state.archived === true,
+    owner: state.owner ?? '',
+    repo: state.repo ?? '',
+    subject: state.subject ?? null,
+    archived: state.archived,
     link: state.link ?? null,
   });
 }
@@ -61,7 +61,7 @@ export function pickInitialSelection(input: InitialSelectionInput): RepoSelectio
        outside the candidate list) recorded what the page really showed, link
        included, and dropping it would forget that article on Back/Forward. The url
        parameter is typed or shared by people, so an unknown one is ignored. */
-    return resolveSelection(input.historySelection, input.candidates) ?? input.historySelection;
+    return resolveSelection(input.historySelection, input.candidates) ?? normalizeSelection(input.historySelection);
   }
   const fromUrl = resolveSelection(input.urlSelection, input.candidates);
   if (fromUrl) return fromUrl;
@@ -83,4 +83,44 @@ export function withCarriedQuery(url: string, currentSearch: string): string {
     parsed.searchParams.append(key, value);
   }
   return parsed.pathname + parsed.search + parsed.hash;
+}
+
+/** What a url of the subject page says about the view and the article it shows. */
+export type SubjectLocation = {
+  view: ViewKey;
+  mode: string;
+  /** The article's owner, when the path names an article. */
+  owner: string | null;
+  /** The subject, for a vanity article url "/subject/{subject}/{owner}[/{n}]". */
+  subject: string | null;
+  /** The repository, for the permanent article url "/{owner}/{repo}". */
+  repo: string | null;
+};
+
+/** Reads a url the subject page can be on:
+   - "/subject/{subject}": the view of its "view" parameter (Bubble by default);
+   - "/subject/{subject}/{owner}[/{n}]": an article, on the Article view;
+   - "/{owner}/{repo}" (the permanent article url, an archived article's for one):
+     that article, on the view of its "view" parameter (Article by default). */
+export function parseSubjectLocation(href: string, appSubUrl: string | undefined): SubjectLocation {
+  const url = new URL(href, 'http://localhost');
+  const params = url.searchParams;
+  const mode = params.get('mode') || 'read';
+  const basePrefix = (appSubUrl || '').replace(/\/+$/, '');
+  const pathname = url.pathname;
+  const trimmedPath = basePrefix && pathname.startsWith(basePrefix) ? pathname.slice(basePrefix.length) : pathname;
+  const segments = trimmedPath.replace(/^\/+/, '').split('/').filter(Boolean).map((s) => decodeURIComponent(s));
+
+  if (segments[0] === 'subject') {
+    if (segments.length >= 3) return {view: 'article', mode, owner: segments[2], subject: segments[1], repo: null};
+    return {view: (params.get('view') as ViewKey) || 'bubble', mode, owner: null, subject: null, repo: null};
+  }
+  if (segments[0] === 'explore' && segments[1] === 'articles' && segments[2] === 'history' && segments.length >= 5) {
+    // the legacy /explore/articles/history/{owner}/{repo}: the subject page of that article
+    return {view: (params.get('view') as ViewKey) || 'bubble', mode, owner: segments[3], subject: null, repo: segments[4]};
+  }
+  if (segments.length >= 2) {
+    return {view: (params.get('view') as ViewKey) || 'article', mode, owner: segments[0], subject: null, repo: segments[1]};
+  }
+  return {view: (params.get('view') as ViewKey) || 'bubble', mode, owner: null, subject: null, repo: null};
 }

@@ -202,7 +202,7 @@ const geometryStyle = {
   color: var(--color-text-primary);
 }
 
-/* x-24 641:62022 and the chevrons: 24px targets around a muted 16px icon */
+/* x-24 641:62022: a 24px target around a muted 16px icon */
 .compare-popover-icon-button {
   display: inline-flex;
   flex-shrink: 0;
@@ -304,8 +304,6 @@ const geometryStyle = {
   font-weight: 400;
   font-style: italic;
 }
-
-
 
 /* Frame 713 641:62040: 12px/8px around a full-width 40px button (Action
    641:62041: #f6f8fa, 1px #d1d9e0, radius 6, Inter 600 14/20) */

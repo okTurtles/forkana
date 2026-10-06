@@ -3,7 +3,7 @@ import {showTemporaryTooltip} from '../modules/tippy.ts';
 import {convertImage} from '../utils.ts';
 import {GET} from '../modules/fetch.ts';
 import {registerGlobalEventFunc} from '../modules/observer.ts';
-import {withCompareRequest} from '../modules/compare-mode-request.ts';
+import {COMPARE_MODE_STATE_EVENT, COMPARE_MODE_TOGGLE_EVENT, withCompareRequest, type CompareModeState} from '../modules/compare-mode-request.ts';
 
 const {i18n} = window.config;
 
@@ -66,14 +66,14 @@ export function initCompareModeToggle() {
       if (bubbleUrl) window.location.assign(withCompareRequest(bubbleUrl));
       return;
     }
-    window.dispatchEvent(new CustomEvent('repo:compare-mode-toggle'));
+    window.dispatchEvent(new CustomEvent(COMPARE_MODE_TOGGLE_EVENT));
   });
 
   /* #421 item 1 (figma 641:61763 / 641:61930): while compare mode is on the
      button is filled with the brand colour and reads "Compare on"; on a subject
      with a single article it is shown unavailable, with figma's tooltip (6661:52942). */
-  window.addEventListener('repo:compare-mode-state', (event: Event) => {
-    const {on, available} = (event as CustomEvent<{on: boolean, available: boolean}>).detail;
+  window.addEventListener(COMPARE_MODE_STATE_EVENT, (event: Event) => {
+    const {on, available} = (event as CustomEvent<CompareModeState>).detail;
     const btn = document.querySelector<HTMLElement>('#compare-mode-button');
     if (!btn) return;
     const label = on ? btn.getAttribute('data-label-on') : btn.getAttribute('data-label-off');
@@ -91,6 +91,9 @@ export function initCompareModeToggle() {
     } else {
       btn.removeAttribute('data-tooltip-content');
       btn.removeAttribute('aria-disabled');
+      // attachTooltip leaves an existing tippy alone on empty content: destroy it, or
+      // the "No forks yet" tooltip keeps showing on a button that is now available
+      (btn as HTMLElement & {_tippy?: {destroy: () => void}})._tippy?.destroy();
     }
   });
 }

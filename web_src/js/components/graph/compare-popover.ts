@@ -12,10 +12,10 @@
    Placement, in order of preference:
      right  — beside the picked bubbles, on their right (as in figma);
      left   — the mirror, when the right side has no room for the box;
-     below  — neither side has room (a phone, or a graph as wide as the
-              screen): the box goes UNDER the graph, full width, in the page
-              flow, so it can never cover the bubbles it describes. Figma has
-              no 2-selected frame for mobile; this is our call, see the PR.
+     below  — neither side has room (a graph as wide as the screen): the
+              box is shown as the bottom sheet, as on a phone (figma "."
+              641:63496, see compareBoxMode below), so it never covers the
+              bubbles it describes.
    Vertically the caret points at the midpoint of the picked bubbles, and the
    box is centred on the caret as figma draws it, then kept inside the graph's
    box; when that clamp moves the box, the caret slides along its edge to keep

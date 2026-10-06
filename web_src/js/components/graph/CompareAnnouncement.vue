@@ -54,8 +54,10 @@ const dismissLabel = computed(() => props.state === 'unavailable' ? props.messag
 </script>
 
 <template>
-  <!-- role="status" is a polite live region already -->
-  <div class="compare-announcement" role="status">
+  <!-- Not a live region itself: it is mounted together with its first message, which
+       screen readers would skip. FishboneGraph's always-mounted status region says
+       each message instead. -->
+  <div class="compare-announcement">
     <!-- IconWrapper: octicon info, 16px, brand indigo -->
     <span class="compare-announcement-icon" aria-hidden="true">
       <svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
@@ -134,10 +136,10 @@ const dismissLabel = computed(() => props.state === 'unavailable' ? props.messag
 .compare-announcement-primary {
   height: 32px;
   padding: 6px 12px;
-  border: 1px solid rgba(31, 35, 40, 0.15);
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 15%, transparent);
   border-radius: 6px;
   background: var(--color-primary);
-  box-shadow: 0 1px 0 0 rgba(31, 35, 40, 0.04);
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--color-text-primary) 4%, transparent);
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
