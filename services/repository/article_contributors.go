@@ -10,7 +10,6 @@ import (
 
 	git_model "code.gitea.io/gitea/models/git"
 	repo_model "code.gitea.io/gitea/models/repo"
-	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/cache"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/gitrepo"
@@ -41,11 +40,11 @@ func ArticleContributorSince(repo *repo_model.Repository) time.Time {
 // articleContributorCountCacheKey is the cache key of the count of repo whose default
 // branch was at head, counted since `since`. The head only detects a change of the
 // branch: the count itself is always made on the real branch tip (see
-// countArticleContributors). "v3": v1 counted on the head itself, which gave wrong
-// counts for a stale head (see nodeContributorStats), and v1 and v2 counted author
-// names, not emails; none of them is reused.
+// countArticleContributors). "v4": v1 counted on the head itself, which gave wrong
+// counts for a stale head (see nodeContributorStats), and v3 counted author emails
+// for a while; neither is reused. (v2 had the same counts as v4.)
 func articleContributorCountCacheKey(repoID int64, head string, since time.Time) string {
-	return fmt.Sprintf("ArticleContributorCount/v3/%d/%s/%d", repoID, head, since.Unix())
+	return fmt.Sprintf("ArticleContributorCount/v4/%d/%s/%d", repoID, head, since.Unix())
 }
 
 // cachedArticleContributorCount returns the cached count of repo at head, if any.
@@ -71,11 +70,9 @@ func cachedArticleContributorCount(repo *repo_model.Repository, head string) (in
 // the older head, which the next push's new head replaces.
 func countArticleContributors(gitRepo *git.Repository, repo *repo_model.Repository, head string) (int64, error) {
 	since := ArticleContributorSince(repo)
-	emails, err := gitRepo.GetContributorAuthorEmails(repo.DefaultBranch, since)
-	if err != nil {
-		return 0, err
-	}
-	count, err := countContributorEmails(gitRepo.Ctx, emails)
+	// git shortlog groups the commits by author NAME, on purpose: the count is the
+	// number of people the article credits, as its history shows them.
+	count, err := gitRepo.GetContributorCount(repo.DefaultBranch, since)
 	if err != nil {
 		return 0, err
 	}
@@ -87,31 +84,8 @@ func countArticleContributors(gitRepo *git.Repository, repo *repo_model.Reposito
 	return count, nil
 }
 
-// countContributorEmails counts the contributors behind author emails exactly as the
-// contributors graph (GetContributorStats) does, and as the fork graph counted them
-// before #405: one per email (case kept), except that the emails of one Gitea account
-// count once, under the account's primary email.
-func countContributorEmails(ctx context.Context, emails []string) (int64, error) {
-	if len(emails) == 0 {
-		return 0, nil
-	}
-	users, err := user_model.GetUsersByEmails(ctx, emails)
-	if err != nil {
-		return 0, err
-	}
-	contributors := make(map[string]bool, len(emails))
-	for _, email := range emails {
-		if u := users.GetByEmail(email); u != nil {
-			email = u.GetEmail()
-		}
-		contributors[email] = true
-	}
-	return int64(len(contributors)), nil
-}
-
 // ArticleContributorCountWithGitRepo returns the number of contributors of an article:
-// the distinct author emails on its default branch since ArticleContributorSince
-// (countContributorEmails). It is the
+// the distinct authors on its default branch since ArticleContributorSince. It is the
 // one count every view of the subject shows (the bubbles, the table, the article view
 // and the compare page), so they can never disagree (#405).
 func ArticleContributorCountWithGitRepo(gitRepo *git.Repository, repo *repo_model.Repository) (int64, error) {

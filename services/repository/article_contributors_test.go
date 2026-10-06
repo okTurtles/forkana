@@ -116,31 +116,3 @@ func TestArticleContributorCountCache(t *testing.T) {
 	assert.Equal(t, int(count), stats.TotalCount)
 	assert.Nil(t, nodeContributorStats(done, repo, "0000000000000000000000000000000000000001"))
 }
-
-// A contributor is an author email, as the contributors graph counts them: the same
-// name with two emails is two contributors, one email under two names is one, and the
-// emails of one Gitea account are one.
-func TestCountContributorEmails(t *testing.T) {
-	require.NoError(t, unittest.PrepareTestDatabase())
-	ctx := t.Context()
-
-	count, err := countContributorEmails(ctx, []string{"alice@example.com", "alice@work.example.com"})
-	require.NoError(t, err)
-	assert.Equal(t, int64(2), count, "one name, two emails")
-
-	// the git side already returns each email once, whatever names it was used under
-	count, err = countContributorEmails(ctx, []string{"alice@example.com"})
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), count)
-
-	// user1's primary email and two of its other activated emails, one of them in
-	// another case: one account
-	user1 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
-	count, err = countContributorEmails(ctx, []string{user1.Email, "user1-2@example.com", "USER1-3@example.com", "stranger@example.com"})
-	require.NoError(t, err)
-	assert.Equal(t, int64(2), count)
-
-	count, err = countContributorEmails(ctx, nil)
-	require.NoError(t, err)
-	assert.Zero(t, count)
-}
