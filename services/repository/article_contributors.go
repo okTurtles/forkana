@@ -61,8 +61,8 @@ func cachedArticleContributorCount(repo *repo_model.Repository, head string) (in
 // countArticleContributors counts the contributors of repo on its default branch, as
 // git has it now, and caches the count under head.
 //
-// The count is made on the branch, never on head: head may come from the database
-// (nodeContributorStats), whose branch table is updated asynchronously after a push
+// The count is made on the branch, never on head: head comes from the database
+// (articleContributorHead), whose branch table is updated asynchronously after a push
 // and can lag behind, or be stale for good in data written straight into the
 // repositories. Counting on a stale head gives the count of an old commit (0 for a
 // fork whose head is still its fork point). head only keys the cache. The price is a
@@ -72,7 +72,8 @@ func countArticleContributors(gitRepo *git.Repository, repo *repo_model.Reposito
 	since := ArticleContributorSince(repo)
 	// git shortlog groups the commits by author NAME, on purpose: the count is the
 	// number of people the article credits, as its history shows them.
-	count, err := gitRepo.GetContributorCount(repo.DefaultBranch, since)
+	// refs/heads/…: a tag named like the branch would win over the short name
+	count, err := gitRepo.GetContributorCount(git.BranchPrefix+repo.DefaultBranch, since)
 	if err != nil {
 		return 0, err
 	}
@@ -92,7 +93,7 @@ func ArticleContributorCountWithGitRepo(gitRepo *git.Repository, repo *repo_mode
 	if repo.IsEmpty {
 		return 0, nil
 	}
-	head, err := gitRepo.GetBranchCommitID(repo.DefaultBranch)
+	head, err := articleContributorHead(gitRepo, repo)
 	if err != nil {
 		return 0, err
 	}
@@ -100,6 +101,21 @@ func ArticleContributorCountWithGitRepo(gitRepo *git.Repository, repo *repo_mode
 		return count, nil
 	}
 	return countArticleContributors(gitRepo, repo, head)
+}
+
+// articleContributorHead is the head every view keys repo's count on: the branch head
+// recorded in the database, as the fork graph reads it for all its nodes in one query
+// (branchHeads), or the head git has when the database has no row for the branch. One
+// key for every view is what keeps them from disagreeing: keyed on git's head here and
+// on the database's in the graph, a push the branch table has not caught up with
+// showed the new count in the Table, Article and Compare views and the old one in the
+// bubbles. Now all of them show the count made when that database head was first seen
+// (on the branch tip, see countArticleContributors), until the table moves on.
+func articleContributorHead(gitRepo *git.Repository, repo *repo_model.Repository) (string, error) {
+	if heads := branchHeads(gitRepo.Ctx, []*repo_model.Repository{repo}); heads[repo.ID] != "" {
+		return heads[repo.ID], nil
+	}
+	return gitRepo.GetBranchCommitID(repo.DefaultBranch)
 }
 
 // ArticleContributorCountOrUnknown is ArticleContributorCountWithGitRepo for a view: -1
@@ -184,7 +200,12 @@ func nodeContributorStats(ctx context.Context, repo *repo_model.Repository, head
 		return countArticleContributors(gitRepo, repo, head)
 	}()
 	if err != nil {
-		log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)
+		if ctx.Err() != nil {
+			// the counting phase ran out (expected on a cold cache) or the client left
+			log.Debug("Contributor count for %s cut off: %v", repo.FullName(), err)
+		} else {
+			log.Warn("Failed to get contributor count for %s: %v", repo.FullName(), err)
+		}
 		return nil
 	}
 	return &ContributorStats{TotalCount: int(total)}

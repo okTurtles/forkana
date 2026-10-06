@@ -228,47 +228,7 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 	// 1. If the repository has a subject, find the subject's root repository (first non-empty, non-fork repo for that subject)
 	// 2. Otherwise, traverse up the fork chain to find the root
 	// This ensures the bubble view always shows the global subject fork tree, not a user-specific view.
-	rootRepo := repo
-	foundNonEmptyRoot := false
-
-	// First, try to find the subject's root repository
-	if repo.SubjectID > 0 {
-		subjectRoot, err := repo_model.GetSubjectRootRepository(ctx, repo.SubjectID)
-		if err == nil {
-			if err := subjectRoot.LoadOwner(ctx); err != nil {
-				log.Warn("Failed to load owner for subject root repository %d: %v. Falling back to fork chain traversal.", subjectRoot.ID, err)
-			} else {
-				rootRepo = subjectRoot
-				foundNonEmptyRoot = true
-				log.Info("Repository %s has subject ID %d, using subject root repository %s for fork graph", repo.FullName(), repo.SubjectID, rootRepo.FullName())
-			}
-		} else if !repo_model.IsErrRepoNotExist(err) {
-			log.Warn("Failed to find subject root repository for subject ID %d: %v. Falling back to fork chain traversal.", repo.SubjectID, err)
-		}
-		// If no subject root exists (all repos are empty), fall through to fork chain traversal
-	}
-
-	// If we didn't find a subject root, traverse up the fork chain
-	if rootRepo.ID == repo.ID && repo.IsFork {
-		current := repo
-		for current.IsFork {
-			parent, err := repo_model.GetRepositoryByID(ctx, current.ForkID)
-			if err != nil {
-				log.Warn("Failed to find parent repository for fork %s (ID: %d, ForkID: %d): %v. Using current repo as root.", current.FullName(), current.ID, current.ForkID, err)
-				break
-			}
-			if err := parent.LoadOwner(ctx); err != nil {
-				log.Warn("Failed to load owner for parent repository %d: %v. Using current repo as root.", parent.ID, err)
-				break
-			}
-			current = parent
-		}
-		rootRepo = current
-		if !rootRepo.IsEmpty {
-			foundNonEmptyRoot = true
-		}
-		log.Info("Repository %s is a fork, building fork graph from root repository %s", repo.FullName(), rootRepo.FullName())
-	}
+	rootRepo, foundNonEmptyRoot := findForkGraphRoot(ctx, repo)
 
 	// If the root repository is empty and we didn't find a non-empty root through subject lookup,
 	// return an empty graph. This triggers the "Create first article" UI in the frontend.
@@ -305,7 +265,8 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 	// The subject root is found by subject, not through FindForks, so it has not been
 	// checked against the reader's access like the forks: one made private after it was
 	// forked must not be shown to readers who may not read it.
-	if !canReadForkGraphRoot(ctx, rootRepo, doer) {
+	rootHidden := !canReadForkGraphRoot(ctx, rootRepo, doer)
+	if rootHidden {
 		hideNode(rootNode)
 	}
 
@@ -332,9 +293,13 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 	// Convert all nodes to API format (using preloaded data)
 	convertNodesToAPI(ctx, rootNode)
 
-	// Count total and visible forks (use root repository's fork count)
-	totalForks := rootRepo.NumForks
+	// Count total and visible forks (use root repository's fork count). A hidden root's
+	// own count includes forks the reader may not see: only the visible ones then.
 	visibleForks := countVisibleForks(rootNode)
+	totalForks := rootRepo.NumForks
+	if rootHidden {
+		totalForks = visibleForks
+	}
 
 	// Build response
 	response := &ForkGraphResponse{
@@ -354,6 +319,61 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 	}
 
 	return response, nil
+}
+
+// findForkGraphRoot finds the root of repo's fork graph: the subject's root repository
+// (its first non-empty, non-fork article) when repo has a subject, otherwise the top of
+// its fork chain. foundNonEmptyRoot reports whether a root with content was found.
+func findForkGraphRoot(ctx context.Context, repo *repo_model.Repository) (rootRepo *repo_model.Repository, foundNonEmptyRoot bool) {
+	rootRepo = repo
+
+	// First, try to find the subject's root repository
+	if repo.SubjectID > 0 {
+		subjectRoot, err := repo_model.GetSubjectRootRepository(ctx, repo.SubjectID)
+		if err == nil {
+			if err := subjectRoot.LoadOwner(ctx); err != nil {
+				log.Warn("Failed to load owner for subject root repository %d: %v. Falling back to fork chain traversal.", subjectRoot.ID, err)
+			} else {
+				rootRepo = subjectRoot
+				foundNonEmptyRoot = true
+				log.Debug("Repository %s has subject ID %d, using subject root repository %s for fork graph", repo.FullName(), repo.SubjectID, rootRepo.FullName())
+			}
+		} else if !repo_model.IsErrRepoNotExist(err) {
+			log.Warn("Failed to find subject root repository for subject ID %d: %v. Falling back to fork chain traversal.", repo.SubjectID, err)
+		}
+		// If no subject root exists (all repos are empty), fall through to fork chain traversal
+	}
+
+	// If we didn't find a subject root, traverse up the fork chain
+	if rootRepo.ID == repo.ID && repo.IsFork {
+		current := repo
+		for current.IsFork {
+			parent, err := repo_model.GetRepositoryByID(ctx, current.ForkID)
+			if err != nil {
+				log.Warn("Failed to find parent repository for fork %s (ID: %d, ForkID: %d): %v. Using current repo as root.", current.FullName(), current.ID, current.ForkID, err)
+				break
+			}
+			if err := parent.LoadOwner(ctx); err != nil {
+				log.Warn("Failed to load owner for parent repository %d: %v. Using current repo as root.", parent.ID, err)
+				break
+			}
+			current = parent
+		}
+		rootRepo = current
+		if !rootRepo.IsEmpty {
+			foundNonEmptyRoot = true
+		}
+		log.Debug("Repository %s is a fork, building fork graph from root repository %s", repo.FullName(), rootRepo.FullName())
+	}
+	return rootRepo, foundNonEmptyRoot
+}
+
+// ForkGraphRootIsPrivate reports whether the root of repo's fork graph is private: a
+// graph cached by the API must not outlive a change of the root's visibility, which
+// changes what a reader may see of it.
+func ForkGraphRootIsPrivate(ctx context.Context, repo *repo_model.Repository) bool {
+	root, _ := findForkGraphRoot(ctx, repo)
+	return root.IsPrivate
 }
 
 // buildNode recursively builds a fork node
@@ -594,11 +614,11 @@ func collectRepositories(node *ForkNode) []*repo_model.Repository {
 
 	var collect func(*ForkNode)
 	collect = func(n *ForkNode) {
-		if n == nil || n.repo == nil {
+		if n == nil {
 			return
 		}
-		// Only add if not already seen
-		if !seen[n.repo.ID] {
+		// a node without a repository (a hidden root) still has forks to collect
+		if n.repo != nil && !seen[n.repo.ID] {
 			seen[n.repo.ID] = true
 			repos = append(repos, n.repo)
 		}

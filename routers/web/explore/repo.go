@@ -435,7 +435,7 @@ func chooseSubjectArticle(ctx *context.Context) bool {
 		// access) is ignored like any other bad one, instead of failing the whole page.
 		if err := repo.LoadSubject(ctx); err != nil {
 			log.Warn("LoadSubject for %s: %v", repo.FullName(), err)
-		} else if !context.SubjectRepositoryAssignable(ctx, repo) {
+		} else if !context.SubjectArticleReadable(ctx, repo) {
 			log.Warn("The selected article %s cannot be rendered; ignoring the selection", repo.FullName())
 		} else {
 			context.AssignSubjectRepository(ctx, repo)
@@ -481,7 +481,7 @@ func selectedSubjectArticle(ctx *context.Context) *repo_model.Repository {
 	}
 	for _, entry := range graph.Articles() {
 		repo := entry.Repo
-		if strings.EqualFold(selected, repo.OwnerName+"/"+repo.Name) && !repo.IsTombstone() {
+		if strings.EqualFold(selected, SubjectSelectedValue(repo)) && !repo.IsTombstone() {
 			return repo
 		}
 	}

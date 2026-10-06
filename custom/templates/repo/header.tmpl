@@ -9,9 +9,12 @@
 			{{/* Follow is offered on every subject, to everyone (#421 item 5). It used to be
 			     hidden from the owner of the article shown, so a signed-in reader lost it on
 			     every subject they had created themselves (the recently created ones). */}}
+			{{/* ...on every page that says where to post it (RepoOperationsLink) */}}
+			{{if $.RepoOperationsLink}}
 			<div class="repo-header-follow">
 				{{template "repo/watch_unwatch" $}}
 			</div>
+			{{end}}
 		</div>
 	</div>
 {{end}}

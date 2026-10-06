@@ -29,7 +29,9 @@ import (
 //   - v3: Changed GetPublicRepositoryBySubject to prioritize non-empty repositories
 //   - v4: Contributor counts come from ArticleContributorCount and are no longer cached in
 //     the response (graphs with include_contributors are never cached); recent_count is 0
-const forkGraphCacheVersion = "v4"
+//   - v5: The key carries the root's visibility: a root made private is hidden from the
+//     readers who may not read it, so a graph cached before must not be served after
+const forkGraphCacheVersion = "v5"
 
 // ForkGraphParams represents the query parameters for fork graph endpoint. The subject
 // page requests the graph it embeds with the same names (services/repository
@@ -42,25 +44,6 @@ type ForkGraphParams struct {
 	Sort                string `form:"sort"`
 	Page                int    `form:"page"`
 	Limit               int    `form:"limit"`
-}
-
-// setDefaults sets default values for parameters
-func (p *ForkGraphParams) setDefaults() {
-	if p.ContributorDays == 0 {
-		p.ContributorDays = 90
-	}
-	if p.MaxDepth == 0 {
-		p.MaxDepth = 10
-	}
-	if p.Sort == "" {
-		p.Sort = "updated"
-	}
-	if p.Page == 0 {
-		p.Page = 1
-	}
-	if p.Limit == 0 {
-		p.Limit = 50
-	}
 }
 
 // validate validates the parameters
@@ -92,14 +75,15 @@ func (p *ForkGraphParams) validate() error {
 // - numForks: Number of forks (changes when forks are created, invalidating cache)
 // - paramsHash: Hash of query parameters (depth, filters, etc.)
 // - userID: User-specific permissions may affect the graph
-func getCacheKey(repoID int64, isEmpty bool, numForks int, params ForkGraphParams, userID int64) string {
+// - rootPrivate: The graph's root is shown only to readers who may read it
+func getCacheKey(repoID int64, isEmpty bool, numForks int, params ForkGraphParams, userID int64, rootPrivate bool) string {
 	paramsHash := hashParams(params)
 	emptyStr := "0"
 	if isEmpty {
 		emptyStr = "1"
 	}
-	return fmt.Sprintf("fork_graph:%s:%d:%s:%d:%s:%d",
-		forkGraphCacheVersion, repoID, emptyStr, numForks, paramsHash, userID)
+	return fmt.Sprintf("fork_graph:%s:%d:%s:%d:%s:%d:%t",
+		forkGraphCacheVersion, repoID, emptyStr, numForks, paramsHash, userID, rootPrivate)
 }
 
 // hashParams creates a hash of the parameters
@@ -214,7 +198,8 @@ func GetForkGraph(ctx *context.APIContext) {
 	cacheKey := ""
 	c := cache.GetCache()
 	if cacheGraph && c != nil {
-		cacheKey = getCacheKey(ctx.Repo.Repository.ID, ctx.Repo.Repository.IsEmpty, ctx.Repo.Repository.NumForks, params, userID)
+		cacheKey = getCacheKey(ctx.Repo.Repository.ID, ctx.Repo.Repository.IsEmpty, ctx.Repo.Repository.NumForks, params, userID,
+			repository.ForkGraphRootIsPrivate(ctx, ctx.Repo.Repository))
 		var cachedResponse repository.ForkGraphResponse
 		found, err := c.GetJSON(cacheKey, &cachedResponse)
 		if err == nil && found {

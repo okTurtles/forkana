@@ -116,3 +116,20 @@ func TestArticleContributorCountCache(t *testing.T) {
 	assert.Equal(t, int(count), stats.TotalCount)
 	assert.Nil(t, nodeContributorStats(done, repo, "0000000000000000000000000000000000000001"))
 }
+
+// A hidden root has no repository, but its forks are still collected for the batch load.
+func TestCollectRepositoriesUnderAHiddenRoot(t *testing.T) {
+	fork1 := &repo_model.Repository{ID: 11}
+	fork2 := &repo_model.Repository{ID: 12}
+	root := newForkNode(&repo_model.Repository{ID: 10}, 0, []*ForkNode{
+		newForkNode(fork1, 1, []*ForkNode{newForkNode(fork2, 2, nil)}),
+	})
+	hideNode(root)
+	assert.Equal(t, []*repo_model.Repository{fork1, fork2}, collectRepositories(root))
+	assert.Equal(t, []int64{11, 12}, func() (ids []int64) {
+		for _, e := range FlattenForkGraph(root) {
+			ids = append(ids, e.Repo.ID)
+		}
+		return ids
+	}(), "and the hidden root is no article")
+}

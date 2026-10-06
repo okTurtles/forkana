@@ -92,6 +92,11 @@ func CompareReadme(ctx *context.Context) {
 		ctx.NotFound(repo_model.ErrRepoNotExist{OwnerName: owner2})
 		return
 	}
+	// A deleted article has no content to compare: like its other routes, a 404.
+	if repo1.IsTombstone() || repo2.IsTombstone() {
+		ctx.NotFound(nil)
+		return
+	}
 
 	// Load owners for both repos
 	if err := repos.LoadOwners(ctx); err != nil {
@@ -140,7 +145,7 @@ func CompareReadme(ctx *context.Context) {
 			ctx.ServerError("getReadmeContent (repo1)", err)
 			return
 		}
-		repo1ContributorCount = getContributorCount(gitRepo1, repo1)
+		repo1ContributorCount = repo_service.ArticleContributorCountOrUnknown(gitRepo1, repo1)
 	}
 
 	// Process repo2: open once, get README and contributor count
@@ -157,7 +162,7 @@ func CompareReadme(ctx *context.Context) {
 			ctx.ServerError("getReadmeContent (repo2)", err)
 			return
 		}
-		repo2ContributorCount = getContributorCount(gitRepo2, repo2)
+		repo2ContributorCount = repo_service.ArticleContributorCountOrUnknown(gitRepo2, repo2)
 	}
 
 	// Generate diff using diffmatchpatch
@@ -189,7 +194,7 @@ func CompareReadme(ctx *context.Context) {
 	// selected (#406). Only one of the two compared articles is accepted.
 	if selected := ctx.FormString("selected"); selected != "" {
 		for _, r := range []*repo_model.Repository{repo1, repo2} {
-			if strings.EqualFold(selected, r.OwnerName+"/"+r.Name) {
+			if strings.EqualFold(selected, explore.SubjectSelectedValue(r)) {
 				ctx.Data["SubjectSelected"] = explore.SubjectSelectedValue(r)
 			}
 		}
@@ -200,6 +205,12 @@ func CompareReadme(ctx *context.Context) {
 	// the header builds its links from has to be resolved here.
 	ctx.Data["Repository"] = repo1
 	ctx.Data["SubjectName"] = repo1.GetSubject(ctx)
+	// the header's Follow control posts to the article's operations link and shows
+	// whether the reader follows it
+	ctx.Data["RepoOperationsLink"] = repo1.OperationsLink()
+	if ctx.IsSigned {
+		ctx.Data["IsWatchingRepo"] = repo_model.IsWatching(ctx, ctx.Doer.ID, repo1.ID)
+	}
 	ctx.Data["IsBubbleView"] = false
 	ctx.Data["IsTableView"] = false
 	ctx.Data["IsArticleView"] = false
@@ -252,14 +263,6 @@ func getReadmeContent(gitRepo *git.Repository, repo *repo_model.Repository) (con
 	}
 
 	return "", "", ErrReadmeNotFound
-}
-
-// getContributorCount retrieves the contributor count for a repository, or -1 when it
-// cannot be computed (shown as unknown, like the bubble and the table row).
-// It accepts an already-opened git repository handle to avoid redundant I/O operations
-func getContributorCount(gitRepo *git.Repository, repo *repo_model.Repository) int64 {
-	// the same count the bubble, the table row and the article view show (#405)
-	return repo_service.ArticleContributorCountOrUnknown(gitRepo, repo)
 }
 
 // generateReadmeDiff generates a diff between two README contents

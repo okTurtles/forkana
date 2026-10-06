@@ -201,17 +201,20 @@ func TestForkGraphCacheKey(t *testing.T) {
 	params4 := params1
 	params4.ContributorDays = 30
 	params4.IncludeContributors = false
-	assert.Equal(t, getCacheKey(1, false, 0, params1, 1), getCacheKey(1, false, 0, params4, 1))
+	assert.Equal(t, getCacheKey(1, false, 0, params1, 1, false), getCacheKey(1, false, 0, params4, 1, false))
 
-	key1 := getCacheKey(1, false, 0, params1, 1)
-	key2 := getCacheKey(1, false, 0, params2, 1)
-	key3 := getCacheKey(1, false, 0, params3, 1)
+	key1 := getCacheKey(1, false, 0, params1, 1, false)
+	key2 := getCacheKey(1, false, 0, params2, 1, false)
+	key3 := getCacheKey(1, false, 0, params3, 1, false)
 
 	// Same params should generate same key
 	assert.Equal(t, key1, key2)
 
 	// Different params should generate different key
 	assert.NotEqual(t, key1, key3)
+
+	// nor may a graph cached while its root was public be served once it is private
+	assert.NotEqual(t, key1, getCacheKey(1, false, 0, params1, 1, true))
 }
 
 func TestForkGraphCacheKeyIncludesVersion(t *testing.T) {
@@ -224,24 +227,13 @@ func TestForkGraphCacheKeyIncludesVersion(t *testing.T) {
 		Limit:               50,
 	}
 
-	key := getCacheKey(1, false, 0, params, 1)
+	key := getCacheKey(1, false, 0, params, 1, false)
 
 	// Verify cache key includes the version
 	assert.Contains(t, key, forkGraphCacheVersion, "Cache key should include version for cache invalidation")
 
 	// Verify cache key format: fork_graph:{version}:{repoID}:{isEmpty}:{numForks}:{paramsHash}:{userID}
 	assert.Contains(t, key, "fork_graph:"+forkGraphCacheVersion+":", "Cache key should start with fork_graph:{version}:")
-}
-
-func TestForkGraphDefaults(t *testing.T) {
-	params := ForkGraphParams{}
-	params.setDefaults()
-
-	assert.Equal(t, 90, params.ContributorDays)
-	assert.Equal(t, 10, params.MaxDepth)
-	assert.Equal(t, "updated", params.Sort)
-	assert.Equal(t, 1, params.Page)
-	assert.Equal(t, 50, params.Limit)
 }
 
 // The subject page embeds the graph it builds with SubjectForkGraphParams and points the
@@ -255,7 +247,7 @@ func TestSubjectForkGraphQueryContract(t *testing.T) {
 	assert.Equal(t, repo_service.SubjectForkGraphParams(), params.serviceParams())
 }
 
-func TestParseForkGraphParamsDefaults(t *testing.T) {
+func TestParseForkGraphParams(t *testing.T) {
 	params, err := parseForkGraphParams(url.Values{})
 	assert.NoError(t, err)
 	assert.Equal(t, ForkGraphParams{ContributorDays: 90, MaxDepth: 10, Sort: "updated", Page: 1, Limit: 50}, params)

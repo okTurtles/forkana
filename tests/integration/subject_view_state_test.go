@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	auth_model "code.gitea.io/gitea/models/auth"
 	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
@@ -104,8 +105,9 @@ func TestSubjectPageArticleViewSelection(t *testing.T) {
 	})
 
 	t.Run("ForeignSelectionIsIgnored", func(t *testing.T) {
-		// repo 3 belongs to another subject, so it is not one of this subject's articles
-		got := get(t, "view=article&selected="+url.QueryEscape("org3/repo3"))
+		// user5/repo4 is public and readable by anyone, but belongs to no subject of
+		// this one: only subject membership can keep it out
+		got := get(t, "view=article&selected="+url.QueryEscape("user5/repo4"))
 		assert.Equal(t, owner.Name, got.owner)
 		assert.False(t, got.chosen)
 		assert.False(t, got.hasReader)
@@ -122,10 +124,13 @@ func TestSubjectPageArticleViewSelection(t *testing.T) {
 	})
 
 	t.Run("OtherViewsRenderNoArticle", func(t *testing.T) {
-		got := get(t, "view=table&selected="+url.QueryEscape(fork))
+		got, body := getSubjectPage(t, nil, subjectName, "view=table&selected="+url.QueryEscape(fork))
 		assert.Equal(t, owner.Name, got.owner)
 		assert.False(t, got.chosen)
 		assert.Equal(t, 2, got.rows)
+		// the view tabs carry the selection on
+		href, _ := NewHTMLParser(t, bytes.NewBufferString(body)).Find("#article-view-link").Attr("href")
+		assert.Contains(t, href, "selected="+url.QueryEscape(fork))
 	})
 }
 
@@ -147,6 +152,11 @@ func TestSubjectPageOnlyLiveArticleIsChosen(t *testing.T) {
 	got, _ := getSubjectPage(t, nil, subjectName, "view=article")
 	assert.True(t, got.chosen, "the only live article is chosen")
 	assert.True(t, got.hasReader)
+	assert.Equal(t, "user4", got.owner)
+
+	// the tombstone stays in the graph, for its fork's ancestry
+	_, body := getSubjectPage(t, nil, subjectName, "view=bubble")
+	assert.Contains(t, body, `"is_tombstoned":true`)
 
 	// the tombstone itself is never chosen, even when it is asked for
 	got, _ = getSubjectPage(t, nil, subjectName, "view=article&selected="+url.QueryEscape(repo.FullName()))
@@ -172,12 +182,11 @@ func TestSubjectPagePrivateFork(t *testing.T) {
 		if visible {
 			rows = 2
 		}
+		forkJSON := `"full_name":"` + forkName + `"`
 		for _, view := range []string{"table", "bubble"} {
 			got, body := getSubjectPage(t, session, subjectName, "view="+view)
-			if view == "table" {
-				assert.Equal(t, rows, got.rows, "table rows")
-			}
-			assert.Equal(t, visible, strings.Contains(body, forkName), "the private fork in the %s view's page", view)
+			assert.Equal(t, rows, got.rows, "table rows on the %s view", view)
+			assert.Equal(t, visible, strings.Contains(body, forkJSON), "the private fork in the %s view's embedded graph", view)
 		}
 		got, body := getSubjectPage(t, session, subjectName, "view=article&selected="+url.QueryEscape(forkName))
 		// a reader who may not see it gets the subject's only other article instead
@@ -198,10 +207,17 @@ func TestSubjectPagePrivateRoot(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
 	owner, repo, subjectName := loadArticleRepo(t, 1)
-	forkArticle(t, repo)
+	fork := forkArticle(t, repo)
+	rootJSON := `"full_name":"` + repo.FullName() + `"`
+	forkJSON := `"full_name":"` + fork.FullName() + `"`
+	apiURL := "/api/v1/repos/" + fork.FullName() + "/forks/graph?include_contributors=false"
+
+	// the API caches a graph without contributors: one cached while the root was public
+	// must not be served once it is private
+	require.Contains(t, MakeRequest(t, NewRequest(t, "GET", apiURL), http.StatusOK).Body.String(), rootJSON)
+
 	repo.IsPrivate = true
 	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "is_private"))
-	rootJSON := `"full_name":"` + repo.FullName() + `"`
 
 	check := func(t *testing.T, session *TestSession, visible bool) {
 		t.Helper()
@@ -213,7 +229,20 @@ func TestSubjectPagePrivateRoot(t *testing.T) {
 		assert.Equal(t, rows, got.rows, "table rows")
 		assert.Equal(t, visible, strings.Contains(body, rootJSON), "the private root in the embedded graph")
 		assert.Equal(t, !visible, strings.Contains(body, `"id":"hidden_root"`), "the root's place in the graph")
-		assert.Contains(t, body, "user4-fork-of-repo1", "its fork stays in the graph")
+		hidden := strings.Index(body, `"id":"hidden_root"`)
+		if !visible && assert.GreaterOrEqual(t, hidden, 0) {
+			assert.Contains(t, body[hidden:], forkJSON, "its fork stays in the graph, under the hidden root")
+		}
+
+		// the API, which the Bubble view falls back to, says the same (it authenticates
+		// with a token, not the session)
+		req := NewRequest(t, "GET", apiURL)
+		if session != nil {
+			req.AddTokenAuth(getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadRepository))
+		}
+		api := MakeRequest(t, req, http.StatusOK).Body.String()
+		assert.Equal(t, visible, strings.Contains(api, repo.FullName()), "the private root in the API's graph")
+		assert.Contains(t, api, forkJSON)
 	}
 
 	t.Run("Owner", func(t *testing.T) { check(t, loginUser(t, owner.Name), true) })
@@ -331,4 +360,24 @@ func TestSubjectPageCountsFromTheBranchNotAStaleHead(t *testing.T) {
 	row := NewHTMLParser(t, resp.Body).Find(`#articles-table tr.article-row[data-owner="user4"]`)
 	require.Equal(t, 1, row.Length())
 	assert.Equal(t, strconv.FormatInt(want, 10), strings.TrimSpace(row.Find("td.tw-font-semibold").First().Text()))
+}
+
+// A deleted article has no content to compare: the compare page is a 404 when either side
+// is a tombstone, like the article's other routes.
+func TestCompareReadmeWithATombstone(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	forkArticle(t, repo)
+	compareURL := "/subject/" + url.PathEscape(subjectName) + "/compare/"
+	MakeRequest(t, NewRequest(t, "GET", compareURL+owner.Name+"...user4"), http.StatusOK)
+
+	session := loginUser(t, owner.Name)
+	req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name),
+		deleteForm(GetUserCSRFToken(t, session), owner.Name, subjectName))
+	session.MakeRequest(t, req, http.StatusSeeOther)
+	require.True(t, unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID}).IsTombstoned)
+
+	MakeRequest(t, NewRequest(t, "GET", compareURL+owner.Name+"...user4"), http.StatusNotFound)
+	MakeRequest(t, NewRequest(t, "GET", compareURL+"user4..."+owner.Name), http.StatusNotFound)
 }

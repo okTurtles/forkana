@@ -1097,19 +1097,56 @@ func RepoAssignmentBySubject(ctx *Context) {
 	AssignSubjectRepository(ctx, repo)
 }
 
-// SubjectRepositoryAssignable reports whether AssignSubjectRepository can set up repo
-// without failing the request: its owner loads, it has a default branch and an
-// openable git repository, and the doer may read it. It writes nothing, so a caller can
-// ignore a repository that does not pass.
-func SubjectRepositoryAssignable(ctx *Context, repo *repo_model.Repository) bool {
-	if repo.LoadOwner(ctx) != nil || repo.DefaultBranch == "" {
-		return false
+// Why prepareSubjectRepository refuses a repository; any other error is a server error.
+var (
+	errSubjectRepositoryBroken   = errors.New("repository not found or corrupted")
+	errSubjectRepositoryNoBranch = errors.New("repository has no default branch")
+	errSubjectRepositoryNoAccess = errors.New("no access to the repository")
+)
+
+// subjectRepositorySetup is what AssignSubjectRepository sets up for a repository.
+type subjectRepositorySetup struct {
+	gitRepo *git.Repository
+	perm    access_model.Permission
+}
+
+// prepareSubjectRepository checks everything AssignSubjectRepository needs for repo and
+// gathers it, writing nothing: its owner loads, its git repository opens, it has a
+// default branch, and the doer may access it. (RepoAssignment also lets a maintainer
+// in through canWriteAsMaintainer, but that needs a branch in the path, which the
+// subject routes never have.)
+func prepareSubjectRepository(ctx *Context, repo *repo_model.Repository) (*subjectRepositorySetup, error) {
+	if err := repo.LoadOwner(ctx); err != nil {
+		return nil, fmt.Errorf("LoadOwner: %w", err)
 	}
-	if _, err := gitrepo.RepositoryFromRequestContextOrOpen(ctx, repo); err != nil {
-		return false
+	gitRepo, err := gitrepo.RepositoryFromRequestContextOrOpen(ctx, repo)
+	if err != nil {
+		if strings.Contains(err.Error(), "repository does not exist") || strings.Contains(err.Error(), "no such file or directory") {
+			return nil, fmt.Errorf("%w: %w", errSubjectRepositoryBroken, err)
+		}
+		return nil, fmt.Errorf("gitrepo.RepositoryFromRequestContextOrOpen: %w", err)
+	}
+	if repo.DefaultBranch == "" {
+		return nil, errSubjectRepositoryNoBranch
 	}
 	perm, err := access_model.GetUserRepoPermission(ctx, repo, ctx.Doer)
-	return err == nil && perm.HasAnyUnitAccessOrPublicAccess()
+	if err != nil {
+		return nil, fmt.Errorf("GetUserRepoPermission: %w", err)
+	}
+	if !perm.HasAnyUnitAccessOrPublicAccess() {
+		return nil, errSubjectRepositoryNoAccess
+	}
+	return &subjectRepositorySetup{gitRepo: gitRepo, perm: perm}, nil
+}
+
+// SubjectArticleReadable reports whether the subject page can render repo as its
+// article for the doer, writing nothing: AssignSubjectRepository would set it up
+// (prepareSubjectRepository), and its content is there to read (the Code unit is
+// enabled and the doer may read it, as the compare page requires). A caller ignores a
+// repository that does not pass.
+func SubjectArticleReadable(ctx *Context, repo *repo_model.Repository) bool {
+	setup, err := prepareSubjectRepository(ctx, repo)
+	return err == nil && repo.UnitEnabled(ctx, unit_model.TypeCode) && setup.perm.CanRead(unit_model.TypeCode)
 }
 
 // AssignSubjectRepository sets up the repository context of the subject page for repo:
@@ -1119,53 +1156,34 @@ func SubjectRepositoryAssignable(ctx *Context, repo *repo_model.Repository) bool
 // The caller must have loaded repo's subject (GetPublicRepositoryBySubject does, and so
 // does the subject page before switching) and checked that repo is not a tombstone.
 func AssignSubjectRepository(ctx *Context, repo *repo_model.Repository) {
-	var err error
-
-	// Load repository owner
-	if err = repo.LoadOwner(ctx); err != nil {
-		ctx.ServerError("LoadOwner", err)
+	setup, err := prepareSubjectRepository(ctx, repo)
+	switch {
+	case errors.Is(err, errSubjectRepositoryBroken):
+		log.Error("Repository %-v has a broken repository on the file system: %s Error: %v", repo, repo.RepoPath(), err)
+		repo.MarkAsBrokenEmpty()
+		ctx.NotFound(errSubjectRepositoryBroken)
 		return
-	}
-
-	// Set up repository context similar to standard RepoAssignment
-	ctx.Repo = &Repository{
-		Repository: repo,
-	}
-
-	// Initialize Git repository
-	ctx.Repo.GitRepo, err = gitrepo.RepositoryFromRequestContextOrOpen(ctx, repo)
-	if err != nil {
-		if strings.Contains(err.Error(), "repository does not exist") || strings.Contains(err.Error(), "no such file or directory") {
-			log.Error("Repository %-v has a broken repository on the file system: %s Error: %v", ctx.Repo.Repository, ctx.Repo.Repository.RepoPath(), err)
-			ctx.Repo.Repository.MarkAsBrokenEmpty()
-			ctx.NotFound(errors.New("repository not found or corrupted"))
-		} else {
-			ctx.ServerError("gitrepo.RepositoryFromRequestContextOrOpen", err)
-		}
-		return
-	}
-
-	// Verify repository has a valid default branch
-	if repo.DefaultBranch == "" {
+	case errors.Is(err, errSubjectRepositoryNoBranch):
 		log.Warn("Repository %-v has no default branch set", repo)
-		ctx.NotFound(errors.New("repository has no default branch"))
+		ctx.NotFound(errSubjectRepositoryNoBranch)
 		return
-	}
-
-	// Check repository access permissions
-	perm, err := access_model.GetUserRepoPermission(ctx, repo, ctx.Doer)
-	if err != nil {
-		ctx.ServerError("GetUserRepoPermission", err)
-		return
-	}
-
-	if !perm.HasAnyUnitAccessOrPublicAccess() && !canWriteAsMaintainer(ctx) {
+	case errors.Is(err, errSubjectRepositoryNoAccess):
 		if ctx.FormString("go-get") == "1" {
 			EarlyResponseForGoGetMeta(ctx)
 			return
 		}
 		ctx.NotFound(nil)
 		return
+	case err != nil:
+		ctx.ServerError("AssignSubjectRepository", err)
+		return
+	}
+	perm := setup.perm
+
+	// Set up repository context similar to standard RepoAssignment
+	ctx.Repo = &Repository{
+		Repository: repo,
+		GitRepo:    setup.gitRepo,
 	}
 
 	ctx.Repo.Permission = perm

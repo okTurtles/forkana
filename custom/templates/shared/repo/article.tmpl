@@ -3,6 +3,13 @@
     <div class="ui" id="article-view-root" data-article-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}">
         {{/* the one "nothing selected" message, shared with the placeholder section */}}
         {{template "shared/repo/article_empty_message" (dict "Hidden" .ReadmeRequested)}}
+        {{/* Outside the article content, on every branch (a tombstone and a README error
+             too): repo-history.ts shows them while another article is fetched into this
+             section, or when that fails. */}}
+        <div class="ui active inline loader tw-mt-4" data-role="article-loader" hidden></div>
+        <div class="ui error message tw-mt-4" data-role="article-error" hidden>
+            <p data-role="article-error-text"></p>
+        </div>
         <div data-role="article-content" {{if not .ReadmeRequested}}hidden{{end}}>
         <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
             style="margin-top: -8px; margin-bottom: 28px" data-role="back-to-bubble"
@@ -17,10 +24,6 @@
                 {{.ReadmeError}}
             </div>
         {{else}}
-            <div class="ui active inline loader tw-mt-4" data-role="article-loader" hidden></div>
-            <div class="ui error message tw-mt-4" data-role="article-error" hidden>
-                <p data-role="article-error-text"></p>
-            </div>
             <div class="tw-flex tw-items-center tw-gap-2">
                 <span class="pill">
                     {{svg "octicon-person" 16 "tw-mr-1"}}

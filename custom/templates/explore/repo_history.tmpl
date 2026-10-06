@@ -169,8 +169,10 @@
     </div>
 
     {{/* Shown to the pending transfer's recipient so the article can be accepted or
-    rejected without visiting the settings of an article they do not own yet. */}}
-    {{if and .RepoTransfer .CanUserAcceptOrRejectTransfer}}
+    rejected without visiting the settings of an article they do not own yet. Only
+    with that article on screen, like the archived notice: elsewhere it is unclear
+    which article Accept would transfer (repo-history.ts follows the view). */}}
+    {{if and $articleRendered .RepoTransfer .CanUserAcceptOrRejectTransfer}}
     <div class="ui info message tw-mt-0 tw-flex tw-items-center tw-justify-between tw-gap-4" id="article-transfer-notice">
         <div class="tw-flex tw-items-center tw-gap-2">
             {{svg "octicon-info" 16 "tw-flex-shrink-0"}}
@@ -233,24 +235,24 @@
                      placeholder only shows while an article is being fetched. */}}
                 <div class="history-view-section history-view-section--article" data-view="article" {{if not .IsArticleView}}hidden{{end}}>
                     {{template "shared/repo/article_empty_message" (dict "Hidden" false)}}
-                    {{/* the loader and error roles of a rendered article section too, so a fetch
-                         that fails replaces the skeleton with its error instead of loading forever */}}
-                    <div data-role="article-content" hidden>
-                        <div class="history-view-placeholder ui segment loading placeholder" data-role="article-loader">
-                            <div class="header">
-                                <div class="line"></div>
-                                <div class="line"></div>
-                            </div>
-                            <div class="paragraph">
-                                <div class="line"></div>
-                                <div class="line"></div>
-                                <div class="line"></div>
-                            </div>
+                    {{/* the loader and error roles of a rendered article section, outside the
+                         content as there, so a fetch that fails shows its error instead of
+                         loading forever */}}
+                    <div class="history-view-placeholder ui segment loading placeholder" data-role="article-loader" hidden>
+                        <div class="header">
+                            <div class="line"></div>
+                            <div class="line"></div>
                         </div>
-                        <div class="ui error message tw-mt-4" data-role="article-error" hidden>
-                            <p data-role="article-error-text"></p>
+                        <div class="paragraph">
+                            <div class="line"></div>
+                            <div class="line"></div>
+                            <div class="line"></div>
                         </div>
                     </div>
+                    <div class="ui error message tw-mt-4" data-role="article-error" hidden>
+                        <p data-role="article-error-text"></p>
+                    </div>
+                    <div data-role="article-content" hidden></div>
                 </div>
             {{end}}
         </div>
