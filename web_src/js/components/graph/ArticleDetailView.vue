@@ -324,8 +324,10 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 6px;
   background: transparent;
+  /* "Back" 1996:36493: Inter 400 14/20 in the brand colour */
   font-size: 14px;
-  font-weight: 600;
+  line-height: 20px;
+  font-weight: 400;
   color: var(--color-primary, #6d28d9);
   cursor: pointer;
 }
@@ -433,20 +435,25 @@ onBeforeUnmount(() => {
   margin-top: var(--detail-gap-loose);
 }
 
+/* The opened article's text follows figma's "Bubble view - Selected" (1842:35629):
+   count 1842:35651 Inter 600 22/30.8; summary 1842:35656 400 14/20 #1f2328;
+   buttons 1842:35659-35660 600 14/20 #25292e; date 1996:36487 400 italic 12/20
+   #1f2328. (The count is #2c2c2c there, the only text of the bubble view that is
+   not #1f2328; it takes the primary text colour like every other.) */
 .detail-count {
   margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--color-text, #111827);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 30.8px;
+  color: var(--color-text-primary);
   white-space: nowrap;
 }
 
 .detail-description {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--color-text-light-2, #6b7280);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
   /* A paragraph, so it wraps — but never past four lines, which is what the
      design shows and what the circle has room for. */
   display: -webkit-box;
@@ -462,14 +469,29 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+/* "Read full article" 1842:35659: Primer's default button, 32px tall (6px 12px
+   around a 20px line), #f6f8fa with a 1px #d1d9e0 border and a 6px radius. Two
+   classes deep, over the shared .btn-neutral. */
+.detail-content > .detail-read {
+  padding: 5px 12px;
+  border-color: var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-button-text);
+}
+
 /* A button that reads as bold text: no border, no background. */
 .detail-history {
-  padding: 2px 4px;
+  padding: 6px 12px;
   border: none;
+  border-radius: 6px;
   background: transparent;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--color-text, #111827);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--color-button-text);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -483,10 +505,10 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 2px;
   margin: 0;              /* the stack's rhythm owns the spacing above this */
-  font-size: 11px;
+  font-size: 12px;
   font-style: italic;
-  line-height: 1.3;
-  color: var(--color-text-light-2, #6b7280);
+  line-height: 20px;
+  color: var(--color-text-primary);
   white-space: nowrap;
 }
 
@@ -502,6 +524,15 @@ onBeforeUnmount(() => {
      grow past the arc. */
   .detail-description {
     -webkit-line-clamp: 3;
+    /* figma has no phone frame of the opened article: its 14/20 summary and 22px
+       count are the desktop circle's, and do not fit the arc of a ~315px one */
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .detail-count {
+    font-size: 18px;
+    line-height: 24px;
   }
 }
 </style>

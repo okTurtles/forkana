@@ -2522,13 +2522,15 @@ function goToComparison() {
                 opacity="0.9"
               />
 
-              <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
+              <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks.
+                   figma 641:61415 (Ellipse 15-23): 12×12, white, a 1px #818b98 ring
+                   drawn inside, so r = 6 - 0.5 with a 1px stroke. -->
               <circle
                 v-for="j in jointDots" :key="`joint-${j.id}`" :data-edge="j.id" class="joint-parent"
                 :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId, 'is-selected': selectedNodeId === j.targetId}"
                 :aria-pressed="selectedNodeId === j.targetId ? 'true' : 'false'"
-                :cx="j.x" :cy="j.y" r="6"
-                fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="2"
+                :cx="j.x" :cy="j.y" r="5.5"
+                fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="1"
                 style="cursor: pointer;"
                 role="button" tabindex="0" :aria-label="`Compare ${j.sourceOwner} with ${j.targetOwner}`"
                 @click.stop="() => onJointClick(j)" @keydown.enter.stop="() => onJointClick(j)"

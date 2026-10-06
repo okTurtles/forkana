@@ -52,6 +52,16 @@
   right: 0;
   top: 50%;
   transform: translateY(-50%);
+  /* #421: figma's Button 484:188986 (in Bubble view 641:61415, I641:61420;8546:7584):
+     110×32, 6px 12px around an Inter 600 14/20 label, 6px radius. Its colours
+     come from the Forkana palette, so they are set in
+     custom/public/assets/css/repo.custom.css. */
+  height: 32px;
+  min-height: 32px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 20px;
   font-weight: var(--font-weight-semibold);
   transition: background 0.1s ease, color 0.1s ease;
 }
@@ -87,7 +97,6 @@ overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
    Comparing disabled", 6661:52942): the button stays clickable, to explain why
    in the Compare banner, but reads as unavailable. */
 #compare-mode-button.is-unavailable {
-  color: var(--color-text-light-3);
   cursor: default;
 }
 

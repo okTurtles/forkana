@@ -34,7 +34,7 @@
 			     without the subject views it opens data-bubble-url with the press. Its icon is
 			     figma's file-diff-24 drawn at 16px (component 319:1637 in the button 484:188986),
 			     not the 16px octicon, whose glyph differs. */}}
-			<button class="ui button tiny compact tw-h-9" id="compare-mode-button" type="button" aria-pressed="false"
+			<button class="ui button tiny compact" id="compare-mode-button" type="button" aria-pressed="false"
 				data-global-click="onCompareModeToggle"
 				data-bubble-url="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "bubble" "selected" .SubjectSelected}}"
 				data-label-off="{{ctx.Locale.Tr "repo.compare_mode"}}"

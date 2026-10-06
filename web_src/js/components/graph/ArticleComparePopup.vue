@@ -324,7 +324,8 @@ const geometryStyle = {
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
-  color: var(--color-text-primary);
+  /* "Compare articles" I641:62041;30258:5600: #25292e, the button label colour */
+  color: var(--color-button-text);
   cursor: pointer;
 }
 
