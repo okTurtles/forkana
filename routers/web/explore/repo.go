@@ -519,6 +519,11 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	ctx.Data["Title"] = title
 	ctx.Data["PageIsViewCode"] = true
 	ctx.Data["RepositoryUploadEnabled"] = false // Disable uploads in history view
+	// The article header's count (shared/repo/article) compares it with 0 to tell an
+	// unknown count (-1) from a real one, which fails on a missing value: an empty
+	// article (a brand-new subject's first one) or a tombstone renders the header without
+	// reaching the count below, so it starts as the empty article's real count, 0.
+	ctx.Data["ReadmeContributorCount"] = int64(0)
 
 	// A tombstone keeps its git data on disk only so that its forks retain a valid
 	// ancestor. The git repository is deliberately left unopened, so no file, README or

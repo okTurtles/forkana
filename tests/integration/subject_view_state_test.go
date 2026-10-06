@@ -13,6 +13,9 @@ import (
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
+	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/setting"
+	repo_service "code.gitea.io/gitea/services/repository"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -181,6 +184,45 @@ func TestSubjectPageFollowButton(t *testing.T) {
 			_, body := getSubjectPage(t, session, subjectName, "view="+view)
 			doc := NewHTMLParser(t, bytes.NewBufferString(body))
 			assert.Equal(t, 1, doc.Find(".repo-header-follow .follow-article-button").Length(), "Follow for %q on the %s view", reader, view)
+		}
+	}
+}
+
+// A brand-new subject: its first article was just created and is still empty (the
+// "create first article" flow makes an empty repository and opens the editor). Every
+// page of it must render as a whole, not with a server error page appended to it.
+func TestSubjectPageBrandNewSubject(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	subjectName := "brand-new-subject-probe"
+	repo, err := repo_service.CreateRepository(t.Context(), user2, user2, repo_service.CreateRepoOptions{
+		Name:          subjectName,
+		Subject:       subjectName,
+		DefaultBranch: setting.Repository.DefaultBranch,
+		AutoInit:      false,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = repo_service.DeleteRepositoryDirectly(t.Context(), repo.ID) })
+
+	paths := []string{
+		"/user2/" + repo.Name,
+		"/subject/" + url.PathEscape(subjectName),
+		"/subject/" + url.PathEscape(subjectName) + "?view=table",
+		"/subject/" + url.PathEscape(subjectName) + "?view=article",
+		"/subject/" + url.PathEscape(subjectName) + "/user2",
+	}
+	for _, session := range []*TestSession{nil, loginUser(t, "user2"), loginUser(t, "user4")} {
+		for _, path := range paths {
+			req := NewRequest(t, "GET", path)
+			var body string
+			if session != nil {
+				body = session.MakeRequest(t, req, NoExpectedStatus).Body.String()
+			} else {
+				body = MakeRequest(t, req, NoExpectedStatus).Body.String()
+			}
+			assert.NotContains(t, body, "Internal Server Error", path)
+			assert.Equal(t, 1, strings.Count(body, "<title>"), "%s renders one page", path)
 		}
 	}
 }

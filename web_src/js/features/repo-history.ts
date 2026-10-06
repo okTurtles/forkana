@@ -487,10 +487,16 @@ export function initRepoHistory() {
       if (articleRequestToken !== currentToken) return;
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
+      /* A page whose rendering failed half-way still answers 200: the server appends
+         its error page to what it had written. Such a page, or one without the
+         article section, is an error, never markup to put into this page. */
+      const newSection = doc.querySelector('.history-view-section--article');
+      if (!newSection || doc.querySelector('.status-page-500') || doc.querySelectorAll('title').length > 1) {
+        throw new Error('The article view could not be rendered');
+      }
       syncArchivedNotice(doc);
       syncTransferNotice(doc);
-      const newSection = doc.querySelector('.history-view-section--article');
-      if (newSection && articleSection) {
+      if (articleSection) {
         articleSection.innerHTML = newSection.innerHTML;
         collectArticleRefs();
         showArticleContent();
