@@ -5,12 +5,14 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	system_model "code.gitea.io/gitea/models/system"
 	"code.gitea.io/gitea/modules/log"
+	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/timeutil"
 )
@@ -23,7 +25,27 @@ type GarbageCollectArticleAttachmentsOptions struct {
 	Limit int
 	// DryRun reports what would be reclaimed without touching anything.
 	DryRun bool
+	// Force collects even while the legacy read fallback is still on, i.e. before the
+	// association backfill has been finalized.
+	Force bool
 }
+
+// DefaultArticleAttachmentGCGracePeriod is how old an unreferenced article upload must be
+// before it is collected. An upload precedes the commit that references it, so the grace
+// period must outlast that window; a week is ample, and short enough to keep abandoned
+// uploads from accumulating.
+const DefaultArticleAttachmentGCGracePeriod = 7 * 24 * time.Hour
+
+// legacyArticleFallbackEnabled reports whether attachments are still authorized by the
+// legacy read fallback. It is a variable so tests can switch it without waiting for the
+// dynamic setting's cache to expire.
+var legacyArticleFallbackEnabled = func(ctx context.Context) bool {
+	return setting.Config().Attachment.LegacyArticleFallback.Value(ctx)
+}
+
+// ErrArticleAttachmentGCGated is returned when the collector refuses to run because the
+// association backfill has not been finalized yet.
+var ErrArticleAttachmentGCGated = errors.New("article attachment collection is gated until the association backfill is finalized")
 
 // GarbageCollectArticleAttachments reclaims article attachments that no repository
 // references any more. It returns how many attachments were collected.
@@ -33,9 +55,19 @@ type GarbageCollectArticleAttachmentsOptions struct {
 // is legitimately unreferenced for a while. The grace period covers that window,
 // and the zero-reference condition is re-checked by the database as part of the
 // delete, so an association committed in between keeps the attachment alive.
+//
+// Until the association backfill is finalized, a live article attachment may still
+// lack its association, so the collector does nothing and returns
+// ErrArticleAttachmentGCGated unless opts.Force is set. Upgraded instances therefore
+// start collecting on their own once `gitea admin backfill-article-attachments
+// --finalize` succeeds, and fresh installations, which start finalized, right away.
 func GarbageCollectArticleAttachments(ctx context.Context, opts GarbageCollectArticleAttachmentsOptions) (int, error) {
 	log.Trace("Doing: GarbageCollectArticleAttachments")
 	defer log.Trace("Finished: GarbageCollectArticleAttachments")
+
+	if !opts.Force && legacyArticleFallbackEnabled(ctx) {
+		return 0, ErrArticleAttachmentGCGated
+	}
 
 	cutoff := timeutil.TimeStamp(opts.OlderThan.Unix())
 	candidates, err := repo_model.FindUnreferencedArticleAttachments(ctx, cutoff, opts.Limit)

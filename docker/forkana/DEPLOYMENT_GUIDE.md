@@ -1193,7 +1193,7 @@ $COMPOSE exec forkana gitea admin backfill-article-attachments
 $COMPOSE exec forkana gitea admin backfill-article-attachments --finalize
 ```
 
-`--finalize` refuses while any reference is outstanding, unreadable or capped. Once it succeeds, it disables `LEGACY_ARTICLE_FALLBACK` in the database. Then set `GITEA__cron_0X2E_gc_article_attachments__ENABLED: "true"` in `dev.yml` and redeploy. Never enable the collector before the backfill has been finalized.
+`--finalize` refuses while any reference is outstanding, unreadable or capped. Once it succeeds, it disables `LEGACY_ARTICLE_FALLBACK` in the database, and the collector's next run starts reclaiming abandoned uploads. Fresh installations start finalized, so they collect from the start.
 
 ### Enabling SSH Access
 
