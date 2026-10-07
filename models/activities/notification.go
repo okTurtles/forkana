@@ -51,6 +51,10 @@ const (
 	// list can render text that says what happened: the "source" column is a SMALLINT
 	// that already exists, so a new value needs no migration.
 	NotificationSourceRepoTransferRejected
+	// NotificationSourceArticleCollaboratorInvite is a notification inviting the user to
+	// maintain an article. Like NotificationSourceRepoTransferRejected it reuses the
+	// existing SMALLINT "source" column, so it needs no migration.
+	NotificationSourceArticleCollaboratorInvite
 )
 
 // Notification represents a notification
@@ -183,6 +187,37 @@ func (n *Notification) IsRepoTransferPending() bool {
 // repository transfer that the recipient rejected it.
 func (n *Notification) IsRepoTransferRejected() bool {
 	return n.Source == NotificationSourceRepoTransferRejected
+}
+
+// CreateArticleCollaboratorInviteNotification creates a notification inviting the user to
+// maintain an article.
+func CreateArticleCollaboratorInviteNotification(ctx context.Context, doer, invitee *user_model.User, repo *repo_model.Repository) error {
+	return db.Insert(ctx, &Notification{
+		UserID:    invitee.ID,
+		RepoID:    repo.ID,
+		Status:    NotificationStatusUnread,
+		UpdatedBy: doer.ID,
+		Source:    NotificationSourceArticleCollaboratorInvite,
+	})
+}
+
+// IsArticleCollaboratorInvite reports whether this notification invites its recipient to
+// maintain an article.
+func (n *Notification) IsArticleCollaboratorInvite() bool {
+	return n.Source == NotificationSourceArticleCollaboratorInvite
+}
+
+// MarkArticleCollaboratorInviteNotificationsRead marks the unread invitation notifications of
+// a user on an article as read, once the invitation was answered or withdrawn. Read rather
+// than deleted, so a user who pinned the row keeps it.
+func MarkArticleCollaboratorInviteNotificationsRead(ctx context.Context, repoID, userID int64) error {
+	_, err := db.GetEngine(ctx).Where(builder.Eq{
+		"repo_id": repoID,
+		"user_id": userID,
+		"status":  NotificationStatusUnread,
+		"source":  NotificationSourceArticleCollaboratorInvite,
+	}).Cols("status").Update(&Notification{Status: NotificationStatusRead})
+	return err
 }
 
 // MarkRepoTransferNotificationsRead marks every unread pending-transfer notification of a
@@ -334,7 +369,7 @@ func (n *Notification) HTMLURL(ctx context.Context) string {
 		return n.Issue.HTMLURL(ctx)
 	case NotificationSourceCommit:
 		return n.Repository.CommitHTMLURL(n.CommitID, ctx)
-	case NotificationSourceRepository, NotificationSourceRepoTransferRejected:
+	case NotificationSourceRepository, NotificationSourceRepoTransferRejected, NotificationSourceArticleCollaboratorInvite:
 		return n.Repository.HTMLURL(ctx)
 	}
 	return ""
@@ -350,7 +385,7 @@ func (n *Notification) Link(ctx context.Context) string {
 		return n.Issue.Link()
 	case NotificationSourceCommit:
 		return n.Repository.CommitLink(n.CommitID, ctx)
-	case NotificationSourceRepository, NotificationSourceRepoTransferRejected:
+	case NotificationSourceRepository, NotificationSourceRepoTransferRejected, NotificationSourceArticleCollaboratorInvite:
 		return n.Repository.LinkCtx(ctx)
 	}
 	return ""
@@ -419,7 +454,7 @@ func SetRepoReadBy(ctx context.Context, userID, repoID int64) error {
 		"user_id": userID,
 		"status":  NotificationStatusUnread,
 		"repo_id": repoID,
-	}.And(builder.In("source", NotificationSourceRepository, NotificationSourceRepoTransferRejected))).
+	}.And(builder.In("source", NotificationSourceRepository, NotificationSourceRepoTransferRejected, NotificationSourceArticleCollaboratorInvite))).
 		Cols("status").Update(&Notification{Status: NotificationStatusRead})
 	return err
 }
