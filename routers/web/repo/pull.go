@@ -2496,9 +2496,14 @@ func MergePullRequest(ctx *context.Context) {
 	pr.Issue = issue
 	pr.Issue.Repo = ctx.Repo.Repository
 
-	// Only the repository owner can merge pull requests
+	// Only the repository owner and the article maintainers can merge pull requests
 	// This check is based on the base repository (target of the PR)
-	if !ctx.IsSigned || ctx.Doer.ID != ctx.Repo.Repository.OwnerID {
+	canMergeChangeRequest, err := repo_service.CanUserMergeArticleChangeRequest(ctx, ctx.Repo.Repository, ctx.Doer)
+	if err != nil {
+		ctx.ServerError("CanUserMergeArticleChangeRequest", err)
+		return
+	}
+	if !canMergeChangeRequest {
 		ctx.JSONError(ctx.Tr("repo.pulls.only_owner_can_merge"))
 		return
 	}

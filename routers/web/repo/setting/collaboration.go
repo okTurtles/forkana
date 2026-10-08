@@ -49,6 +49,9 @@ func Collaboration(ctx *context.Context) {
 
 // CollaborationPost response for actions for a collaboration of a repository
 func CollaborationPost(ctx *context.Context) {
+	if refuseArticleCollaboration(ctx) {
+		return
+	}
 	name := strings.ToLower(ctx.FormString("collaborator"))
 	if len(name) == 0 || ctx.Repo.Owner.LowerName == name {
 		ctx.Redirect(setting.AppSubURL + ctx.Req.URL.EscapedPath())
@@ -118,6 +121,9 @@ func CollaborationPost(ctx *context.Context) {
 
 // ChangeCollaborationAccessMode response for changing access of a collaboration
 func ChangeCollaborationAccessMode(ctx *context.Context) {
+	if refuseArticleCollaboration(ctx) {
+		return
+	}
 	if err := repo_model.ChangeCollaborationAccessMode(
 		ctx,
 		ctx.Repo.Repository,
@@ -127,8 +133,22 @@ func ChangeCollaborationAccessMode(ctx *context.Context) {
 	}
 }
 
+// refuseArticleCollaboration answers 404 for an article: its collaborators are managed
+// from the article settings, which keep the article_collaborator records (role and
+// invitation) in step with the write access granted here.
+func refuseArticleCollaboration(ctx *context.Context) bool {
+	if ctx.Repo.Repository.SubjectID == 0 {
+		return false
+	}
+	ctx.NotFound(nil)
+	return true
+}
+
 // DeleteCollaboration delete a collaboration for a repository
 func DeleteCollaboration(ctx *context.Context) {
+	if refuseArticleCollaboration(ctx) {
+		return
+	}
 	if collaborator, err := user_model.GetUserByID(ctx, ctx.FormInt64("id")); err != nil {
 		if user_model.IsErrUserNotExist(err) {
 			ctx.Flash.Error(ctx.Tr("form.user_not_exist"))
