@@ -9,6 +9,8 @@ export async function initRepoBubbleView() {
   // Component is now eagerly imported, eliminating the dynamic import delay
   const app = createApp(FishboneGraph, {
     apiUrl: (el as HTMLElement).getAttribute('data-api-url'),
+    // the fork graph the subject page was rendered with, so the first draw needs no request
+    initialGraph: window.config.pageData?.subjectForkGraph ?? null,
     owner: (el as HTMLElement).getAttribute('data-owner'),
     repo: (el as HTMLElement).getAttribute('data-repo'),
     subject: (el as HTMLElement).getAttribute('data-subject'),

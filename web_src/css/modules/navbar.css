@@ -13,9 +13,46 @@
      with the navbar.
      Note: some navbar items are inset by a different amount and are therefore
      not covered by this variable — the avatar dropdown overrides padding-right
-     (see "#navbar .item.ui.dropdown" below) and the mobile menu toggle is a
-     Fomantic ".ui.icon.button" carrying that component's own padding. */
+     (see "#navbar .item.ui.dropdown" below) and the mobile menu toggle has its
+     own, --navbar-toggle-padding-x. */
   --navbar-content-inset-x: calc(var(--navbar-padding-x) + var(--navbar-item-padding-x));
+  /* right padding of the avatar dropdown, the last item when signed in */
+  --navbar-dropdown-padding-right: 5px;
+  /* horizontal padding of the mobile menu toggle (a Fomantic icon button) */
+  --navbar-toggle-padding-x: 10px;
+  /* the navbar's geometry, shared with custom/public/assets/css/navbar.custom.css (the
+     profile menu's offset): the height of its rows of items, an item's height, and the
+     open phone menu's bottom padding */
+  --navbar-row-height: 49px; /* +1px border-bottom */
+  --navbar-item-height: 36px;
+  --navbar-menu-open-padding-bottom: 8px;
+  /* distance from the viewport's RIGHT edge to the visible right edge of the
+     navbar's last item: the "Sign Up" label when signed out (the content
+     inset), the avatar menu's ▾ when signed in, the ☰ toggle on a phone (both
+     set below). Elements outside the navbar that must end where the navbar
+     ends (the Compare banner's dismiss x) use it. */
+  --navbar-end-inset-x: var(--navbar-content-inset-x);
+}
+
+/* Signed in, the navbar ends with the avatar menu: its ▾ glyph (octicon
+   triangle-down, 16px, drawn from 4.427 to 11.573) ends 4.427px inside the
+   item's content box. */
+:root:has(#navbar .navbar-right > .item.ui.dropdown:last-child) {
+  --navbar-end-inset-x: calc(var(--navbar-padding-x) + var(--navbar-dropdown-padding-right) + 4.427px);
+}
+
+/* On a phone the navbar ends with the ☰ toggle: its glyph (octicon
+   three-bars, 16px, drawn from 1 to 15) ends 1px inside the button's padding. */
+@media (max-width: 767.98px) {
+  :root,
+  :root:has(#navbar .navbar-right > .item.ui.dropdown:last-child) {
+    --navbar-end-inset-x: calc(var(--navbar-padding-x) + var(--navbar-toggle-padding-x) + 1px);
+  }
+
+  #navbar #navbar-expand-toggle {
+    padding-right: var(--navbar-toggle-padding-x);
+    padding-left: var(--navbar-toggle-padding-x);
+  }
 }
 
 #navbar {
@@ -32,7 +69,7 @@
   display: flex;
   align-items: center;
   gap: var(--navbar-item-gap);
-  min-height: 49px; /* +1px border-bottom */
+  min-height: var(--navbar-row-height);
 }
 
 .navbar-left > .item,
@@ -44,8 +81,8 @@
   color: var(--color-nav-text);
   position: relative;
   text-decoration: none;
-  min-height: 36px;
-  min-width: 36px;
+  min-height: var(--navbar-item-height);
+  min-width: var(--navbar-item-height);
   padding: 3px var(--navbar-item-padding-x);
   border-radius: 4px;
 }
@@ -88,7 +125,7 @@
 }
 
 #navbar .item.ui.dropdown {
-  padding-right: 5px;
+  padding-right: var(--navbar-dropdown-padding-right);
 }
 
 @media (max-width: 767.98px) {
@@ -120,7 +157,7 @@
   }
   /* show items if the navbar is open */
   #navbar.navbar-menu-open {
-    padding-bottom: 8px;
+    padding-bottom: var(--navbar-menu-open-padding-bottom);
   }
   #navbar.navbar-menu-open,
   #navbar.navbar-menu-open .navbar-right {
@@ -141,7 +178,7 @@
   #navbar.navbar-menu-open .navbar-left .navbar-mobile-right {
     justify-content: flex-end;
     width: 50%;
-    min-height: 49px;
+    min-height: var(--navbar-row-height);
   }
   #navbar #mobile-stopwatch-icon,
   #navbar #mobile-notifications-icon {

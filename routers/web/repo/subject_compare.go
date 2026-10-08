@@ -8,17 +8,17 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/gitrepo"
-	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/routers/web/explore"
 	"code.gitea.io/gitea/services/context"
 	"code.gitea.io/gitea/services/gitdiff"
+	repo_service "code.gitea.io/gitea/services/repository"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
@@ -92,6 +92,11 @@ func CompareReadme(ctx *context.Context) {
 		ctx.NotFound(repo_model.ErrRepoNotExist{OwnerName: owner2})
 		return
 	}
+	// A deleted article has no content to compare: like its other routes, a 404.
+	if repo1.IsTombstone() || repo2.IsTombstone() {
+		ctx.NotFound(nil)
+		return
+	}
 
 	// Load owners for both repos
 	if err := repos.LoadOwners(ctx); err != nil {
@@ -140,7 +145,7 @@ func CompareReadme(ctx *context.Context) {
 			ctx.ServerError("getReadmeContent (repo1)", err)
 			return
 		}
-		repo1ContributorCount = getContributorCount(gitRepo1, repo1)
+		repo1ContributorCount = repo_service.ArticleContributorCountOrUnknown(gitRepo1, repo1)
 	}
 
 	// Process repo2: open once, get README and contributor count
@@ -157,7 +162,7 @@ func CompareReadme(ctx *context.Context) {
 			ctx.ServerError("getReadmeContent (repo2)", err)
 			return
 		}
-		repo2ContributorCount = getContributorCount(gitRepo2, repo2)
+		repo2ContributorCount = repo_service.ArticleContributorCountOrUnknown(gitRepo2, repo2)
 	}
 
 	// Generate diff using diffmatchpatch
@@ -183,12 +188,29 @@ func CompareReadme(ctx *context.Context) {
 	ctx.Data["SplitViewLines"] = splitViewLines
 	ctx.Data["IsSplitStyle"] = true
 	ctx.Data["PageIsSubjectCompare"] = true
+	// Clicking a point of contention in the Bubble view selects the fork it leads to and
+	// opens this page with "?selected={owner}/{repo}". The view tabs and the Back link
+	// carry it on, so the Bubble, Table and Article views come back with that article
+	// selected (#406). Only one of the two compared articles is accepted.
+	if selected := ctx.FormString("selected"); selected != "" {
+		for _, r := range []*repo_model.Repository{repo1, repo2} {
+			if strings.EqualFold(selected, explore.SubjectSelectedValue(r)) {
+				ctx.Data["SubjectSelected"] = explore.SubjectSelectedValue(r)
+			}
+		}
+	}
 
 	// Set Repository data needed by repo/header template for view tabs. This route
 	// does not go through the repository assignment middleware, so the subject name
 	// the header builds its links from has to be resolved here.
 	ctx.Data["Repository"] = repo1
 	ctx.Data["SubjectName"] = repo1.GetSubject(ctx)
+	// the header's Follow control posts to the article's operations link and shows
+	// whether the reader follows it
+	ctx.Data["RepoOperationsLink"] = repo1.OperationsLink()
+	if ctx.IsSigned {
+		ctx.Data["IsWatchingRepo"] = repo_model.IsWatching(ctx, ctx.Doer.ID, repo1.ID)
+	}
 	ctx.Data["IsBubbleView"] = false
 	ctx.Data["IsTableView"] = false
 	ctx.Data["IsArticleView"] = false
@@ -241,25 +263,6 @@ func getReadmeContent(gitRepo *git.Repository, repo *repo_model.Repository) (con
 	}
 
 	return "", "", ErrReadmeNotFound
-}
-
-// getContributorCount retrieves the contributor count for a repository
-// It accepts an already-opened git repository handle to avoid redundant I/O operations
-func getContributorCount(gitRepo *git.Repository, repo *repo_model.Repository) int64 {
-	if repo.IsEmpty {
-		return 0
-	}
-
-	var since time.Time
-	if repo.IsFork && repo.CreatedUnix > 0 {
-		since = repo.CreatedUnix.AsTime()
-	}
-	count, err := gitRepo.GetContributorCount(repo.DefaultBranch, since)
-	if err != nil {
-		log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
-		return 0
-	}
-	return count
 }
 
 // generateReadmeDiff generates a diff between two README contents

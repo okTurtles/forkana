@@ -14,7 +14,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
 	asymkey_model "code.gitea.io/gitea/models/asymkey"
 	"code.gitea.io/gitea/models/db"
@@ -1095,52 +1094,96 @@ func RepoAssignmentBySubject(ctx *Context) {
 		return
 	}
 
-	// Load repository owner
-	if err = repo.LoadOwner(ctx); err != nil {
-		ctx.ServerError("LoadOwner", err)
-		return
-	}
+	AssignSubjectRepository(ctx, repo)
+}
 
-	// Subject is already loaded by GetPublicRepositoryBySubject
-	// Set up repository context similar to standard RepoAssignment
-	ctx.Repo = &Repository{
-		Repository: repo,
-	}
+// Why prepareSubjectRepository refuses a repository; any other error is a server error.
+var (
+	errSubjectRepositoryBroken   = errors.New("repository not found or corrupted")
+	errSubjectRepositoryNoBranch = errors.New("repository has no default branch")
+	errSubjectRepositoryNoAccess = errors.New("no access to the repository")
+)
 
-	// Initialize Git repository
-	ctx.Repo.GitRepo, err = gitrepo.RepositoryFromRequestContextOrOpen(ctx, repo)
+// subjectRepositorySetup is what AssignSubjectRepository sets up for a repository.
+type subjectRepositorySetup struct {
+	gitRepo *git.Repository
+	perm    access_model.Permission
+}
+
+// prepareSubjectRepository checks everything AssignSubjectRepository needs for repo and
+// gathers it, writing nothing: its owner loads, its git repository opens, it has a
+// default branch, and the doer may access it. (RepoAssignment also lets a maintainer
+// in through canWriteAsMaintainer, but that needs a branch in the path, which the
+// subject routes never have.)
+func prepareSubjectRepository(ctx *Context, repo *repo_model.Repository) (*subjectRepositorySetup, error) {
+	if err := repo.LoadOwner(ctx); err != nil {
+		return nil, fmt.Errorf("LoadOwner: %w", err)
+	}
+	gitRepo, err := gitrepo.RepositoryFromRequestContextOrOpen(ctx, repo)
 	if err != nil {
 		if strings.Contains(err.Error(), "repository does not exist") || strings.Contains(err.Error(), "no such file or directory") {
-			log.Error("Repository %-v has a broken repository on the file system: %s Error: %v", ctx.Repo.Repository, ctx.Repo.Repository.RepoPath(), err)
-			ctx.Repo.Repository.MarkAsBrokenEmpty()
-			ctx.NotFound(errors.New("repository not found or corrupted"))
-		} else {
-			ctx.ServerError("gitrepo.RepositoryFromRequestContextOrOpen", err)
+			return nil, fmt.Errorf("%w: %w", errSubjectRepositoryBroken, err)
 		}
-		return
+		return nil, fmt.Errorf("gitrepo.RepositoryFromRequestContextOrOpen: %w", err)
 	}
-
-	// Verify repository has a valid default branch
 	if repo.DefaultBranch == "" {
-		log.Warn("Repository %-v has no default branch set", repo)
-		ctx.NotFound(errors.New("repository has no default branch"))
-		return
+		return nil, errSubjectRepositoryNoBranch
 	}
-
-	// Check repository access permissions
 	perm, err := access_model.GetUserRepoPermission(ctx, repo, ctx.Doer)
 	if err != nil {
-		ctx.ServerError("GetUserRepoPermission", err)
-		return
+		return nil, fmt.Errorf("GetUserRepoPermission: %w", err)
 	}
+	if !perm.HasAnyUnitAccessOrPublicAccess() {
+		return nil, errSubjectRepositoryNoAccess
+	}
+	return &subjectRepositorySetup{gitRepo: gitRepo, perm: perm}, nil
+}
 
-	if !perm.HasAnyUnitAccessOrPublicAccess() && !canWriteAsMaintainer(ctx) {
+// SubjectArticleReadable reports whether the subject page can render repo as its
+// article for the doer, writing nothing: AssignSubjectRepository would set it up
+// (prepareSubjectRepository), and its content is there to read (the Code unit is
+// enabled and the doer may read it, as the compare page requires). A caller ignores a
+// repository that does not pass.
+func SubjectArticleReadable(ctx *Context, repo *repo_model.Repository) bool {
+	setup, err := prepareSubjectRepository(ctx, repo)
+	return err == nil && repo.UnitEnabled(ctx, unit_model.TypeCode) && setup.perm.CanRead(unit_model.TypeCode)
+}
+
+// AssignSubjectRepository sets up the repository context of the subject page for repo:
+// its git repository, the doer's permission and the template data. RepoAssignmentBySubject
+// uses it for the subject's main article; the subject page uses it again to switch to the
+// article named by its "selected" parameter, so that article is rendered directly (#405).
+// The caller must have loaded repo's subject (GetPublicRepositoryBySubject does, and so
+// does the subject page before switching) and checked that repo is not a tombstone.
+func AssignSubjectRepository(ctx *Context, repo *repo_model.Repository) {
+	setup, err := prepareSubjectRepository(ctx, repo)
+	switch {
+	case errors.Is(err, errSubjectRepositoryBroken):
+		log.Error("Repository %-v has a broken repository on the file system: %s Error: %v", repo, repo.RepoPath(), err)
+		repo.MarkAsBrokenEmpty()
+		ctx.NotFound(errSubjectRepositoryBroken)
+		return
+	case errors.Is(err, errSubjectRepositoryNoBranch):
+		log.Warn("Repository %-v has no default branch set", repo)
+		ctx.NotFound(errSubjectRepositoryNoBranch)
+		return
+	case errors.Is(err, errSubjectRepositoryNoAccess):
 		if ctx.FormString("go-get") == "1" {
 			EarlyResponseForGoGetMeta(ctx)
 			return
 		}
 		ctx.NotFound(nil)
 		return
+	case err != nil:
+		ctx.ServerError("AssignSubjectRepository", err)
+		return
+	}
+	perm := setup.perm
+
+	// Set up repository context similar to standard RepoAssignment
+	ctx.Repo = &Repository{
+		Repository: repo,
+		GitRepo:    setup.gitRepo,
 	}
 
 	ctx.Repo.Permission = perm
@@ -1188,22 +1231,13 @@ func RepoAssignmentBySubject(ctx *Context) {
 		return
 	}
 
-	// Set up contributor count data
-	// For forks, only count contributors who made commits after the fork was created
-	// to avoid including inherited history from the parent repository
-	ctx.Data["ContributorCount"] = int64(0)
-	if !repo.IsEmpty && ctx.Repo.GitRepo != nil {
-		var since time.Time
-		if repo.IsFork && repo.CreatedUnix > 0 {
-			since = repo.CreatedUnix.AsTime()
-		}
-		contributorCount, err := ctx.Repo.GitRepo.GetContributorCount(repo.DefaultBranch, since)
-		if err != nil {
-			log.Warn("Failed to get contributor count for repository %s: %v", repo.FullName(), err)
-		} else {
-			ctx.Data["ContributorCount"] = contributorCount
-		}
-	}
+	// The accept/reject notice of a pending transfer (explore/repo_history.tmpl), as the
+	// article urls show it through repoAssignment: the article the subject page renders
+	// for its "selected" parameter must not come without it — nor with the notice of the
+	// main article it replaces.
+	delete(ctx.Data, "RepoTransfer")
+	delete(ctx.Data, "CanUserAcceptOrRejectTransfer")
+	retrievePendingRepositoryTransfer(ctx)
 }
 
 // RepoAssignmentByOwnerAndSubject assigns repository context by owner name and subject name

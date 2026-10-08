@@ -20,6 +20,17 @@
 	--bubble-joint-stroke: #818B98;
 	--bubble-shadow-color: #64748b;
 	--bubble-overlay-bg: rgba(255, 255, 255, 0.98);
+	/* Compare mode (#405 item 6), figma frame 641:61930: the bubbles are
+	   unfilled over the page; one not picked has a 1px dashed outline in
+	   #1f2328 (= --color-text-primary), a picked one a 2px ring and an order
+	   badge in #4e40fa (= --color-primary), the badge's number in white
+	   (= --color-primary-contrast). All four reference theme tokens, so the
+	   dark themes get their variants from those tokens (the outline turns
+	   light on a dark page, the disc takes the dark page colour). */
+	--bubble-compare-fill: var(--color-body);
+	--bubble-compare-outline: var(--color-text-primary);
+	--bubble-compare-selected: var(--color-primary);
+	--bubble-compare-badge-text: var(--color-primary-contrast);
 }
 
 

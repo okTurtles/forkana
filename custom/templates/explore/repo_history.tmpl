@@ -123,6 +123,8 @@
 {{end}}
 
 {{template "base/head" .}}
+{{/* the Article view is rendered with its article (see explore.chooseSubjectArticle) */}}
+{{$articleRendered := and .IsArticleView .ArticleChosen}}
 <style>
 /* Temporary Fork hierarchy level styling until we agree on design */
 .fork-level-0 { margin-left: 0px !important; }
@@ -141,11 +143,23 @@
    footer below the fold (#149). */
 </style>
 <div role="main" aria-label="{{.Title}}" class="page-content repository file list">
+    {{/* The Compare mode banner (figma "Announcement" 641:61937 / 641:61765 / 641:61848 /
+         6661:53348) is drawn here, under the navbar and above the subject, by the bubble
+         view (FishboneGraph teleports CompareAnnouncement.vue into it). The strings come
+         from the locale file. */}}
+    <div id="compare-announcement-root"
+        data-msg-select="{{ctx.Locale.Tr "repo.compare_mode_select"}}"
+        data-msg-one="{{ctx.Locale.Tr "repo.compare_mode_one_selected"}}"
+        data-msg-ready="{{ctx.Locale.Tr "repo.compare_mode_ready"}}"
+        data-msg-no-forks="{{ctx.Locale.Tr "repo.compare_mode_no_forks"}}"
+        data-msg-compare-now="{{ctx.Locale.Tr "repo.compare_mode_compare_now"}}"
+        data-msg-dismiss="{{ctx.Locale.Tr "repo.compare_mode_dismiss"}}"
+        data-msg-dismiss-notice="{{ctx.Locale.Tr "repo.compare_mode_dismiss_notice"}}"></div>
     {{/* Rendered outside the article section so it stays visible on every article
     mode (read, edit, history, settings); repo-history.ts keeps it in sync when the
     article section is swapped or another view is selected. */}}
     {{/* tw-hidden, not the hidden attribute: tw-flex would otherwise win over the UA [hidden] rule */}}
-    <div class="ui warning message tw-mt-0 tw-flex tw-items-start tw-gap-2{{if not (and .Repository.IsArchived .IsArticleView)}} tw-hidden{{end}}" id="article-archived-notice">
+    <div class="ui warning message tw-mt-0 tw-flex tw-items-start tw-gap-2{{if not (and .Repository.IsArchived $articleRendered)}} tw-hidden{{end}}" id="article-archived-notice">
         {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
         <span data-role="article-archived-text">
             {{- if .Repository.IsArchived -}}
@@ -155,8 +169,10 @@
     </div>
 
     {{/* Shown to the pending transfer's recipient so the article can be accepted or
-    rejected without visiting the settings of an article they do not own yet. */}}
-    {{if and .RepoTransfer .CanUserAcceptOrRejectTransfer}}
+    rejected without visiting the settings of an article they do not own yet. Only
+    with that article on screen, like the archived notice: elsewhere it is unclear
+    which article Accept would transfer (repo-history.ts follows the view). */}}
+    {{if and $articleRendered .RepoTransfer .CanUserAcceptOrRejectTransfer}}
     <div class="ui info message tw-mt-0 tw-flex tw-items-center tw-justify-between tw-gap-4" id="article-transfer-notice">
         <div class="tw-flex tw-items-center tw-gap-2">
             {{svg "octicon-info" 16 "tw-flex-shrink-0"}}
@@ -194,6 +210,10 @@
             class="history-view-app"
             data-initial-view="{{.HistoryView}}"
             data-initial-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}"
+            {{/* set when the article section holds a rendered article: the one an article url
+                 names, the one "selected=" names, or a subject's only article. That article is
+                 then the page's selection. */}}
+            data-initial-article="{{if $articleRendered}}true{{end}}"
             data-initial-owner="{{.Repository.Owner.Name}}"
             data-initial-repo="{{.Repository.Name}}"
             data-initial-subject="{{.SubjectName}}"
@@ -206,11 +226,19 @@
             {{if .ArticleLink}}data-article-canonical="{{.ArticleLink}}"{{end}}>
             {{template "shared/repo/bubble" .}}
             {{template "shared/repo/table" .}}
-            {{if .IsArticleView}}
+            {{if $articleRendered}}
                 {{template "shared/repo/article" .}}
             {{else}}
-                <div class="history-view-section history-view-section--article" data-view="article" hidden>
-                    <div class="history-view-placeholder ui segment loading placeholder">
+                {{/* Not rendered as an article yet: the section is filled in when an article is
+                     selected. Until then it has to say so, exactly like a rendered article
+                     section does when nothing is selected (#405 item 1); the loading
+                     placeholder only shows while an article is being fetched. */}}
+                <div class="history-view-section history-view-section--article" data-view="article" {{if not .IsArticleView}}hidden{{end}}>
+                    {{template "shared/repo/article_empty_message" (dict "Hidden" false)}}
+                    {{/* the loader and error roles of a rendered article section, outside the
+                         content as there, so a fetch that fails shows its error instead of
+                         loading forever */}}
+                    <div class="history-view-placeholder ui segment loading placeholder" data-role="article-loader" hidden>
                         <div class="header">
                             <div class="line"></div>
                             <div class="line"></div>
@@ -221,6 +249,10 @@
                             <div class="line"></div>
                         </div>
                     </div>
+                    <div class="ui error message tw-mt-4" data-role="article-error" hidden>
+                        <p data-role="article-error-text"></p>
+                    </div>
+                    <div data-role="article-content" hidden></div>
                 </div>
             {{end}}
         </div>

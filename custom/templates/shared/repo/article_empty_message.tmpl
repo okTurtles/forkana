@@ -1,0 +1,10 @@
+{{/* The Article view's "nothing selected" message. Shared by the rendered article section
+     (shared/repo/article) and the placeholder section of the subject page
+     (explore/repo_history), which must say the same thing; repo-history.ts shows and
+     hides it through data-role="article-empty". */}}
+{{define "shared/repo/article_empty_message"}}
+<div class="ui message" aria-live="polite" data-role="article-empty" {{if .Hidden}}hidden{{end}}>
+    {{svg "octicon-info" 16}}
+    <span class="tw-ml-2">{{ctx.Locale.Tr "repo.article_select_prompt"}}</span>
+</div>
+{{end}}

@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -19,8 +20,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// forkArticle forks the article for user4 and removes the fork when the test ends.
-func forkArticle(t *testing.T, repo *repo_model.Repository) {
+// forkArticle forks the article for user4, removes the fork when the test ends, and
+// returns it.
+func forkArticle(t *testing.T, repo *repo_model.Repository) *repo_model.Repository {
 	t.Helper()
 	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
 	fork, err := repo_service.ForkRepository(t.Context(), user4, user4, repo_service.ForkRepoOptions{
@@ -30,8 +32,10 @@ func forkArticle(t *testing.T, repo *repo_model.Repository) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = repo_service.DeleteRepositoryDirectly(t.Context(), fork.ID)
+		// t.Context() is already cancelled when cleanups run
+		_ = repo_service.DeleteRepositoryDirectly(context.Background(), fork.ID)
 	})
+	return fork
 }
 
 // deleteForm builds the payload the article delete modal submits.

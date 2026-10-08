@@ -8146,7 +8146,7 @@
           {
             "type": "integer",
             "default": 90,
-            "description": "Days to look back for contributor activity (1-365)",
+            "description": "Accepted and validated (1-365) for compatibility and echoed as metadata.contributor_window_days; it no longer affects the counts",
             "name": "contributor_days",
             "in": "query"
           },
@@ -22665,11 +22665,13 @@
       "type": "object",
       "properties": {
         "recent_count": {
+          "description": "RecentCount is no longer computed and is always 0. It is kept so the response\nkeeps its shape for existing API clients.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "RecentCount"
         },
         "total_count": {
+          "description": "TotalCount is the article's contributor count: the distinct authors on its default\nbranch, counted from the fork's creation for a fork. It is the count the subject's\nBubble, Table and Article views all show.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "TotalCount"
@@ -25716,6 +25718,7 @@
           "x-go-name": "CacheStatus"
         },
         "contributor_window_days": {
+          "description": "ContributorWindowDays echoes the request's contributor_days parameter. It no\nlonger windows the counts: total_count is measured from the fork's creation (see\nContributorStats). Kept so the response keeps its shape.",
           "type": "integer",
           "format": "int64",
           "x-go-name": "ContributorWindowDays"

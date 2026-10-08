@@ -2,9 +2,10 @@
 /* keep selectors specific enough to win without !important where possible */
 
 #navbar {
+  /* the navbar's geometry variables are defined in web_src/css/modules/navbar.css */
+  --navbar-padding-y: 9px;
   background: var(--color-body);
-  /* --navbar-padding-x is defined in web_src/css/modules/navbar.css */
-  padding: 9px var(--navbar-padding-x);
+  padding: var(--navbar-padding-y) var(--navbar-padding-x);
 }
 
 .ui.menu .item.svg-no-margin > svg{
@@ -39,10 +40,23 @@
   background: var(--color-nav-bg);
   border: none;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-  /* A little air between the navbar and the card. */
-  margin-top: 8px;
+  /* #421 item 6: the card opens BELOW the navbar's bottom border, 4px under it,
+     as the layout draws it, instead of over it. The menu hangs from the dropdown
+     item, which is centred in the navbar's row inside its vertical padding: from
+     the item's bottom to below the 1px border is
+     padding + (row - item) / 2 + 1px. */
+  margin-top: var(--navbar-user-menu-offset, calc(var(--navbar-padding-y) + (var(--navbar-row-height) - var(--navbar-item-height)) / 2 + 1px + 4px));
   /* Clip the edge-to-edge hover highlight to the card's rounded corners. */
   overflow: hidden;
+}
+
+/* On a phone the menu hangs from the avatar row, the last of the open navbar's
+   rows, which ends 8px (the open navbar's bottom padding, web_src/css/modules/
+   navbar.css) above the 1px border: the card still opens 4px below it. */
+@media (max-width: 767.98px) {
+  #navbar.navbar-menu-open {
+    --navbar-user-menu-offset: calc(var(--navbar-menu-open-padding-bottom) + 1px + 4px);
+  }
 }
 
 /* Hovered entries run edge to edge but keep rounded corners, matching the

@@ -1,20 +1,19 @@
 {{define "shared/repo/article"}}
 <div class="history-view-section history-view-section--article" data-view="article" {{if not .IsArticleView}}hidden{{end}}>
-    <div class="ui tw-mt-10" id="article-view-root" data-article-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}">
-        {{if .IsSubjectContext}}
-            <div class="ui info message" id="article-guidance" style="display:none">
-                {{svg "octicon-info" 16}}
-                <span class="tw-ml-2">Select an article in Bubble view or Table view to open its Article page.</span>
-            </div>
-        {{end}}
-        <div class="ui message" aria-live="polite" data-role="article-empty" {{if .ReadmeRequested}}hidden{{end}}>
-            {{svg "octicon-info" 16}}
-            <span class="tw-ml-2">Please select an article in bubble or table view.</span>
+    <div class="ui" id="article-view-root" data-article-mode="{{if .ArticleMode}}{{.ArticleMode}}{{else}}read{{end}}">
+        {{/* the one "nothing selected" message, shared with the placeholder section */}}
+        {{template "shared/repo/article_empty_message" (dict "Hidden" .ReadmeRequested)}}
+        {{/* Outside the article content, on every branch (a tombstone and a README error
+             too): repo-history.ts shows them while another article is fetched into this
+             section, or when that fails. */}}
+        <div class="ui active inline loader tw-mt-4" data-role="article-loader" hidden></div>
+        <div class="ui error message tw-mt-4" data-role="article-error" hidden>
+            <p data-role="article-error-text"></p>
         </div>
         <div data-role="article-content" {{if not .ReadmeRequested}}hidden{{end}}>
         <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
-            style="margin-top: -8px; margin-bottom: 28px"
-            href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "bubble"}}">
+            style="margin-top: -8px; margin-bottom: 28px" data-role="back-to-bubble"
+            href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "bubble" "selected" .SubjectSelected}}">
             {{svg "octicon-chevron-left" 16}}
             <span>{{ctx.Locale.Tr "repo.back_to_bubble_view"}}</span>
         </a>
@@ -25,14 +24,10 @@
                 {{.ReadmeError}}
             </div>
         {{else}}
-            <div class="ui active inline loader tw-mt-4" data-role="article-loader" hidden></div>
-            <div class="ui error message tw-mt-4" data-role="article-error" hidden>
-                <p data-role="article-error-text"></p>
-            </div>
             <div class="tw-flex tw-items-center tw-gap-2">
                 <span class="pill">
                     {{svg "octicon-person" 16 "tw-mr-1"}}
-                    {{.ReadmeContributorCount}} {{if eq .ReadmeContributorCount 1}}contributor{{else}}contributors{{end}}
+                    {{template "shared/repo/contributor_count" (dict "Count" .ReadmeContributorCount "Label" "lower")}}
                 </span>
                 {{if and .ReadmeLastCommit .ReadmeLastCommit.Committer}}
                     <span class="pill">
