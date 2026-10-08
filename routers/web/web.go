@@ -294,8 +294,9 @@ func registerRepoFileEditorRoutes(m *web.Router, reqRepoCodeWriter func(*context
 		// article images are visible to the readers of every repository keeping them alive.
 		// Only "code reader" is required so the "fork and edit" flow can upload before the
 		// fork is created; the enclosing groups already enforce sign-in and repo read access.
-		// Any signed-in reader can still create an abandoned upload; the article-attachment
-		// garbage collector eventually reclaims it.
+		// Any signed-in reader can still create an abandoned upload, so the handler charges
+		// each upload against the uploader's pending quota and upload rate, and the
+		// article-attachment garbage collector eventually reclaims what no commit claims.
 		m.Post("/editor-attachments", repo.UploadEditorAttachment)
 	}, repo.MustBeEditable, context.RepoMustNotBeArchived())
 }

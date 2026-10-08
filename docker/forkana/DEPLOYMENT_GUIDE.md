@@ -1180,9 +1180,15 @@ A section name containing `.` is written with `_0X2E_`, for example
 `dev.yml` enables attachments and configures two cron tasks:
 
 - `reconcile_article_attachments` runs daily. It only adds associations that are missing; it never removes one.
-- `gc_article_attachments` is configured but **disabled**. It deletes article attachments that nothing references once they are older than `OLDER_THAN` (`168h`).
+- `gc_article_attachments` runs daily. It deletes article attachments that nothing references once they are older than `OLDER_THAN` (`168h`). Until the backfill below has been finalized, each run is skipped and logs why, because a live attachment may still be missing its association.
 
-On an instance that has article attachments from before this feature, run the backfill once after deploying, then turn the collector on:
+Editor uploads that no commit has claimed yet are also bounded per uploader by `[attachment]` `ARTICLE_MAX_PENDING_FILES` (20), `ARTICLE_MAX_PENDING_SIZE` (100 MB) and `ARTICLE_UPLOAD_RATE_LIMIT` (10 per `ARTICLE_UPLOAD_RATE_WINDOW`, 1 minute). Site administrators are exempt. To see the abandoned uploads waiting for the collector:
+
+```bash
+$COMPOSE exec forkana gitea doctor check --run article-attachments-pending
+```
+
+On an instance that has article attachments from before this feature, run the backfill once after deploying, which lets the collector start:
 
 ```bash
 COMPOSE="docker compose --env-file $HOME/forkana/compose/.env \
@@ -1193,7 +1199,7 @@ $COMPOSE exec forkana gitea admin backfill-article-attachments
 $COMPOSE exec forkana gitea admin backfill-article-attachments --finalize
 ```
 
-`--finalize` refuses while any reference is outstanding, unreadable or capped. Once it succeeds, it disables `LEGACY_ARTICLE_FALLBACK` in the database. Then set `GITEA__cron_0X2E_gc_article_attachments__ENABLED: "true"` in `dev.yml` and redeploy. Never enable the collector before the backfill has been finalized.
+`--finalize` refuses while any reference is outstanding, unreadable or capped. Once it succeeds, it disables `LEGACY_ARTICLE_FALLBACK` in the database, and the collector's next run starts reclaiming abandoned uploads. Fresh installations start finalized, so they collect from the start.
 
 ### Enabling SSH Access
 

@@ -4,6 +4,7 @@
 package repository
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/storage"
+	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
@@ -44,8 +46,15 @@ func addStoredAttachment(t *testing.T, uuid string, createdUnix timeutil.TimeSta
 	return attach
 }
 
+// mockLegacyFallback puts the instance in the given backfill state for the test.
+func mockLegacyFallback(t *testing.T, enabled bool) {
+	t.Helper()
+	t.Cleanup(test.MockVariableValue(&legacyArticleFallbackEnabled, func(context.Context) bool { return enabled }))
+}
+
 func TestGarbageCollectArticleAttachments(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
+	mockLegacyFallback(t, false)
 
 	cutoff := time.Unix(2000, 0)
 	old, recent := timeutil.TimeStamp(1000), timeutil.TimeStamp(3000)
@@ -83,6 +92,7 @@ func TestGarbageCollectArticleAttachments(t *testing.T) {
 
 func TestGarbageCollectArticleAttachmentsLimit(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
+	mockLegacyFallback(t, false)
 
 	cutoff := time.Unix(2000, 0)
 	addStoredAttachment(t, "7f2c9a31-0000-4000-8000-00000000e001", timeutil.TimeStamp(1000))
@@ -95,4 +105,24 @@ func TestGarbageCollectArticleAttachmentsLimit(t *testing.T) {
 	collected, err = GarbageCollectArticleAttachments(t.Context(), GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff, Limit: 1})
 	require.NoError(t, err)
 	assert.Equal(t, 1, collected)
+}
+
+func TestGarbageCollectArticleAttachmentsGatedUntilFinalized(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	mockLegacyFallback(t, true)
+
+	cutoff := time.Unix(2000, 0)
+	abandoned := addStoredAttachment(t, "7f2c9a31-0000-4000-8000-00000000f001", timeutil.TimeStamp(1000))
+
+	// while the backfill is not finalized, nothing is collected
+	collected, err := GarbageCollectArticleAttachments(t.Context(), GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff})
+	assert.ErrorIs(t, err, ErrArticleAttachmentGCGated)
+	assert.Equal(t, 0, collected)
+	unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: abandoned.ID})
+
+	// an administrator may still force a run
+	collected, err = GarbageCollectArticleAttachments(t.Context(), GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff, Force: true})
+	require.NoError(t, err)
+	assert.Equal(t, 1, collected)
+	unittest.AssertNotExistsBean(t, &repo_model.Attachment{ID: abandoned.ID})
 }

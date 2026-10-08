@@ -111,6 +111,16 @@ export async function createToastEditor(
             const form = new FormData();
             form.append('file', blob, name);
             const resp = await POST(attachmentUploadUrl, {data: form});
+            // The server bounds uploads that no saved edit references yet: 429 is the upload
+            // rate, 413 the pending quota (the per-file size limit is checked before uploading).
+            if (resp.status === 429) {
+              showErrorToast(window.config.i18n.editor_image_upload_rate_limited || 'You are uploading images too quickly.');
+              return;
+            }
+            if (resp.status === 413) {
+              showErrorToast(window.config.i18n.editor_image_upload_quota_exceeded || 'Too many unsaved images. Save your changes first.');
+              return;
+            }
             if (!resp.ok) throw new Error(`attachment upload failed: ${resp.status}`);
             const data = await resp.json();
             callback(data.url, name);

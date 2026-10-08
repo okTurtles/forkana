@@ -328,3 +328,82 @@ func RetainedRepoAttachmentIDs(ctx context.Context, repoID int64) ([]int64, erro
 		Cols("attachment.id").
 		Find(&ids)
 }
+
+// pendingArticleUploadsOf matches the uploader's article uploads that no commit
+// has claimed yet: the rows the per-uploader pending quota is charged for.
+func pendingArticleUploadsOf(uploaderID int64) builder.Cond {
+	return unassociatedAttachmentCond(AttachmentPurposeArticle).And(builder.Eq{"attachment.uploader_id": uploaderID})
+}
+
+// GetPendingArticleAttachmentStats returns how many pending article uploads the
+// uploader holds and how many bytes they take.
+func GetPendingArticleAttachmentStats(ctx context.Context, uploaderID int64) (count, size int64, err error) {
+	var stats struct {
+		Count int64
+		Size  int64
+	}
+	_, err = db.GetEngine(ctx).Table("attachment").
+		Select("COUNT(*) AS count, COALESCE(SUM(attachment.size), 0) AS size").
+		Where(pendingArticleUploadsOf(uploaderID)).
+		Get(&stats)
+	return stats.Count, stats.Size, err
+}
+
+// CountArticleUploadsSince returns how many article uploads the uploader made
+// since the given time, whether or not a commit has claimed them since. It is
+// the upload rate limit's measure, kept in the database so every process of an
+// instance shares it.
+func CountArticleUploadsSince(ctx context.Context, uploaderID int64, since timeutil.TimeStamp) (int64, error) {
+	return db.GetEngine(ctx).Table("attachment").
+		Where(builder.Eq{
+			"attachment.purpose":     AttachmentPurposeArticle,
+			"attachment.uploader_id": uploaderID,
+		}).
+		And(builder.Gte{"attachment.created_unix": since}).
+		Count(new(Attachment))
+}
+
+// PendingArticleUploader is one uploader's share of the stale pending article uploads.
+type PendingArticleUploader struct {
+	UploaderID int64
+	Count      int64
+	Size       int64
+}
+
+// PendingArticleAttachmentSummary describes the stale pending article uploads
+// that the garbage collector may reclaim.
+type PendingArticleAttachmentSummary struct {
+	Count        int64
+	Size         int64
+	TopUploaders []*PendingArticleUploader
+}
+
+// GetPendingArticleAttachmentSummary reports the pending article uploads created
+// before olderThan, with the topN uploaders by size.
+func GetPendingArticleAttachmentSummary(ctx context.Context, olderThan timeutil.TimeStamp, topN int) (*PendingArticleAttachmentSummary, error) {
+	cond := unreferencedArticleAttachmentCond().And(builder.Lt{"attachment.created_unix": olderThan})
+
+	var total struct {
+		Count int64
+		Size  int64
+	}
+	if _, err := db.GetEngine(ctx).Table("attachment").
+		Select("COUNT(*) AS count, COALESCE(SUM(attachment.size), 0) AS size").
+		Where(cond).
+		Get(&total); err != nil {
+		return nil, err
+	}
+
+	summary := &PendingArticleAttachmentSummary{Count: total.Count, Size: total.Size}
+	if topN <= 0 || total.Count == 0 {
+		return summary, nil
+	}
+	summary.TopUploaders = make([]*PendingArticleUploader, 0, topN)
+	return summary, db.GetEngine(ctx).Table("attachment").
+		Select("attachment.uploader_id AS uploader_id, COUNT(*) AS count, COALESCE(SUM(attachment.size), 0) AS size").
+		Where(cond).
+		GroupBy("attachment.uploader_id").
+		OrderBy("size DESC, uploader_id ASC").
+		Limit(topN).
+		Find(&summary.TopUploaders)
+}
