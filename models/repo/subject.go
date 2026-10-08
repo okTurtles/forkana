@@ -6,7 +6,6 @@ package repo
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -16,6 +15,7 @@ import (
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/modules/optional"
 	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/subjecttitle"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"golang.org/x/text/runes"
@@ -24,14 +24,14 @@ import (
 	"xorm.io/builder"
 )
 
-// MaxSubjectNameLength is the maximum allowed length for a subject name.
-// This matches the VARCHAR(255) database column size.
-const MaxSubjectNameLength = 255
+// MaxSubjectNameLength is the maximum length of a new subject name in bytes (UTF-8), as on
+// Wikipedia. Such a name always fits the VARCHAR(255) column, which counts characters.
+const MaxSubjectNameLength = subjecttitle.MaxBytes
 
 // Subject represents a repository subject that can be shared across repositories
 type Subject struct {
 	ID          int64              `xorm:"pk autoincr"`
-	Name        string             `xorm:"VARCHAR(255) NOT NULL"`        // Display name (can contain special chars)
+	Name        string             `xorm:"VARCHAR(255) NOT NULL"`        // Display name; new names follow modules/subjecttitle, older ones may not
 	Slug        string             `xorm:"VARCHAR(255) UNIQUE NOT NULL"` // URL-safe slug (globally unique)
 	CreatedUnix timeutil.TimeStamp `xorm:"INDEX created"`
 	UpdatedUnix timeutil.TimeStamp `xorm:"INDEX updated"`
@@ -93,9 +93,12 @@ func GenerateSlugFromName(name string) string {
 
 // CreateSubject creates a new subject with the given name
 // Returns ErrSubjectSlugAlreadyExists if a subject with the same slug already exists
+// The name is normalized (see subjecttitle.Normalize) and must follow the subject title rule,
+// otherwise ErrSubjectNameInvalid is returned.
 func CreateSubject(ctx context.Context, name string) (*Subject, error) {
-	if name == "" {
-		return nil, errors.New("subject name cannot be empty")
+	name, err := ValidateSubjectName(name)
+	if err != nil {
+		return nil, err
 	}
 
 	slug := GenerateSlugFromName(name)
@@ -106,7 +109,7 @@ func CreateSubject(ctx context.Context, name string) (*Subject, error) {
 	}
 
 	// Use transaction to prevent race conditions
-	err := db.WithTx(ctx, func(ctx context.Context) error {
+	err = db.WithTx(ctx, func(ctx context.Context) error {
 		// Check if slug already exists
 		existing := &Subject{Slug: slug}
 		has, err := db.GetEngine(ctx).Get(existing)
@@ -136,30 +139,23 @@ func CreateSubject(ctx context.Context, name string) (*Subject, error) {
 }
 
 // GetOrCreateSubject gets an existing subject by slug or creates a new one if it doesn't exist
-// This function is idempotent and safe for concurrent use
+// This function is idempotent and safe for concurrent use.
+// The name is normalized (see subjecttitle.Normalize). Existing subjects are matched by slug and
+// returned as-is; a new subject is only created when the name follows the subject title rule,
+// otherwise ErrSubjectNameInvalid is returned (see ResolveSubjectName, which applies the same
+// rules without creating anything).
 func GetOrCreateSubject(ctx context.Context, name string) (*Subject, error) {
-	// Validate subject name
-	if name == "" {
-		return nil, errors.New("subject name cannot be empty")
-	}
-	if len(name) > MaxSubjectNameLength {
-		return nil, fmt.Errorf("subject name is too long (maximum %d characters)", MaxSubjectNameLength)
-	}
-
-	slug := GenerateSlugFromName(name)
-
-	// Try to get existing subject by slug
-	subject := &Subject{Slug: slug}
-	has, err := db.GetEngine(ctx).Get(subject)
+	name, existing, err := lookupSubjectForCreate(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	if has {
-		return subject, nil
+	if existing != nil {
+		return existing, nil
 	}
 
 	// Create new subject
-	subject = &Subject{
+	slug := GenerateSlugFromName(name)
+	subject := &Subject{
 		Name: name,
 		Slug: slug,
 	}

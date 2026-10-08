@@ -25,6 +25,7 @@ import (
 	"code.gitea.io/gitea/modules/markup"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/sitemap"
+	"code.gitea.io/gitea/modules/subjecttitle"
 	"code.gitea.io/gitea/modules/templates"
 	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/modules/util"
@@ -285,6 +286,9 @@ func Subjects(ctx *context.Context) {
 		if exactMatch == nil && !loadExactSubject(ctx, keyword) {
 			return
 		}
+		// The "create new subject" offer prefills a title that follows the subject title rule
+		// ("C# basics" → "C basics", "iPhone" → "IPhone"); it is hidden when nothing valid is left.
+		ctx.Data["NewSubjectTitle"] = subjecttitle.Clean(keyword)
 
 		// For pagination total, we count exact + similar
 		count = int64(len(similarSubjects))

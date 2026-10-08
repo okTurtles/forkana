@@ -2,6 +2,7 @@ import {test, expect} from '@playwright/test';
 import {
   login_user,
   load_logged_in_context,
+  normalizeSubjectTitle,
 } from './utils_e2e.ts';
 
 /**
@@ -18,8 +19,11 @@ test.describe('First Article Becomes Root', () => {
   });
 
   test('first user can create article with subject', async ({browser}, workerInfo) => {
-    const subjectName = `${TEST_SUBJECT_PREFIX}-${workerInfo.workerIndex}-${Date.now()}`;
-    const repoName = subjectName.toLowerCase().replace(/\s+/g, '-');
+    // typed with a lowercase first letter on purpose: a new subject is stored capitalized
+    const typedSubject = `${TEST_SUBJECT_PREFIX}-${workerInfo.workerIndex}-${Date.now()}`;
+    const subjectName = normalizeSubjectTitle(typedSubject);
+    expect(subjectName).toBe(`E${typedSubject.slice(1)}`);
+    const repoName = typedSubject.toLowerCase().replace(/\s+/g, '-');
 
     // Login as user2
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
@@ -27,9 +31,9 @@ test.describe('First Article Becomes Root', () => {
 
     try {
       // Step 1: Navigate to create repository page with subject pre-filled
-      await page.goto(`/repo/create?subject=${encodeURIComponent(subjectName)}`);
+      await page.goto(`/repo/create?subject=${encodeURIComponent(typedSubject)}`);
 
-      // Step 2: Verify subject field is populated
+      // Step 2: Verify subject field is populated with the normalized title
       await expect(page.locator('input#subject')).toHaveValue(subjectName);
 
       // Step 3: Check the template requirements checkbox (required to enable submit button)
@@ -47,7 +51,7 @@ test.describe('First Article Becomes Root', () => {
       await page.waitForURL(/\/subject\//, {timeout: 30000});
 
       // Step 6: Verify we are on the subject page
-      expect(page.url()).toContain('/subject/');
+      expect(page.url()).toContain(`/subject/${encodeURIComponent(subjectName)}`);
 
       // Step 7: Navigate to the repository page to verify it was created
       await page.goto(`/user2/${repoName}`);
