@@ -35,6 +35,9 @@ import (
 type ForkOnEditPermissions struct {
 	// IsRepoOwner is true if the user owns the repository
 	IsRepoOwner bool
+	// IsArticleMaintainer is true if the user accepted an invitation to maintain the
+	// article, which lets them edit it directly like its owner
+	IsArticleMaintainer bool
 	// CanEditDirectly is true if the user can commit directly to the repository
 	CanEditDirectly bool
 	// NeedsFork is true if the user needs to create a fork to edit
@@ -75,6 +78,19 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 	// Check if user owns the repository
 	if repo.OwnerID == doer.ID {
 		perms.IsRepoOwner = true
+		perms.CanEditDirectly = true
+		return perms, nil
+	}
+
+	// An accepted maintainer commits directly as well. This is checked before the subject
+	// rule: a maintainer was refused at invitation and acceptance if they owned another
+	// article for the subject, so an article created afterwards does not revoke the rights.
+	isMaintainer, err := repo_model.IsAcceptedArticleMaintainer(ctx, repo.ID, doer.ID)
+	if err != nil {
+		return nil, err
+	}
+	if isMaintainer {
+		perms.IsArticleMaintainer = true
 		perms.CanEditDirectly = true
 		return perms, nil
 	}

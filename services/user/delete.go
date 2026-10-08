@@ -76,6 +76,7 @@ func deleteUser(ctx context.Context, u *user_model.User, purge, anonymize bool) 
 	if err = db.DeleteBeans(ctx,
 		&auth_model.AccessToken{UID: u.ID},
 		&repo_model.Collaboration{UserID: u.ID},
+		&repo_model.ArticleCollaborator{UserID: u.ID},
 		&access_model.Access{UserID: u.ID},
 		&repo_model.Watch{UserID: u.ID},
 		&repo_model.Star{UID: u.ID},
