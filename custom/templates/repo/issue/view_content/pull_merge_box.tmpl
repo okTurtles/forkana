@@ -1,6 +1,6 @@
 {{/* Forkana: only the article owner may merge a change request, so the "viewer can merge"
      predicate is hoisted here instead of being spelled out at every use site. */}}
-{{$viewerCanMerge := and .AllowMerge .IsBaseRepoOwner}}
+{{$viewerCanMerge := and .AllowMerge .CanMergeChangeRequest}}
 {{$mergeColor := "red"}}
 {{- if .Issue.PullRequest.HasMerged}}{{$mergeColor = "purple"}}
 {{- else if .Issue.IsClosed}}{{$mergeColor = "grey"}}
@@ -292,7 +292,7 @@
 					<div class="divider"></div>
 					<div class="item">
 						{{svg "octicon-info"}}
-						{{if and .AllowMerge (not .IsBaseRepoOwner)}}
+						{{if and .AllowMerge (not .CanMergeChangeRequest)}}
 							{{ctx.Locale.Tr "repo.pulls.only_owner_can_merge"}}
 						{{else}}
 							{{ctx.Locale.Tr "repo.pulls.no_merge_access"}}
@@ -362,7 +362,7 @@
 			* Then the Manually Merged form will be shown in the merge form
 			* Note: Only repository owners can perform manual merge operations
 			*/}}
-			{{if and $.StillCanManualMerge (not $showGeneralMergeForm) $.IsBaseRepoOwner}}
+			{{if and $.StillCanManualMerge (not $showGeneralMergeForm) $.CanMergeChangeRequest}}
 				<div class="divider"></div>
 				<form class="ui form form-fetch-action" action="{{.Issue.Link}}/merge" method="post">{{/* another similar form is in PullRequestMergeForm.vue*/}}
 					{{.CsrfTokenHtml}}

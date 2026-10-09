@@ -1,0 +1,187 @@
+{{define "shared/repo/settings_collaborators"}}
+{{/* The collaborators section of the article settings, shown to the owner and to the
+     delegates. Collaborators are read-only on an archived article. The role values are
+     repo_model.ArticleCollaboratorRole: 1 is Maintainer, 2 is Maintainer (Delegate). */}}
+{{$perm := .ArticleCollaboratorPerm}}
+{{$editable := not .Repository.IsArchived}}
+<div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-collaborators">
+    <div class="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">
+        <h4 class="ui header tw-m-0">{{ctx.Locale.Tr "repo.settings.article_collaborators"}}</h4>
+        {{if and $editable .ArticleCollaborators}}
+            <button type="button" class="ui small primary button tw-m-0" data-article-settings-modal="#article-collaborator-invite-modal">
+                {{svg "octicon-person-add" 16}} {{ctx.Locale.Tr "repo.settings.article_collaborators_invite_button"}}
+            </button>
+        {{end}}
+    </div>
+    {{if .ArticleCollaborators}}
+        <div class="tw-flex tw-flex-wrap tw-items-center tw-gap-3 tw-p-3 tw-border-b tw-border-secondary">
+            {{if $editable}}
+                <input type="checkbox" id="article-collaborators-select-all" aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_select_all"}}">
+                <button type="button" id="article-collaborators-remove-selected" class="ui small button tw-m-0 tw-text-red disabled" disabled>
+                    {{svg "octicon-trash" 14}} {{ctx.Locale.Tr "repo.settings.article_collaborators_remove_selected"}}
+                </button>
+            {{end}}
+            <div class="ui small icon input tw-flex-1 tw-min-w-[10rem]">
+                <input type="search" id="article-collaborators-search" autocomplete="off"
+                    placeholder="{{ctx.Locale.Tr "repo.settings.article_collaborators_search_placeholder"}}"
+                    aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_search_placeholder"}}">
+                {{svg "octicon-search" 16 "icon"}}
+            </div>
+            <div class="ui small selection dropdown custom tw-ml-auto" id="article-collaborators-role-filter"
+                aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_filter_role"}}">
+                <div class="text">{{ctx.Locale.Tr "repo.settings.article_collaborators_filter_role"}}</div>
+                {{svg "octicon-triangle-down" 14 "dropdown icon"}}
+                <div class="menu">
+                    <div class="item" data-value="">{{ctx.Locale.Tr "repo.settings.article_collaborators_filter_all"}}</div>
+                    <div class="item" data-value="1">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer"}}</div>
+                    <div class="item" data-value="2">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_delegate"}}</div>
+                </div>
+            </div>
+        </div>
+        <form id="article-collaborators-remove-form" class="tw-m-0" method="post" action="{{.RepoOperationsLink}}/article_collaborators/remove">
+            {{.CsrfTokenHtml}}
+            <table class="ui very basic unstackable table tw-m-0">
+                <tbody>
+                    {{range .ArticleCollaborators}}
+                        {{$canRemove := and $editable ($perm.CanRemove .)}}
+                        <tr data-article-collaborator data-role="{{.Role}}" data-search="{{.User.LowerName}} {{.User.FullName}}">
+                            {{if $editable}}
+                                <td class="collapsing tw-pl-3">
+                                    {{if $canRemove}}
+                                        <input type="checkbox" name="uid" value="{{.UserID}}" data-article-collaborator-select
+                                            aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_select" .User.DisplayName}}">
+                                    {{end}}
+                                </td>
+                            {{end}}
+                            <td>
+                                <div class="tw-flex tw-items-center tw-gap-2">
+                                    <a href="{{.User.HomeLink}}">{{ctx.AvatarUtils.Avatar .User 28}}</a>
+                                    <div class="tw-flex tw-flex-col tw-min-w-0">
+                                        <a class="tw-font-bold muted tw-truncate" href="{{.User.HomeLink}}">{{.User.DisplayName}}</a>
+                                        {{if .User.FullName}}<span class="text grey tw-text-sm">{{.User.Name}}</span>{{end}}
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="collapsing">
+                                {{if and $editable $perm.CanChangeRoles}}
+                                    <div class="ui dropdown custom article-collaborator-role" data-uid="{{.UserID}}" data-last-value="{{.Role}}"
+                                        data-url="{{$.RepoOperationsLink}}/article_collaborators/role">
+                                        <div class="text">{{ctx.Locale.Tr .Role.LocaleKey}}</div>
+                                        {{svg "octicon-triangle-down" 14 "dropdown icon"}}
+                                        {{template "shared/repo/settings_collaborators_role_menu" (dict "IsOwner" true)}}
+                                    </div>
+                                {{else}}
+                                    <span data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_collaborators_role_readonly"}}">{{ctx.Locale.Tr .Role.LocaleKey}}</span>
+                                {{end}}
+                            </td>
+                            <td class="collapsing">
+                                {{if .IsPending}}
+                                    <span class="ui basic label">{{svg "octicon-clock" 14}} {{ctx.Locale.Tr "repo.settings.article_collaborators_status_pending"}}</span>
+                                {{else}}
+                                    <span class="ui basic green label">{{svg "octicon-check" 14}} {{ctx.Locale.Tr "repo.settings.article_collaborators_status_accepted"}}</span>
+                                {{end}}
+                            </td>
+                            <td class="collapsing right aligned tw-pr-3">
+                                {{if $canRemove}}
+                                    <button type="button" class="btn interact-fg tw-text-red" data-article-collaborator-remove="{{.UserID}}"
+                                        data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_collaborators_remove_tooltip" .User.DisplayName}}"
+                                        aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_remove_tooltip" .User.DisplayName}}">{{svg "octicon-trash" 16}}</button>
+                                {{end}}
+                            </td>
+                        </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            <p class="tw-hidden tw-m-0 tw-p-4 tw-text-center text grey" id="article-collaborators-no-match">{{ctx.Locale.Tr "repo.settings.article_collaborators_no_match"}}</p>
+        </form>
+    {{else}}
+        <div class="tw-flex tw-flex-col tw-items-center tw-gap-2 tw-p-8 tw-text-center" id="article-collaborators-empty">
+            {{svg "octicon-people" 32 "text grey"}}
+            <p class="tw-m-0 tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators_empty"}}</p>
+            <p class="tw-m-0 text grey">{{ctx.Locale.Tr "repo.settings.article_collaborators_empty_desc"}}</p>
+            {{if $editable}}
+                <button type="button" class="ui primary button tw-mt-2" data-article-settings-modal="#article-collaborator-invite-modal">
+                    {{svg "octicon-person-add" 16}} {{ctx.Locale.Tr "repo.settings.article_collaborators_invite_button"}}
+                </button>
+            {{end}}
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{define "shared/repo/settings_collaborators_role_menu"}}
+{{/* The access levels with their descriptions, the delegate level only for the owner:
+     a delegate can never grant delegation. */}}
+<div class="menu">
+    <div class="item" data-value="1" data-text="{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer"}}">
+        <div class="tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer"}}</div>
+        <div class="text grey tw-text-sm tw-whitespace-normal">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer_desc"}}</div>
+    </div>
+    {{if .IsOwner}}
+        <div class="item" data-value="2" data-text="{{ctx.Locale.Tr "repo.settings.article_collaborators.role_delegate"}}">
+            <div class="tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_delegate"}}</div>
+            <div class="text grey tw-text-sm tw-whitespace-normal">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_delegate_desc"}}</div>
+        </div>
+    {{end}}
+</div>
+{{end}}
+
+{{define "shared/repo/settings_collaborators_modals"}}
+{{/* The invite and remove modals, only rendered while the collaborators can change. */}}
+<div class="ui small modal" id="article-collaborator-invite-modal">
+    <div class="header">{{ctx.Locale.Tr "repo.settings.article_collaborators_invite_modal_header"}}</div>
+    <div class="content">
+        <p>{{ctx.Locale.Tr "repo.settings.article_collaborators_invite_modal_desc"}}</p>
+        <form class="ui form" action="{{.RepoOperationsLink}}/article_collaborators/invite" method="post">
+            {{/* see the transfer modal: the dummy inputs absorb the browser's autofill so the
+            invitee is always picked through the backend-validated search dropdown */}}
+            {{template "base/disable_form_autofill"}}
+            {{.CsrfTokenHtml}}
+            <div class="required field">
+                <label for="article-collaborator-invitee" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators_invitee"}}</label>
+                <div id="article-collaborator-search" class="ui fluid search article-user-search"
+                    data-search-url="{{.RepoLink}}/settings/collaborator_candidates">
+                    <div class="ui fluid input">
+                        <input id="article-collaborator-invitee" class="prompt" name="invitee_name" required maxlength="255"
+                            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                            placeholder="{{ctx.Locale.Tr "repo.settings.article_collaborators_invitee_placeholder"}}">
+                    </div>
+                    <div class="article-user-search-selection tw-hidden tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded">
+                        <div class="tw-flex tw-items-center tw-gap-2">
+                            <img class="article-user-search-avatar ui avatar image" width="20" height="20" src="" alt aria-hidden="true">
+                            <span class="article-user-search-name tw-font-bold"></span>
+                        </div>
+                        <button type="button" class="article-user-search-clear btn interact-fg"
+                            data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_collaborators_invitee_clear"}}"
+                            aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_invitee_clear"}}">{{svg "octicon-x" 16}}</button>
+                    </div>
+                </div>
+            </div>
+            <div class="required field">
+                <label class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators_access"}}</label>
+                <div class="ui fluid selection dropdown" id="article-collaborator-role">
+                    <input type="hidden" name="role" value="1">
+                    <div class="text">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer"}}</div>
+                    {{svg "octicon-triangle-down" 14 "dropdown icon"}}
+                    {{template "shared/repo/settings_collaborators_role_menu" (dict "IsOwner" .ArticleCollaboratorPerm.IsOwner)}}
+                </div>
+            </div>
+            <div class="actions">
+                <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+                <button type="submit" id="article-collaborator-invite-submit" class="ui primary button disabled" disabled
+                    data-label-select="{{ctx.Locale.Tr "repo.settings.article_collaborators_select_user"}}"
+                    data-label-invite="{{ctx.Locale.Tr "repo.settings.article_collaborators_invite_submit" "%s"}}">{{ctx.Locale.Tr "repo.settings.article_collaborators_select_user"}}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="ui small modal" id="article-collaborators-remove-modal">
+    <div class="header">{{svg "octicon-trash"}} {{ctx.Locale.Tr "repo.settings.article_collaborators_remove_modal_header"}}</div>
+    <div class="content"><p>{{ctx.Locale.Tr "repo.settings.article_collaborators_remove_modal_desc"}}</p></div>
+    <div class="actions">
+        <button type="button" class="ui cancel button">{{svg "octicon-x" 16}} {{ctx.Locale.Tr "settings.cancel"}}</button>
+        <button type="submit" form="article-collaborators-remove-form" class="ui red button">{{ctx.Locale.Tr "repo.settings.article_collaborators_remove_confirm"}}</button>
+    </div>
+</div>
+{{end}}

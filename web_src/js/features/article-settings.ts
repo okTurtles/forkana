@@ -1,5 +1,7 @@
 import {fomanticQuery} from '../modules/fomantic/base.ts';
-import {addDelegatedEventListener, hideElem, showElem} from '../utils/dom.ts';
+import {POST} from '../modules/fetch.ts';
+import {showErrorToast} from '../modules/toast.ts';
+import {addDelegatedEventListener, hideElem, showElem, toggleElem} from '../utils/dom.ts';
 import {htmlEscape} from '../utils/html.ts';
 
 // The transfer modal additionally requires an owner picked from the search results,
@@ -26,44 +28,61 @@ function syncTransferConfirmInput(): void {
   if (input) syncConfirmInput(input);
 }
 
-// Resets the "new owner" field back to its searchable state, called when the owner is
-// cleared and every time the transfer modal is reopened. The settings markup is
-// re-rendered in place and the modal is absent for archived articles, so the elements
-// are resolved on every call instead of being captured once.
-function resetTransferOwnerSearch(): void {
-  transferOwnerSelected = false;
-  const elSearch = document.querySelector<HTMLElement>('#article-transfer-owner-search');
-  if (!elSearch) return;
-
-  const elInput = elSearch.querySelector<HTMLInputElement>('input[name="new_owner_name"]');
-  const elSelection = elSearch.querySelector<HTMLElement>('#article-transfer-owner-selection');
-  if (!elInput || !elSelection) return;
-
-  const elAvatar = elSelection.querySelector<HTMLImageElement>('#article-transfer-owner-avatar');
-  const elName = elSelection.querySelector<HTMLElement>('#article-transfer-owner-name');
-  elInput.value = '';
-  if (elAvatar) elAvatar.src = '';
-  if (elName) elName.textContent = '';
-  hideElem(elSelection);
-  const elPrompt = elInput.closest<HTMLElement>('.ui.input');
-  if (elPrompt) showElem(elPrompt);
-  syncTransferConfirmInput();
+// Labels the invite button with the picked user, it stays disabled until one is picked.
+function syncInviteSubmit(name: string | null): void {
+  const button = document.querySelector<HTMLButtonElement>('#article-collaborator-invite-submit');
+  if (!button) return;
+  const enabled = Boolean(name);
+  button.textContent = enabled ?
+    button.getAttribute('data-label-invite').replace('%s', name) :
+    button.getAttribute('data-label-select');
+  button.classList.toggle('disabled', !enabled);
+  button.disabled = !enabled;
 }
 
-// Turns the "new owner" field into a search box listing the users the article can be
-// transferred to. A user is shown by their full name, falling back to the username,
-// while the submitted value is always the username, which is what the backend resolves
-// the recipient by.
-function initArticleTransferOwnerSearch(): void {
-  const elSearch = document.querySelector<HTMLElement>('#article-transfer-owner-search');
-  if (!elSearch) return;
+type ArticleUserSearchParts = {
+  input: HTMLInputElement,
+  prompt: HTMLElement,
+  selection: HTMLElement,
+  avatar: HTMLImageElement,
+  name: HTMLElement,
+  clear: HTMLElement,
+};
 
+function articleUserSearchParts(elSearch: HTMLElement): ArticleUserSearchParts | null {
+  const input = elSearch.querySelector<HTMLInputElement>('input.prompt');
+  const selection = elSearch.querySelector<HTMLElement>('.article-user-search-selection');
+  if (!input || !selection) return null;
+  return {
+    input,
+    prompt: input.closest<HTMLElement>('.ui.input'),
+    selection,
+    avatar: selection.querySelector<HTMLImageElement>('.article-user-search-avatar'),
+    name: selection.querySelector<HTMLElement>('.article-user-search-name'),
+    clear: selection.querySelector<HTMLElement>('.article-user-search-clear'),
+  };
+}
+
+// Resets a user search back to its searchable state, called when the user is cleared
+// and every time its modal is reopened.
+function resetArticleUserSearch(elSearch: HTMLElement): void {
+  const parts = articleUserSearchParts(elSearch);
+  if (!parts) return;
+  parts.input.value = '';
+  if (parts.avatar) parts.avatar.src = '';
+  if (parts.name) parts.name.textContent = '';
+  hideElem(parts.selection);
+  if (parts.prompt) showElem(parts.prompt);
+}
+
+// Turns a user field into a search box listing the users returned by its search url. A
+// user is shown by their full name, falling back to the username, while the submitted
+// value is always the username, which is what the backend resolves the user by.
+// onChange receives the displayed name of the picked user, or null when none is picked.
+function bindArticleUserSearch(elSearch: HTMLElement, onChange: (name: string | null) => void): void {
+  const parts = articleUserSearchParts(elSearch);
+  if (!parts) return;
   const searchURL = elSearch.getAttribute('data-search-url');
-  const elInput = elSearch.querySelector<HTMLInputElement>('input[name="new_owner_name"]');
-  const elPrompt = elInput.closest<HTMLElement>('.ui.input');
-  const elSelection = elSearch.querySelector<HTMLElement>('#article-transfer-owner-selection');
-  const elAvatar = elSelection.querySelector<HTMLImageElement>('#article-transfer-owner-avatar');
-  const elName = elSelection.querySelector<HTMLElement>('#article-transfer-owner-name');
 
   fomanticQuery(elSearch).search({
     minCharacters: 2,
@@ -79,7 +98,7 @@ function initArticleTransferOwnerSearch(): void {
           const name = user.full_name || user.login;
           results.push({
             // the result template renders "title" as HTML (preserveHTML), the raw value
-            // is kept separately for the selected-owner display
+            // is kept separately for the selected-user display
             title: htmlEscape(name),
             rawName: name,
             login: user.login,
@@ -90,38 +109,203 @@ function initArticleTransferOwnerSearch(): void {
       },
     },
     onSelect(result: any) {
-      transferOwnerSelected = Boolean(result?.login);
-      if (!transferOwnerSelected) return;
+      if (!result?.login) {
+        onChange(null);
+        return;
+      }
       // the search fills the input with the displayed title, the form has to carry the
       // username instead
-      elInput.value = result.login;
-      elAvatar.src = result.image ?? '';
-      elName.textContent = result.rawName ?? '';
-      hideElem(elPrompt);
-      showElem(elSelection);
-      syncTransferConfirmInput();
+      parts.input.value = result.login;
+      parts.avatar.src = result.image ?? '';
+      parts.name.textContent = result.rawName ?? '';
+      hideElem(parts.prompt);
+      showElem(parts.selection);
+      onChange(result.rawName || result.login);
     },
   });
 
-  elSelection.querySelector('#article-transfer-owner-clear').addEventListener('click', () => {
-    resetTransferOwnerSearch();
-    elInput.focus();
+  parts.clear.addEventListener('click', () => {
+    resetArticleUserSearch(elSearch);
+    onChange(null);
+    parts.input.focus();
   });
 
-  elInput.addEventListener('input', () => {
-    transferOwnerSelected = false;
-    syncTransferConfirmInput();
-  });
+  parts.input.addEventListener('input', () => onChange(null));
 }
 
-// Opens the Article settings modals (transfer/archive/delete). Submission is
-// handled by the forms inside the modals.
+function initArticleUserSearches(): void {
+  const elTransfer = document.querySelector<HTMLElement>('#article-transfer-owner-search');
+  if (elTransfer) {
+    bindArticleUserSearch(elTransfer, (name) => {
+      transferOwnerSelected = Boolean(name);
+      syncTransferConfirmInput();
+    });
+  }
+  const elInvite = document.querySelector<HTMLElement>('#article-collaborator-search');
+  if (elInvite) bindArticleUserSearch(elInvite, syncInviteSubmit);
+}
+
+// Puts a reopened modal back in its initial state: the confirmation, the picked user and
+// the access level must be entered again.
+function resetArticleSettingsModal(modal: HTMLElement): void {
+  for (const elSearch of modal.querySelectorAll<HTMLElement>('.article-user-search')) {
+    resetArticleUserSearch(elSearch);
+  }
+  transferOwnerSelected = false;
+  syncTransferConfirmInput();
+  syncInviteSubmit(null);
+
+  const elRole = modal.querySelector<HTMLElement>('#article-collaborator-role');
+  if (elRole) fomanticQuery(elRole).dropdown('set selected', '1');
+
+  for (const input of modal.querySelectorAll<HTMLInputElement>('[data-article-confirm-value]')) {
+    input.value = '';
+    syncConfirmInput(input);
+  }
+}
+
+// Shows one settings section (general, collaborators) and hides the others, both are
+// rendered so switching does not reload the article.
+function showArticleSettingsSection(section: string): void {
+  for (const item of document.querySelectorAll('[data-article-settings-section]')) {
+    item.classList.toggle('active', item.getAttribute('data-article-settings-section') === section);
+  }
+  for (const panel of document.querySelectorAll('[data-article-settings-panel]')) {
+    toggleElem(panel, panel.getAttribute('data-article-settings-panel') === section);
+  }
+}
+
+function showRemoveCollaboratorsModal(): void {
+  const modal = document.querySelector<HTMLElement>('#article-collaborators-remove-modal');
+  if (modal) fomanticQuery(modal).modal('show');
+}
+
+// The collaborators table: search, role filter, selection with bulk removal and the role
+// dropdown of each row. The list is short, so filtering happens on the rendered rows.
+function initArticleCollaborators(): void {
+  const root = document.querySelector<HTMLElement>('#article-settings-collaborators');
+  if (!root) return;
+
+  const rows = Array.from(root.querySelectorAll<HTMLElement>('tr[data-article-collaborator]'));
+  const elSelectAll = root.querySelector<HTMLInputElement>('#article-collaborators-select-all');
+  const elRemoveSelected = root.querySelector<HTMLButtonElement>('#article-collaborators-remove-selected');
+  const elSearch = root.querySelector<HTMLInputElement>('#article-collaborators-search');
+  const elNoMatch = root.querySelector<HTMLElement>('#article-collaborators-no-match');
+  let roleFilter = '';
+
+  const rowCheckbox = (row: HTMLElement) => row.querySelector<HTMLInputElement>('[data-article-collaborator-select]');
+  const visibleCheckboxes = () => rows.filter((row) => !row.classList.contains('tw-hidden')).map(rowCheckbox).filter(Boolean);
+
+  const syncSelection = () => {
+    const checkboxes = visibleCheckboxes();
+    const checked = checkboxes.filter((checkbox) => checkbox.checked).length;
+    if (elSelectAll) {
+      elSelectAll.checked = checkboxes.length > 0 && checked === checkboxes.length;
+      elSelectAll.indeterminate = checked > 0 && checked < checkboxes.length;
+      elSelectAll.disabled = checkboxes.length === 0;
+    }
+    if (elRemoveSelected) {
+      elRemoveSelected.disabled = checked === 0;
+      elRemoveSelected.classList.toggle('disabled', checked === 0);
+    }
+  };
+
+  const applyFilter = () => {
+    const query = elSearch?.value.trim().toLowerCase() ?? '';
+    let shown = 0;
+    for (const row of rows) {
+      const matches = (!query || row.getAttribute('data-search').toLowerCase().includes(query)) &&
+        (!roleFilter || row.getAttribute('data-role') === roleFilter);
+      toggleElem(row, matches);
+      // a collaborator filtered out of sight must not be removed along with the visible ones
+      const checkbox = rowCheckbox(row);
+      if (!matches && checkbox) checkbox.checked = false;
+      if (matches) shown++;
+    }
+    if (elNoMatch) toggleElem(elNoMatch, shown === 0);
+    syncSelection();
+  };
+
+  elSelectAll?.addEventListener('change', () => {
+    for (const checkbox of visibleCheckboxes()) checkbox.checked = elSelectAll.checked;
+    syncSelection();
+  });
+  for (const row of rows) rowCheckbox(row)?.addEventListener('change', syncSelection);
+  elSearch?.addEventListener('input', applyFilter);
+
+  const elRoleFilter = root.querySelector<HTMLElement>('#article-collaborators-role-filter');
+  if (elRoleFilter) {
+    fomanticQuery(elRoleFilter).dropdown({
+      onChange(value: string) {
+        roleFilter = value;
+        applyFilter();
+      },
+    });
+  }
+
+  elRemoveSelected?.addEventListener('click', showRemoveCollaboratorsModal);
+  // removing a single collaborator reuses the bulk form with only their row selected
+  for (const button of root.querySelectorAll<HTMLElement>('[data-article-collaborator-remove]')) {
+    button.addEventListener('click', () => {
+      const uid = button.getAttribute('data-article-collaborator-remove');
+      for (const row of rows) {
+        const checkbox = rowCheckbox(row);
+        if (checkbox) checkbox.checked = checkbox.value === uid;
+      }
+      syncSelection();
+      showRemoveCollaboratorsModal();
+    });
+  }
+
+  for (const dropdownEl of root.querySelectorAll<HTMLElement>('.ui.dropdown.article-collaborator-role')) {
+    const textEl = dropdownEl.querySelector<HTMLElement>(':scope > .text');
+    const row = dropdownEl.closest<HTMLElement>('tr[data-article-collaborator]');
+    const $dropdown = fomanticQuery(dropdownEl);
+    $dropdown.dropdown({
+      async action(_text: string, value: string) {
+        $dropdown.dropdown('hide');
+        const lastValue = dropdownEl.getAttribute('data-last-value');
+        if (value === lastValue) return;
+        dropdownEl.classList.add('is-loading', 'loading-icon-2px');
+        try {
+          const response = await POST(dropdownEl.getAttribute('data-url'), {
+            data: new URLSearchParams({uid: dropdownEl.getAttribute('data-uid'), role: value}),
+          });
+          if (!response.ok) {
+            let message = `Failed with status ${response.status}`;
+            try {
+              message = (await response.json()).errorMessage ?? message;
+            } catch {
+              // a non-JSON error page keeps the status message
+            }
+            throw new Error(message);
+          }
+          // the items carry a description, the shown text is only the role name
+          textEl.textContent = dropdownEl.querySelector(`.item[data-value="${value}"]`)?.getAttribute('data-text') ?? '';
+          dropdownEl.setAttribute('data-last-value', value);
+          row?.setAttribute('data-role', value);
+          applyFilter();
+        } catch (err) {
+          showErrorToast(err.message);
+        } finally {
+          dropdownEl.classList.remove('is-loading', 'loading-icon-2px');
+        }
+      },
+    });
+  }
+
+  applyFilter();
+}
+
+// Opens the Article settings modals (invite/transfer/archive/delete) and switches the
+// settings sections. Submission is handled by the forms inside the modals.
 export function initArticleSettings(): void {
-  if (!document.querySelector('#article-settings-general')) return;
+  if (!document.querySelector('#article-settings-root')) return;
 
   // the settings markup is re-rendered when switching modes in the history view, so the
-  // search is bound against the current elements on every call
-  initArticleTransferOwnerSearch();
+  // searches and the table are bound against the current elements on every call
+  initArticleUserSearches();
+  initArticleCollaborators();
 
   if (delegatedListenersBound) return;
   delegatedListenersBound = true;
@@ -130,13 +314,13 @@ export function initArticleSettings(): void {
     e.preventDefault();
     const modal = document.querySelector<HTMLElement>(el.getAttribute('data-article-settings-modal'));
     if (!modal) return;
-    // a modal can be reopened, so the confirmation and the owner must be entered again
-    resetTransferOwnerSearch();
-    for (const input of modal.querySelectorAll<HTMLInputElement>('[data-article-confirm-value]')) {
-      input.value = '';
-      syncConfirmInput(input);
-    }
+    resetArticleSettingsModal(modal);
     fomanticQuery(modal).modal('show');
+  });
+
+  addDelegatedEventListener(document, 'click', '[data-article-settings-section]', (el: HTMLElement, e: MouseEvent) => {
+    e.preventDefault();
+    showArticleSettingsSection(el.getAttribute('data-article-settings-section'));
   });
 
   addDelegatedEventListener(document, 'input', '[data-article-confirm-value]', (el: HTMLInputElement) => {
