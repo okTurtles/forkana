@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 
 	"code.gitea.io/gitea/models/db"
@@ -14,7 +16,6 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/container"
-	"code.gitea.io/gitea/modules/util"
 
 	"xorm.io/builder"
 )
@@ -68,7 +69,7 @@ func (actions ActionList) LoadRepositories(ctx context.Context) error {
 	for _, action := range actions {
 		action.Repo = repoMaps[action.RepoID]
 	}
-	repos := repo_model.RepositoryList(util.ValuesOfMap(repoMaps))
+	repos := repo_model.RepositoryList(slices.Collect(maps.Values(repoMaps)))
 	return repos.LoadUnits(ctx)
 }
 
