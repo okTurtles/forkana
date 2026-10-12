@@ -156,7 +156,8 @@
 			</div>
 			{{else}}
 			<div class="feeds-page-empty">
-				<p>{{ctx.Locale.Tr "no_results_found"}}</p>
+				{{/* nothing matches the search/filters, or the feed has no content at all yet (#404 item 5) */}}
+				<p>{{if or .Keyword .Filters .Period}}{{ctx.Locale.Tr "no_results_found"}}{{else}}{{ctx.Locale.Tr "home.feeds_empty"}}{{end}}</p>
 			</div>
 			{{end}}
 		</div>

@@ -77,7 +77,13 @@
 				</div>
 			</div>
 			{{end}}
-			<a href="{{AppSubUrl}}/feeds" class="home-feeds-see-all">{{ctx.Locale.Tr "home.see_all"}}</a>
+			{{if .Feeds}}
+			<!-- Secondary large button (Figma 3853:40422), it was the primary one before #404 item 5 -->
+			<a href="{{AppSubUrl}}/feeds" class="home-feeds-see-all forkana-btn forkana-btn-secondary forkana-btn-lg">{{ctx.Locale.Tr "home.see_all"}}</a>
+			{{else}}
+			<!-- Empty state (Figma 6315:57313) -->
+			<div class="home-feeds-empty">{{ctx.Locale.Tr "home.feeds_empty"}}</div>
+			{{end}}
 		</div>
 		{{end}}
 	</section>
