@@ -122,25 +122,14 @@ export function initRepoNew() {
   updateRepoNameFromSubject();
   updateUiRepoName();
 
-  // Handle template_requirements checkbox validation
-  const inputTemplateRequirements = form.querySelector<HTMLInputElement>('#template_requirements');
+  // The submit button is only disabled while the selected owner can't create a subject
+  // (the "reach limit of creation" prompt shown in #create-repo-error-message).
   const elSubmitButton = form.querySelector<HTMLButtonElement>('#create-repo-submit-button');
   const updateSubmitButtonState = () => {
-    if (!elSubmitButton || !inputTemplateRequirements) return;
-
-    const isTemplateRequirementsChecked = inputTemplateRequirements.checked;
+    if (!elSubmitButton) return;
     const elCreateRepoErrorMessage = form.querySelector('#create-repo-error-message');
-    const hasOwnerError = elCreateRepoErrorMessage?.textContent?.trim() !== '';
-    // Disable submit button if template_requirements is not checked or if there's an owner error
-    elSubmitButton.disabled = !isTemplateRequirementsChecked || hasOwnerError;
+    elSubmitButton.disabled = Boolean(elCreateRepoErrorMessage?.textContent?.trim());
   };
-
-  // Listen for checkbox changes
-  if (inputTemplateRequirements) {
-    inputTemplateRequirements.addEventListener('change', updateSubmitButtonState);
-    // Initial state check
-    updateSubmitButtonState();
-  }
 
   initRepoNewTemplateSearch(form, updateSubmitButtonState);
 }
