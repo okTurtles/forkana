@@ -88,8 +88,8 @@ func TestPullViewMergePermissionHint(t *testing.T) {
 		// contains is the accurate, Forkana-specific message the viewer should get instead.
 		contains string
 	}{
-		{user: "user2", absent: []string{writeAccessHint, "Only the article owner can accept change requests."}},
-		{user: "user40", absent: []string{writeAccessHint}, contains: "Only the article owner can accept change requests."},
+		{user: "user2", absent: []string{writeAccessHint, "Only the article owner and its maintainers can accept change requests."}},
+		{user: "user40", absent: []string{writeAccessHint}, contains: "Only the article owner and its maintainers can accept change requests."},
 		{user: "user4", absent: []string{writeAccessHint}, contains: "You are not authorized to merge this change request."},
 	}
 
