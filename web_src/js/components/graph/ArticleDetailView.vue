@@ -23,6 +23,7 @@
 
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { formatDateYMD } from '../../utils/time.ts';
+import { DETAIL_DIAMETER_DESIGN, DETAIL_EDGE_MARGIN, DETAIL_VIEWPORT_CAP } from './detail-size.ts';
 
 /* Screen-space circle the detail view grows out of / shrinks back into: the
    bubble that was clicked, in viewport px. Null when there is nothing to grow
@@ -60,7 +61,9 @@ const emit = defineEmits<{
   (e: 'closed'): void;
 }>();
 
-const diameter = computed(() => props.size ?? 425);
+const diameter = computed(() => props.size ?? DETAIL_DIAMETER_DESIGN);
+/* The CSS spelling of the viewport cap (see ./detail-size.ts). */
+const viewportCap = `${DETAIL_VIEWPORT_CAP * 100}vw`;
 const label = computed(() => (props.contributors === 1 ? 'Contributor' : 'Contributors'));
 const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 const showBack = computed(() => props.showBack !== false);
@@ -95,8 +98,6 @@ const layerRef = ref<HTMLElement | null>(null);
    pokes outside the layer's clipping. Falls back to the CSS 50% until first
    measured. */
 const centerY = ref('50%');
-/** Space kept between the circle and the box's top and bottom edges. */
-const DETAIL_EDGE_MARGIN = 24;
 
 function updateCenterY() {
   const layer = layerRef.value;
@@ -107,7 +108,7 @@ function updateCenterY() {
   const visBottom = Math.min(r.bottom, window.innerHeight);
   if (visBottom <= visTop) return;   // box fully off-screen: keep the last spot
   /* Half the circle, plus the breathing room the canvas keeps around it
-     (FishboneGraph's DETAIL_CONTAINER_MARGIN) when the box has room for it, so
+     (DETAIL_EDGE_MARGIN, ./detail-size.ts) when the box has room for it, so
      the circle never touches the view tabs above it or the legend below. */
   const half = (bubbleRef.value?.offsetHeight || diameter.value) / 2;
   const reach = Math.min(half + DETAIL_EDGE_MARGIN, r.height / 2);
@@ -129,16 +130,29 @@ function prefersReducedMotion(): boolean {
 
 /* The transform that maps this circle, at its resting size and position, onto
    the bubble it came from. Measured rather than derived from `size` because the
-   circle is also clamped by `min(--detail-size, 84vw)`. */
+   circle is also clamped by `min(--detail-size, 84vw)`.
+
+   The circle sits inside .detail-viewport, which carries the reader's zoom
+   (`scale`) and the History card's shift (`translate`). The measured rect
+   already includes both, so the scale needs no correction — but the circle's
+   own translate is applied INSIDE the viewport's scale, so a displacement in
+   screen px is divided by the zoom. And the shift may be on its way back to
+   another value (closing the History card hands the circle its centre back,
+   in the same tick as a close): the flight is aimed from where the circle
+   will REST, not from where the viewport happens to be right now. */
 function originTransform(): string | null {
   const el = bubbleRef.value;
   const o = props.origin;
   if (!el || !o || !(o.r > 0)) return null;
   const b = el.getBoundingClientRect();
   if (!b.width) return null;
+  const zoom = props.zoom || 1;
+  const viewport = el.parentElement;
+  const translateNow = viewport ? parseFloat(getComputedStyle(viewport).translate) || 0 : 0;   // 'none' -> 0
+  const restCx = b.left + b.width / 2 - translateNow - (props.shift ?? 0);
   const scale = (o.r * 2) / b.width;
-  const dx = o.cx - (b.left + b.width / 2);
-  const dy = o.cy - (b.top + b.height / 2);
+  const dx = (o.cx - restCx) / zoom;
+  const dy = (o.cy - (b.top + b.height / 2)) / zoom;
   return `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(${scale.toFixed(4)})`;
 }
 
@@ -218,7 +232,7 @@ onBeforeUnmount(() => {
   <div
     class="detail-layer" :class="{'is-open': entered, 'is-closing': leaving}"
     ref="layerRef"
-    :style="{'--detail-size': diameter + 'px', '--detail-center-y': centerY}"
+    :style="{'--detail-size': diameter + 'px', '--detail-center-y': centerY, '--detail-viewport-cap': viewportCap}"
   >
     <button v-if="showBack" ref="backRef" class="detail-back" @click="emit('back')">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -362,8 +376,8 @@ onBeforeUnmount(() => {
 .detail-bubble {
   /* Never wider than the viewport allows — on a phone the design's 425px
      circle would be clipped on both sides. */
-  width: min(var(--detail-size, 425px), 84vw);
-  height: min(var(--detail-size, 425px), 84vw);
+  width: min(var(--detail-size, 425px), var(--detail-viewport-cap, 84vw));
+  height: min(var(--detail-size, 425px), var(--detail-viewport-cap, 84vw));
   flex: none;
   display: flex;
   align-items: center;

@@ -23,9 +23,9 @@ export type HistoryEntry = {
    Desktop: a card beside the opened bubble (FishboneGraph places it, never
    over the bubble — #423).
    Narrow viewports: the same card as a bottom sheet, sliding up over the
-   dimmed bubble. That switch is a CSS media query rather than a JS viewport
-   check — it cannot get out of step with an actual resize, and it needs no
-   listener. The breakpoint is the one the rest of the app uses, 768px.
+   dimmed bubble. The parent decides (`sheet`): a phone (the app's 768px
+   breakpoint), or a window with no room for the card beside the circle — a
+   pinch-zoomed circle, say — where the card would otherwise cover it.
 
    Every value below is from figma "Bubble view - Selected" (1996:36527), the
    card "ActionMenu/History" 641:62665 and its rows 641:62676-62679, unless a
@@ -37,6 +37,8 @@ const props = defineProps<{
   entries: HistoryEntry[];
   /* Which row starts expanded — the design expands the oldest ancestor. */
   expandedId?: string | null;
+  /* Bottom sheet instead of the card beside the bubble. */
+  sheet?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -57,9 +59,9 @@ function toggle(id: string) {
 
 <template>
   <!-- Backdrop: closes on click, and dims the bubble behind the bottom sheet. -->
-  <div class="history-backdrop" @click="emit('close')"/>
+  <div class="history-backdrop" :class="{'is-sheet': sheet}" @click="emit('close')"/>
 
-  <aside class="history-popup" role="dialog" aria-label="Article history" @click.stop>
+  <aside class="history-popup" :class="{'is-sheet': sheet}" role="dialog" aria-label="Article history" @click.stop>
     <header class="history-header">
       <h3 class="history-title">History</h3>
       <!-- x-24 (641:62668): the 24px octicon, #59636e -->
@@ -119,6 +121,9 @@ function toggle(id: string) {
   inset: 0;
   z-index: 20;
   background: transparent;
+  /* A pinch over the card or its backdrop zooms the circle (FishboneGraph's
+     zoom gestures, #422), not the page; one-finger scrolling still works. */
+  touch-action: pan-y;
 }
 
 .history-popup {
@@ -156,6 +161,21 @@ function toggle(id: string) {
     0 6px 12px -3px rgb(37 41 46 / 4%),
     0 0 0 1px rgb(209 217 224 / 50%);
   overflow: hidden;
+  touch-action: pan-y;
+  /* Appears once the circle has glided aside to make room for it
+     (--history-enter-delay, set by FishboneGraph), never over it. */
+  animation: history-in 120ms ease-out var(--history-enter-delay, 0ms) both;
+}
+
+@keyframes history-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history-popup {
+    animation: none;
+  }
 }
 
 /* Frame 714 (641:62666): 6px above and below a 24px row, the title 8px in */
@@ -336,32 +356,30 @@ function toggle(id: string) {
 }
 
 /* ── Narrow viewports: the same card as a bottom sheet ─────────────────── */
-@media (width <= 767px) {
-  .history-backdrop {
-    position: fixed;
-    z-index: 30;
-    background: rgb(15 23 42 / 35%);
-  }
+.history-backdrop.is-sheet {
+  position: fixed;
+  z-index: 30;
+  background: rgb(15 23 42 / 35%);
+}
 
-  .history-popup {
-    position: fixed;
-    z-index: 31;
-    inset: auto 0 0;
-    top: auto;
-    left: 0;
-    width: 100%;
-    /* the desktop card clamps its width to the window; the sheet spans the
-       whole viewport edge to edge and must drop that clamp */
-    max-width: none;
-    max-height: 55vh;
-    border-radius: 16px 16px 0 0;
-    transform: none;
-    animation: sheet-up 0.22s ease-out;
-  }
+.history-popup.is-sheet {
+  position: fixed;
+  z-index: 31;
+  inset: auto 0 0;
+  top: auto;
+  left: 0;
+  width: 100%;
+  /* the desktop card clamps its width to the window; the sheet spans the
+     whole viewport edge to edge and must drop that clamp */
+  max-width: none;
+  max-height: 55vh;
+  border-radius: 16px 16px 0 0;
+  transform: none;
+  animation: sheet-up 0.22s ease-out;
+}
 
-  .history-header {
-    padding-top: 12px;
-  }
+.history-popup.is-sheet .history-header {
+  padding-top: 12px;
 }
 
 @keyframes sheet-up {
