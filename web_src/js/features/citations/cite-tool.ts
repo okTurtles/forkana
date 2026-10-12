@@ -22,9 +22,10 @@ import {
   type SourceType,
 } from './citation-format.ts';
 import {footnoteSources, nextFootnoteLabel, plainCitationSummary, referenceNumberAt, type FootnoteSource} from './footnote-markdown.ts';
-import {caretRect, currentView, focusEditor, insertFootnote, textBefore, type ToolsEditor} from './editor-ops.ts';
+import {caretRect, currentView, focusEditor, insertFootnote, isInCode, textBefore, type ToolsEditor} from './editor-ops.ts';
+import {showErrorToast} from '../../modules/toast.ts';
 import {closePopover, openPopover} from './popover.ts';
-import {GET} from '../../modules/fetch.ts';
+import {POST} from '../../modules/fetch.ts';
 import {svg, type SvgName} from '../../svg.ts';
 import {createElementFromHTML} from '../../utils/dom.ts';
 import {html, htmlEscape, htmlRaw} from '../../utils/html.ts';
@@ -132,7 +133,7 @@ export function fieldsFromLookup(src: LookupSource): CitationFields {
 // fieldsFromQuery puts what the writer pasted in the field of its type.
 function fieldsFromQuery(type: SourceType, query: string): CitationFields {
   if (type === 'journal') return {doi: normalizeDOI(query) || query};
-  if (type === 'book') return {isbn: query};
+  if (type === 'book') return {isbn: query.trim().replace(/^isbn(?:-1[03])?:?\s*/i, '')};
   if (type === 'other') return parseHttpURL(query) ? {link: query} : {citation: query};
   return {url: query};
 }
@@ -149,8 +150,9 @@ export function citationPreviewHTML(markdown: string): string {
   const restore = (t: string) => t.replace(/\0(\d+)\0/g, (_, i: string) => htmlEscape(escapes[Number(i)]));
   // the text is HTML-escaped already: its pieces go in raw
   const link = (url: string, text: string) => html`<a class="external-link" href="${htmlRaw(/^https?:/i.test(url) ? url : '#')}" target="_blank" rel="noopener">${htmlRaw(text)}</a>`;
-  s = s.replace(/&lt;(https?:\/\/[^\s&]+)&gt;/g, (_, url: string) => link(url, url));
-  s = s.replace(/\[([^\]]*)\]\((?:&lt;([^)]*?)&gt;|([^)\s]*))\)/g, (_, text: string, a: string, b: string) => link(a ?? b ?? '', text));
+  // links first: their "(<…>)" destination would look like an autolink
+  s = s.replace(/\[([^\]]*)\]\((?:&lt;((?:(?!&gt;).)*)&gt;|([^)\s]*))\)/g, (_, text: string, a: string, b: string) => link(a ?? b ?? '', text));
+  s = s.replace(/&lt;(https?:\/\/(?:[^\s&]|&amp;)+)&gt;/g, (_, url: string) => link(url, url));
   s = s.replace(/\*([^*]+)\*/g, (_, text: string) => html`<em>${htmlRaw(text)}</em>`);
   return restore(s);
 }
@@ -159,7 +161,7 @@ let lookupSeq = 0;
 
 async function lookup(query: string): Promise<LookupSource | null> {
   try {
-    const resp = await GET(`${window.config.appSubUrl}/-/citation/lookup?q=${encodeURIComponent(query)}`);
+    const resp = await POST(`${window.config.appSubUrl}/-/citation/lookup`, {data: new URLSearchParams({q: query})});
     if (!resp.ok) return null;
     return await resp.json();
   } catch {
@@ -193,7 +195,9 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
   let type: SourceType = (query && detectSourceType(query)) || 'website';
   const values: Record<SourceType, CitationFields> = {website: {}, news: {}, journal: {}, book: {}, other: {}};
   if (query) values[type] = fieldsFromQuery(type, query);
-  const filled = new Set<keyof CitationFields>(); // fields Forkana filled in
+  // the fields a lookup filled in, as "type:field": a later lookup may replace them, the
+  // writer's own values it may not
+  const filled = new Set<string>();
   let location = '';
 
   const dialog = createElementFromHTML(html`
@@ -297,10 +301,18 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
     status.hidden = true;
     const found = fieldsFromLookup(src);
     const t = sourceTypes.includes(src.type) ? src.type : type;
+    // what the previous lookup filled in belongs to the previous source
+    for (const key of Array.from(filled)) {
+      const [ft, fk] = key.split(':') as [SourceType, keyof CitationFields];
+      if (ft === t && !(fk in found)) {
+        delete values[ft][fk];
+        filled.delete(key);
+      }
+    }
     for (const [k, v] of Object.entries(found) as Array<[keyof CitationFields, string]>) {
-      if (!values[t][k]?.trim()) {
+      if (!values[t][k]?.trim() || filled.has(`${t}:${k}`)) {
         values[t][k] = v;
-        filled.add(k);
+        filled.add(`${t}:${k}`);
       }
     }
     if (t !== type) {
@@ -318,7 +330,7 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
     const required = new Set(missingRequiredFieldsAll(type));
     for (const spec of typeFields[type]) {
       const placeholder = spec.placeholder?.startsWith('=') ? spec.placeholder.slice(1) : spec.placeholder ? citationText(spec.placeholder) : '';
-      const filledLabel = filled.has(spec.key) ? citationText(spec.key === 'title' || spec.key === 'url' ? 'filled_from_page' : 'filled_auto') : '';
+      const filledLabel = filled.has(`${type}:${spec.key}`) ? citationText(spec.key === 'title' || spec.key === 'url' ? 'filled_from_page' : 'filled_auto') : '';
       const field = createElementFromHTML(html`
         <label class="citation-field${spec.half ? ' citation-field-half' : ''}">
           <span class="citation-field-label-row">
@@ -331,6 +343,7 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
       const input = field.querySelector('input');
       input.addEventListener('input', () => {
         values[type][spec.key] = input.value;
+        if (filled.delete(`${type}:${spec.key}`)) field.querySelector('.citation-field-filled')?.remove();
         error.hidden = true;
         updatePreview();
       });
@@ -463,6 +476,11 @@ export function openCiteTool(editor: ToolsEditor, opts?: CiteOptions): void {
   if (!opts) {
     const {to} = currentView(editor).state.selection;
     opts = {from: to, to};
+  }
+  if (isInCode(editor, opts.from)) {
+    // "[^1]" in code is text: the citation would never render
+    showErrorToast(citationText('in_code'));
+    return;
   }
   if (opts.manual) {
     openCiteDialog(editor, opts);

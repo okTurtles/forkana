@@ -3,7 +3,8 @@
 // so the tools read the text around the caret and edit through ProseMirror transactions; only
 // the Visual editor needs a link mark where the Source editor gets Markdown text.
 
-import {appendFootnoteDefinition} from './footnote-markdown.ts';
+import {appendFootnoteDefinition, isInFencedCode} from './footnote-markdown.ts';
+import {escapeMarkdownText, markdownDestination} from './citation-format.ts';
 import {stripWidgetPlaceholders} from '../comp/base64ImageWidget.ts';
 
 // The part of Toast UI Editor the tools use.
@@ -66,7 +67,8 @@ function setCaret(view: any, pos: number): void {
   const SelectionCtor: any = state.selection.constructor; // TextSelection: Toast UI bundles its own prosemirror-state
   const clamped = Math.max(0, Math.min(pos, state.doc.content.size));
   try {
-    view.dispatch(state.tr.setSelection(SelectionCtor.create(state.doc, clamped)));
+    // the document was rebuilt with the caret at its end: bring the caret back into view
+    view.dispatch(state.tr.setSelection(SelectionCtor.create(state.doc, clamped)).scrollIntoView());
   } catch {
     // leave the caret where it is
   }
@@ -79,7 +81,10 @@ export function insertLink(editor: ToolsEditor, from: number, to: number, label:
   const view = currentView(editor);
   const {state} = view;
   if (editor.isMarkdownMode()) {
-    const text = `[${label.replace(/([[\]\\])/g, '\\$1')}](${url})`;
+    // a subject link keeps its readable form; any other address is written so that spaces
+    // or parentheses cannot end it
+    const dest = url.startsWith('subject/') ? url : markdownDestination(url);
+    const text = `[${escapeMarkdownText(label)}](${dest})`;
     view.dispatch(state.tr.insertText(text, from, to).scrollIntoView());
   } else {
     const mark = state.schema.marks.link.create({linkUrl: url});
@@ -102,6 +107,24 @@ export function insertText(editor: ToolsEditor, from: number, to: number, text: 
   const view = currentView(editor);
   view.dispatch(view.state.tr.insertText(text, from, to).scrollIntoView());
   focusEditor(editor);
+}
+
+// isInCode reports whether pos is in code: a code block or an inline code span, where
+// "[^1]" or "[[" is text, not Markdown.
+export function isInCode(editor: ToolsEditor, pos: number): boolean {
+  const view = currentView(editor);
+  const $pos = view.state.doc.resolve(pos);
+  if ($pos.parent.type.spec.code) return true;
+  if (!editor.isMarkdownMode()) {
+    // inside an inline code span, not at its edge: what goes in there is inserted without it
+    const inCodeMark = (node: any) => (node?.marks ?? []).some((m: any) => m.type.spec.code || m.type.name === 'code');
+    return inCodeMark($pos.nodeBefore) && inCodeMark($pos.nodeAfter);
+  }
+  // the Source editor holds one paragraph per line: read the Markdown before pos
+  const before = textBefore(view, pos);
+  if (isInFencedCode(before)) return true;
+  const line = before.slice(before.lastIndexOf('\n') + 1);
+  return (line.match(/`+/g) ?? []).length % 2 === 1;
 }
 
 // A character that cannot be in an article, marking where the caret was while the Visual
@@ -133,18 +156,26 @@ export function insertFootnote(editor: ToolsEditor, from: number, to: number, la
     return;
   }
 
-  view.dispatch(view.state.tr.insertText(CARET_MARK, from, to));
+  // without the marks of the text around it: inline code would swallow the reference
+  view.dispatch(view.state.tr.replaceWith(from, to, view.state.schema.text(CARET_MARK)));
   let markdown = editor.getMarkdown();
   if (!markdown.includes(CARET_MARK)) {
-    // the serialization lost the mark: fall back to a plain text reference
+    // the serialization lost the mark: put the reference as text where the mark is, and the
+    // definition at the end
     const v = currentView(editor);
     const at = findText(v, CARET_MARK);
     if (at >= 0) v.dispatch(v.state.tr.insertText(reference, at, at + CARET_MARK.length));
+    if (definition !== undefined) {
+      editor.setMarkdown(appendFootnoteDefinition(editor.getMarkdown(), label, definition), true);
+      const after = findText(currentView(editor), reference);
+      if (after >= 0) setCaret(currentView(editor), after + reference.length);
+    }
+    focusEditor(editor);
     return;
   }
   // the reference may already be used before: the caret goes after the occurrence just added
   const occurrence = markdown.slice(0, markdown.indexOf(CARET_MARK)).split(reference).length - 1;
-  markdown = markdown.replace(CARET_MARK, reference);
+  markdown = markdown.replace(CARET_MARK, () => reference);
   if (definition !== undefined) markdown = appendFootnoteDefinition(markdown, label, definition);
   editor.setMarkdown(markdown, true);
   const v = currentView(editor);

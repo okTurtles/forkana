@@ -14,7 +14,7 @@
 // as a plain link.
 
 import {citationText} from './i18n.ts';
-import {caretRect, currentView, focusEditor, insertLink, textBefore, textBeforeCaretInBlock, type ToolsEditor} from './editor-ops.ts';
+import {caretRect, currentView, focusEditor, insertLink, isInCode, textBefore, textBeforeCaretInBlock, type ToolsEditor} from './editor-ops.ts';
 import {closePopover, isPhoneLayout, openPopover, type Popover} from './popover.ts';
 import {nextFootnoteLabel, referenceNumberAt} from './footnote-markdown.ts';
 import {parseHttpURL} from './citation-format.ts';
@@ -45,23 +45,33 @@ type Session = {
   authorsOf: string | null, // the subject whose articles are listed
   popover: Popover | null,
   searchSeq: number,
+  // a phone turned the "[[" session into a field session: Esc drops the "[[" too
+  fromBrackets?: boolean,
 };
 
 let session: Session | null = null;
 
 const BRACKETS_RE = /\[\[([^[\]\n]{0,80})$/;
 
+let searchTimer: ReturnType<typeof setTimeout>;
+let listSeq = 0;
+
 function endSession(): void {
+  clearTimeout(searchTimer);
   const s = session;
   session = null;
   if (s?.popover) s.popover.close();
+  if (s) setComboboxState(s, false);
 }
+
+// the characters subject titles may not contain (modules/subjecttitle)
+const FORBIDDEN_TITLE_CHARS = /[#<>[\]|{}]/;
 
 // subjectLinkURL is the link destination of a subject (and author): the subject name as
 // written, spaces included (the article format of issue #399), with only the characters that
 // would break the link or the path escaped.
 export function subjectLinkURL(subject: string, owner?: string): string {
-  let name = subject.replaceAll('%', '%25').replaceAll('/', '%2F').replace(/[\n\\]/g, encodeURIComponent);
+  let name = subject.replaceAll('%', '%25').replaceAll('/', '%2F').replaceAll('#', '%23').replaceAll('?', '%3F').replace(/[\n\\]/g, encodeURIComponent);
   let depth = 0;
   let balanced = true;
   for (const c of name) {
@@ -115,6 +125,27 @@ function articlesText(n: number | null): string {
   return n === 1 ? citationText('subject_articles_one') : citationText('subject_articles', n);
 }
 
+// setComboboxState puts the combobox attributes on what has the focus while the list is open:
+// the search field, or the editor's document in a "[[" session.
+function setComboboxState(s: Session, open: boolean): void {
+  const field = s.popover?.el.querySelector<HTMLInputElement>('input[type="search"]');
+  const owner: HTMLElement = field ?? currentView(s.editor).dom;
+  if (!open) {
+    for (const attr of ['aria-controls', 'aria-expanded', 'aria-activedescendant', 'aria-autocomplete']) owner.removeAttribute(attr);
+    if (!field) owner.removeAttribute('aria-haspopup');
+    return;
+  }
+  const list = s.popover?.el.querySelector('.citation-subject-results');
+  owner.setAttribute('aria-controls', list?.id ?? '');
+  owner.setAttribute('aria-expanded', 'true');
+  owner.setAttribute('aria-autocomplete', 'list');
+  if (field) field.setAttribute('role', 'combobox');
+  else owner.setAttribute('aria-haspopup', 'listbox');
+  const active = list?.querySelector('.citation-subject-row.is-active');
+  if (active) owner.setAttribute('aria-activedescendant', active.id);
+  else owner.removeAttribute('aria-activedescendant');
+}
+
 function renderRows(s: Session): void {
   const list = s.popover?.el.querySelector('.citation-subject-results');
   if (!list) return;
@@ -149,12 +180,15 @@ function renderRows(s: Session): void {
         </div>
       `);
     }
+    el.id = `${list.id}-${i}`;
     el.classList.toggle('is-active', i === s.active);
     el.setAttribute('aria-selected', String(i === s.active));
     el.addEventListener('pointerdown', (e) => e.preventDefault()); // keep the editor's caret
     el.addEventListener('click', () => chooseRow(s, row));
     list.append(el);
+    if (i === s.active) el.scrollIntoView?.({block: 'nearest'});
   }
+  setComboboxState(s, true);
 }
 
 async function showAuthors(s: Session, subject: string): Promise<void> {
@@ -163,14 +197,16 @@ async function showAuthors(s: Session, subject: string): Promise<void> {
   s.active = 0;
   renderRows(s);
   const seq = ++s.searchSeq;
+  let rows: Row[] = [];
   try {
     const resp = await GET(`${window.config.appSubUrl}/explore/subjects/articles?subject=${encodeURIComponent(subject)}`);
     const data = await resp.json();
-    if (session !== s || seq !== s.searchSeq) return;
-    s.rows = (data.articles ?? []).map((a: {owner: string}) => ({kind: 'author', subject: data.subject ?? subject, owner: a.owner}));
+    rows = (data.articles ?? []).map((a: {owner: string}) => ({kind: 'author', subject: data.subject ?? subject, owner: a.owner}));
   } catch {
-    s.rows = [];
+    rows = [];
   }
+  if (session !== s || seq !== s.searchSeq) return;
+  s.rows = rows;
   s.popover?.el.classList.add('is-authors');
   renderRows(s);
 }
@@ -211,9 +247,10 @@ function showURLDetected(s: Session, url: string): void {
   const input = el.querySelector('input');
   el.querySelector('.citation-popover-close').addEventListener('click', () => popover.close());
   el.querySelector('[data-action="plain"]').addEventListener('click', () => {
-    const target = input.value.trim() || url;
+    const typed = input.value.trim() || url;
+    const target = parseHttpURL(typed)?.href ?? typed;
     popover.close();
-    insertLink(editor, from, to, label || target, target);
+    insertLink(editor, from, to, label || typed, target);
   });
   const cite = () => {
     const target = input.value.trim() || url;
@@ -231,6 +268,7 @@ function showURLDetected(s: Session, url: string): void {
 }
 
 async function search(s: Session): Promise<void> {
+  if (session !== s) return;
   const query = s.query.trim();
   const seq = ++s.searchSeq;
   if (parseHttpURL(query)) {
@@ -261,12 +299,12 @@ async function search(s: Session): Promise<void> {
   }
   if (session !== s || seq !== s.searchSeq || s.authorsOf) return;
   s.rows = results.map((subject) => ({kind: 'subject', subject}));
-  if (!results.some((r) => r.name.toLowerCase() === query.toLowerCase())) s.rows.push({kind: 'new', name: query});
+  if (!results.some((r) => r.name.toLowerCase() === query.toLowerCase()) && !FORBIDDEN_TITLE_CHARS.test(query)) {
+    s.rows.push({kind: 'new', name: query});
+  }
   s.active = 0;
   renderRows(s);
 }
-
-let searchTimer: ReturnType<typeof setTimeout>;
 
 function scheduleSearch(s: Session): void {
   clearTimeout(searchTimer);
@@ -275,8 +313,9 @@ function scheduleSearch(s: Session): void {
 }
 
 function openSession(s: Session): void {
+  const listID = `citation-subject-results-${++listSeq}`;
   const el = createElementFromHTML(html`
-    <div class="citation-subject-search" role="listbox" aria-label="${citationText('tool_link')}">
+    <div class="citation-subject-search" aria-label="${citationText('tool_link')}">
       ${htmlRaw(s.mode === 'field' || isPhoneLayout() ? html`
         <div class="citation-popover-header citation-subject-header">
           <span class="citation-popover-title">${citationText('tool_link')}</span>
@@ -286,7 +325,7 @@ function openSession(s: Session): void {
           <span class="citation-text-input-box">${htmlRaw(svg('octicon-search', 16))}<input type="search" placeholder="${citationText('search_subjects')}" value="${s.query}"></span>
         </label>
       ` : '')}
-      <div class="citation-subject-results"></div>
+      <div class="citation-subject-results" id="${listID}" role="listbox" aria-label="${citationText('tool_link')}"></div>
     </div>
   `);
   s.popover = openPopover(el, caretRect(currentView(s.editor)), () => {
@@ -299,6 +338,7 @@ function openSession(s: Session): void {
       // on a phone, the writer types in the sheet's field: "[[" stays in the text until a
       // subject is chosen
       s.mode = 'field';
+      s.fromBrackets = true;
       s.from = s.start;
       s.to = currentView(s.editor).state.selection.from;
     }
@@ -346,11 +386,12 @@ function handleKey(s: Session, e: KeyboardEvent): boolean {
       break;
     case 'Escape':
       // close the list and leave the text as plain words: drop the "[["
-      if (s.mode === 'brackets') {
+      if (s.mode === 'brackets' || s.fromBrackets) {
         const view = currentView(s.editor);
         const text = view.state.doc.textBetween(s.start, Math.min(s.start + 2, view.state.doc.content.size));
         endSession();
         if (text === '[[') view.dispatch(view.state.tr.delete(s.start, s.start + 2));
+        focusEditor(s.editor);
       } else {
         endSession();
         focusEditor(s.editor);
@@ -369,7 +410,7 @@ function handleKey(s: Session, e: KeyboardEvent): boolean {
 function onEditorInput(editor: ToolsEditor): void {
   if (session && session.mode === 'field') return;
   const view = currentView(editor);
-  const m = BRACKETS_RE.exec(textBeforeCaretInBlock(view));
+  const m = isInCode(editor, view.state.selection.from) ? null : BRACKETS_RE.exec(textBeforeCaretInBlock(view));
   if (!m) {
     if (session) endSession();
     return;

@@ -35,6 +35,12 @@ function markdownLines(markdown: string): Line[] {
   return out;
 }
 
+// isInFencedCode reports whether the end of the Markdown is inside a fenced code block.
+export function isInFencedCode(markdown: string): boolean {
+  const lines = markdownLines(markdown);
+  return lines.at(-1)?.inCode ?? false;
+}
+
 // stripCodeSpans blanks the inline code of a line, where "[^1]" is not a reference.
 function stripCodeSpans(line: string): string {
   return line.replace(/(`+)[\s\S]*?\1/g, (s) => ' '.repeat(s.length));

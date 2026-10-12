@@ -6,7 +6,7 @@ import Editor from '@toast-ui/editor';
 import {installLosslessMarkdownTracker} from '../comp/losslessMarkdown.ts';
 import {installBase64WidgetPatch} from '../comp/base64ImageWidget.ts';
 import {installInternalLinkView} from './internal-link-view.ts';
-import {currentView, findText, insertFootnote, insertLink} from './editor-ops.ts';
+import {currentView, findText, insertFootnote, insertLink, isInCode} from './editor-ops.ts';
 import {subjectLinkURL} from './subject-link-tool.ts';
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -138,4 +138,51 @@ test('subjectLinkURL keeps the name readable', () => {
   expect(subjectLinkURL('Mercury (planet)')).toBe('subject/Mercury (planet)');
   expect(subjectLinkURL('Smile :)')).toBe('subject/Smile :%29');
   expect(subjectLinkURL('Solar System', 'pierre')).toBe('subject/Solar System/pierre');
+  expect(subjectLinkURL('What? #1')).toBe('subject/What%3F %231');
+});
+
+test('a quoted title stays a title in the Visual editor (review #7)', () => {
+  const md = '[Moon](subject/Moon "the satellite") and [Mercury](subject/Mercury (planet)).\n';
+  const {editor} = createEditor(md);
+  expect(linksOf(editor.wwEditor.view)).toEqual([
+    {text: 'Moon', url: 'subject/Moon'},
+    {text: 'Mercury', url: 'subject/Mercury (planet)'},
+  ]);
+  expect(editor.getMarkdown()).toBe(md);
+});
+
+test('a citation after inline code goes after it, not in it (review #10)', () => {
+  const {editor} = createEditor('Run `make` here.\n');
+  const view = currentView(editor);
+  const at = findText(view, ' here');
+  expect(isInCode(editor, at)).toBe(false); // at the edge of the code span
+  expect(isInCode(editor, at - 2)).toBe(true); // inside it
+  insertFootnote(editor, at, at, '1', 'A source.');
+  const md = editor.getMarkdown();
+  expect(md).toContain('Run `make`[^1] here.');
+  expect(md).toContain('[^1]: A source.');
+});
+
+test('isInCode in the Source editor', () => {
+  const {editor} = createEditor('Text `code` and\n\n```sh\nif [[ -f x ]]\n```\n', 'markdown');
+  const view = currentView(editor);
+  expect(isInCode(editor, findText(view, 'code') + 1)).toBe(true);
+  expect(isInCode(editor, findText(view, ' and'))).toBe(false);
+  expect(isInCode(editor, findText(view, '-f'))).toBe(true);
+});
+
+test('a reused label with "$" patterns is inserted as written (review #31)', () => {
+  const {editor} = createEditor('One.[^$&]\n\n[^$&]: Source.\n');
+  const view = currentView(editor);
+  const at = findText(view, 'One.') + 'One.'.length;
+  insertFootnote(editor, at, at, '$&');
+  expect(editor.getMarkdown()).toContain('One.[^$&][^$&]');
+});
+
+test('insertLink in the Source editor keeps a plain address a link (review #17)', () => {
+  const {editor} = createEditor('See x.', 'markdown');
+  const view = currentView(editor);
+  const at = findText(view, 'x');
+  insertLink(editor, at, at + 1, 'C*-algebra*', 'https://example.com/a b(c');
+  expect(editor.getMarkdown()).toBe('See [C\\*-algebra\\*](<https://example.com/a b(c>).');
 });
