@@ -85,9 +85,9 @@ func SubjectSuggestions(ctx *context.Context) {
 		for i, subject := range subjects {
 			ids[i] = subject.ID
 		}
-		counts, err := repo_model.CountPublicArticlesBySubjectIDs(ctx, ids)
+		counts, err := repo_model.CountReadableArticlesBySubjectIDs(ctx, ids, ctx.Doer)
 		if err != nil {
-			ctx.ServerError("CountPublicArticlesBySubjectIDs", err)
+			ctx.ServerError("CountReadableArticlesBySubjectIDs", err)
 			return
 		}
 		details := make([]subjectSuggestionDetail, len(subjects))
@@ -110,6 +110,11 @@ type subjectSuggestionDetail struct {
 // lists them to link to one author's version of the subject (issue #399).
 func SubjectArticles(ctx *context.Context) {
 	name := ctx.FormTrim("subject")
+	if name == "" {
+		// GetSubjectByName("") has no condition and would return any subject
+		ctx.JSON(http.StatusOK, map[string]any{"articles": []any{}})
+		return
+	}
 	subject, err := repo_model.GetSubjectByName(ctx, name)
 	if err != nil {
 		if repo_model.IsErrSubjectNotExist(err) {
@@ -119,24 +124,17 @@ func SubjectArticles(ctx *context.Context) {
 		ctx.ServerError("GetSubjectByName", err)
 		return
 	}
-	repos, err := repo_model.FindPublicArticlesBySubjectID(ctx, subject.ID)
+	owners, err := repo_model.FindReadableArticleOwners(ctx, subject.ID, ctx.Doer)
 	if err != nil {
-		ctx.ServerError("FindPublicArticlesBySubjectID", err)
+		ctx.ServerError("FindReadableArticleOwners", err)
 		return
 	}
 	type article struct {
 		Owner string `json:"owner"`
 	}
-	articles := make([]article, 0, len(repos))
-	seen := make(map[string]bool, len(repos))
-	for _, repo := range repos {
-		// an owner's archived articles are older versions: link to the owner, whose url
-		// shows the current one
-		if seen[repo.OwnerName] {
-			continue
-		}
-		seen[repo.OwnerName] = true
-		articles = append(articles, article{Owner: repo.OwnerName})
+	articles := make([]article, len(owners))
+	for i, owner := range owners {
+		articles[i] = article{Owner: owner}
 	}
 	ctx.JSON(http.StatusOK, map[string]any{"subject": subject.Name, "articles": articles})
 }

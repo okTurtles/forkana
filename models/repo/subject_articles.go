@@ -5,25 +5,42 @@ package repo
 
 import (
 	"context"
+	"strings"
 
 	"code.gitea.io/gitea/models/db"
+	"code.gitea.io/gitea/models/unit"
+	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/structs"
 
 	"xorm.io/builder"
 )
 
-// publicArticleCond selects the articles a reader can open from a subject: public, not
-// deleted (tombstones), with content.
-func publicArticleCond() builder.Cond {
-	return builder.Eq{
-		"repository.is_private":    false,
-		"repository.is_tombstoned": false,
-		"repository.is_empty":      false,
+// readableArticleCond selects the articles of a subject the doer (nil when signed out) can
+// open: repositories they can access (AccessibleRepositoryCondition, which hides the public
+// repositories of private and, signed out, limited organizations), whose owner is not a
+// private user, that are not deleted (tombstones) and have content.
+func readableArticleCond(doer *user_model.User) builder.Cond {
+	cond := AccessibleRepositoryCondition(doer, unit.TypeInvalid).And(builder.Eq{
+		"`repository`.is_tombstoned": false,
+		"`repository`.is_empty":      false,
+	})
+	if doer == nil || !doer.IsAdmin {
+		privateUsers := builder.Select("id").From("`user`").Where(builder.Eq{
+			"type":       user_model.UserTypeIndividual,
+			"visibility": structs.VisibleTypePrivate,
+		})
+		hidden := builder.NotIn("`repository`.owner_id", privateUsers)
+		if doer != nil {
+			hidden = hidden.Or(builder.Eq{"`repository`.owner_id": doer.ID})
+		}
+		cond = cond.And(hidden)
 	}
+	return cond
 }
 
-// CountPublicArticlesBySubjectIDs returns, for each of the subjects, how many articles a
-// reader can open in it (see publicArticleCond); subjects without any are left out.
-func CountPublicArticlesBySubjectIDs(ctx context.Context, subjectIDs []int64) (map[int64]int64, error) {
+// CountReadableArticlesBySubjectIDs returns, for each of the subjects, how many articles the
+// doer can open in it (see readableArticleCond); subjects without any are left out.
+func CountReadableArticlesBySubjectIDs(ctx context.Context, subjectIDs []int64, doer *user_model.User) (map[int64]int64, error) {
 	counts := make(map[int64]int64, len(subjectIDs))
 	if len(subjectIDs) == 0 {
 		return counts, nil
@@ -33,9 +50,9 @@ func CountPublicArticlesBySubjectIDs(ctx context.Context, subjectIDs []int64) (m
 		Count     int64
 	}
 	err := db.GetEngine(ctx).Table("repository").
-		Select("subject_id, COUNT(*) AS count").
-		Where(builder.In("subject_id", subjectIDs).And(publicArticleCond())).
-		GroupBy("subject_id").
+		Select("`repository`.subject_id, COUNT(*) AS count").
+		Where(builder.In("`repository`.subject_id", subjectIDs).And(readableArticleCond(doer))).
+		GroupBy("`repository`.subject_id").
 		Find(&rows)
 	if err != nil {
 		return nil, err
@@ -46,13 +63,44 @@ func CountPublicArticlesBySubjectIDs(ctx context.Context, subjectIDs []int64) (m
 	return counts, nil
 }
 
-// FindPublicArticlesBySubjectID returns the articles a reader can open in the subject (see
-// publicArticleCond), the most recently updated first. Their owners are not loaded.
-func FindPublicArticlesBySubjectID(ctx context.Context, subjectID int64) (RepositoryList, error) {
-	var repos RepositoryList
+// maxArticleOwners bounds the authors listed for a subject.
+const maxArticleOwners = 50
+
+// FindReadableArticleOwners returns the owners of the articles the doer can open in the
+// subject (see readableArticleCond), the most recently updated first, each once.
+func FindReadableArticleOwners(ctx context.Context, subjectID int64, doer *user_model.User) ([]string, error) {
+	var rows []struct {
+		OwnerName string
+	}
 	err := db.GetEngine(ctx).Table("repository").
-		Where(builder.Eq{"repository.subject_id": subjectID}.And(publicArticleCond())).
+		Select("`repository`.owner_name").
+		Where(builder.Eq{"`repository`.subject_id": subjectID}.And(readableArticleCond(doer))).
 		OrderBy(articleOrderBy).
-		Find(&repos)
-	return repos, err
+		Limit(4 * maxArticleOwners).
+		Find(&rows)
+	if err != nil {
+		return nil, err
+	}
+	owners := make([]string, 0, len(rows))
+	seen := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		key := strings.ToLower(r.OwnerName)
+		if seen[key] || len(owners) == maxArticleOwners {
+			continue
+		}
+		seen[key] = true
+		owners = append(owners, r.OwnerName)
+	}
+	return owners, nil
+}
+
+// HasReadableArticle reports whether the subject has an article the doer can open (see
+// readableArticleCond), by ownerName when it is not empty.
+func HasReadableArticle(ctx context.Context, subjectID int64, ownerName string, doer *user_model.User) (bool, error) {
+	cond := builder.Eq{"`repository`.subject_id": subjectID}.And(readableArticleCond(doer))
+	if ownerName != "" {
+		cond = cond.And(builder.Eq{"`repository`.owner_name": ownerName}.Or(
+			builder.In("`repository`.owner_id", builder.Select("id").From("`user`").Where(builder.Eq{"lower_name": strings.ToLower(ownerName)}))))
+	}
+	return db.GetEngine(ctx).Table("repository").Where(cond).Exist()
 }

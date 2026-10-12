@@ -566,7 +566,7 @@ func registerWebRoutes(m *web.Router) {
 	}, optionsCorsHandler())
 
 	m.Post("/-/markup", reqSignIn, web.Bind(structs.MarkupOption{}), misc.Markup)
-	m.Get("/-/citation/lookup", reqSignIn, misc.CitationLookup)
+	m.Post("/-/citation/lookup", reqSignIn, misc.CitationLookup)
 
 	m.Get("/subject/{subjectname}", optSignIn, context.RepoAssignmentBySubject, context.RepoRefByDefaultBranch(), repo.SetEditorconfigIfExists, explore.RepoHistory)
 	m.Get("/subject/{subjectname}/compare/{owners}", optSignIn, repo.CompareReadme)

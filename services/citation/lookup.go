@@ -9,12 +9,14 @@
 //     DataCite and mEDRA all serve), and the source is a journal article;
 //   - an ISBN is looked up in Open Library, and the source is a book;
 //   - any other URL is fetched and read: the citation_* meta tags (Google Scholar's, used by
-//     most journals), Open Graph, schema.org JSON-LD and the page title. The source is a news
-//     article when the page says so (og:type "article" with a publisher, NewsArticle) and a
-//     website otherwise.
+//     most journals), Open Graph, schema.org JSON-LD and the page title (all in the <head>).
+//     The source is a news article when its JSON-LD says so (NewsArticle) or it is on a
+//     well-known news site (news_hosts.json), and a website otherwise.
 //
-// Only public internet hosts are contacted (hostmatcher's "external"), the responses are
-// size-limited and the whole lookup has a timeout: the URL comes from the user.
+// The URL comes from the user, so: only public internet hosts are contacted (hostmatcher's
+// "external", minus the shared and translation ranges below), on the standard ports, without
+// going through a proxy (a proxy would hide the target from that check); the responses are
+// size-limited and the whole lookup has a timeout.
 package citation
 
 import (
@@ -32,7 +34,6 @@ import (
 
 	"code.gitea.io/gitea/modules/hostmatcher"
 	"code.gitea.io/gitea/modules/json"
-	"code.gitea.io/gitea/modules/setting"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
@@ -93,21 +94,36 @@ var (
 var client = func() *http.Client {
 	httpClientOnce.Do(func() {
 		allow := hostmatcher.ParseHostMatchList("citation lookup", hostmatcher.MatchBuiltinExternal)
+		// "external" still lets through carrier-grade NAT (where some clouds put their
+		// metadata service), benchmarking and IPv6 translation ranges
+		block := hostmatcher.ParseHostMatchList("citation lookup", "100.64.0.0/10,198.18.0.0/15,64:ff9b::/96,64:ff9b:1::/48,2002::/16")
 		httpClient = &http.Client{
 			Timeout: lookupTimeout,
 			Transport: &http.Transport{
-				Proxy:       http.ProxyFromEnvironment,
-				DialContext: hostmatcher.NewDialContext("citation lookup", allow, nil, setting.Proxy.ProxyURLFixed),
+				// no proxy: through one, the dialer would only see the proxy's address
+				Proxy:       nil,
+				DialContext: hostmatcher.NewDialContext("citation lookup", allow, block, nil),
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 5 {
 					return errors.New("too many redirects")
 				}
-				return nil
+				return checkURL(req.URL)
 			},
 		}
 	})
 	return httpClient
+}
+
+// checkURL allows only http(s) URLs on the standard ports.
+func checkURL(u *url.URL) error {
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return ErrUnsupported
+	}
+	if port := u.Port(); port != "" && port != "80" && port != "443" {
+		return fmt.Errorf("%w: port %s", ErrUnsupported, port)
+	}
+	return nil
 }
 
 // NormalizeDOI returns the DOI in s (a bare DOI, "doi:…" or a doi.org URL), or "".
@@ -179,8 +195,11 @@ func Lookup(ctx context.Context, query string) (*Source, error) {
 		return lookupISBN(ctx, isbn)
 	}
 	u, err := url.Parse(query)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	if err != nil || u.Host == "" {
 		return nil, ErrUnsupported
+	}
+	if err := checkURL(u); err != nil {
+		return nil, err
 	}
 	return lookupPage(ctx, u.String())
 }
@@ -265,8 +284,17 @@ func cslDate(parts [][]json.Number) string {
 	return strings.Join(out, "-")
 }
 
+// escapeDOI escapes a DOI for a doi.org URL: each "/"-separated part is a path segment.
+func escapeDOI(doi string) string {
+	parts := strings.Split(doi, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
+}
+
 func lookupDOI(ctx context.Context, doi string) (*Source, error) {
-	resp, err := get(ctx, doiAPI+doi, "application/vnd.citationstyles.csl+json")
+	resp, err := get(ctx, doiAPI+escapeDOI(doi), "application/vnd.citationstyles.csl+json")
 	if err != nil {
 		return nil, err
 	}
@@ -454,10 +482,9 @@ func readPageMeta(r io.Reader) *pageMeta {
 						inJSONLD = true
 					}
 				}
-			case "body":
-				if len(m.values) > 0 || m.title != "" {
-					return m // everything the lookup reads is in <head>
-				}
+			case "body", "svg":
+				// everything the lookup reads is in <head>; a <title> after it is an icon's
+				return m
 			}
 		case html.TextToken:
 			if inTitle {
@@ -642,9 +669,7 @@ func ParsePage(r io.Reader, pageURL *url.URL) *Source {
 		}
 	}
 
-	if (ld != nil && isNewsType(ldTypes(ld.Type))) || (strings.EqualFold(m.first("og:type"), "article") && m.first("article:published_time") != "" && IsNewsHost(pageURL)) {
-		src.Type = TypeNews
-	} else if IsNewsHost(pageURL) {
+	if (ld != nil && isNewsType(ldTypes(ld.Type))) || IsNewsHost(pageURL) {
 		src.Type = TypeNews
 	}
 	return src

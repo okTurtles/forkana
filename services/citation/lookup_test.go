@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"code.gitea.io/gitea/modules/test"
 
@@ -45,6 +47,7 @@ func TestNormalizeISBN(t *testing.T) {
 }
 
 func parse(t *testing.T, pageURL, page string) *Source {
+	t.Helper()
 	u, err := url.Parse(pageURL)
 	require.NoError(t, err)
 	return ParsePage(strings.NewReader(page), u)
@@ -189,13 +192,58 @@ func TestLookup_Unsupported(t *testing.T) {
 }
 
 func TestLookup_RefusesPrivateHosts(t *testing.T) {
-	// The default client only reaches public internet hosts: a user must not be able to make
-	// the server fetch an address on its own network.
+	// The default client only reaches public internet hosts, on the standard ports: a user
+	// must not be able to make the server fetch an address on its own network.
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
 		_, _ = w.Write([]byte(`<title>secret</title>`))
 	}))
 	defer srv.Close()
-	_, err := Lookup(t.Context(), srv.URL)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "can only call allowed HTTP servers")
+
+	_, err := Lookup(t.Context(), srv.URL) // a loopback address on another port
+	require.ErrorIs(t, err, ErrUnsupported)
+	for _, target := range []string{"http://127.0.0.1/", "http://localhost/", "http://100.100.100.200/latest/meta-data/", "http://[::1]/"} {
+		_, err = Lookup(t.Context(), target)
+		require.Error(t, err, target)
+		assert.Contains(t, err.Error(), "deny", target) // refused by the dialer, before connecting
+	}
+	assert.Zero(t, hits.Load())
+
+	// a redirect may not go to another port either
+	redirect := &http.Request{URL: &url.URL{Scheme: "http", Host: "example.com:8080", Path: "/"}}
+	assert.ErrorIs(t, client().CheckRedirect(redirect, nil), ErrUnsupported)
+	assert.NoError(t, client().CheckRedirect(&http.Request{URL: &url.URL{Scheme: "https", Host: "example.com", Path: "/"}}, nil))
+}
+
+func TestParsePage_IgnoresTitlesAfterHead(t *testing.T) {
+	src := parse(t, "https://example.com/page", `<html><head></head><body><svg><title>Close</title></svg><h1>Page</h1></body></html>`)
+	assert.Empty(t, src.Title)
+}
+
+func TestLookupFor_CacheAndRateLimit(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte(`{"type":"article-journal","title":"T"}`))
+	}))
+	defer srv.Close()
+	defer test.MockVariableValue(&doiAPI, srv.URL+"/")()
+	defer test.MockVariableValue(&client, func() *http.Client { return srv.Client() })()
+
+	// the same DOI, written two ways, is fetched once
+	src, err := LookupFor(t.Context(), 1, "10.1234/cache-test")
+	require.NoError(t, err)
+	assert.Equal(t, "T", src.Title)
+	_, err = LookupFor(t.Context(), 1, "https://doi.org/10.1234/CACHE-test")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, hits.Load())
+
+	now := time.Now()
+	for range lookupsPerMinute {
+		assert.True(t, allowLookup(42, now))
+	}
+	assert.False(t, allowLookup(42, now), "over the limit")
+	assert.True(t, allowLookup(43, now), "other users are not limited")
+	assert.True(t, allowLookup(42, now.Add(time.Minute)), "a new minute")
 }
