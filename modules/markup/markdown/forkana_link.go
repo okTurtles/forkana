@@ -5,6 +5,7 @@ package markdown
 
 import (
 	"bytes"
+	"regexp"
 
 	"code.gitea.io/gitea/modules/markup"
 
@@ -30,7 +31,8 @@ import (
 // The label is taken as plain text: it cannot contain brackets or a line break, and inline
 // markup inside it is not interpreted (the link-to-subject flow of the editor inserts the
 // subject title). A destination may contain balanced parentheses, as in
-// "subject/Mercury (planet)", but no line break, "<" or ">".
+// "subject/Mercury (planet)", but no line break, "<", ">", "[" or "]"; a destination
+// followed by a quoted title is a standard link.
 type internalLinkParser struct{}
 
 // NewInternalLinkParser returns the parser of internal links with spaces.
@@ -42,15 +44,29 @@ func (p *internalLinkParser) Trigger() []byte {
 	return []byte{'['}
 }
 
+// maxInternalLinkLabel and maxInternalLinkDest bound the scan of a "[label](destination)"
+// candidate: a subject name is at most 255 bytes and an owner name 40, so a longer
+// destination is not an internal link. The bounds keep the parser linear: it runs at every
+// "[" of every Markdown render.
+const (
+	maxInternalLinkLabel = 1024
+	maxInternalLinkDest  = 1024
+)
+
+// linkTitleRe matches the quoted title of a standard link, `dest "title"` or `dest 'title'`:
+// such a link is left to the standard parser. A parenthesized "(title)" is not taken as a
+// title on Forkana: "subject/Mercury (planet)" names the subject "Mercury (planet)".
+var linkTitleRe = regexp.MustCompile(`\s+("[^"]*"|'[^']*')$`)
+
 // parseInternalLinkShorthand returns the label and destination of an internal link with
 // spaces at the start of line, and the number of bytes it spans; ok is false when line does
 // not start with one (the standard link parser then handles it).
-func parseInternalLinkShorthand(line []byte) (label, dest []byte, n int, ok bool) {
+func parseInternalLinkShorthand(line []byte, article bool) (label, dest []byte, n int, ok bool) {
 	if len(line) == 0 || line[0] != '[' {
 		return nil, nil, 0, false
 	}
 	closeLabel := -1
-	for i := 1; i < len(line); i++ {
+	for i := 1; i < len(line) && i <= maxInternalLinkLabel; i++ {
 		c := line[i]
 		if c == '\\' {
 			i++ // an escaped character is part of the label
@@ -71,8 +87,11 @@ func parseInternalLinkShorthand(line []byte) (label, dest []byte, n int, ok bool
 	depth := 0
 	end := -1
 	for i := start; i < len(line) && end < 0; i++ {
+		if i-start > maxInternalLinkDest {
+			return nil, nil, 0, false
+		}
 		switch line[i] {
-		case '\n', '\r', '<', '>':
+		case '\n', '\r', '<', '>', '[', ']':
 			return nil, nil, 0, false
 		case '\\':
 			i++
@@ -90,11 +109,12 @@ func parseInternalLinkShorthand(line []byte) (label, dest []byte, n int, ok bool
 		return nil, nil, 0, false
 	}
 	dest = bytes.TrimSpace(line[start:end])
-	// Only take what the standard parser cannot: a destination with a space.
-	if !bytes.ContainsRune(dest, ' ') {
+	// Only take what the standard parser cannot: a destination with a space, which is not a
+	// destination followed by a title.
+	if !bytes.ContainsRune(dest, ' ') || linkTitleRe.Match(dest) {
 		return nil, nil, 0, false
 	}
-	if _, isInternal := markup.ParseForkanaInternalLink(string(dest)); !isInternal {
+	if _, isInternal := markup.ParseForkanaInternalLink(string(util.UnescapePunctuations(append([]byte(nil), dest...))), article); !isInternal {
 		return nil, nil, 0, false
 	}
 	return line[1:closeLabel], dest, end + 1, true
@@ -102,12 +122,16 @@ func parseInternalLinkShorthand(line []byte) (label, dest []byte, n int, ok bool
 
 func (p *internalLinkParser) Parse(parent ast.Node, block text.Reader, pc parser.Context) ast.Node {
 	line, _ := block.PeekLine()
-	label, dest, n, ok := parseInternalLinkShorthand(line)
+	article := false
+	if ctx, _ := pc.Get(renderContextKey).(*markup.RenderContext); ctx != nil {
+		article = ctx.RenderOptions.ForkanaArticle
+	}
+	label, dest, n, ok := parseInternalLinkShorthand(line, article)
 	if !ok {
 		return nil
 	}
 	link := ast.NewLink()
-	link.Destination = append([]byte(nil), dest...)
+	link.Destination = util.UnescapePunctuations(append([]byte(nil), dest...))
 	link.AppendChild(link, ast.NewString(util.UnescapePunctuations(append([]byte(nil), label...))))
 	block.Advance(n)
 	return link

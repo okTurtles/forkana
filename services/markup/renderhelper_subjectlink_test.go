@@ -30,7 +30,23 @@ func TestRenderHelperSubjectLink(t *testing.T) {
 	tomb.IsTombstoned = true
 	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, tomb, "subject_id", "is_tombstoned"))
 
+	hidden, err := repo_model.GetOrCreateSubject(ctx, "Hidden subject")
+	require.NoError(t, err)
+	private := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 40}) // privated_org's public repo
+	private.SubjectID = hidden.ID
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, private, "subject_id"))
+
+	emptySubject, err := repo_model.GetOrCreateSubject(ctx, "Empty subject")
+	require.NoError(t, err)
+	empty := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 11}) // user13, public
+	empty.SubjectID = emptySubject.ID
+	empty.IsEmpty = true
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, empty, "subject_id", "is_empty"))
+
 	exists := FormalRenderHelperFuncs().IsSubjectLinkExisting
+	assert.False(t, exists(ctx, "Hidden subject", ""), "its only article belongs to a private organization")
+	assert.False(t, exists(ctx, "Hidden subject", "privated_org"))
+	assert.False(t, exists(ctx, "Empty subject", ""), "its only article has no content")
 	assert.True(t, exists(ctx, "Solar system", ""))
 	assert.True(t, exists(ctx, "solar  system", ""), "names are normalized like the subject routes do")
 	assert.True(t, exists(ctx, "Solar system", "user5"))
