@@ -566,6 +566,7 @@ func registerWebRoutes(m *web.Router) {
 	}, optionsCorsHandler())
 
 	m.Post("/-/markup", reqSignIn, web.Bind(structs.MarkupOption{}), misc.Markup)
+	m.Get("/-/citation/lookup", reqSignIn, misc.CitationLookup)
 
 	m.Get("/subject/{subjectname}", optSignIn, context.RepoAssignmentBySubject, context.RepoRefByDefaultBranch(), repo.SetEditorconfigIfExists, explore.RepoHistory)
 	m.Get("/subject/{subjectname}/compare/{owners}", optSignIn, repo.CompareReadme)
@@ -576,6 +577,7 @@ func registerWebRoutes(m *web.Router) {
 		})
 		m.Get("/subjects", explore.Subjects)
 		m.Get("/subjects/suggestions", explore.SubjectSuggestions)
+		m.Get("/subjects/articles", explore.SubjectArticles)
 		m.Get("/articles/history/{username}/{reponame}", optSignIn, context.RepoAssignment, context.RepoRefByDefaultBranch(), repo.SetEditorconfigIfExists, explore.RepoHistory)
 		m.Get("/subjects/sitemap-{idx}.xml", sitemapEnabled, explore.Subjects)
 		// Crawlers that indexed the removed article listing's sitemaps keep requesting the old
