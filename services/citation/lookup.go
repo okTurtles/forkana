@@ -660,7 +660,7 @@ func ParsePage(r io.Reader, pageURL *url.URL) *Source {
 	}
 	seen := map[string]bool{}
 	for _, a := range authors {
-		for _, name := range strings.Split(a, " and ") {
+		for name := range strings.SplitSeq(a, " and ") {
 			name = invertName(name)
 			if name != "" && !seen[name] && name != src.Site {
 				seen[name] = true
