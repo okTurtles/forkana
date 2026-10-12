@@ -30,6 +30,7 @@ import (
 	"code.gitea.io/gitea/modules/setting/config"
 	"code.gitea.io/gitea/modules/storage"
 	"code.gitea.io/gitea/modules/test"
+	"code.gitea.io/gitea/modules/timeutil"
 	repo_service "code.gitea.io/gitea/services/repository"
 	"code.gitea.io/gitea/tests"
 
@@ -579,13 +580,13 @@ func TestForkedArticleAttachmentSurvivesSourceDeletion(t *testing.T) {
 		cutoff := time.Now().Add(time.Second)
 
 		// the collector leaves a referenced attachment alone whatever its age
-		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff})
+		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff, Force: true})
 		require.NoError(t, err)
 		unittest.AssertExistsAndLoadBean(t, &repo_model.Attachment{ID: attach.ID})
 
 		// once the last repository referencing it is gone, it becomes collectable
 		require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), fork.ID))
-		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff})
+		_, err = repo_service.GarbageCollectArticleAttachments(t.Context(), repo_service.GarbageCollectArticleAttachmentsOptions{OlderThan: cutoff, Force: true})
 		require.NoError(t, err)
 		unittest.AssertNotExistsBean(t, &repo_model.Attachment{ID: attach.ID})
 		MakeRequest(t, NewRequest(t, "GET", "/attachments/"+uuid), http.StatusNotFound)
@@ -678,4 +679,51 @@ func TestLegacyAttachmentFallbackRetires(t *testing.T) {
 	reader.MakeRequest(t, get(unassociated.UUID), http.StatusNotFound)
 	uploader.MakeRequest(t, get(unassociated.UUID), http.StatusOK)
 	reader.MakeRequest(t, get(associated.UUID), http.StatusOK)
+}
+
+// TestEditorAttachmentLimits covers the bounds on editor uploads that no commit has claimed yet:
+// the pending quota answers 413 until a commit claims an upload, and the upload rate answers 429
+// whether or not the uploads were committed.
+func TestEditorAttachmentLimits(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		session := loginUser(t, "user2")
+		csrf := GetUserCSRFToken(t, session)
+		user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+		pendingBefore, _, err := repo_model.GetPendingArticleAttachmentStats(t.Context(), user2.ID)
+		require.NoError(t, err)
+
+		t.Run("PendingQuota", func(t *testing.T) {
+			defer test.MockVariableValue(&setting.Attachment.ArticleUploadRateLimit, 0)()
+			defer test.MockVariableValue(&setting.Attachment.ArticleMaxPendingSize, 0)()
+			defer test.MockVariableValue(&setting.Attachment.ArticleMaxPendingFiles, pendingBefore+2)()
+
+			first := createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+			createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+			createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusRequestEntityTooLarge)
+
+			// issue uploads are not article uploads and stay unaffected
+			createAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+
+			// committing an upload claims it, which frees its slot
+			_, err := createFileInBranch(user2, repo1, "article-quota.md", repo1.DefaultBranch, articleAttachmentContent(first))
+			require.NoError(t, err)
+			createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+		})
+
+		t.Run("UploadRate", func(t *testing.T) {
+			defer test.MockVariableValue(&setting.Attachment.ArticleMaxPendingFiles, 0)()
+			defer test.MockVariableValue(&setting.Attachment.ArticleMaxPendingSize, 0)()
+			// the previous subtest's uploads fall within the window, so count from them
+			since := time.Now().Add(-time.Hour)
+			recent, err := repo_model.CountArticleUploadsSince(t.Context(), user2.ID, timeutil.TimeStamp(since.Unix()))
+			require.NoError(t, err)
+			defer test.MockVariableValue(&setting.Attachment.ArticleUploadRateWindow, time.Hour)()
+			defer test.MockVariableValue(&setting.Attachment.ArticleUploadRateLimit, recent+1)()
+
+			createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusOK)
+			createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusTooManyRequests)
+		})
+	})
 }

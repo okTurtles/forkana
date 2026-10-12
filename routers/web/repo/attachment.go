@@ -34,9 +34,10 @@ func UploadReleaseAttachment(ctx *context.Context) {
 }
 
 // UploadEditorAttachment response for images pasted or dropped in the article/file editor.
-// It differs from UploadIssueAttachment only in the recorded purpose, which is what lets the
+// It differs from UploadIssueAttachment in the recorded purpose, which is what lets the
 // article-attachment garbage collector tell an abandoned editor upload apart from an unfinished
-// issue or release draft.
+// issue or release draft, and in being charged against the uploader's pending-upload quota and
+// upload rate (see attachment.UploadArticleAttachment).
 func UploadEditorAttachment(ctx *context.Context) {
 	uploadAttachment(ctx, ctx.Repo.Repository.ID, setting.Attachment.AllowedTypes, repo_model.AttachmentPurposeArticle)
 }
@@ -59,13 +60,26 @@ func uploadAttachment(ctx *context.Context, repoID int64, allowedTypes string, p
 	}
 	defer file.Close()
 
-	attach, err := attachment.UploadAttachment(ctx, file, allowedTypes, header.Size, &repo_model.Attachment{
+	attach := &repo_model.Attachment{
 		Name:       header.Filename,
 		UploaderID: ctx.Doer.ID,
 		RepoID:     repoID,
 		Purpose:    purpose,
-	})
+	}
+	if purpose == repo_model.AttachmentPurposeArticle {
+		attach, err = attachment.UploadArticleAttachment(ctx, ctx.Doer, file, allowedTypes, header.Size, attach)
+	} else {
+		attach, err = attachment.UploadAttachment(ctx, file, allowedTypes, header.Size, attach)
+	}
 	if err != nil {
+		if attachment.IsErrUploadRateLimited(err) {
+			ctx.HTTPError(http.StatusTooManyRequests, err.Error())
+			return
+		}
+		if attachment.IsErrPendingQuotaExceeded(err) {
+			ctx.HTTPError(http.StatusRequestEntityTooLarge, err.Error())
+			return
+		}
 		if upload.IsErrFileTypeForbidden(err) {
 			ctx.HTTPError(http.StatusBadRequest, err.Error())
 			return

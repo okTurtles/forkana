@@ -289,13 +289,17 @@ func TestSubjectPageBrandNewSubject(t *testing.T) {
 		// t.Context() is already cancelled when cleanups run
 		assert.NoError(t, repo_service.DeleteRepositoryDirectly(context.Background(), repo.ID))
 	})
+	// A new subject is stored under its normalized title ("Brand-new-subject-probe"), and
+	// any other spelling of it redirects there.
+	require.NoError(t, repo.LoadSubject(t.Context()))
+	subjectPath := "/subject/" + url.PathEscape(repo.SubjectRelation.Name)
 
 	paths := []string{
 		"/user2/" + repo.Name,
-		"/subject/" + url.PathEscape(subjectName),
-		"/subject/" + url.PathEscape(subjectName) + "?view=table",
-		"/subject/" + url.PathEscape(subjectName) + "?view=article",
-		"/subject/" + url.PathEscape(subjectName) + "/user2",
+		subjectPath,
+		subjectPath + "?view=table",
+		subjectPath + "?view=article",
+		subjectPath + "/user2",
 	}
 	for _, session := range []*TestSession{nil, loginUser(t, "user2"), loginUser(t, "user4")} {
 		for _, path := range paths {

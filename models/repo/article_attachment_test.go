@@ -302,3 +302,72 @@ func TestRetainedRepoAttachmentIDs(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Empty(t, ids)
 }
+
+func TestGetPendingArticleAttachmentStats(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// fixture 15 is user 2's only pending article upload; 13 and 14 are associated
+	count, size, err := repo_model.GetPendingArticleAttachmentStats(t.Context(), 2)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, count)
+	assert.EqualValues(t, 0, size)
+
+	addAttachment(t, &repo_model.Attachment{UUID: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b01", RepoID: 1, UploaderID: 2, Purpose: repo_model.AttachmentPurposeArticle, Size: 300}, timeutil.TimeStampNow())
+	// an issue draft is no pending article upload, whatever its size
+	addAttachment(t, &repo_model.Attachment{UUID: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b02", RepoID: 1, UploaderID: 2, Size: 7000}, timeutil.TimeStampNow())
+	// another uploader's pending upload is not charged to user 2
+	addAttachment(t, &repo_model.Attachment{UUID: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b03", RepoID: 1, UploaderID: 4, Purpose: repo_model.AttachmentPurposeArticle, Size: 9000}, timeutil.TimeStampNow())
+
+	count, size, err = repo_model.GetPendingArticleAttachmentStats(t.Context(), 2)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, count)
+	assert.EqualValues(t, 300, size)
+
+	count, size, err = repo_model.GetPendingArticleAttachmentStats(t.Context(), 99)
+	require.NoError(t, err)
+	assert.Zero(t, count)
+	assert.Zero(t, size)
+}
+
+func TestCountArticleUploadsSince(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	now := timeutil.TimeStampNow()
+	addAttachment(t, &repo_model.Attachment{UUID: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b11", RepoID: 1, UploaderID: 2, Purpose: repo_model.AttachmentPurposeArticle}, now)
+	associated := addAttachment(t, &repo_model.Attachment{UUID: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b12", RepoID: 1, UploaderID: 2, Purpose: repo_model.AttachmentPurposeArticle}, now)
+	require.NoError(t, repo_model.AddArticleAttachments(t.Context(), 1, []int64{associated.ID}))
+	addAttachment(t, &repo_model.Attachment{UUID: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b13", RepoID: 1, UploaderID: 2}, now)
+
+	// a committed upload still counts toward the rate; an issue upload does not, and the
+	// fixtures are far older than the window
+	count, err := repo_model.CountArticleUploadsSince(t.Context(), 2, now-60)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, count)
+
+	count, err = repo_model.CountArticleUploadsSince(t.Context(), 2, 0)
+	require.NoError(t, err)
+	assert.EqualValues(t, 5, count)
+}
+
+func TestGetPendingArticleAttachmentSummary(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	addAttachment(t, &repo_model.Attachment{UUID: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b21", RepoID: 1, UploaderID: 4, Purpose: repo_model.AttachmentPurposeArticle, Size: 500}, 946684800)
+	addAttachment(t, &repo_model.Attachment{UUID: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b22", RepoID: 1, UploaderID: 4, Purpose: repo_model.AttachmentPurposeArticle, Size: 700}, 946684800)
+	// too recent to be stale
+	addAttachment(t, &repo_model.Attachment{UUID: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380b23", RepoID: 1, UploaderID: 5, Purpose: repo_model.AttachmentPurposeArticle, Size: 9000}, timeutil.TimeStampNow())
+
+	summary, err := repo_model.GetPendingArticleAttachmentSummary(t.Context(), timeutil.TimeStampNow()-3600, 10)
+	require.NoError(t, err)
+	// fixture 15 (user 2, empty) plus user 4's two uploads
+	assert.EqualValues(t, 3, summary.Count)
+	assert.EqualValues(t, 1200, summary.Size)
+	require.Len(t, summary.TopUploaders, 2)
+	assert.Equal(t, repo_model.PendingArticleUploader{UploaderID: 4, Count: 2, Size: 1200}, *summary.TopUploaders[0])
+	assert.Equal(t, repo_model.PendingArticleUploader{UploaderID: 2, Count: 1, Size: 0}, *summary.TopUploaders[1])
+
+	summary, err = repo_model.GetPendingArticleAttachmentSummary(t.Context(), timeutil.TimeStampNow()-3600, 1)
+	require.NoError(t, err)
+	require.Len(t, summary.TopUploaders, 1)
+	assert.EqualValues(t, 4, summary.TopUploaders[0].UploaderID)
+}
