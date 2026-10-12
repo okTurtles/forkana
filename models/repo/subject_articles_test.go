@@ -8,12 +8,13 @@ import (
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
+	user_model "code.gitea.io/gitea/models/user"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPublicArticlesBySubject(t *testing.T) {
+func TestReadableArticlesBySubject(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
@@ -22,37 +23,68 @@ func TestPublicArticlesBySubject(t *testing.T) {
 	other, err := repo_model.GetOrCreateSubject(ctx, "Apollo 17")
 	require.NoError(t, err)
 
-	assign := func(repoID, subjectID int64, cols ...func(*repo_model.Repository) string) {
+	assign := func(repoID, subjectID int64, set func(*repo_model.Repository) []string) {
 		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repoID})
 		repo.SubjectID = subjectID
-		var names []string
-		for _, set := range cols {
-			names = append(names, set(repo))
+		cols := []string{}
+		if set != nil {
+			cols = set(repo)
 		}
-		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id", names...))
+		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "subject_id", cols...))
 	}
-	assign(1, subject.ID)                                          // user2, public
-	assign(4, subject.ID)                                          // user5, public
-	assign(2, subject.ID)                                          // user2, private: not counted
-	assign(10, subject.ID, func(r *repo_model.Repository) string { // user12, deleted
+	assign(1, subject.ID, nil)                                       // user2, public
+	assign(4, subject.ID, nil)                                       // user5, public
+	assign(2, subject.ID, nil)                                       // user2, private: not readable by others
+	assign(10, subject.ID, func(r *repo_model.Repository) []string { // user12, deleted
 		r.IsTombstoned = true
-		return "is_tombstoned"
+		return []string{"is_tombstoned"}
 	})
-	assign(11, other.ID) // user13, public
+	assign(11, subject.ID, func(r *repo_model.Repository) []string { // user13, empty
+		r.IsEmpty = true
+		return []string{"is_empty"}
+	})
+	assign(38, subject.ID, nil) // limited_org: only for signed-in users
+	assign(40, subject.ID, nil) // privated_org: hidden
+	assign(16, other.ID, nil)   // user2, private
 
-	counts, err := repo_model.CountPublicArticlesBySubjectIDs(ctx, []int64{subject.ID, other.ID, 9999})
-	require.NoError(t, err)
-	assert.Equal(t, map[int64]int64{subject.ID: 2, other.ID: 1}, counts)
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
-	articles, err := repo_model.FindPublicArticlesBySubjectID(ctx, subject.ID)
+	// signed out: user2 and user5
+	counts, err := repo_model.CountReadableArticlesBySubjectIDs(ctx, []int64{subject.ID, other.ID, 9999}, nil)
 	require.NoError(t, err)
-	owners := make([]string, 0, len(articles))
-	for _, a := range articles {
-		owners = append(owners, a.OwnerName)
-	}
+	assert.Equal(t, int64(2), counts[subject.ID])
+	_, has := counts[9999]
+	assert.False(t, has)
+
+	owners, err := repo_model.FindReadableArticleOwners(ctx, subject.ID, nil)
+	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"user2", "user5"}, owners)
 
-	counts, err = repo_model.CountPublicArticlesBySubjectIDs(ctx, nil)
+	// signed in as user2: the limited org too, and user2 once although it has two articles
+	owners, err = repo_model.FindReadableArticleOwners(ctx, subject.ID, user2)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"user2", "user5", "limited_org"}, owners)
+
+	for _, c := range []struct {
+		owner string
+		doer  *user_model.User
+		want  bool
+	}{
+		{"", nil, true},
+		{"user5", nil, true},
+		{"USER5", nil, true},
+		{"user12", nil, false},       // tombstone
+		{"user13", nil, false},       // empty
+		{"privated_org", nil, false}, // private owner
+		{"limited_org", nil, false},
+		{"limited_org", user2, true},
+	} {
+		got, err := repo_model.HasReadableArticle(ctx, subject.ID, c.owner, c.doer)
+		require.NoError(t, err)
+		assert.Equal(t, c.want, got, "%s, signed in: %v", c.owner, c.doer != nil)
+	}
+
+	counts, err = repo_model.CountReadableArticlesBySubjectIDs(ctx, nil, nil)
 	require.NoError(t, err)
 	assert.Empty(t, counts)
 }
