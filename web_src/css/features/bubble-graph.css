@@ -10,8 +10,8 @@
    Component-specific tweaks stay scoped in the component. */
 
 /* The neutral button of the design: light surface, subtle border. Used by
-   ArticleDetailView ("Read full article") and ArticleHistoryPopup
-   ("View full history"). */
+   ArticleDetailView ("Read full article"; ArticleHistoryPopup's "View full
+   history" has its own figma values since #423). */
 .btn-neutral {
   padding: 8px 16px;
   border: 1px solid var(--color-secondary, #d1d5db);

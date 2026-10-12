@@ -44,6 +44,7 @@ import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import { GET } from "../../modules/fetch.ts";
 import { extractArticleSummary } from "./article-summary.ts";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
+import { attachZoomGestures, clampZoom } from "./zoom-gestures.ts";
 import {
   BUBBLE_HOVER_RADIUS, BUBBLE_UNKNOWN_RUNG, bubbleRungFor, countTextForRung,
   maxContributors, type BubbleRung, type ComparePickState,
@@ -390,6 +391,7 @@ let remeasureCleanup: (() => void) | null = null;
    gesture; cleared whenever the component frames the view itself. */
 let viewMovedByUser = false;
 let pointerCleanup: (() => void) | null = null;
+let zoomGesturesCleanup: (() => void) | null = null;
 
 /* ──────────────────────────────────────────────────────────────────────────────
    PROPS & API CONFIGURATION
@@ -949,9 +951,27 @@ function restingContentHeight(): number {
    per-frame calls it gets from setFrame(): one Map iteration, no DOM reads
    beyond the legend height, and stable during a hover by construction (the
    resting layout does not move). */
+/** Is an article open (ArticleDetailView)? Mirrored from `openArticle` by its
+   watcher, because syncCanvasHeight() is reachable before that computed exists. */
+let canvasHoldsArticle = false;
+
+/** Height the canvas needs to show the opened article at its design size
+   (#422): the circle plus its margin above and below. Without this floor a
+   short canvas (a short window, a zoomed page, a one-article subject whose
+   "graph" is one small bubble) shrank the circle while the text inside it kept
+   its size, and the stack spilled out of the circle. The circle is still capped
+   by the WIDTH (a phone), where its contents have their own smaller sizes. */
+function articleCanvasFloor(): number {
+  if (!canvasHoldsArticle) return 0;
+  const w = containerWidth || DEFAULT_CONTAINER_WIDTH;
+  const vw = window.innerWidth * 0.84;   // .detail-bubble's 84vw cap
+  const d = Math.max(DETAIL_DIAMETER_MIN, Math.min(DETAIL_DIAMETER_DESIGN, w - DETAIL_CONTAINER_MARGIN * 2, vw));
+  return Math.ceil(d + DETAIL_CONTAINER_MARGIN * 2);
+}
+
 function syncCanvasHeight() {
   const legendH = legendRef.value?.offsetHeight ?? 0;
-  const contentH = Math.ceil(restingContentHeight());
+  const contentH = Math.max(Math.ceil(restingContentHeight()), articleCanvasFloor());
   svgHeight.value = Math.max(graphViewportHeight(), contentH);
   /* Publish the height the graph NEEDS as a min-height floor on the page box
      (.history-bubble-root). The box itself stays free-space sized (basis 0),
@@ -1599,7 +1619,10 @@ onMounted(async () => {
      plain wheel. The canvas is content-sized now (syncCanvasHeight), so the
      whole graph is inside the page and a plain wheel should do what it does
      everywhere else on the page: scroll it. Ctrl+wheel (and pinch) still zoom
-     through d3-zoom's filter above, and dragging still pans. */
+     through d3-zoom's filter above, and dragging still pans. What d3 leaves
+     to the browser (a pinch at the scale limit, Safari's gesture events, any
+     pinch over the opened article) is caught by attachZoomGestures below, so
+     it never zooms the page (#422). */
 
   /* Observe container width for responsive dials */
   await nextTick();
@@ -1621,6 +1644,16 @@ onMounted(async () => {
      feedback loop. The window/document triggers that back it up (a throttled
      tab, the table→bubble switch) went in at the top of this function. */
   unobserveContainer = observeContainerResize(el, scheduleRemeasure);
+
+  /* #422: a zoom gesture over the diagram zooms the diagram, never the page —
+     at d3's scale limits too, over the opened article, and for Safari's pinch. */
+  const canvasBox = el.querySelector<HTMLElement>('.graph-container');
+  if (canvasBox) {
+    zoomGesturesCleanup = attachZoomGestures(canvasBox, {
+      onZoom: onCanvasZoom,
+      handledElsewhere: zoomedByD3,
+    });
+  }
 
   /* Where the pointer is. Read only when an article view finishes closing, to
      ask whether the bubble it landed on is genuinely under the cursor. */
@@ -1665,6 +1698,8 @@ onBeforeUnmount(() => {
   remeasureCleanup = null;
   if (pendingRaf !== null) { cancelAnimationFrame(pendingRaf); pendingRaf = null; }
   pointerCleanup?.();
+  zoomGesturesCleanup?.();
+  zoomGesturesCleanup = null;
   cancelReflow();
   cancelStatsRetry();
   if (hoverTimer !== null) window.clearTimeout(hoverTimer);
@@ -1809,8 +1844,27 @@ const TOUCH_TAP_GUARD_MS = 500;
 let hoverSuppressedUntil = 0;
 const HOVER_DISMISS_GUARD_MS = 250;
 
-/** The node the History card is anchored to, in canvas-box px. */
+/** Where the History card goes, in canvas-box px: `x` is the card's LEFT edge
+   (already clear of the bubble and inside the window), `y` the bubble's centre. */
 const historyAnchor = reactive({x: 0, y: 0});
+
+/* The History card beside the opened circle, from figma "Bubble view - Selected"
+   (1996:36527): the circle (Frame 361, 1996:36736) spans x 507-932 and the card
+   (ActionMenu/History, 641:62665) starts at x 975 — a 43px gap, the card 383px
+   wide and centred on the circle. It sits BESIDE the circle, never over it
+   (#423): when the window is too narrow for both, the circle moves left. */
+const HISTORY_CARD_WIDTH = 383;
+const HISTORY_CARD_GAP = 43;
+const HISTORY_EDGE_GAP = 12;   // from the window edge, as the Compare box keeps
+/** How far the opened circle moves left to make room for the History card. */
+const detailShift = ref(0);
+
+/* Zoom of the opened article (#422). On a one-article subject it IS the whole
+   diagram, and a pinch over it used to zoom the page. It zooms about the
+   circle's centre; there is nothing to pan to. */
+const DETAIL_ZOOM_MIN = 0.5;
+const DETAIL_ZOOM_MAX = 2;
+const detailZoom = ref(1);
 
 function nodeById(id: NodeId | null): Node | null {
   return id ? state.graph[id] ?? null : null;
@@ -2128,6 +2182,9 @@ const historyEntries = computed<HistoryEntry[]>(() => {
     });
     cur = cur.parentId ? state.graph[cur.parentId] : undefined;
   }
+  /* The oldest ancestor is the original article (#423: its row is the bold
+     blue-violet one). */
+  if (out.length) out[out.length - 1].isOrigin = true;
   return out;
 });
 
@@ -2137,9 +2194,15 @@ const historyExpandedId = computed(() => {
   return entries.length ? entries[entries.length - 1].id : null;
 });
 
-/** Where the opened bubble is inside the canvas box, in px, for the History
-   card to sit beside. Derived from the rendered placement and the live zoom
-   transform, so it follows a pan.
+/** Where the History card goes, in canvas-box px: beside the bubble it
+   belongs to, never over it (#423, figma 1996:36527). Derived from the
+   rendered placement and the live zoom transform, so it follows a pan.
+
+   The card may reach past the box's sides into the page margin (the box is at
+   most 1100px wide, and the design's card hangs past it), never past the
+   window. The opened circle is centred in the box; when the window has no room
+   for the card on its right, the circle moves left by what is missing
+   (`detailShift`), as far as the box allows.
 
    The Y is clamped to the middle 30% of the box and the card is limited to 70%
    of its height (see ArticleHistoryPopup), which together guarantee the card is
@@ -2148,33 +2211,44 @@ function updateHistoryAnchor() {
   const box = containerRef.value?.querySelector('.graph-container') as HTMLElement | null;
   if (!box) return;
   const boxRect = box.getBoundingClientRect();
-  let x: number, y: number;
+  /* The window's edges, in box px. */
+  const windowLeft = -boxRect.left + HISTORY_EDGE_GAP;
+  const windowRight = document.documentElement.clientWidth - boxRect.left - HISTORY_EDGE_GAP;
+  let right: number, y: number;
   if (openArticle.value) {
-    /* The card hangs off the opened circle's right edge, exactly as the design
-       draws it. The circle is measured, not assumed at the box centre: on a
-       box taller than the viewport it rests in the visible part of the box
-       (ArticleDetailView's .detail-viewport). Fallback to the box centre for
-       the tick before the circle exists. */
-    const bubble = box.querySelector('.detail-bubble');
+    /* The circle's resting geometry, from layout rather than from its rect:
+       the rect moves with the open flight, the zoom and the shift itself. It is
+       centred horizontally in the box (.detail-viewport); vertically it rests
+       in the visible part of the box, so that is measured — a zoom about the
+       centre and a horizontal shift leave the centre's Y where it is. */
+    const bubble = box.querySelector<HTMLElement>('.detail-bubble');
+    const d = (bubble?.offsetWidth || Math.min(detailSize.value, boxRect.width * 0.84)) * detailZoom.value;
+    const centreX = boxRect.width / 2;
     if (bubble) {
       const r = bubble.getBoundingClientRect();
-      x = r.right - boxRect.left;
       y = r.top + r.height / 2 - boxRect.top;
     } else {
-      const d = Math.min(detailSize.value, boxRect.width * 0.84);
-      x = boxRect.width / 2 + d / 2;
       y = boxRect.height / 2;
     }
+    let shift = 0;
+    if (historyOpen.value && !isNarrow.value) {
+      const missing = (centreX + d / 2 + HISTORY_CARD_GAP + HISTORY_CARD_WIDTH) - windowRight;
+      /* never past the box's left edge: the layer clips the circle there */
+      shift = Math.max(0, Math.min(missing, centreX - d / 2));
+    }
+    detailShift.value = Math.round(shift);
+    right = centreX + d / 2 - shift;
   } else {
     const svg = svgRef.value;
     const p = hoveredId.value !== null ? framePlacements.get(hoveredId.value) : null;
     if (!svg || !p) return;
     const t = zoomTransform(svg);
     const svgBox = svg.getBoundingClientRect();
-    x = (svgBox.left - boxRect.left) + t.applyX(p.x) + p.r * t.k;
+    right = (svgBox.left - boxRect.left) + t.applyX(p.x) + p.r * t.k;
     y = (svgBox.top - boxRect.top) + t.applyY(p.y);
   }
-  historyAnchor.x = Math.round(Math.max(0, Math.min(boxRect.width, x)));
+  const left = Math.min(right + HISTORY_CARD_GAP, windowRight - HISTORY_CARD_WIDTH);
+  historyAnchor.x = Math.round(Math.max(windowLeft, left));
   /* The card extends up to ±35% of a viewport-ish box from its anchor; clamp
      so it stays inside the box. Sized from the smaller of box and viewport:
      on a box TALLER than the viewport, 35% of the box would push the card
@@ -2182,6 +2256,31 @@ function updateHistoryAnchor() {
      35% of the viewport keeps the old guarantee and follows the circle. */
   const halfCard = 0.35 * Math.min(boxRect.height, window.innerHeight);
   historyAnchor.y = Math.round(Math.max(halfCard, Math.min(boxRect.height - halfCard, y)));
+}
+
+/* Closing the card hands the circle its centre back. */
+watch(historyOpen, (open) => { if (!open) detailShift.value = 0; });
+
+/** A zoom gesture over the canvas box (#422) that d3 does not handle itself:
+   over the opened article, or a Safari trackpad pinch over the graph. */
+function onCanvasZoom(factor: number, clientX: number, clientY: number) {
+  if (openArticle.value) {
+    if (detailClosing.value) return;
+    detailZoom.value = clampZoom(detailZoom.value * factor, DETAIL_ZOOM_MIN, DETAIL_ZOOM_MAX);
+    if (historyOpen.value) updateHistoryAnchor();
+    return;
+  }
+  const svg = svgRef.value;
+  if (!svg || !svgSel || !zoomBehavior || !graphRendered.value) return;
+  const box = svg.getBoundingClientRect();
+  viewMovedByUser = true;
+  svgSel.call(zoomBehavior.scaleBy as any, factor, [clientX - box.left, clientY - box.top]);
+}
+
+/** Wheel and touch over the graph's own <svg> are d3-zoom's — but not while an
+   article covers it, when the gesture is the article's. */
+function zoomedByD3(target: EventTarget | null): boolean {
+  return !openArticle.value && target instanceof Element && svgRef.value?.contains(target) === true;
 }
 
 /* ── COMPARE BOX ──────────────────────────────────────────────────────────
@@ -2250,7 +2349,16 @@ watch([compareBoxOpen, isNarrow], async ([open]) => {
 /* The circle is sized from the container, and on a solo subject nothing
    "opens" it — it is simply there once the data lands. Size it whenever an
    article appears, after the DOM has settled so the canvas box is measured. */
-watch(openArticle, async (article) => {
+watch(openArticle, async (article, before) => {
+  /* A pre-flush watcher, so the taller canvas (articleCanvasFloor) lands in
+     the same render that mounts the circle: its resting spot is measured in
+     that render, and must not move under the opening flight. */
+  if (canvasHoldsArticle !== (article !== null)) {
+    canvasHoldsArticle = article !== null;
+    syncCanvasHeight();
+  }
+  /* Each article opens at 1:1. */
+  if (article?.id !== before?.id) detailZoom.value = 1;
   if (!article) return;
   await nextTick();
   detailSize.value = computeDetailSize();
@@ -2685,7 +2793,7 @@ function goToComparison() {
           :contributors="openArticle.contributors" :description="openArticle.description"
           :updated-at="openArticle.updatedAt" :size="detailSize"
           :origin="soloPinned ? null : detailOrigin" :show-back="!soloPinned"
-          :closing="detailClosing"
+          :closing="detailClosing" :zoom="detailZoom" :shift="detailShift"
           @back="closeDetail" @read="onDetailRead" @history="onHistoryOpen"
           @closed="finishDetailClose"
         />
@@ -2693,8 +2801,9 @@ function goToComparison() {
         <!-- History card (#284). It MUST stay inside .graph-container: the
              desktop card is position:absolute and resolves against the nearest
              positioned ancestor, and anywhere else it would paint over the page
-             chrome. It anchors to the OPENED bubble (--history-anchor-*) and
-             clamps itself to this box; under 768px it is a bottom sheet
+             chrome. It sits beside the OPENED bubble (--history-left, placed by
+             updateHistoryAnchor) and clamps its height to this box; under 768px
+             it is a bottom sheet
              instead, which is fixed to the viewport by design. -->
         <!-- The wrapper carries the anchor: ArticleHistoryPopup has two root
              elements (backdrop + card), so a style binding on the component
@@ -2702,7 +2811,7 @@ function goToComparison() {
              block, so it adds nothing to the box. -->
         <div
           v-if="historyOpen && (openArticle || hoveredId)" class="history-anchor"
-          :style="{ '--history-anchor-x': historyAnchor.x + 'px', '--history-anchor-y': historyAnchor.y + 'px' }"
+          :style="{ '--history-left': historyAnchor.x + 'px', '--history-anchor-y': historyAnchor.y + 'px' }"
         >
           <ArticleHistoryPopup
             :entries="historyEntries" :expanded-id="historyExpandedId"

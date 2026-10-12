@@ -45,6 +45,12 @@ const props = defineProps<{
   /* Flipped by the parent to ask for the closing animation; the parent unmounts
      us when we emit "closed". */
   closing?: boolean;
+  /* The reader's zoom of the circle (#422: a pinch over the opened article
+     zooms it, not the page), about its centre. 1 = the design size. */
+  zoom?: number;
+  /* How far the circle moves left to make room for the History card beside it
+     (#423), in px. */
+  shift?: number;
 }>();
 
 const emit = defineEmits<{
@@ -89,6 +95,8 @@ const layerRef = ref<HTMLElement | null>(null);
    pokes outside the layer's clipping. Falls back to the CSS 50% until first
    measured. */
 const centerY = ref('50%');
+/** Space kept between the circle and the box's top and bottom edges. */
+const DETAIL_EDGE_MARGIN = 24;
 
 function updateCenterY() {
   const layer = layerRef.value;
@@ -98,9 +106,13 @@ function updateCenterY() {
   const visTop = Math.max(r.top, 0);
   const visBottom = Math.min(r.bottom, window.innerHeight);
   if (visBottom <= visTop) return;   // box fully off-screen: keep the last spot
+  /* Half the circle, plus the breathing room the canvas keeps around it
+     (FishboneGraph's DETAIL_CONTAINER_MARGIN) when the box has room for it, so
+     the circle never touches the view tabs above it or the legend below. */
   const half = (bubbleRef.value?.offsetHeight || diameter.value) / 2;
+  const reach = Math.min(half + DETAIL_EDGE_MARGIN, r.height / 2);
   const y = (visTop + visBottom) / 2 - r.top;
-  centerY.value = `${Math.round(Math.max(half, Math.min(r.height - half, y)))}px`;
+  centerY.value = `${Math.round(Math.max(reach, Math.min(r.height - reach, y)))}px`;
   /* Written straight to the node as well: the opening flight measures the
      circle's resting rect synchronously in onMounted, before Vue would apply
      the reactive binding, and it must measure the final spot. */
@@ -220,7 +232,10 @@ onBeforeUnmount(() => {
          than the screen the circle rests where the reader is instead of at a
          centre below the fold. The box (and the graph underneath) keeps its
          size, and the wrapper is click-transparent so Back stays reachable. -->
-    <div class="detail-viewport">
+    <!-- `scale` and `translate` are the individual transform properties, so
+         they compose with the centring transform below instead of replacing
+         it, and never touch the circle's own (flight) transform. -->
+    <div class="detail-viewport" :style="{scale: String(zoom ?? 1), translate: `${-(shift ?? 0)}px 0`}">
       <!-- `transform` on this element is owned by the open/close animation above
          and written straight to the node, so it must not appear in this
          binding — Vue would patch it away on the next render. -->
@@ -261,6 +276,9 @@ onBeforeUnmount(() => {
      keep the circle and the history card clipped to it. */
   border-radius: inherit;
   overflow: hidden;
+  /* A pinch here zooms the circle (FishboneGraph's zoom gestures, #422), not
+     the page; a one-finger vertical drag still scrolls the page. */
+  touch-action: pan-y;
 
   /* Single source of truth for the open/close motion. The JS above mirrors
      these numbers only to know when it may unmount. */
@@ -296,8 +314,10 @@ onBeforeUnmount(() => {
    without resizing the box (which would relayout the whole graph on every
    open and close). The mockup drew the circle left of centre with the
    history card beside it, but a bubble off-centre in an empty box reads as a
-   layout bug — so the circle owns the centre and the history card overlaps
-   its right edge instead (see ArticleHistoryPopup). */
+   layout bug — so the circle owns the centre, and the history card sits 43px
+   to its right as the design draws it. Only a window too narrow for both
+   moves the circle left (the `shift` prop, see updateHistoryAnchor in
+   FishboneGraph): the card never covers the circle (#423). */
 .detail-viewport {
   position: absolute;
   left: 0;
@@ -307,6 +327,9 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   pointer-events: none;
+  /* Making room for the History card glides the circle aside, at the open
+     flight's pace; a zoom follows the fingers, so it is not eased. */
+  transition: translate var(--detail-zoom-ms) var(--detail-zoom-ease);
 }
 
 .detail-viewport > * {
@@ -390,6 +413,7 @@ onBeforeUnmount(() => {
 /* Reduced motion: the same states, swapped instantly. */
 @media (prefers-reduced-motion: reduce) {
   .detail-layer::before,
+  .detail-viewport,
   .detail-bubble,
   .detail-content,
   .detail-back {
@@ -462,8 +486,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-/* .btn-neutral itself is global — web_src/css/features/bubble-graph.css, shared
-   with ArticleHistoryPopup. Only this button's no-wrap sits here: it is side by
+/* .btn-neutral itself is global — web_src/css/features/bubble-graph.css. Only this button's no-wrap sits here: it is side by
    side with another control, where a wrap would jump the row. */
 .detail-read {
   white-space: nowrap;
