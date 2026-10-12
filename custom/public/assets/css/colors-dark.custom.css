@@ -82,6 +82,8 @@
   --color-button-border-disabled: #6e76811a;
   --color-button-secondary-hover-bg: #30363d;
   --color-button-secondary-active-bg: #282e33;
+  /* the dark "Outline focus" of the Design System file (STYLES > Dark mode, node 40000080:133320) */
+  --color-button-focus-ring: #3b2fd4;
 
   /* Border colors */
   --color-border: #30363d;
@@ -196,6 +198,8 @@
     --color-button-border-disabled: #6e76811a;
     --color-button-secondary-hover-bg: #30363d;
     --color-button-secondary-active-bg: #282e33;
+    /* the dark "Outline focus" of the Design System file (STYLES > Dark mode, node 40000080:133320) */
+    --color-button-focus-ring: #3b2fd4;
 
     /* Border colors */
     --color-border: #30363d;

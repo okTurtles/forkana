@@ -120,11 +120,11 @@
    width (updateButton in web_src/js/features/home-search.ts), so a longer translated label still
    fits; the fallback only exists as a safety net (the class and the variable are set in the same
    synchronous block, so it never applies in practice) and is sized for the rendered English
-   "Search" (~57px) plus the 21px gap. "!important" is required no matter the
+   "Search" (~57px) plus the 21px gap (78px). "!important" is required no matter the
    specificity: tailwind runs with `important: true` (tailwind.config.ts), so every tw- utility
    on the input is itself !important. */
 #home-search-form input[name="q"].home-search-input-with-button {
-  padding-right: var(--home-search-button-inset, 100px) !important;
+  padding-right: var(--home-search-button-inset, 78px) !important;
 }
 
 /* ===== Homepage search validation ===== */

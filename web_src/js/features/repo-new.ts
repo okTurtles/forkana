@@ -5,7 +5,7 @@ import {sanitizeRepoName, generateRepoNameFromSubject} from './repo-common.ts';
 
 const {appSubUrl} = window.config;
 
-function initRepoNewTemplateSearch(form: HTMLFormElement, updateSubmitButtonState: () => void) {
+function initRepoNewTemplateSearch(form: HTMLFormElement, updateSubmitButtonState: (hasError: boolean) => void) {
   const elCreateRepoErrorMessage = form.querySelector('#create-repo-error-message');
   const elRepoOwnerDropdown = form.querySelector('#repo_owner_dropdown');
   const elRepoTemplateDropdown = form.querySelector<HTMLInputElement>('#repo_template_search');
@@ -26,13 +26,14 @@ function initRepoNewTemplateSearch(form: HTMLFormElement, updateSubmitButtonStat
     const ownerId = $repoOwnerDropdown.dropdown('get value');
     const $ownerItem = $repoOwnerDropdown.dropdown('get item', ownerId);
     hideElem(elCreateRepoErrorMessage);
+    let hasError = false;
     if ($ownerItem?.length) {
       const elOwnerItem = $ownerItem[0];
       elCreateRepoErrorMessage.textContent = elOwnerItem.getAttribute('data-create-repo-disallowed-prompt') ?? '';
-      const hasError = Boolean(elCreateRepoErrorMessage.textContent);
+      hasError = Boolean(elCreateRepoErrorMessage.textContent);
       toggleElem(elCreateRepoErrorMessage, hasError);
     }
-    updateSubmitButtonState();
+    updateSubmitButtonState(hasError);
     $repoTemplateDropdown.dropdown('setting', {
       apiSettings: {
         url: `${appSubUrl}/repo/search?q={query}&template=true&priority_owner_id=${ownerId}`,
@@ -125,10 +126,8 @@ export function initRepoNew() {
   // The submit button is only disabled while the selected owner can't create a subject
   // (the "reach limit of creation" prompt shown in #create-repo-error-message).
   const elSubmitButton = form.querySelector<HTMLButtonElement>('#create-repo-submit-button');
-  const updateSubmitButtonState = () => {
-    if (!elSubmitButton) return;
-    const elCreateRepoErrorMessage = form.querySelector('#create-repo-error-message');
-    elSubmitButton.disabled = Boolean(elCreateRepoErrorMessage?.textContent?.trim());
+  const updateSubmitButtonState = (hasError: boolean) => {
+    if (elSubmitButton) elSubmitButton.disabled = hasError;
   };
 
   initRepoNewTemplateSearch(form, updateSubmitButtonState);

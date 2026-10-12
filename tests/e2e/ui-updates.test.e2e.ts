@@ -56,6 +56,10 @@ test('empty feed shows the empty state on the home page and on /feeds', async ({
     await page.goto('/feeds');
     await expect(page.locator('.feeds-page-empty')).toHaveText('It\'s quiet in here… for now');
 
+    // an empty "?filter=" (hand-crafted URL) is not a filter
+    await page.goto('/feeds?filter=');
+    await expect(page.locator('.feeds-page-empty')).toHaveText('It\'s quiet in here… for now');
+
     // a search that matches nothing still says so
     await page.goto('/feeds?q=no-such-activity');
     await expect(page.locator('.feeds-page-empty')).toHaveText('No results found.');
