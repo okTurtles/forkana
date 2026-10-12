@@ -63,6 +63,8 @@ function referencesOf(footnotes: Element): Map<string, Reference> {
   let number = 0;
   for (const item of footnotes.querySelectorAll<HTMLLIElement>(':scope > ol > li[id]')) {
     number++;
+    // the list numbers itself from this, not from a counter: a filter hides some items
+    item.setAttribute('data-number', String(number));
     refs.set(item.id, referenceOf(item, number));
   }
   return refs;
@@ -119,6 +121,17 @@ function placeCard(card: HTMLElement, marker: HTMLElement): void {
   card.style.top = `${rect.bottom + window.scrollY + 6}px`;
 }
 
+// scheduleHideFor hides the marker's card soon, unless the pointer comes back to the marker
+// or moves into the card.
+function scheduleHideFor(marker: HTMLElement): void {
+  const state = openCard;
+  if (state?.marker !== marker) return;
+  clearTimeout(state.hideTimer);
+  state.hideTimer = setTimeout(() => {
+    if (openCard === state) closeCard();
+  }, 250);
+}
+
 function showHoverCard(marker: HTMLElement, ref: Reference): void {
   if (openCard?.marker === marker) {
     clearTimeout(openCard.hideTimer);
@@ -133,17 +146,8 @@ function showHoverCard(marker: HTMLElement, ref: Reference): void {
   marker.classList.add('is-active');
   const state = {card, marker} as NonNullable<typeof openCard>;
   openCard = state;
-  const scheduleHide = () => {
-    clearTimeout(state.hideTimer);
-    state.hideTimer = setTimeout(() => {
-      if (openCard === state) closeCard();
-    }, 250);
-  };
-  const keep = () => clearTimeout(state.hideTimer);
-  card.addEventListener('mouseenter', keep);
-  card.addEventListener('mouseleave', scheduleHide);
-  marker.addEventListener('mouseleave', scheduleHide, {once: true});
-  marker.addEventListener('blur', scheduleHide, {once: true});
+  card.addEventListener('mouseenter', () => clearTimeout(state.hideTimer));
+  card.addEventListener('mouseleave', () => scheduleHideFor(marker));
   card.querySelector('[data-citation-goto]')?.addEventListener('click', () => closeCard());
 }
 
@@ -189,9 +193,16 @@ function initReferenceMarkers(container: HTMLElement, refs: Map<string, Referenc
       if (isPhone()) return;
       showTimer = setTimeout(() => showHoverCard(sup, ref), 150);
     });
-    link.addEventListener('mouseleave', () => clearTimeout(showTimer));
+    link.addEventListener('mouseleave', () => {
+      clearTimeout(showTimer);
+      scheduleHideFor(sup);
+    });
     link.addEventListener('focus', () => {
       if (!isPhone()) showHoverCard(sup, ref);
+    });
+    link.addEventListener('blur', () => scheduleHideFor(sup));
+    link.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && openCard?.marker === sup) closeCard(); // dismissable (WCAG 1.4.13)
     });
     link.addEventListener('click', (e) => {
       if (!isPhone()) {
@@ -200,6 +211,10 @@ function initReferenceMarkers(container: HTMLElement, refs: Map<string, Referenc
       }
       e.preventDefault();
       showBottomSheet(sup, ref);
+    });
+    // a filter may hide the reference the marker jumps to
+    link.addEventListener('click', () => {
+      if (ref.item.hidden) ref.item.closest('.footnotes')?.querySelector<HTMLButtonElement>('.citation-filter')?.click();
     });
   }
 }

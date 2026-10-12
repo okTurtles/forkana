@@ -17,12 +17,21 @@ export function isPhoneLayout(): boolean {
   return window.matchMedia('(max-width: 767.98px)').matches;
 }
 
-// openPopover shows el under rect. onClose runs once, whichever way it closes: Escape (when
-// the popover has the focus), a click outside, or close().
+// openPopover shows el under rect. onClose runs once, whichever way it closes: Escape, a
+// click outside, or close(). When the popover took the focus, closing it gives the focus back
+// to where it was. A popover holding its own fields (or a phone's sheet) is a dialog.
 export function openPopover(el: HTMLElement, rect: DOMRect, onClose?: () => void): Popover {
   closePopover();
   el.classList.add('citation-popover');
-  if (isPhoneLayout()) el.classList.add('citation-popover-sheet');
+  const sheet = isPhoneLayout();
+  if (sheet) {
+    el.classList.add('citation-popover-sheet');
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+  } else if (el.querySelector('input, button') && !el.hasAttribute('role')) {
+    el.setAttribute('role', 'dialog');
+  }
+  const previousFocus = document.activeElement as HTMLElement | null;
   document.body.append(el);
 
   let popover: Popover = null;
@@ -30,20 +39,25 @@ export function openPopover(el: HTMLElement, rect: DOMRect, onClose?: () => void
     if (!el.contains(e.target as Node)) popover.close();
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && !e.defaultPrevented) {
       e.preventDefault();
       popover.close();
     }
   };
+  // a click that opened the popover must not close it
+  const listenTimer = setTimeout(() => document.addEventListener('pointerdown', onDocumentPointer, true), 0);
   popover = {
     el,
     close: () => {
       if (current !== popover) return;
       current = null;
+      clearTimeout(listenTimer);
+      const hadFocus = el.contains(document.activeElement);
       el.remove();
       document.removeEventListener('pointerdown', onDocumentPointer, true);
-      el.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onKey);
       onClose?.();
+      if (hadFocus && document.activeElement === document.body && previousFocus?.isConnected) previousFocus.focus();
     },
     reposition: (r: DOMRect) => {
       if (el.classList.contains('citation-popover-sheet')) return;
@@ -56,8 +70,7 @@ export function openPopover(el: HTMLElement, rect: DOMRect, onClose?: () => void
   };
   current = popover;
   popover.reposition(rect);
-  // a click that opened the popover must not close it
-  setTimeout(() => document.addEventListener('pointerdown', onDocumentPointer, true), 0);
-  el.addEventListener('keydown', onKey);
+  // Escape closes it wherever the focus is (the "[[" list keeps the focus in the editor)
+  document.addEventListener('keydown', onKey);
   return popover;
 }

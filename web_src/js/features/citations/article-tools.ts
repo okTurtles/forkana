@@ -39,7 +39,7 @@ export function installArticleTools(editor: ToolsEditor, container: HTMLElement,
   buttons.link.el.addEventListener('click', () => openSubjectLinkTool(editor));
   buttons.cite.el.addEventListener('click', () => openCiteTool(editor));
   container.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyK') {
       e.preventDefault();
       e.stopPropagation();
       openCiteTool(editor);

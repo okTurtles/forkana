@@ -85,6 +85,11 @@ test('formatCitation: the forms of the design', () => {
 
 test('formatCitation escapes Markdown in the fields', () => {
   expect(escapeMarkdownText('a *b* [c]\nd')).toBe('a \\*b\\* \\[c\\] d');
+  // "$" is math, "~" strikethrough, "&" an entity (review #27)
+  expect(escapeMarkdownText('$5 to $10 ~~ AT&T&copy;')).toBe('\\$5 to \\$10 \\~\\~ AT\\&T\\&copy;');
+  // a pasted "ISBN …" is not written twice (review #13); a DOI with parentheses stays one link (#26)
+  expect(formatCitation('book', {isbn: 'ISBN: 978-0-670-81446-6', title: 'T', authors: 'A'}, today)).toBe('A. *T*. ISBN 978-0-670-81446-6.');
+  expect(formatCitation('journal', {doi: '10.1016/S0140-6736(20)30183-5'}, today)).toBe('doi:[10.1016/S0140-6736(20)30183-5](<https://doi.org/10.1016/S0140-6736(20)30183-5>).');
   expect(formatCitation('website', {url: 'https://example.com/a (b)', title: 'T [x]'}, today))
     .toBe('["T \\[x\\]"](<https://example.com/a (b)>). Retrieved 1 October 2026.');
 });
@@ -112,4 +117,13 @@ test('classifyCitation reads back what formatCitation wrote', () => {
     .toEqual({type: 'book', publisher: 'Viking', sourceURL: '', archived: false});
   expect(classifyCitation(citationElement('Armstrong, Neil. Oral history interview.')))
     .toEqual({type: 'other', publisher: '', sourceURL: '', archived: false});
+});
+
+test('citationPreviewHTML', async () => {
+  const {citationPreviewHTML} = await import('./cite-tool.ts');
+  expect(citationPreviewHTML('doi:[10.1016/S0140-6736(20)30183-5](<https://doi.org/10.1016/S0140-6736(20)30183-5>).'))
+    .toBe('doi:<a class="external-link" href="https://doi.org/10.1016/S0140-6736(20)30183-5" target="_blank" rel="noopener">10.1016/S0140-6736(20)30183-5</a>.');
+  expect(citationPreviewHTML('A. <https://x.org/?a=1&b=2>'))
+    .toBe('A. <a class="external-link" href="https://x.org/?a=1&amp;b=2" target="_blank" rel="noopener">https://x.org/?a=1&amp;b=2</a>');
+  expect(citationPreviewHTML('*Pub* \\*not\\*')).toBe('<em>Pub</em> *not*');
 });

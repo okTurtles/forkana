@@ -71,6 +71,7 @@ test.describe('Citations and internal links', () => {
     await page.keyboard.press('Escape');
     await expect(search).toHaveCount(0);
     await expect.poll(() => markdownOf(page)).toContain(' just words');
+    expect(await markdownOf(page)).not.toContain('[[just words');
 
     // the links stay links after a round trip through the Source editor
     await page.locator('.toastui-editor-mode-switch .tab-item', {hasText: 'Source editor'}).click();
@@ -101,7 +102,7 @@ test.describe('Citations and internal links', () => {
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
     const page = await context.newPage();
     // the lookup reaches the internet: answer it here
-    await page.route('**/-/citation/lookup?**', (route) => route.fulfill({
+    await page.route('**/-/citation/lookup', (route) => route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({type: 'website', url: 'https://nssdc.gsfc.nasa.gov/luna2', title: 'Luna 2', site: 'NASA–NSSDC'}),
@@ -125,8 +126,8 @@ test.describe('Citations and internal links', () => {
     await dialog.locator('[data-action="insert"]').click();
     await expect(dialog).toHaveCount(0);
 
+    await expect.poll(() => markdownOf(page)).toContain('Luna 2 came first.[^1]');
     let markdown = await markdownOf(page);
-    expect(markdown).toContain('Luna 2 came first.[^1]');
     expect(markdown).toMatch(/\n\[\^1\]: \["Luna 2"\]\(https:\/\/nssdc\.gsfc\.nasa\.gov\/luna2\)\. \*NASA–NSSDC\*\. Retrieved \d+ \w+ \d{4}\.\n/);
 
     // Ctrl+Shift+K, then reuse the source: no second definition
@@ -134,8 +135,8 @@ test.describe('Citations and internal links', () => {
     await page.keyboard.press('ControlOrMeta+Shift+K');
     await expect(popover).toBeVisible();
     await popover.locator('.citation-reuse-row', {hasText: '[1]'}).click();
+    await expect.poll(() => markdownOf(page)).toContain('Again.[^1]');
     markdown = await markdownOf(page);
-    expect(markdown).toContain('Again.[^1]');
     expect(markdown.match(/\[\^1\]:/g)).toHaveLength(1);
 
     // add a citation by hand
@@ -150,8 +151,8 @@ test.describe('Citations and internal links', () => {
     await dialog.locator('.citation-field', {hasText: 'Year'}).locator('input').fill('1994');
     await expect(dialog.locator('[data-action="insert"]')).toHaveText('Insert [2]');
     await dialog.locator('[data-action="insert"]').click();
+    await expect.poll(() => markdownOf(page)).toContain('A book.[^2]');
     markdown = await markdownOf(page);
-    expect(markdown).toContain('A book.[^2]');
     expect(markdown).toContain('[^2]: Chaikin, Andrew (1994). *A Man on the Moon*.');
     await context.close();
   });
@@ -204,6 +205,8 @@ test.describe('Citations and internal links', () => {
       // the filter chips
       await markup.locator('.citation-filter', {hasText: 'News'}).click();
       await expect(markup.locator('.footnotes li:visible')).toHaveCount(1);
+      // it keeps its number (review #16)
+      await expect(markup.locator('.footnotes li:visible')).toHaveAttribute('data-number', '2');
     } finally {
       try {
         await delete_repo(page, workerInfo, 'user2', repoName);

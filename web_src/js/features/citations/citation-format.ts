@@ -153,7 +153,8 @@ export function yearOf(s: string): string {
 // escapeMarkdownText escapes the characters that would turn plain text into Markdown, and
 // keeps the citation on one line (a footnote definition is one line).
 export function escapeMarkdownText(s: string): string {
-  return s.replace(/\s+/g, ' ').trim().replace(/([\\`*_[\]<>|])/g, '\\$1');
+  // "$" is inline math, "~" strikethrough and "&" starts an entity
+  return s.replace(/\s+/g, ' ').trim().replace(/([\\`*_[\]<>|$~&])/g, '\\$1');
 }
 
 // markdownDestination writes a URL as a link destination.
@@ -203,7 +204,7 @@ export function formatCitation(type: SourceType, f: CitationFields, today: strin
       if (f.pages?.trim()) where += `${where ? ': ' : ''}${escapeMarkdownText(f.pages).replace(/-/g, '–')}`;
       if (where.trim()) parts.push(`${where.trim()}.`);
       if (!authors && year) parts.push(`${year}.`);
-      if (doi) parts.push(`doi:[${escapeMarkdownText(doi)}](https://doi.org/${encodeURI(doi)}).`);
+      if (doi) parts.push(`doi:[${escapeMarkdownText(doi)}](${markdownDestination(`https://doi.org/${doi}`)}).`);
       break;
     }
     case 'book': {
@@ -217,7 +218,7 @@ export function formatCitation(type: SourceType, f: CitationFields, today: strin
       parts.push(`${title}.`);
       if (f.publisher?.trim()) parts.push(sentence(escapeMarkdownText(f.publisher)));
       if (!authors && year) parts.push(`${year}.`);
-      const isbn = (f.isbn ?? '').trim();
+      const isbn = (f.isbn ?? '').trim().replace(/^isbn(?:-1[03])?:?\s*/i, '');
       if (isbn) parts.push(`ISBN ${escapeMarkdownText(isbn)}.`);
       break;
     }
