@@ -113,11 +113,13 @@ function initExploreTabSearches(): void {
     if (e.persisted) updateInactiveTabLinks();
   });
 
-  // Only a plain primary click switches tabs in this browser tab. A middle click or a modified one
-  // (Cmd/Ctrl/Shift/Alt) opens or downloads the link elsewhere, and recording it here would leave a
+  // Only a plain primary click that is still going to navigate switches tabs in this browser tab. A
+  // middle click or a modified one (Cmd/Ctrl/Shift/Alt) opens or downloads the link elsewhere, and a
+  // click some other script has already cancelled goes nowhere: recording either here would leave a
   // stale flag behind that could later restore a draft over what an address asks for.
   queryElems<HTMLAnchorElement>(document, tabLinkSelector, (tabLink) => {
     tabLink.addEventListener('click', (e: MouseEvent) => {
+      if (e.defaultPrevented) return;
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       storageSet(switchStorageKey, tabPath(tabLink));
     });

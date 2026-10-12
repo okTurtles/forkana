@@ -225,4 +225,16 @@ describe('each explore tab keeps its own search', () => {
     switchTo('subjects');
     expect(mountExploreTab('subjects', 'mars').value).toEqual('forest');
   });
+
+  test('a tab link click cancelled by another script is not a switch', () => {
+    const field = mountExploreTab('subjects', 'mars');
+    typeInto(field, 'forest');
+    // a listener that runs before the feature's own one cancels the click, so nothing navigates
+    const cancel = (e: Event) => e.preventDefault();
+    document.addEventListener('click', cancel, {capture: true});
+    switchTo('subjects');
+    document.removeEventListener('click', cancel, {capture: true});
+    // later loaded from its address, the tab shows what the address says, not the draft
+    expect(mountExploreTab('subjects', 'mars').value).toEqual('mars');
+  });
 });
