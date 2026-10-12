@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"code.gitea.io/gitea/modules/markup"
 	"code.gitea.io/gitea/modules/markup/markdown"
@@ -25,21 +26,24 @@ func withSubjects(t *testing.T, existing ...string) {
 		set[s] = true
 	}
 	old := markup.DefaultRenderHelperFuncs
-	markup.DefaultRenderHelperFuncs = &markup.RenderHelperFuncs{
-		IsSubjectLinkExisting: func(_ context.Context, subject, owner string) bool {
-			if owner != "" {
-				return set[subject+"\x00"+owner]
-			}
-			return set[subject]
-		},
+	funcs := markup.RenderHelperFuncs{}
+	if old != nil {
+		funcs = *old
 	}
+	funcs.IsSubjectLinkExisting = func(_ context.Context, subject, owner string) bool {
+		if owner != "" {
+			return set[subject+"\x00"+owner]
+		}
+		return set[subject]
+	}
+	markup.DefaultRenderHelperFuncs = &funcs
 	t.Cleanup(func() { markup.DefaultRenderHelperFuncs = old })
 }
 
 func renderArticle(t *testing.T, input string) string {
 	// the article's own base link: relative links that are not Forkana pages resolve against it
 	rctx := markup.NewTestRenderContext("/subject/Moon%20landing/pierre/src/branch/main")
-	rctx.RenderOptions.MarkExternalLinks = true // as for every article
+	rctx.RenderOptions.ForkanaArticle = true // as for every article
 	res, err := markdown.RenderString(rctx, input)
 	require.NoError(t, err)
 	return strings.TrimSpace(string(res))
@@ -94,9 +98,29 @@ func TestRender_ForkanaInternalLinks(t *testing.T) {
 			`<p><a href="/repo/create?subject=Chang%27e+4" class="internal-link internal-link-missing" rel="nofollow">Chang&#39;e 4</a></p>`,
 		},
 		{
-			"missing article in an existing subject",
+			"missing article in an existing subject leads to the subject",
 			"[Tom's](subject/Solar System/tom)",
-			`<p><a href="/subject/Solar%20System/tom" class="internal-link internal-link-missing" rel="nofollow">Tom&#39;s</a></p>`,
+			`<p><a href="/subject/Solar%20System" class="internal-link internal-link-missing" rel="nofollow">Tom&#39;s</a></p>`,
+		},
+		{
+			"a standard link with a title is not taken (review #7)",
+			`[Solar System](subject/Solar System "the system")`,
+			`<p>[Solar System](subject/Solar System &#34;the system&#34;)</p>`,
+		},
+		{
+			"a standard link without spaces and a title",
+			`[Solar](subject/Solar "the system")`,
+			`<p><a href="/repo/create?subject=Solar" title="the system" class="internal-link internal-link-missing" rel="nofollow">Solar</a></p>`,
+		},
+		{
+			"escaped parentheses in the name (review #25)",
+			`[Mercury](subject/Mercury \(planet\))`,
+			`<p><a href="/subject/Mercury%20%28planet%29" class="internal-link" rel="nofollow">Mercury</a></p>`,
+		},
+		{
+			"the app's own links keep their query (review #2)",
+			"[history](/subject/Solar%20System/pierre?version=abc)",
+			`<p><a href="/subject/Solar%20System/pierre?version=abc" class="internal-link" rel="nofollow">history</a></p>`,
 		},
 		{
 			"external link",
@@ -123,6 +147,39 @@ func TestRender_ForkanaInternalLinks(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			assert.Equal(t, c.expected, renderArticle(t, c.input))
 		})
+	}
+}
+
+func TestRender_ForkanaSpecialPagesOnlyInArticles(t *testing.T) {
+	defer test.MockVariableValue(&setting.AppURL, "https://forkana.example/")()
+	defer test.MockVariableValue(&setting.AppSubURL, "")()
+	withSubjects(t, "Moon")
+	// a comment or README: "security/…" is a file of the repository (review #3)
+	res, err := markdown.RenderString(markup.NewTestRenderContext("/user2/repo1/src/branch/main"), "[policy](security/README.md) [Moon](subject/Moon)")
+	require.NoError(t, err)
+	assert.Equal(t, `<p><a href="/user2/repo1/src/branch/main/security/README.md" rel="nofollow">policy</a> <a href="/subject/Moon" class="internal-link" rel="nofollow">Moon</a></p>`, strings.TrimSpace(string(res)))
+}
+
+// TestRender_InternalLinkParserIsLinear is the regression test of review #1: the parser runs at
+// every "[", and an unbounded scan of each candidate made this line quadratic.
+func TestRender_InternalLinkParserIsLinear(t *testing.T) {
+	for _, input := range []string{
+		strings.Repeat("[a]( ", 50000),
+		strings.Repeat("[a](subject/x ", 50000),
+		strings.Repeat("[", 100000),
+		"[a](subject/" + strings.Repeat("(", 100000),
+	} {
+		start := time.Now()
+		_, err := markdown.RenderString(markup.NewTestRenderContext(), input)
+		require.NoError(t, err)
+		assert.Less(t, time.Since(start), 5*time.Second)
+	}
+}
+
+func BenchmarkInternalLinkParserPathological(b *testing.B) {
+	input := strings.Repeat("[a]( ", 50000)
+	for b.Loop() {
+		_, _ = markdown.RenderString(markup.NewTestRenderContext(), input)
 	}
 }
 

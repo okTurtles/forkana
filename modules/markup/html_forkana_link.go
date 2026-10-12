@@ -27,7 +27,7 @@ import (
 // subject or an article that does not exist (yet) renders as a missing link
 // ("internal-link-missing", Wikipedia's red link) and leads to the creation of the subject.
 //
-// When the render marks external links (RenderOptions.MarkExternalLinks, set for articles),
+// When the render marks external links (RenderOptions.ForkanaArticle, set for articles),
 // every other http(s) link, which leaves Forkana, renders as an external link
 // ("external-link"), so readers know they are leaving.
 
@@ -58,31 +58,59 @@ type ForkanaInternalLink struct {
 	Owner   string
 }
 
+// instanceRelativePath returns the part of href after this instance's root when href is the
+// full URL of a page on this instance (the scheme and the host's case may differ from
+// AppURL's) or a path starting with AppSubURL + "/".
+func instanceRelativePath(href string) (rest string, ok bool) {
+	if strings.HasPrefix(href, setting.AppSubURL+"/") && !strings.HasPrefix(href, "//") {
+		return href[len(setting.AppSubURL)+1:], true
+	}
+	if !IsFullURLString(href) || setting.AppURL == "" {
+		return "", false
+	}
+	u, err := url.Parse(href)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", false
+	}
+	app, err := url.Parse(setting.AppURL)
+	if err != nil || !strings.EqualFold(u.Host, app.Host) {
+		return "", false
+	}
+	// keep the path as written (escaped), with its query and fragment
+	afterHost := href[strings.Index(href, "://")+3+len(u.Host):]
+	prefix := strings.TrimSuffix(app.Path, "/") + "/"
+	if !strings.HasPrefix(afterHost, prefix) {
+		return "", false
+	}
+	return afterHost[len(prefix):], true
+}
+
 // ParseForkanaInternalLink parses href as a Forkana internal link: a root-relative path whose
 // first segment is in ForkanaInternalLinkRoots ("subject/Solar System"), the same path with
 // a leading AppSubURL ("/subject/Solar%20System"), or the full URL of such a page on this
 // instance (AppURL + "subject/Solar%20System"). Segments may be written escaped or not.
-func ParseForkanaInternalLink(href string) (link ForkanaInternalLink, ok bool) {
-	var rest string
-	switch {
-	case setting.AppURL != "" && strings.HasPrefix(href, setting.AppURL):
-		rest = href[len(setting.AppURL):]
-	case strings.HasPrefix(href, setting.AppSubURL+"/"):
-		rest = href[len(setting.AppSubURL)+1:]
-	case IsFullURLString(href) || strings.HasPrefix(href, "/") || strings.HasPrefix(href, "#") || strings.HasPrefix(href, "?"):
-		return link, false
-	default:
+// Unless specialPages is set (articles), only "subject" links are internal links: elsewhere a
+// relative "about" or "security/README.md" is a link to a file of the repository.
+func ParseForkanaInternalLink(href string, specialPages bool) (link ForkanaInternalLink, ok bool) {
+	rest, urlForm := instanceRelativePath(href)
+	if !urlForm {
+		if IsFullURLString(href) || strings.HasPrefix(href, "/") || strings.HasPrefix(href, "#") || strings.HasPrefix(href, "?") {
+			return link, false
+		}
 		rest = href
 	}
 
 	rest, link.Suffix = splitFragment(rest)
-	if i := strings.IndexByte(rest, '?'); i >= 0 && !strings.HasPrefix(rest, "subject/") {
-		// a query on a special page is kept as is; subject names may contain "?" (it is
-		// escaped below), so a subject link has no query
+	// In a URL or an absolute path, "?" starts the query (a "?" in a subject name is written
+	// "%3F"); only the hand-written "subject/Name" form may have a "?" in the name.
+	if i := strings.IndexByte(rest, '?'); i >= 0 && (urlForm || !strings.HasPrefix(rest, "subject/")) {
 		rest, link.Suffix = rest[:i], rest[i:]+link.Suffix
 	}
 	segments := strings.Split(strings.TrimSuffix(rest, "/"), "/")
 	if len(segments) == 0 || !ForkanaInternalLinkRoots.Contains(segments[0]) {
+		return link, false
+	}
+	if segments[0] != "subject" && !specialPages {
 		return link, false
 	}
 
@@ -108,6 +136,9 @@ func ParseForkanaInternalLink(href string) (link ForkanaInternalLink, ok bool) {
 	if segments[0] == "subject" && link.Subject == "" {
 		return link, false // "subject" alone is not a page
 	}
+	if len(segments) > 2 && segments[0] == "subject" && segments[2] == "compare" {
+		link.Owner = "" // "subject/X/compare/…" is a page of the subject, not an article
+	}
 	link.Path = strings.Join(escaped, "/")
 	return link, true
 }
@@ -124,12 +155,16 @@ func isExternalLink(href string) bool {
 	if !IsFullURLString(href) {
 		return false
 	}
-	if setting.AppURL != "" && strings.HasPrefix(href, setting.AppURL) {
+	if _, onInstance := instanceRelativePath(href); onInstance {
 		return false
 	}
 	lower := strings.ToLower(href)
 	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
 }
+
+// maxSubjectLinkLookups bounds the existence checks of a render (each costs database
+// queries): the links after that many distinct ones are taken as existing.
+const maxSubjectLinkLookups = 100
 
 // isForkanaSubjectLinkExisting reports whether the subject (or the owner's article on it) a
 // link points to exists, asking the render helper and caching the answer for the render.
@@ -140,6 +175,9 @@ func (ctx *RenderContext) isForkanaSubjectLinkExisting(subject, owner string) bo
 	key := subject + "\x00" + owner
 	if exists, ok := ctx.subjectLinkExists[key]; ok {
 		return exists
+	}
+	if len(ctx.subjectLinkExists) >= maxSubjectLinkLookups {
+		return true
 	}
 	exists := DefaultRenderHelperFuncs.IsSubjectLinkExisting(ctx, subject, owner)
 	if ctx.subjectLinkExists == nil {
@@ -160,29 +198,43 @@ func anchorContainsImage(node *html.Node) bool {
 	return false
 }
 
+// addClass adds a class to the node, after the safe class it may already have.
+func addClass(ctx *RenderContext, node *html.Node, class string) {
+	key := ctx.RenderInternal.SafeAttr("class")
+	for i, attr := range node.Attr {
+		if attr.Key == key {
+			node.Attr[i].Val += " " + class
+			return
+		}
+	}
+	node.Attr = append(node.Attr, ctx.RenderInternal.NodeSafeAttr("class", class))
+}
+
 // processForkanaLink resolves a Forkana internal link to the instance root and marks it, or
 // marks an external link. It returns false when href is neither (the caller resolves it).
 func processForkanaLink(ctx *RenderContext, node *html.Node, idx int, href string) bool {
-	if link, ok := ParseForkanaInternalLink(href); ok {
+	if link, ok := ParseForkanaInternalLink(href, ctx.RenderOptions.ForkanaArticle); ok {
 		class := internalLinkClass
-		if link.Subject != "" && !ctx.isForkanaSubjectLinkExisting(link.Subject, link.Owner) {
+		switch {
+		case link.Subject != "" && !ctx.isForkanaSubjectLinkExisting(link.Subject, link.Owner):
 			class = internalLinkMissingClass
-			if link.Owner == "" {
+			if link.Owner != "" && ctx.isForkanaSubjectLinkExisting(link.Subject, "") {
+				// the author has no article on the subject: show the subject's articles
+				node.Attr[idx].Val = ctx.ResolveLinkRoot("subject/" + url.PathEscape(link.Subject))
+			} else {
 				// Wikipedia's red link leads to the creation of the page
 				node.Attr[idx].Val = ctx.ResolveLinkRoot("repo/create?subject=" + url.QueryEscape(link.Subject))
-			} else {
-				node.Attr[idx].Val = ctx.ResolveLinkRoot(link.Path) + link.Suffix
 			}
-		} else if IsFullURLString(href) {
+		case IsFullURLString(href):
 			node.Attr[idx].Val = href // already the page's URL on this instance
-		} else {
+		default:
 			node.Attr[idx].Val = ctx.ResolveLinkRoot(link.Path) + link.Suffix
 		}
-		node.Attr = append(node.Attr, ctx.RenderInternal.NodeSafeAttr("class", class))
+		addClass(ctx, node, class)
 		return true
 	}
-	if ctx.RenderOptions.MarkExternalLinks && isExternalLink(href) && !anchorContainsImage(node) {
-		node.Attr = append(node.Attr, ctx.RenderInternal.NodeSafeAttr("class", externalLinkClass))
+	if ctx.RenderOptions.ForkanaArticle && isExternalLink(href) && !anchorContainsImage(node) {
+		addClass(ctx, node, externalLinkClass)
 	}
 	return false
 }

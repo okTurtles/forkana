@@ -53,9 +53,11 @@ type RenderOptions struct {
 	// used by external render. the router "/org/repo/render/..." will output the rendered content in a standalone page
 	InStandalonePage bool
 
-	// MarkExternalLinks gives the links that leave this instance the "external-link" class,
-	// so an article shows its readers which links leave Forkana (issue #399).
-	MarkExternalLinks bool
+	// ForkanaArticle is set when rendering an article (a repository file): links that leave
+	// this instance get the "external-link" class, and the Forkana special pages ("about",
+	// "community-notes", …) can be linked with a relative path (issue #399). Elsewhere only
+	// "subject/…" links are Forkana internal links.
+	ForkanaArticle bool
 }
 
 // RenderContext represents a render context
