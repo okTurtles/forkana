@@ -161,18 +161,28 @@ func TestRender_ForkanaSpecialPagesOnlyInArticles(t *testing.T) {
 }
 
 // TestRender_InternalLinkParserIsLinear is the regression test of review #1: the parser runs at
-// every "[", and an unbounded scan of each candidate made this line quadratic.
+// every "[", and an unbounded scan of each candidate made this line quadratic. It compares the
+// render time of an input with that of an input 4 times longer (4x when linear, 16x when
+// quadratic) rather than using a fixed budget, which CI's race detector makes unreliable.
 func TestRender_InternalLinkParserIsLinear(t *testing.T) {
-	for _, input := range []string{
-		strings.Repeat("[a]( ", 50000),
-		strings.Repeat("[a](subject/x ", 50000),
-		strings.Repeat("[", 100000),
-		"[a](subject/" + strings.Repeat("(", 100000),
-	} {
+	render := func(input string) time.Duration {
 		start := time.Now()
 		_, err := markdown.RenderString(markup.NewTestRenderContext(), input)
 		require.NoError(t, err)
-		assert.Less(t, time.Since(start), 5*time.Second)
+		return time.Since(start)
+	}
+	for name, build := range map[string]func(n int) string{
+		"empty destinations": func(n int) string { return strings.Repeat("[a]( ", n) },
+		"unclosed subject":   func(n int) string { return strings.Repeat("[a](subject/x ", n) },
+		"brackets":           func(n int) string { return strings.Repeat("[", 2*n) },
+		"nested parentheses": func(n int) string { return "[a](subject/" + strings.Repeat("(", 2*n) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			small, large := build(12500), build(50000)
+			render(small) // warm up
+			base := max(render(small), 20*time.Millisecond)
+			assert.Less(t, render(large), 10*base)
+		})
 	}
 }
 

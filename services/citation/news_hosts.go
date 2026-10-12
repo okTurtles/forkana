@@ -4,10 +4,11 @@
 package citation
 
 import (
-	_ "embed"
 	"net/url"
 	"strings"
 	"sync"
+
+	_ "embed"
 
 	"code.gitea.io/gitea/modules/json"
 )
