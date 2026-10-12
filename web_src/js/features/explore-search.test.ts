@@ -162,10 +162,10 @@ function typeInto(field: HTMLInputElement, text: string): void {
 }
 
 // Follow a tab link the way a click does, minus the navigation happy-dom cannot perform.
-function switchTo(name: string): void {
+function switchTo(name: string, init: MouseEventInit = {}): void {
   const tabLink = document.querySelector<HTMLAnchorElement>(`a[href*="/explore/${name}"]`);
   tabLink.addEventListener('click', (e) => e.preventDefault());
-  tabLink.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+  tabLink.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, ...init}));
 }
 
 describe('each explore tab keeps its own search', () => {
@@ -210,5 +210,19 @@ describe('each explore tab keeps its own search', () => {
     typeInto(field, 'forest');
     // loaded from its address, the home page search or a bookmark: the address says what to show
     expect(mountExploreTab('subjects', 'mars').value).toEqual('mars');
+  });
+
+  test('a tab opened elsewhere with a modified or middle click is not a switch', () => {
+    const field = mountExploreTab('subjects', 'mars');
+    typeInto(field, 'forest');
+    for (const init of [{metaKey: true}, {ctrlKey: true}, {shiftKey: true}, {altKey: true}, {button: 1}]) {
+      switchTo('subjects', init);
+      // later loaded from its address, the tab shows what the address says, not the draft
+      expect(mountExploreTab('subjects', 'mars').value).toEqual('mars');
+      typeInto(document.querySelector<HTMLInputElement>('input[name="q"]'), 'forest');
+    }
+    // while a plain click does restore it
+    switchTo('subjects');
+    expect(mountExploreTab('subjects', 'mars').value).toEqual('forest');
   });
 });

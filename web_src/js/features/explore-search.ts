@@ -99,7 +99,7 @@ function initExploreTabSearches(): void {
   storageRemove(switchStorageKey);
 
   const stored = loadTabSearch(activePath);
-  if (switchedHere && stored?.query === renderedKeyword && stored.draft !== renderedKeyword) {
+  if (switchedHere && stored?.query === renderedKeyword) {
     searchInput.value = stored.draft; // shown as it was left, searched on Enter like any typed text
   }
   const saveDraft = () => saveTabSearch(activePath, {query: renderedKeyword, draft: searchInput.value.trim()});
@@ -113,8 +113,14 @@ function initExploreTabSearches(): void {
     if (e.persisted) updateInactiveTabLinks();
   });
 
+  // Only a plain primary click switches tabs in this browser tab. A middle click or a modified one
+  // (Cmd/Ctrl/Shift/Alt) opens or downloads the link elsewhere, and recording it here would leave a
+  // stale flag behind that could later restore a draft over what an address asks for.
   queryElems<HTMLAnchorElement>(document, tabLinkSelector, (tabLink) => {
-    tabLink.addEventListener('click', () => storageSet(switchStorageKey, tabPath(tabLink)));
+    tabLink.addEventListener('click', (e: MouseEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      storageSet(switchStorageKey, tabPath(tabLink));
+    });
   });
 }
 
