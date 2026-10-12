@@ -5,10 +5,11 @@ package citation
 
 import (
 	_ "embed"
-	"encoding/json"
 	"net/url"
 	"strings"
 	"sync"
+
+	"code.gitea.io/gitea/modules/json"
 )
 
 // newsHostsJSON lists the hosts of well-known news publications: a page there is cited as a
