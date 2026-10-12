@@ -1,0 +1,461 @@
+/* Internal links, references and the editor's link and cite tools (issue #399).
+   Values from the Figma page "#399 Internal Link and External Reference Link handling"
+   (canvas 6503:57320); the node of each value is given next to it. */
+
+:root {
+  --color-citation-accent: #4e40fa;          /* links and [n] markers, 6597:45559 */
+  --color-citation-missing: #d1242f;         /* red link, "Chang'e 4" 6597:45563 */
+  --color-citation-highlight: #eef2ff;       /* Cite/marker 6597:45564, Reference row 6597:45573 */
+  --color-citation-chip-border: #dad5ff;     /* selected Chip 6597:45570 */
+  --color-citation-website: #006edb;         /* Source summary bar 6597:45570 */
+  --color-citation-news: #179b9b;
+  --color-citation-other: #9d615c;
+  --color-citation-balanced: #1a7f37;
+  --color-citation-warning: #9a6700;
+  --color-citation-archived-bg: #fff8c5;     /* "Archived copy" chip 6597:45562 */
+  --color-citation-archived-border: #d4a72c66;
+  --color-citation-banner: #eeeeff;          /* Link popover banner 6597:45396 */
+  --color-citation-muted: #59636e;
+  --color-citation-faint: #9ca3af;           /* "URL detected" footnote 6597:44313 */
+  --color-citation-skeleton: #eef0f3;
+  --color-citation-border: #d1d9e0;
+  --color-citation-text: #1f2328;
+  --color-citation-surface: #ffffff;
+  --color-citation-surface-muted: #f6f8fa;   /* preview box 6597:44669 */
+  --color-citation-backdrop: #1f2328;        /* M1 backdrop, opacity 0.35 */
+  --color-citation-dialog-scrim: #59636ecc;  /* "Rectangle 78" behind Add citation 6597:44667 */
+  --shadow-citation-card: 0 10px 30px rgba(18, 23, 38, 0.12), 0 2px 6px rgba(18, 23, 38, 0.06);
+  --shadow-citation-popover: 0 6px 18px rgba(37, 41, 46, 0.12), 0 6px 12px -3px rgba(37, 41, 46, 0.04), 0 0 0 1px rgba(209, 217, 224, 0.5);
+}
+
+[data-theme="gitea-dark"],
+[data-theme="gitea-dark-protanopia-deuteranopia"] {
+  --color-citation-accent: #8c83ff;
+  --color-citation-missing: #f85149;
+  --color-citation-highlight: #4e40fa33;
+  --color-citation-chip-border: #4e40fa80;
+  --color-citation-balanced: #3fb950;
+  --color-citation-warning: #d29922;
+  --color-citation-archived-bg: #bb800926;
+  --color-citation-archived-border: #bb800966;
+  --color-citation-banner: #4e40fa26;
+  --color-citation-muted: #8d96a0;
+  --color-citation-faint: #6e7681;
+  --color-citation-skeleton: #2d333b;
+  --color-citation-border: #3d444d;
+  --color-citation-text: #e6edf3;
+  --color-citation-surface: #151b23;
+  --color-citation-surface-muted: #1f2428;
+  --color-citation-backdrop: #010409;
+  --color-citation-dialog-scrim: #010409cc;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="gitea-auto"],
+  [data-theme="gitea-auto-protanopia-deuteranopia"] {
+    --color-citation-accent: #8c83ff;
+    --color-citation-missing: #f85149;
+    --color-citation-highlight: #4e40fa33;
+    --color-citation-chip-border: #4e40fa80;
+    --color-citation-balanced: #3fb950;
+    --color-citation-warning: #d29922;
+    --color-citation-archived-bg: #bb800926;
+    --color-citation-archived-border: #bb800966;
+    --color-citation-banner: #4e40fa26;
+    --color-citation-muted: #8d96a0;
+    --color-citation-faint: #6e7681;
+    --color-citation-skeleton: #2d333b;
+    --color-citation-border: #3d444d;
+    --color-citation-text: #e6edf3;
+    --color-citation-surface: #151b23;
+    --color-citation-surface-muted: #1f2428;
+    --color-citation-backdrop: #010409;
+    --color-citation-dialog-scrim: #010409cc;
+  }
+}
+
+/* ---------- links in an article ---------- */
+
+/* "Purple text opens a Forkana subject" (6597:45584) */
+.markup a.internal-link {
+  color: var(--color-citation-accent);
+  text-decoration: none;
+}
+
+.markup a.internal-link:hover {
+  text-decoration: underline;
+}
+
+/* a subject that does not exist yet: Wikipedia's red link (6597:45650) */
+.markup a.internal-link-missing {
+  color: var(--color-citation-missing);
+}
+
+/* "Plain external links get the external-link icon so readers know they're leaving"
+   (6597:45588); the reference titles carry the same "↗" (Reference row 6597:45572). */
+.markup a.external-link::after {
+  content: "\2197";
+  margin-left: 0.15em;
+  font-size: 0.85em;
+  text-decoration: none;
+  display: inline-block;
+}
+
+/* ---------- [n] markers ---------- */
+
+.markup sup.footnote-ref {
+  font-size: 0.75em;
+  line-height: 0;
+  vertical-align: super;
+  scroll-margin-top: 80px;
+}
+
+.markup sup.footnote-ref a {
+  color: var(--color-citation-accent);
+  text-decoration: none;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.markup sup.footnote-ref a:hover {
+  text-decoration: underline;
+}
+
+/* the selected marker: Cite/marker 6597:45564, fill #eef2ff radius 3 padding 0/2 */
+.markup sup.footnote-ref:target a,
+.markup sup.footnote-ref.is-active a {
+  background: var(--color-citation-highlight);
+}
+
+/* ---------- References ---------- */
+
+.markup .footnotes {
+  margin-top: 32px;
+}
+
+/* "Frame 219" 6597:45566: top border #d1d9e0 @0.70, padding 16/0/8/0, the count on the right */
+.markup .footnotes-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--color-citation-border);
+  padding: 16px 0 8px;
+  margin-bottom: 12px;
+}
+
+.markup .footnotes > .footnotes-heading,
+.markup .footnotes-header > .footnotes-heading {
+  font-size: 20px;
+  line-height: 32px;
+  font-weight: 700;
+  color: var(--color-citation-text);
+  border-bottom: none;
+  margin: 0;
+  padding: 0;
+}
+
+.markup .footnotes > .footnotes-heading {
+  border-top: 1px solid var(--color-citation-border);
+  padding-top: 16px;
+  margin-bottom: 12px;
+}
+
+.markup .footnotes-count {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-citation-muted);
+  white-space: nowrap;
+}
+
+/* Reference list 6597:45571: rows gap 2, padding 5/6, radius 6; number 13/21 right-aligned
+   in 24px, citation 12/18 */
+.markup .footnotes > ol {
+  list-style: none;
+  counter-reset: reference;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.markup .footnotes > ol > li {
+  counter-increment: reference;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  column-gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-citation-text);
+  scroll-margin-top: 80px;
+  margin: 0;
+}
+
+.markup .footnotes > ol > li[hidden] {
+  display: none;
+}
+
+.markup .footnotes > ol > li::before {
+  content: counter(reference) ".";
+  grid-column: 1;
+  text-align: right;
+  font-size: 13px;
+  line-height: 21px;
+  color: var(--color-citation-muted);
+}
+
+.markup .footnotes > ol > li > * {
+  grid-column: 2;
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.markup .footnotes > ol > li > :first-child {
+  padding-top: 1.5px; /* line up the 18px text with the 21px number */
+}
+
+.markup .footnotes > ol > li:target {
+  background: var(--color-citation-highlight);
+}
+
+.markup .footnotes a {
+  color: var(--color-citation-accent);
+}
+
+/* "^ a b" (Reference row 6597:45577): "^" semibold, the letters regular */
+.markup .footnote-backrefs {
+  color: var(--color-citation-accent);
+  font-weight: 600;
+}
+
+.markup .footnote-backrefs a {
+  text-decoration: none;
+  font-weight: 400;
+}
+
+.markup .footnote-backrefs a:only-child {
+  font-weight: 600;
+}
+
+/* ---------- Source summary (6597:45570) ---------- */
+
+.citation-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 18px;
+  border: 1px solid var(--color-citation-border);
+  border-radius: 8px;
+  background: var(--color-citation-surface);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.citation-summary-title {
+  font-weight: 600;
+  color: var(--color-citation-text);
+}
+
+.citation-summary-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.citation-summary-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.citation-summary-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--color-citation-muted);
+}
+
+.citation-summary-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.citation-summary-swatch {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.citation-summary-balance {
+  color: var(--color-citation-balanced);
+}
+
+.citation-summary-balance.is-dominated {
+  color: var(--color-citation-warning);
+}
+
+.citation-summary-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Chip 6597:42644 / 6597:42652: padding 2/8, radius 999, 12/18 semibold */
+.citation-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-citation-border);
+  background: var(--color-citation-surface);
+  color: var(--color-citation-muted);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+button.citation-chip {
+  cursor: pointer;
+}
+
+.citation-chip[aria-pressed="true"] {
+  background: var(--color-citation-highlight);
+  border-color: var(--color-citation-chip-border);
+  color: var(--color-citation-accent);
+}
+
+.citation-chip-archived {
+  background: var(--color-citation-archived-bg);
+  border-color: var(--color-citation-archived-border);
+  color: var(--color-citation-warning);
+}
+
+/* ---------- Hover card (6597:45562) and bottom sheet (6597:45407) ---------- */
+
+.citation-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-citation-text);
+}
+
+.citation-hover-card {
+  position: absolute;
+  z-index: 1000;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background: var(--color-citation-surface);
+  border: 1px solid var(--color-citation-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-citation-card);
+}
+
+.citation-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+}
+
+.citation-card-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--color-citation-muted);
+}
+
+.citation-card-text {
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.citation-card-text a {
+  color: var(--color-citation-accent);
+}
+
+.citation-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 12px;
+  line-height: 15px;
+}
+
+.citation-card-links {
+  display: inline-flex;
+  gap: 14px;
+}
+
+.citation-card-action {
+  color: var(--color-citation-accent);
+  font-weight: 500;
+}
+
+.citation-card-uses {
+  color: var(--color-citation-muted);
+}
+
+.citation-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  background: color-mix(in srgb, var(--color-citation-backdrop) 35%, transparent);
+}
+
+/* Bottom sheet 6597:45407: radius 16/16/0/0, padding 10/16/34/16, gap 12, handle 36×4 */
+.citation-sheet {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 34px;
+  background: var(--color-citation-surface);
+  border-radius: 16px 16px 0 0;
+}
+
+.citation-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-citation-border);
+}
+
+.citation-card-sheet {
+  width: 100%;
+  padding: 12px 0;
+}
+
+.citation-card-sheet .citation-card-type {
+  font-weight: 400;
+  gap: 6px;
+}
+
+.citation-card-sheet .citation-card-actions,
+.citation-card-sheet .citation-card-links {
+  gap: 16px;
+  line-height: 18px;
+}
+
+.citation-card-sheet .citation-card-action {
+  font-weight: 600;
+}
