@@ -26,8 +26,8 @@ func TestPullViewChangeRequestTitleDesc(t *testing.T) {
 		absent   []string
 	}{
 		{user: "user1", contains: "You want to make", absent: []string{"wants to make"}},
-		{user: "user2", contains: "changes to your article", absent: []string{"You want to make", "changes to the article"}},
-		{user: "user4", contains: "changes to the article", absent: []string{"You want to make", "changes to your article"}},
+		{user: "user2", contains: "changes to your article", absent: []string{"You want to make", "changes to this article"}},
+		{user: "user4", contains: "changes to this article", absent: []string{"You want to make", "changes to your article"}},
 	}
 
 	for _, c := range cases {
@@ -36,11 +36,18 @@ func TestPullViewChangeRequestTitleDesc(t *testing.T) {
 			req := NewRequest(t, "GET", "/user2/repo1/pulls/3")
 			resp := session.MakeRequest(t, req, http.StatusOK)
 			// Scope the assertions to the header element so unrelated page copy cannot affect them.
-			desc := NewHTMLParser(t, resp.Body).Find("#pull-desc-display").Text()
+			htmlDoc := NewHTMLParser(t, resp.Body)
+			desc := htmlDoc.Find("#pull-desc-display").Text()
 			assert.Contains(t, desc, c.contains)
 			for _, absent := range c.absent {
 				assert.NotContains(t, desc, absent)
 			}
+			// #326: the line no longer names the article, the title above links to it instead
+			assert.NotContains(t, desc, "user2/repo1")
+			assert.Equal(t, 0, htmlDoc.Find("#pull-desc-display .article-ref-pill").Length())
+			title := htmlDoc.Find(".pr-repo-title a#pr-article-link")
+			assert.Equal(t, "user2 / example-subject", strings.TrimSpace(title.Text()))
+			assert.Equal(t, "/subject/example-subject/user2", title.AttrOr("href", ""))
 		})
 	}
 }
@@ -56,8 +63,8 @@ func TestPullViewChangeRequestTitleDescPlural(t *testing.T) {
 		contains string
 	}{
 		{user: "user2", contains: "1 change to your article"},
-		{user: "user1", contains: "You want to make 1 change to the article"},
-		{user: "user4", contains: "1 change to the article"},
+		{user: "user1", contains: "You want to make 1 change to this article"},
+		{user: "user4", contains: "1 change to this article"},
 	}
 
 	for _, c := range cases {

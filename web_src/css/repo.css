@@ -264,22 +264,22 @@ td .commit-summary {
   text-decoration: underline;
 }
 
+/* #326: the title links back to the article, so it is drawn as a link, in the
+   primary colour, semibold 16px/24px (figma node 662:109913) */
 .pr-repo-title {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 24px;
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text);
 }
 
 .pr-repo-title a {
-  color: var(--color-text);
+  color: var(--color-primary);
 }
 
 .pr-repo-title a:hover {
   text-decoration: underline;
-  color: var(--color-primary);
 }
 
 .fork-flag {

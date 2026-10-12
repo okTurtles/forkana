@@ -90,19 +90,6 @@
   font-weight: var(--font-weight-medium);
 }
 
-/* #4 — Article reference pill in merge info */
-.article-ref-pill {
-  display: inline-block;
-  padding: 2px 10px;
-  border: none;
-  border-radius: 6px;
-  font-weight: var(--font-weight-medium);
-  font-size: 0.85em;
-  background: var(--color-diff-added-row-bg);
-  color: var(--color-primary);
-  vertical-align: middle;
-}
-
 /* #5 — Tab count: plain inline number instead of badge circle */
 .issue-content .tabular.menu .item .ui.label {
   background: transparent !important;

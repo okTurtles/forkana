@@ -21,7 +21,9 @@
 			{{end}}
 			*/}}
 			{{if not ctx.Consts.RepoUnitTypePullRequests.UnitGlobalDisabled}}
-				{{/* #386 item 3: no "View modes" label before the link */}}
+				{{/* #386 item 3, #326: no "View modes" entry; the Bubble/Table/Article tabs under the
+				     subject title already switch views, and a change request page links back to its
+				     article from its title */}}
 				<a class="item{{if .PageIsPullList}} navbar-pill-active{{end}}" href="{{AppSubUrl}}/pulls">{{ctx.Locale.Tr "pull_requests"}}</a>
 			{{end}}
 			{{/* Milestones link hidden - not used in Forkana
