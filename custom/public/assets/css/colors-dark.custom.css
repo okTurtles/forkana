@@ -80,6 +80,8 @@
   --color-button-text: #e6edf3;
   --color-button-text-disabled: #6e7681;
   --color-button-border-disabled: #6e76811a;
+  --color-button-secondary-hover-bg: #30363d;
+  --color-button-secondary-active-bg: #282e33;
 
   /* Border colors */
   --color-border: #30363d;
@@ -192,6 +194,8 @@
     --color-button-text: #e6edf3;
     --color-button-text-disabled: #6e7681;
     --color-button-border-disabled: #6e76811a;
+    --color-button-secondary-hover-bg: #30363d;
+    --color-button-secondary-active-bg: #282e33;
 
     /* Border colors */
     --color-border: #30363d;
