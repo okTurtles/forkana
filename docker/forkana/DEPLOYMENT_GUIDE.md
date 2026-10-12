@@ -1182,7 +1182,7 @@ A section name containing `.` is written with `_0X2E_`, for example
 - `reconcile_article_attachments` runs daily. It only adds associations that are missing; it never removes one.
 - `gc_article_attachments` runs daily. It deletes article attachments that nothing references once they are older than `OLDER_THAN` (`168h`). Until the backfill below has been finalized, each run is skipped and logs why, because a live attachment may still be missing its association.
 
-Editor uploads that no commit has claimed yet are also bounded per uploader by `[attachment]` `ARTICLE_MAX_PENDING_FILES` (20), `ARTICLE_MAX_PENDING_SIZE` (100 MB) and `ARTICLE_UPLOAD_RATE_LIMIT` (10 per `ARTICLE_UPLOAD_RATE_WINDOW`, 1 minute). Site administrators are exempt. To see the abandoned uploads waiting for the collector:
+Editor uploads that no commit has claimed yet are also bounded per uploader by `[attachment]` `ARTICLE_MAX_PENDING_FILES` (20), `ARTICLE_MAX_PENDING_SIZE` (100 MB) and `ARTICLE_UPLOAD_RATE_LIMIT` (10 per `ARTICLE_UPLOAD_RATE_WINDOW`, 1 minute). Site administrators are exempt. These limits hold within one process: if several Forkana containers serve the same instance, set `[global_lock]` `SERVICE_TYPE = redis` so that they are enforced across all of them. To see the abandoned uploads waiting for the collector:
 
 ```bash
 $COMPOSE exec forkana gitea doctor check --run article-attachments-pending
