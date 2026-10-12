@@ -22,7 +22,7 @@ var microcmdBackfillArticleAttachments = &cli.Command{
 
 The run is idempotent and restartable, so it is safe to run it again after a failure or an interruption; use --start-repo-id to resume where the previous run stopped.
 
-Once a --verify run reports nothing outstanding, no unreadable repositories and no capped histories, --finalize switches attachment authorization to associations only. Enable the gc_article_attachments cron task afterwards, never before.
+Once a --verify run reports nothing outstanding, no unreadable repositories and no capped histories, --finalize switches attachment authorization to associations only, which also lets the gc_article_attachments cron task start collecting abandoned uploads.
 
 A capped history means the scan stopped before the oldest revisions of an article; re-run with a higher --max-history-blobs to read them.`,
 	Flags: []cli.Flag{

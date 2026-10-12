@@ -18,7 +18,9 @@ import (
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/gitrepo"
+	"code.gitea.io/gitea/modules/setting"
 	api "code.gitea.io/gitea/modules/structs"
+	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -359,5 +361,15 @@ func TestAPIUploadAssetRelease(t *testing.T) {
 
 		assert.Equal(t, "stream.bin", attachment.Name)
 		assert.EqualValues(t, 104, attachment.Size)
+	})
+
+	t.Run("application/octet-stream too large", func(t *testing.T) {
+		defer tests.PrintCurrentTest(t)()
+		defer test.MockVariableValue(&setting.Attachment.MaxSize, 1)()
+
+		// a raw body has no declared size, so the limit is only hit while storing it
+		req := NewRequestWithBody(t, http.MethodPost, assetURL+"?name=big.bin", bytes.NewReader(bytes.Repeat([]byte("a"), 1<<20+1))).
+			AddTokenAuth(token)
+		MakeRequest(t, req, http.StatusRequestEntityTooLarge)
 	})
 }

@@ -5,6 +5,7 @@ package setting
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -130,4 +131,28 @@ STORAGE_TYPE = minio
 	assert.EqualValues(t, "minio", Attachment.Storage.Type)
 	assert.Equal(t, "gitea", Attachment.Storage.MinioConfig.Bucket)
 	assert.Equal(t, "attachments/", Attachment.Storage.MinioConfig.BasePath)
+}
+
+func Test_loadAttachmentArticleLimits(t *testing.T) {
+	cfg, err := NewConfigProviderFromData(``)
+	assert.NoError(t, err)
+	assert.NoError(t, loadAttachmentFrom(cfg))
+	assert.EqualValues(t, 20, Attachment.ArticleMaxPendingFiles)
+	assert.EqualValues(t, 100, Attachment.ArticleMaxPendingSize)
+	assert.EqualValues(t, 10, Attachment.ArticleUploadRateLimit)
+	assert.Equal(t, time.Minute, Attachment.ArticleUploadRateWindow)
+
+	cfg, err = NewConfigProviderFromData(`
+[attachment]
+ARTICLE_MAX_PENDING_FILES = 0
+ARTICLE_MAX_PENDING_SIZE = 5
+ARTICLE_UPLOAD_RATE_LIMIT = 3
+ARTICLE_UPLOAD_RATE_WINDOW = 30s
+`)
+	assert.NoError(t, err)
+	assert.NoError(t, loadAttachmentFrom(cfg))
+	assert.EqualValues(t, 0, Attachment.ArticleMaxPendingFiles)
+	assert.EqualValues(t, 5, Attachment.ArticleMaxPendingSize)
+	assert.EqualValues(t, 3, Attachment.ArticleUploadRateLimit)
+	assert.Equal(t, 30*time.Second, Attachment.ArticleUploadRateWindow)
 }

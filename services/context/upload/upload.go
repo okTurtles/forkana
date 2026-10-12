@@ -4,6 +4,7 @@
 package upload
 
 import (
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
@@ -25,10 +26,10 @@ type ErrFileTooLarge struct {
 	MaxMB int64
 }
 
-// IsErrFileTooLarge checks if an error is ErrFileTooLarge.
+// IsErrFileTooLarge checks if an error is ErrFileTooLarge. It unwraps, because the limit
+// may only be hit while the upload is being stored, and the storage error is wrapped.
 func IsErrFileTooLarge(err error) bool {
-	_, ok := err.(ErrFileTooLarge)
-	return ok
+	return errors.As(err, new(ErrFileTooLarge))
 }
 
 func (err ErrFileTooLarge) Error() string {
