@@ -58,3 +58,14 @@ func TestCleanValue(t *testing.T) {
 		assert.Equal(t, []byte(test.expect), CleanValue([]byte(test.param)), test.param)
 	}
 }
+
+func TestFootnoteBackLinkLetter(t *testing.T) {
+	for n, want := range map[int]string{1: "a", 2: "b", 26: "z", 27: "aa", 28: "ab", 52: "az", 53: "ba"} {
+		assert.Equal(t, want, FootnoteBackLinkLetter(n), n)
+	}
+}
+
+func TestFootnoteRefID(t *testing.T) {
+	assert.Equal(t, "fnref:user-content-1", FootnoteRefID([]byte("user-content-1"), 1))
+	assert.Equal(t, "fnref:user-content-1:3", FootnoteRefID([]byte("user-content-1"), 3))
+}

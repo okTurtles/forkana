@@ -52,6 +52,10 @@ type RenderOptions struct {
 
 	// used by external render. the router "/org/repo/render/..." will output the rendered content in a standalone page
 	InStandalonePage bool
+
+	// MarkExternalLinks gives the links that leave this instance the "external-link" class,
+	// so an article shows its readers which links leave Forkana (issue #399).
+	MarkExternalLinks bool
 }
 
 // RenderContext represents a render context
@@ -66,6 +70,10 @@ type RenderContext struct {
 	RenderHelper   RenderHelper
 	RenderOptions  RenderOptions
 	RenderInternal internal.RenderInternal
+
+	// subjectLinkExists caches, for the render, whether the subjects (and articles) that
+	// Forkana internal links point to exist; see isForkanaSubjectLinkExisting.
+	subjectLinkExists map[string]bool
 }
 
 func (ctx *RenderContext) Deadline() (deadline time.Time, ok bool) {

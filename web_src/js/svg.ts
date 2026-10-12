@@ -10,6 +10,7 @@ import octiconArchive from '../../public/assets/img/svg/octicon-archive.svg';
 import octiconArrowSwitch from '../../public/assets/img/svg/octicon-arrow-switch.svg';
 import octiconBlocked from '../../public/assets/img/svg/octicon-blocked.svg';
 import octiconBold from '../../public/assets/img/svg/octicon-bold.svg';
+import octiconBook from '../../public/assets/img/svg/octicon-book.svg';
 import octiconCheck from '../../public/assets/img/svg/octicon-check.svg';
 import octiconCheckbox from '../../public/assets/img/svg/octicon-checkbox.svg';
 import octiconCheckCircleFill from '../../public/assets/img/svg/octicon-check-circle-fill.svg';
@@ -40,6 +41,8 @@ import octiconGitMerge from '../../public/assets/img/svg/octicon-git-merge.svg';
 import octiconGitPullRequest from '../../public/assets/img/svg/octicon-git-pull-request.svg';
 import octiconGitPullRequestClosed from '../../public/assets/img/svg/octicon-git-pull-request-closed.svg';
 import octiconGitPullRequestDraft from '../../public/assets/img/svg/octicon-git-pull-request-draft.svg';
+import octiconGlobe from '../../public/assets/img/svg/octicon-globe.svg';
+import octiconGoal from '../../public/assets/img/svg/octicon-goal.svg';
 import octiconGrabber from '../../public/assets/img/svg/octicon-grabber.svg';
 import octiconHeading from '../../public/assets/img/svg/octicon-heading.svg';
 import octiconHorizontalRule from '../../public/assets/img/svg/octicon-horizontal-rule.svg';
@@ -49,16 +52,20 @@ import octiconIssueOpened from '../../public/assets/img/svg/octicon-issue-opened
 import octiconItalic from '../../public/assets/img/svg/octicon-italic.svg';
 import octiconKebabHorizontal from '../../public/assets/img/svg/octicon-kebab-horizontal.svg';
 import octiconLink from '../../public/assets/img/svg/octicon-link.svg';
+import octiconLinkExternal from '../../public/assets/img/svg/octicon-link-external.svg';
 import octiconListOrdered from '../../public/assets/img/svg/octicon-list-ordered.svg';
 import octiconListUnordered from '../../public/assets/img/svg/octicon-list-unordered.svg';
 import octiconLock from '../../public/assets/img/svg/octicon-lock.svg';
+import octiconLog from '../../public/assets/img/svg/octicon-log.svg';
 import octiconMeter from '../../public/assets/img/svg/octicon-meter.svg';
 import octiconMilestone from '../../public/assets/img/svg/octicon-milestone.svg';
 import octiconMirror from '../../public/assets/img/svg/octicon-mirror.svg';
 import octiconOrganization from '../../public/assets/img/svg/octicon-organization.svg';
+import octiconPencil from '../../public/assets/img/svg/octicon-pencil.svg';
 import octiconPlay from '../../public/assets/img/svg/octicon-play.svg';
 import octiconPlus from '../../public/assets/img/svg/octicon-plus.svg';
 import octiconProject from '../../public/assets/img/svg/octicon-project.svg';
+import octiconProjectRoadmap from '../../public/assets/img/svg/octicon-project-roadmap.svg';
 import octiconQuote from '../../public/assets/img/svg/octicon-quote.svg';
 import octiconRepo from '../../public/assets/img/svg/octicon-repo.svg';
 import octiconRepoForked from '../../public/assets/img/svg/octicon-repo-forked.svg';
@@ -90,6 +97,7 @@ const svgs = {
   'octicon-arrow-switch': octiconArrowSwitch,
   'octicon-blocked': octiconBlocked,
   'octicon-bold': octiconBold,
+  'octicon-book': octiconBook,
   'octicon-check': octiconCheck,
   'octicon-check-circle-fill': octiconCheckCircleFill,
   'octicon-checkbox': octiconCheckbox,
@@ -120,6 +128,8 @@ const svgs = {
   'octicon-git-pull-request': octiconGitPullRequest,
   'octicon-git-pull-request-closed': octiconGitPullRequestClosed,
   'octicon-git-pull-request-draft': octiconGitPullRequestDraft,
+  'octicon-globe': octiconGlobe,
+  'octicon-goal': octiconGoal,
   'octicon-grabber': octiconGrabber,
   'octicon-heading': octiconHeading,
   'octicon-horizontal-rule': octiconHorizontalRule,
@@ -129,16 +139,20 @@ const svgs = {
   'octicon-italic': octiconItalic,
   'octicon-kebab-horizontal': octiconKebabHorizontal,
   'octicon-link': octiconLink,
+  'octicon-link-external': octiconLinkExternal,
   'octicon-list-ordered': octiconListOrdered,
   'octicon-list-unordered': octiconListUnordered,
   'octicon-lock': octiconLock,
+  'octicon-log': octiconLog,
   'octicon-meter': octiconMeter,
   'octicon-milestone': octiconMilestone,
   'octicon-mirror': octiconMirror,
   'octicon-organization': octiconOrganization,
+  'octicon-pencil': octiconPencil,
   'octicon-play': octiconPlay,
   'octicon-plus': octiconPlus,
   'octicon-project': octiconProject,
+  'octicon-project-roadmap': octiconProjectRoadmap,
   'octicon-quote': octiconQuote,
   'octicon-repo': octiconRepo,
   'octicon-repo-forked': octiconRepoForked,

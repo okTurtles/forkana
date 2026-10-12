@@ -34,6 +34,7 @@ export function initMarkupAnchors(): void {
   for (const markupEl of markupEls) {
     // create link icons for markup headings, the resulting link href will remove `user-content-`
     for (const heading of markupEl.querySelectorAll('h1, h2, h3, h4, h5, h6')) {
+      if (!heading.id) continue; // e.g. the References heading of footnotes: nothing to link to
       const a = document.createElement('a');
       a.classList.add('anchor');
       a.setAttribute('href', `#${encodeURIComponent(removePrefix(heading.id))}`);
