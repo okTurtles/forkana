@@ -52,13 +52,20 @@ export function attachZoomGestures(el: HTMLElement, handlers: ZoomGestureHandler
   let lastCtrlWheelAt = -Infinity;
   const elsewhere = (t: EventTarget | null) => handlers.handledElsewhere?.(t) === true;
 
-  /* Bubble phase, so d3's listener on the <svg> has already run: a wheel it
-     zoomed is defaultPrevented and left alone. One it ignored (at the scale
-     limit) is cancelled here, so the page does not zoom in its place. */
+  /* Capture phase: every ctrl+wheel is seen here, including those d3 zooms.
+     d3-zoom's `noevent` calls stopImmediatePropagation, so a wheel it zoomed
+     never reaches the bubble-phase listener below, and the gesture path's
+     "already served by a wheel" check would miss it. */
+  const noteCtrlWheel = (ev: WheelEvent) => {
+    if (ev.ctrlKey) lastCtrlWheelAt = ev.timeStamp;
+  };
+
+  /* Bubble phase, after d3's listener on the <svg>: a wheel d3 zoomed has been
+     stopped and never gets here. One it ignored (at the scale limit) arrives,
+     and is cancelled here so the page does not zoom in its place. */
   const onWheel = (ev: WheelEvent) => {
     if (!ev.ctrlKey) return;   // a plain wheel scrolls the page, as everywhere else
-    lastCtrlWheelAt = ev.timeStamp;
-    if (ev.defaultPrevented) return;
+    if (ev.defaultPrevented) return;   // someone else already took it
     ev.preventDefault();
     if (elsewhere(ev.target)) return;
     handlers.onZoom(wheelZoomFactor(ev), ev.clientX, ev.clientY, ev.target);
@@ -114,6 +121,7 @@ export function attachZoomGestures(el: HTMLElement, handlers: ZoomGestureHandler
 
   // eslint-disable-next-line github/require-passive-events -- it must preventDefault the page zoom
   el.addEventListener('wheel', onWheel, {passive: false});
+  el.addEventListener('wheel', noteCtrlWheel, {capture: true, passive: true});
   el.addEventListener('gesturestart', onGestureStart);
   el.addEventListener('gesturechange', onGestureChange);
   el.addEventListener('gestureend', onGestureEnd);
@@ -123,6 +131,7 @@ export function attachZoomGestures(el: HTMLElement, handlers: ZoomGestureHandler
   el.addEventListener('pointercancel', onPointerEnd);
   return () => {
     el.removeEventListener('wheel', onWheel);
+    el.removeEventListener('wheel', noteCtrlWheel, {capture: true});
     el.removeEventListener('gesturestart', onGestureStart);
     el.removeEventListener('gesturechange', onGestureChange);
     el.removeEventListener('gestureend', onGestureEnd);

@@ -61,13 +61,43 @@ test('a pinch d3 ignored (at its scale limit) is still kept off the page', () =>
   expect(onZoom).not.toHaveBeenCalled();
 });
 
+/* d3-zoom's `noevent`: preventDefault AND stopImmediatePropagation, on the <svg>. */
+function d3LikeChild(parent: HTMLElement): HTMLElement {
+  const svg = document.createElement('span');
+  parent.append(svg);
+  // eslint-disable-next-line github/require-passive-events -- models d3, which cancels the wheel
+  svg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, {passive: false});
+  return svg;
+}
+
 test('a pinch d3 already zoomed is not zoomed twice', () => {
   const el = document.createElement('div');
+  const svg = d3LikeChild(el);
   const onZoom = vi.fn();
   attachZoomGestures(el, {onZoom});
   const ev = wheel({ctrlKey: true, deltaY: -10});
-  ev.preventDefault();
-  el.dispatchEvent(ev);
+  svg.dispatchEvent(ev);
+  expect(ev.defaultPrevented).toBe(true);
+  expect(onZoom).not.toHaveBeenCalled();
+});
+
+/* A Safari that reports one trackpad pinch both as ctrl+wheel (zoomed and
+   stopped by d3) and as gesture events must not zoom the graph a second time. */
+test('a pinch d3 zoomed as ctrl+wheel is not zoomed again by its gesture events', () => {
+  const el = document.createElement('div');
+  const svg = d3LikeChild(el);
+  const onZoom = vi.fn();
+  attachZoomGestures(el, {onZoom});
+  const w = wheel({ctrlKey: true, deltaY: -10});
+  svg.dispatchEvent(w);
+  const g = new Event('gesturechange', {bubbles: true, cancelable: true});
+  Object.assign(g, {scale: 1.5, clientX: 0, clientY: 0});
+  Object.defineProperty(g, 'timeStamp', {value: w.timeStamp + 10});
+  svg.dispatchEvent(g);
+  expect(g.defaultPrevented).toBe(true);
   expect(onZoom).not.toHaveBeenCalled();
 });
 
