@@ -35,8 +35,9 @@
 					aria-controls="home-search-suggestions"
 					class="tw-w-full tw-rounded-md tw-border tw-border-input-border focus:tw-border-primary tw-outline-none tw-pl-10 tw-pr-4 tw-py-3 tw-text-[17px] tw-leading-6 tw-shadow-sm"
 				/>
-				<!-- Appears while the field holds text (initHomeSearch), per the Figma design -->
-				<button id="home-search-button" type="submit" class="home-search-button tw-hidden">
+				<!-- Secondary small button (Figma 5743:44869); appears while the field holds text
+						 (initHomeSearch). The search icon on the left stays decorative, Enter still submits. -->
+				<button id="home-search-button" type="submit" class="home-search-button forkana-btn forkana-btn-secondary forkana-btn-sm tw-hidden">
 					{{ctx.Locale.Tr "home.search_button"}}
 				</button>
 			</form>
