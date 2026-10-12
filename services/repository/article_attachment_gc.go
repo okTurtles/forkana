@@ -40,6 +40,15 @@ const DefaultArticleAttachmentGCGracePeriod = 7 * 24 * time.Hour
 // which bounds the first run on an instance with a long backlog.
 const DefaultArticleAttachmentGCMaxPerRun = 1000
 
+// ArticleAttachmentGCLimit turns a configured MAX_PER_RUN into a collection limit: 0 means
+// no cap, and a negative value, which the collector would reject, falls back to the default.
+func ArticleAttachmentGCLimit(maxPerRun int) int {
+	if maxPerRun < 0 {
+		return DefaultArticleAttachmentGCMaxPerRun
+	}
+	return maxPerRun
+}
+
 // legacyArticleFallbackEnabled reports whether attachments are still authorized by the
 // legacy read fallback. It is a variable so tests can switch it without waiting for the
 // dynamic setting's cache to expire.

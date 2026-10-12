@@ -243,7 +243,7 @@ func registerGCArticleAttachments() {
 		gcConfig := config.(*GCArticleAttachmentsConfig)
 		_, err := repo_service.GarbageCollectArticleAttachments(ctx, repo_service.GarbageCollectArticleAttachmentsOptions{
 			OlderThan: time.Now().Add(-gcConfig.OlderThan),
-			Limit:     gcConfig.MaxPerRun,
+			Limit:     repo_service.ArticleAttachmentGCLimit(gcConfig.MaxPerRun),
 		})
 		if errors.Is(err, repo_service.ErrArticleAttachmentGCGated) {
 			// An expected state on an upgraded instance, not a failed run.

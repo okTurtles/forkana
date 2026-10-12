@@ -126,3 +126,17 @@ func TestGarbageCollectArticleAttachmentsGatedUntilFinalized(t *testing.T) {
 	assert.Equal(t, 1, collected)
 	unittest.AssertNotExistsBean(t, &repo_model.Attachment{ID: abandoned.ID})
 }
+
+func TestArticleAttachmentGCLimit(t *testing.T) {
+	cases := []struct {
+		maxPerRun int
+		want      int
+	}{
+		{maxPerRun: 5, want: 5},
+		{maxPerRun: 0, want: 0},
+		{maxPerRun: -1, want: DefaultArticleAttachmentGCMaxPerRun},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, ArticleAttachmentGCLimit(c.maxPerRun), "MAX_PER_RUN = %d", c.maxPerRun)
+	}
+}

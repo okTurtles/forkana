@@ -34,15 +34,11 @@ func articleAttachmentGCSettings() (gracePeriod time.Duration, maxPerRun int) {
 	if _, err := setting.GetCronSettings("gc_article_attachments", config); err != nil {
 		return repo_service.DefaultArticleAttachmentGCGracePeriod, repo_service.DefaultArticleAttachmentGCMaxPerRun
 	}
-	gracePeriod, maxPerRun = config.OlderThan, config.MaxPerRun
+	gracePeriod = config.OlderThan
 	if gracePeriod <= 0 {
 		gracePeriod = repo_service.DefaultArticleAttachmentGCGracePeriod
 	}
-	// 0 means no cap; the collector rejects a negative one.
-	if maxPerRun < 0 {
-		maxPerRun = repo_service.DefaultArticleAttachmentGCMaxPerRun
-	}
-	return gracePeriod, maxPerRun
+	return gracePeriod, repo_service.ArticleAttachmentGCLimit(config.MaxPerRun)
 }
 
 // checkPendingArticleAttachments reports article editor uploads that no commit ever
