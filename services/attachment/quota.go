@@ -51,27 +51,6 @@ func (err ErrUploadRateLimited) Error() string {
 	return fmt.Sprintf("too many article uploads: at most %d per %s", err.Limit, err.Window)
 }
 
-// quotaLimitedReader fails the upload as soon as it would push the uploader past the
-// pending byte quota, so the excess is never written to storage.
-type quotaLimitedReader struct {
-	r         io.Reader
-	remaining int64
-	maxMB     int64
-}
-
-func (q *quotaLimitedReader) Read(p []byte) (int, error) {
-	// Ask for one byte more than allowed: getting it back means the quota is exceeded.
-	if int64(len(p)) > q.remaining+1 {
-		p = p[:q.remaining+1]
-	}
-	n, err := q.r.Read(p)
-	if int64(n) > q.remaining {
-		return int(q.remaining), ErrPendingQuotaExceeded{MaxMB: q.maxMB}
-	}
-	q.remaining -= int64(n)
-	return n, err
-}
-
 // UploadArticleAttachment stores an article editor upload after charging it against the
 // uploader's rate limit and pending quota (setting.Attachment.Article*).
 //
@@ -132,11 +111,14 @@ func chargeArticleUpload(ctx context.Context, uploaderID int64, file io.Reader, 
 	}
 	if cfg.ArticleMaxPendingSize > 0 {
 		remaining := cfg.ArticleMaxPendingSize<<20 - size
-		// A declared size is only a hint, so the reader enforces the quota on the real bytes.
+		// A declared size is only a hint, so the reader enforces the quota on the real bytes
+		// and fails before the excess is written to storage.
 		if remaining <= 0 || fileSize > remaining {
 			return nil, ErrPendingQuotaExceeded{MaxMB: cfg.ArticleMaxPendingSize}
 		}
-		file = &quotaLimitedReader{r: file, remaining: remaining, maxMB: cfg.ArticleMaxPendingSize}
+		file = &limitedErrorReader{r: file, remaining: remaining, onExceed: func() error {
+			return ErrPendingQuotaExceeded{MaxMB: cfg.ArticleMaxPendingSize}
+		}}
 	}
 	return file, nil
 }

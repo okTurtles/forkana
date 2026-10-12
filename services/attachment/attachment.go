@@ -19,14 +19,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// limitedErrorReader wraps a reader and returns ErrFileTooLarge if more than remaining bytes are read.
+// limitedErrorReader wraps a reader and returns onExceed() if more than remaining bytes are read.
 // Unlike io.LimitReader, it errors instead of silently stopping, preventing silent file truncation
 // when fileSize is unknown (-1).
 type limitedErrorReader struct {
 	r         io.Reader
 	remaining int64
-	name      string
-	maxMB     int64
+	onExceed  func() error
 }
 
 func (l *limitedErrorReader) Read(p []byte) (int, error) {
@@ -37,7 +36,7 @@ func (l *limitedErrorReader) Read(p []byte) (int, error) {
 	}
 	n, err := l.r.Read(p)
 	if int64(n) > l.remaining {
-		return int(l.remaining), upload.ErrFileTooLarge{Name: l.name, MaxMB: l.maxMB}
+		return int(l.remaining), l.onExceed()
 	}
 	l.remaining -= int64(n)
 	return n, err
@@ -72,7 +71,9 @@ func UploadAttachment(ctx context.Context, file io.Reader, allowedTypes string, 
 		}
 		// Wrap with a reader that errors (rather than silently truncates) when the limit is exceeded.
 		// This handles both spoofed Content-Length and unknown size (fileSize == -1).
-		file = &limitedErrorReader{r: file, remaining: maxBytes, name: attach.Name, maxMB: setting.Attachment.MaxSize}
+		file = &limitedErrorReader{r: file, remaining: maxBytes, onExceed: func() error {
+			return upload.ErrFileTooLarge{Name: attach.Name, MaxMB: setting.Attachment.MaxSize}
+		}}
 	}
 
 	buf := make([]byte, 1024)
