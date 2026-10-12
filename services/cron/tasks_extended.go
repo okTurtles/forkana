@@ -238,9 +238,7 @@ func registerGCArticleAttachments() {
 			Schedule:   "@every 24h",
 		},
 		OlderThan: repo_service.DefaultArticleAttachmentGCGracePeriod,
-
-		// Bound the first run on an instance with a long backlog.
-		MaxPerRun: 1000,
+		MaxPerRun: repo_service.DefaultArticleAttachmentGCMaxPerRun,
 	}, func(ctx context.Context, _ *user_model.User, config Config) error {
 		gcConfig := config.(*GCArticleAttachmentsConfig)
 		_, err := repo_service.GarbageCollectArticleAttachments(ctx, repo_service.GarbageCollectArticleAttachmentsOptions{

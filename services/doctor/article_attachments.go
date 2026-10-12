@@ -20,23 +20,36 @@ import (
 // pendingArticleAttachmentsTopUploaders is how many uploaders the report lists by size.
 const pendingArticleAttachmentsTopUploaders = 10
 
-// articleAttachmentGCGracePeriod returns the grace period gc_article_attachments uses, so
-// the report counts exactly what the next collection would reclaim.
-func articleAttachmentGCGracePeriod() time.Duration {
+// articleAttachmentGCSettings returns the grace period and per-run cap that
+// gc_article_attachments uses, so the report counts exactly what the next collection
+// would reclaim and --fix is bounded like a cron run.
+func articleAttachmentGCSettings() (gracePeriod time.Duration, maxPerRun int) {
 	config := &struct {
 		OlderThan time.Duration
-	}{OlderThan: repo_service.DefaultArticleAttachmentGCGracePeriod}
-	if _, err := setting.GetCronSettings("gc_article_attachments", config); err != nil || config.OlderThan <= 0 {
-		return repo_service.DefaultArticleAttachmentGCGracePeriod
+		MaxPerRun int
+	}{
+		OlderThan: repo_service.DefaultArticleAttachmentGCGracePeriod,
+		MaxPerRun: repo_service.DefaultArticleAttachmentGCMaxPerRun,
 	}
-	return config.OlderThan
+	if _, err := setting.GetCronSettings("gc_article_attachments", config); err != nil {
+		return repo_service.DefaultArticleAttachmentGCGracePeriod, repo_service.DefaultArticleAttachmentGCMaxPerRun
+	}
+	gracePeriod, maxPerRun = config.OlderThan, config.MaxPerRun
+	if gracePeriod <= 0 {
+		gracePeriod = repo_service.DefaultArticleAttachmentGCGracePeriod
+	}
+	// 0 means no cap; the collector rejects a negative one.
+	if maxPerRun < 0 {
+		maxPerRun = repo_service.DefaultArticleAttachmentGCMaxPerRun
+	}
+	return gracePeriod, maxPerRun
 }
 
 // checkPendingArticleAttachments reports article editor uploads that no commit ever
 // claimed and that are old enough to be collected. The storage checks cannot see them:
 // such an upload has both its database row and its stored object.
 func checkPendingArticleAttachments(ctx context.Context, logger log.Logger, autofix bool) error {
-	gracePeriod := articleAttachmentGCGracePeriod()
+	gracePeriod, maxPerRun := articleAttachmentGCSettings()
 	olderThan := time.Now().Add(-gracePeriod)
 
 	summary, err := repo_model.GetPendingArticleAttachmentSummary(ctx, timeutil.TimeStamp(olderThan.Unix()), pendingArticleAttachmentsTopUploaders)
@@ -65,6 +78,7 @@ func checkPendingArticleAttachments(ctx context.Context, logger log.Logger, auto
 	}
 	collected, err := repo_service.GarbageCollectArticleAttachments(ctx, repo_service.GarbageCollectArticleAttachmentsOptions{
 		OlderThan: olderThan,
+		Limit:     maxPerRun,
 	})
 	if errors.Is(err, repo_service.ErrArticleAttachmentGCGated) {
 		// Collecting before the backfill is finalized could delete a live attachment
@@ -77,6 +91,9 @@ func checkPendingArticleAttachments(ctx context.Context, logger log.Logger, auto
 		return err
 	}
 	logger.Info("Collected %d pending article attachments", collected)
+	if maxPerRun > 0 && summary.Count > int64(maxPerRun) {
+		logger.Info("[cron.gc_article_attachments] MAX_PER_RUN capped this run at %d: run again to collect the rest", maxPerRun)
+	}
 	return nil
 }
 

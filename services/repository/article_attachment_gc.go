@@ -36,6 +36,10 @@ type GarbageCollectArticleAttachmentsOptions struct {
 // uploads from accumulating.
 const DefaultArticleAttachmentGCGracePeriod = 7 * 24 * time.Hour
 
+// DefaultArticleAttachmentGCMaxPerRun caps how many attachments one collection reclaims,
+// which bounds the first run on an instance with a long backlog.
+const DefaultArticleAttachmentGCMaxPerRun = 1000
+
 // legacyArticleFallbackEnabled reports whether attachments are still authorized by the
 // legacy read fallback. It is a variable so tests can switch it without waiting for the
 // dynamic setting's cache to expire.
