@@ -53,7 +53,9 @@
 								<label for="password" class="tw-text-[14px] tw-font-semibold tw-leading-[20px] tw-text-[#1f2328]">
 									{{ctx.Locale.Tr "password"}}
 								</label>
-								<a href="{{AppSubUrl}}/user/forgot_password" tabindex="4" class="tw-text-[12px] tw-font-semibold tw-leading-[20px] tw-text-[#4e40fa] tw-text-right">
+								{{/* a small tertiary button (Figma 6310:42750), centred on the label: its negative
+									vertical margin keeps the 26px button from making the 20px label row taller */}}
+								<a href="{{AppSubUrl}}/user/forgot_password" tabindex="4" class="forkana-btn forkana-btn-tertiary forkana-btn-sm forkana-btn-primary-text tw-my-[-3px]">
 									{{ctx.Locale.Tr "auth.forgot_password"}}
 								</a>
 							</div>
@@ -108,12 +110,12 @@
 					{{end}}
 				</div>
 
-				{{/* Registration button */}}
+				{{/* Registration link */}}
 				{{if .ShowRegistrationButton}}
-				<a href="{{AppSubUrl}}/user/sign_up" class="tw-bg-[#f6f8fa] tw-border tw-border-[#d1d9e0] tw-border-solid tw-rounded-[6px] tw-px-[12px] tw-py-[6px] tw-flex tw-items-center tw-justify-center tw-gap-[8px] tw-w-full tw-text-[14px] tw-font-semibold tw-leading-[20px] tw-text-[#25292e] hover:tw-bg-[#eaeef2] tw-no-underline">
-					<span>{{ctx.Locale.Tr "auth.need_account"}}</span>
-					<span class="tw-font-normal tw-text-[#4e40fa]">{{ctx.Locale.Tr "auth.sign_up_now"}}</span>
-				</a>
+				{{/* a sentence with a link in it, not a button (Figma 641:65416) */}}
+				<div class="auth-alternative-box">
+					{{ctx.Locale.Tr "auth.need_account"}} <a href="{{AppSubUrl}}/user/sign_up" class="forkana-link">{{ctx.Locale.Tr "auth.sign_up_now"}}</a>
+				</div>
 				{{end}}
 
 				{{/* Passkey auth
