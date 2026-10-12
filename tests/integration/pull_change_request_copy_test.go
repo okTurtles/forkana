@@ -79,6 +79,41 @@ func TestPullViewChangeRequestTitleDescPlural(t *testing.T) {
 	}
 }
 
+// TestPullViewChangeRequestTitleDescOtherLocale checks that the change request header line renders
+// cleanly in a non-English locale. The upstream translations (e.g. de-DE) still define Gitea's
+// pulls.title_desc / pulls.merged_title_desc with Gitea's branch arguments, so the fork's copy must
+// use keys of its own: a reused key resolves to the upstream translation, which formats the fork's
+// arguments into "%!s(MISSING)" / "%!s(BADINDEX)" garbage.
+func TestPullViewChangeRequestTitleDescOtherLocale(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// /user2/repo1/pulls/3 is open (user1 posted it, user2 owns the article, user4 is neither),
+	// /user2/repo1/pulls/2 is merged.
+	cases := []struct {
+		user string
+		pull string
+	}{
+		{user: "user1", pull: "3"},
+		{user: "user2", pull: "3"},
+		{user: "user4", pull: "3"},
+		{user: "user2", pull: "2"},
+		{user: "user4", pull: "2"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.user+"/pulls/"+c.pull, func(t *testing.T) {
+			session := loginUser(t, c.user)
+			req := NewRequest(t, "GET", "/user2/repo1/pulls/"+c.pull+"?lang=de-DE")
+			resp := session.MakeRequest(t, req, http.StatusOK)
+			htmlDoc := NewHTMLParser(t, resp.Body)
+			assert.Equal(t, "de-DE", htmlDoc.Find("html").AttrOr("lang", ""))
+			desc := strings.Join(strings.Fields(htmlDoc.Find(".issue-title-meta .pull-desc").Text()), " ")
+			assert.NotEmpty(t, desc)
+			assert.NotContains(t, desc, "%!")
+		})
+	}
+}
+
 // TestPullViewMergePermissionHint checks that the upstream "only those with write access ... can
 // merge change requests" hint is gone: merging is owner-only in Forkana, so that copy contradicted
 // the owner-scoped message shown right below it to every non-owner viewer.
