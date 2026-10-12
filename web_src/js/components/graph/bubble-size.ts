@@ -70,7 +70,54 @@ export type BubbleRung = {
      inside the arc. The count itself is never dropped and never shrunk — if it
      is too long it is abbreviated instead (formatContributorCount). */
   labelDetail: BubbleLabelDetail;
+  /** The order badge this rung carries in Compare mode (see CompareBadgeStyle). */
+  compareBadge: CompareBadgeStyle;
 };
+
+/* COMPARE MODE, from the figma frame "2/2 selected – ready to compare"
+   (node 641:61930): unpicked bubbles 6484:44251 and 6484:44237, picked
+   bubbles 6484:44255 and 6484:44308, badges (CounterLabel) 6484:44262 and
+   6484:44315.
+
+   The outline and the ring are CONSTANTS: the frame draws the same 1px 3/3
+   dashed outline on every bubble from 30px to 124px, and the same 2px ring on
+   both picked ones. Both are INSIDE strokes in figma, i.e. they end at the
+   bubble's edge rather than straddling it; BubbleNode insets the circle by
+   half a stroke to match. World px, so they follow the zoom like the bubble. */
+export const COMPARE_OUTLINE = {width: 1, dash: 3, gap: 3} as const;
+export const COMPARE_RING_WIDTH = 2;
+
+/** The order badge of a picked bubble: an 18px disc with its number in Inter
+   600 12px (CounterLabel 6484:44262). 18px is kept on every rung it fits;
+   only the two smallest shrink it, because an 18px disc would cover over half
+   of a 34px bubble and most of a 22px one, count included. */
+export type CompareBadgeStyle = {diameter: number, fontSize: number};
+const COMPARE_BADGE: CompareBadgeStyle = {diameter: 18, fontSize: 12};
+const COMPARE_BADGE_S: CompareBadgeStyle = {diameter: 14, fontSize: 10};
+const COMPARE_BADGE_XS: CompareBadgeStyle = {diameter: 12, fontSize: 8};
+
+/** Where the badge sits, relative to the bubble's centre: in the 100px figma
+   bubble its centre is at (87, 20) from the top-left corner, i.e. at 0.95 of
+   the radius, 39° above the horizontal on the right — on the ring. Taken from
+   the radius on screen, so it rides the ring through a hover. */
+export const COMPARE_BADGE_ANGLE_DEG = 39;
+export const COMPARE_BADGE_DISTANCE = 0.95;
+export function compareBadgeCenter(radius: number): {x: number, y: number} {
+  const a = COMPARE_BADGE_ANGLE_DEG * Math.PI / 180;
+  const d = radius * COMPARE_BADGE_DISTANCE;
+  return {x: d * Math.cos(a), y: -d * Math.sin(a)};
+}
+
+/** Where a bubble stands in the comparison being picked: not picked, or picked first
+   or second. */
+export type ComparePickState = 'none' | 'first' | 'second';
+
+/** The number on a picked bubble's badge: its place in the comparison. */
+export function compareOrderFor(state: ComparePickState | undefined): number | null {
+  if (state === 'first') return 1;
+  if (state === 'second') return 2;
+  return null;
+}
 
 /* THE LADDER. Five diameters, five thresholds — the only thing anyone should
    need to edit. Ordered smallest → largest; `bubbleRungFor` takes the LAST
@@ -82,18 +129,18 @@ export type BubbleRung = {
    was confirmed as wanted. The issue text is therefore NOT the spec here —
    do not "correct" this back to four on the strength of it. */
 export const BUBBLE_SIZE_LADDER: readonly BubbleRung[] = [
-  {name: 'XS', minRatio: 0, diameter: 22, countFontSize: 9, labelDetail: 'count'},
-  {name: 'S', minRatio: 0.07, diameter: 34, countFontSize: 12, labelDetail: 'count'},
-  {name: 'M', minRatio: 0.2, diameter: 58, countFontSize: 14, labelDetail: 'count'},
-  {name: 'L', minRatio: 0.45, diameter: 90, countFontSize: 22, labelDetail: 'label'},
-  {name: 'XL', minRatio: 0.75, diameter: 126, countFontSize: 22, labelDetail: 'full'},
+  {name: 'XS', minRatio: 0, diameter: 22, countFontSize: 9, labelDetail: 'count', compareBadge: COMPARE_BADGE_XS},
+  {name: 'S', minRatio: 0.07, diameter: 34, countFontSize: 12, labelDetail: 'count', compareBadge: COMPARE_BADGE_S},
+  {name: 'M', minRatio: 0.2, diameter: 58, countFontSize: 14, labelDetail: 'count', compareBadge: COMPARE_BADGE},
+  {name: 'L', minRatio: 0.45, diameter: 90, countFontSize: 22, labelDetail: 'label', compareBadge: COMPARE_BADGE},
+  {name: 'XL', minRatio: 0.75, diameter: 126, countFontSize: 22, labelDetail: 'full', compareBadge: COMPARE_BADGE},
 ] as const;
 
-/* THE STATS ARE NOT IN YET. The API reports a repository whose contributor
-   stats are still being computed as 0 contributors (see the `statsPending`
-   handling in FishboneGraph), and a ratio needs a real maximum to mean
-   anything. When NOTHING in the graph has a real count there is no comparison
-   to draw, so every bubble sits on the bottom rung until the numbers arrive —
+/* NO COUNT TO COMPARE. The API leaves out the contributor count of a repository
+   it could not count (FishboneGraph marks such a node `statsPending`; a real 0 is
+   a count like any other), and a ratio needs a real maximum to mean anything.
+   When NOTHING in the graph has a real count there is no comparison to draw, so
+   every bubble sits on the bottom rung —
    deliberately the SMALLEST, not the largest: `contributorRatio(0, 0)` answers
    1 ("everything ties for biggest"), which would otherwise paint every bubble
    at 126px, the single most misleading picture available. */

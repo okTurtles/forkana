@@ -1,0 +1,9 @@
+{{/* An article's contributor count, as every view of the subject shows it: "-" when the
+     count is unknown (-1, or missing), else the number (through CountFmt when .Short),
+     followed by "contributor(s)" when .Label is "lower" or "Contributor(s)" when it is
+     "title". */}}
+{{define "shared/repo/contributor_count"}}
+{{- $n := .Count -}}
+{{- if and $n (lt $n 0)}}-{{else if .Short}}{{CountFmt (or $n 0)}}{{else}}{{or $n 0}}{{end -}}
+{{- if .Label}} {{if eq .Label "title"}}Contributor{{else}}contributor{{end}}{{if not (and $n (eq $n 1))}}s{{end}}{{end -}}
+{{end}}

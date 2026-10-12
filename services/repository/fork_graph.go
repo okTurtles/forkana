@@ -7,19 +7,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
-	"sync"
+	"strconv"
 	"time"
 
 	"code.gitea.io/gitea/models/db"
 	perm_model "code.gitea.io/gitea/models/perm"
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unit"
 	user_model "code.gitea.io/gitea/models/user"
-	"code.gitea.io/gitea/modules/cache"
 	"code.gitea.io/gitea/modules/log"
 	api "code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/services/convert"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // Error definitions
@@ -28,18 +31,6 @@ var (
 	ErrTooManyNodes      = errors.New("too many nodes in graph")
 	ErrProcessingTimeout = errors.New("processing timeout")
 	ErrCycleDetected     = errors.New("cycle detected in fork graph")
-
-	// forkStatsComputeLock prevents cache stampede on secondary cache computation.
-	// When multiple goroutines request the same cache key simultaneously, only one
-	// will compute and cache the result; others will compute without caching.
-	forkStatsComputeLock = sync.Map{}
-
-	// forkStatsCacheKeys tracks active cache keys per repository for invalidation.
-	// Key: repoID (int64), Value: map[string]struct{} (set of cache keys)
-	// This enables efficient cache invalidation when commits are pushed to a repository.
-	// Uses a regular map with mutex for simpler synchronization (no type assertions needed).
-	forkStatsCacheKeys     = make(map[int64]map[string]struct{})
-	forkStatsCacheKeysLock sync.Mutex
 )
 
 // IsErrMaxDepthExceeded checks if an error is ErrMaxDepthExceeded
@@ -62,81 +53,6 @@ func IsErrCycleDetected(err error) bool {
 	return errors.Is(err, ErrCycleDetected)
 }
 
-// registerForkStatsCacheKey registers a cache key for a repository.
-// This enables efficient cache invalidation when commits are pushed.
-func registerForkStatsCacheKey(repoID int64, cacheKey string) {
-	forkStatsCacheKeysLock.Lock()
-	defer forkStatsCacheKeysLock.Unlock()
-
-	keys, ok := forkStatsCacheKeys[repoID]
-	if !ok {
-		keys = make(map[string]struct{})
-		forkStatsCacheKeys[repoID] = keys
-	}
-	keys[cacheKey] = struct{}{}
-}
-
-// InvalidateForkContributorStatsCache invalidates all fork contributor stats cache entries
-// for a specific repository. This should be called when commits are pushed to ensure
-// contributor statistics are refreshed.
-//
-// The function is safe to call even if no cache entries exist for the repository.
-// Errors during cache deletion are logged but don't cause the function to fail,
-// as cache invalidation is best-effort.
-func InvalidateForkContributorStatsCache(repoID int64) {
-	c := cache.GetCache()
-	if c == nil {
-		return
-	}
-
-	forkStatsCacheKeysLock.Lock()
-	keys, ok := forkStatsCacheKeys[repoID]
-	if !ok {
-		forkStatsCacheKeysLock.Unlock()
-		return
-	}
-	// Clear the keys map for this repo
-	delete(forkStatsCacheKeys, repoID)
-	forkStatsCacheKeysLock.Unlock()
-
-	// Delete all cached entries for this repository
-	for cacheKey := range keys {
-		if err := c.Delete(cacheKey); err != nil {
-			log.Warn("Failed to invalidate fork contributor stats cache key %s: %v", cacheKey, err)
-		}
-	}
-
-	if len(keys) > 0 {
-		log.Debug("Invalidated %d fork contributor stats cache entries for repo %d", len(keys), repoID)
-	}
-}
-
-// getForkStatsCacheKeysForTesting returns the registered cache keys for a repository.
-// This function is intended for testing purposes only.
-func getForkStatsCacheKeysForTesting(repoID int64) map[string]struct{} {
-	forkStatsCacheKeysLock.Lock()
-	defer forkStatsCacheKeysLock.Unlock()
-
-	keys, ok := forkStatsCacheKeys[repoID]
-	if !ok {
-		return nil
-	}
-	// Return a copy to avoid race conditions
-	result := make(map[string]struct{}, len(keys))
-	for k := range keys {
-		result[k] = struct{}{}
-	}
-	return result
-}
-
-// clearForkStatsCacheKeysForTesting clears all registered cache keys.
-// This function is intended for testing purposes only.
-func clearForkStatsCacheKeysForTesting() {
-	forkStatsCacheKeysLock.Lock()
-	defer forkStatsCacheKeysLock.Unlock()
-	forkStatsCacheKeys = make(map[int64]map[string]struct{})
-}
-
 // ForkGraphParams represents parameters for building fork graph
 type ForkGraphParams struct {
 	IncludeContributors bool
@@ -148,11 +64,100 @@ type ForkGraphParams struct {
 	Limit               int
 }
 
+// SubjectForkGraphParams are the parameters the subject page builds its fork graph
+// with: the graph is embedded in the page and drawn by the Bubble view, the Table view
+// is built from it on the server, and it decides the Article view's article, so all
+// three always list the same articles (#405). The Bubble view's API fallback (used for
+// retries) requests the same graph: custom/templates/shared/repo/bubble.tmpl builds its
+// url from SubjectForkGraphQuery, which is derived from these.
+//
+// IncludePrivate does not show anyone a private article they may not read: the forks
+// come from FindForks, which keeps only the repositories the doer can access, so an
+// anonymous reader still gets the public ones only, and a private article's owner (or a
+// collaborator) gets it too, as the Table view did before it was built from this graph.
+// Limit is per tree level; 100 keeps the old table's page size (the table has no pager).
+// ContributorDays is only echoed back (GraphMetadata.ContributorWindowDays); it no
+// longer windows the counts.
+func SubjectForkGraphParams() ForkGraphParams {
+	return ForkGraphParams{
+		IncludeContributors: true,
+		ContributorDays:     90,
+		MaxDepth:            10,
+		IncludePrivate:      true,
+		Sort:                "updated",
+		Page:                1,
+		Limit:               100,
+	}
+}
+
+// SubjectForkGraphQuery is SubjectForkGraphParams as the fork-graph API's query string.
+// The parameter names are the API's (routers/api/v1/repo ForkGraphParams and
+// parseForkGraphParams); TestSubjectForkGraphQueryContract there parses this query with
+// the API's own parser and checks it gives back SubjectForkGraphParams.
+func SubjectForkGraphQuery() string {
+	p := SubjectForkGraphParams()
+	q := url.Values{}
+	q.Set("include_contributors", strconv.FormatBool(p.IncludeContributors))
+	q.Set("include_private", strconv.FormatBool(p.IncludePrivate))
+	q.Set("contributor_days", strconv.Itoa(p.ContributorDays))
+	q.Set("max_depth", strconv.Itoa(p.MaxDepth))
+	q.Set("sort", p.Sort)
+	q.Set("page", strconv.Itoa(p.Page))
+	q.Set("limit", strconv.Itoa(p.Limit))
+	return q.Encode()
+}
+
+// ForkGraphEntry is one article of a fork graph, as a flat list entry.
+type ForkGraphEntry struct {
+	Repo *repo_model.Repository
+	// ContributorCount is -1 when the count could not be computed.
+	ContributorCount int64
+}
+
+// FlattenForkGraph lists the articles of a fork graph in depth-first order: the root,
+// then each fork followed by its own forks, in the graph's sort order.
+func FlattenForkGraph(root *ForkNode) []*ForkGraphEntry {
+	var entries []*ForkGraphEntry
+	var visit func(*ForkNode)
+	visit = func(n *ForkNode) {
+		if n == nil {
+			return
+		}
+		if n.hidden || n.repo == nil {
+			// a root the reader may not see is no article of theirs; its forks are
+			for _, child := range n.Children {
+				visit(child)
+			}
+			return
+		}
+		count := int64(-1)
+		if n.Contributors != nil {
+			count = int64(n.Contributors.TotalCount)
+		}
+		entries = append(entries, &ForkGraphEntry{Repo: n.repo, ContributorCount: count})
+		for _, child := range n.Children {
+			visit(child)
+		}
+	}
+	visit(root)
+	return entries
+}
+
 // ForkGraphResponse represents the complete fork graph response
 type ForkGraphResponse struct {
 	Root       *ForkNode       `json:"root"`
 	Metadata   GraphMetadata   `json:"metadata"`
 	Pagination *PaginationInfo `json:"pagination,omitempty"`
+
+	// articles is the graph as a flat list (see Articles); never serialized
+	articles []*ForkGraphEntry
+}
+
+// Articles lists the articles of the graph in depth-first order (see FlattenForkGraph).
+// Only a freshly built graph has them: the nodes give their repositories up when they
+// are converted to the API format, and a response read back from a cache has none.
+func (r *ForkGraphResponse) Articles() []*ForkGraphEntry {
+	return r.articles
 }
 
 // ForkNode represents a node in the fork tree
@@ -169,22 +174,38 @@ type ForkNode struct {
 
 	// Internal field for batch processing (not exported to JSON)
 	repo *repo_model.Repository `json:"-"`
+	// hidden marks a root the reader may not read (a subject root made private after it
+	// was forked): it is drawn like a tombstone, structure only, so its forks stay
+	// connected, and nothing of the repository is sent (see hideNode).
+	hidden bool `json:"-"`
 }
+
+// hiddenNodeID is the id of a node the reader may not see: it must not carry the
+// repository's id either.
+const hiddenNodeID = "hidden_root"
 
 // ContributorStats represents contributor statistics
 type ContributorStats struct {
-	TotalCount  int `json:"total_count"`
+	// TotalCount is the article's contributor count: the distinct authors on its default
+	// branch, counted from the fork's creation for a fork. It is the count the subject's
+	// Bubble, Table and Article views all show.
+	TotalCount int `json:"total_count"`
+	// RecentCount is no longer computed and is always 0. It is kept so the response
+	// keeps its shape for existing API clients.
 	RecentCount int `json:"recent_count"`
 }
 
 // GraphMetadata represents metadata about the fork graph
 type GraphMetadata struct {
-	TotalForks            int       `json:"total_forks"`
-	VisibleForks          int       `json:"visible_forks"`
-	MaxDepthReached       bool      `json:"max_depth_reached"`
-	CacheStatus           string    `json:"cache_status"`
-	GeneratedAt           time.Time `json:"generated_at"`
-	ContributorWindowDays int       `json:"contributor_window_days,omitempty"`
+	TotalForks      int       `json:"total_forks"`
+	VisibleForks    int       `json:"visible_forks"`
+	MaxDepthReached bool      `json:"max_depth_reached"`
+	CacheStatus     string    `json:"cache_status"`
+	GeneratedAt     time.Time `json:"generated_at"`
+	// ContributorWindowDays echoes the request's contributor_days parameter. It no
+	// longer windows the counts: total_count is measured from the fork's creation (see
+	// ContributorStats). Kept so the response keeps its shape.
+	ContributorWindowDays int `json:"contributor_window_days,omitempty"`
 }
 
 // PaginationInfo represents pagination information
@@ -198,15 +219,6 @@ type PaginationInfo struct {
 const (
 	maxNodes          = 10000
 	processingTimeout = 30 * time.Second
-
-	// forkContributorStatsCacheKey is the cache key format for pre-filtered fork contributor stats.
-	// Format: "ForkContributorStats/{repoID}/{sinceUnix}/{days}"
-	// This secondary cache stores pre-filtered results to avoid repeated post-cache filtering.
-	forkContributorStatsCacheKey = "ForkContributorStats/%d/%d/%d"
-	// forkContributorStatsCacheTimeout is the TTL for fork contributor stats cache (5 minutes).
-	// This is shorter than the base contributor stats cache (10 minutes) to ensure
-	// the secondary cache doesn't outlive the underlying data.
-	forkContributorStatsCacheTimeout int64 = 60 * 5
 )
 
 // BuildForkGraph builds the fork graph for a repository
@@ -216,47 +228,7 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 	// 1. If the repository has a subject, find the subject's root repository (first non-empty, non-fork repo for that subject)
 	// 2. Otherwise, traverse up the fork chain to find the root
 	// This ensures the bubble view always shows the global subject fork tree, not a user-specific view.
-	rootRepo := repo
-	foundNonEmptyRoot := false
-
-	// First, try to find the subject's root repository
-	if repo.SubjectID > 0 {
-		subjectRoot, err := repo_model.GetSubjectRootRepository(ctx, repo.SubjectID)
-		if err == nil {
-			if err := subjectRoot.LoadOwner(ctx); err != nil {
-				log.Warn("Failed to load owner for subject root repository %d: %v. Falling back to fork chain traversal.", subjectRoot.ID, err)
-			} else {
-				rootRepo = subjectRoot
-				foundNonEmptyRoot = true
-				log.Info("Repository %s has subject ID %d, using subject root repository %s for fork graph", repo.FullName(), repo.SubjectID, rootRepo.FullName())
-			}
-		} else if !repo_model.IsErrRepoNotExist(err) {
-			log.Warn("Failed to find subject root repository for subject ID %d: %v. Falling back to fork chain traversal.", repo.SubjectID, err)
-		}
-		// If no subject root exists (all repos are empty), fall through to fork chain traversal
-	}
-
-	// If we didn't find a subject root, traverse up the fork chain
-	if rootRepo.ID == repo.ID && repo.IsFork {
-		current := repo
-		for current.IsFork {
-			parent, err := repo_model.GetRepositoryByID(ctx, current.ForkID)
-			if err != nil {
-				log.Warn("Failed to find parent repository for fork %s (ID: %d, ForkID: %d): %v. Using current repo as root.", current.FullName(), current.ID, current.ForkID, err)
-				break
-			}
-			if err := parent.LoadOwner(ctx); err != nil {
-				log.Warn("Failed to load owner for parent repository %d: %v. Using current repo as root.", parent.ID, err)
-				break
-			}
-			current = parent
-		}
-		rootRepo = current
-		if !rootRepo.IsEmpty {
-			foundNonEmptyRoot = true
-		}
-		log.Info("Repository %s is a fork, building fork graph from root repository %s", repo.FullName(), rootRepo.FullName())
-	}
+	rootRepo, foundNonEmptyRoot := findForkGraphRoot(ctx, repo)
 
 	// If the root repository is empty and we didn't find a non-empty root through subject lookup,
 	// return an empty graph. This triggers the "Create first article" UI in the frontend.
@@ -290,6 +262,22 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 		return nil, err
 	}
 
+	// The subject root is found by subject, not through FindForks, so it has not been
+	// checked against the reader's access like the forks: one made private after it was
+	// forked must not be shown to readers who may not read it.
+	rootHidden := !canReadForkGraphRoot(ctx, rootRepo, doer)
+	if rootHidden {
+		hideNode(rootNode)
+	}
+
+	// The contributor counts, once the tree is known (see attachContributorStats). The
+	// whole phase has one budget, which also ends with the request.
+	if params.IncludeContributors {
+		statsCtx, cancelStats := context.WithTimeout(ctx, contributorStatsBudget)
+		attachContributorStats(statsCtx, rootNode)
+		cancelStats()
+	}
+
 	// Collect all repositories from the tree for batch loading
 	allRepos := collectRepositories(rootNode)
 
@@ -299,16 +287,24 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 		// Continue anyway - individual loads will happen in convert.ToRepo
 	}
 
+	// The flat list of the articles, taken while the nodes still hold their repositories
+	articles := FlattenForkGraph(rootNode)
+
 	// Convert all nodes to API format (using preloaded data)
 	convertNodesToAPI(ctx, rootNode)
 
-	// Count total and visible forks (use root repository's fork count)
-	totalForks := rootRepo.NumForks
+	// Count total and visible forks (use root repository's fork count). A hidden root's
+	// own count includes forks the reader may not see: only the visible ones then.
 	visibleForks := countVisibleForks(rootNode)
+	totalForks := rootRepo.NumForks
+	if rootHidden {
+		totalForks = visibleForks
+	}
 
 	// Build response
 	response := &ForkGraphResponse{
-		Root: rootNode,
+		Root:     rootNode,
+		articles: articles,
 		Metadata: GraphMetadata{
 			TotalForks:      totalForks,
 			VisibleForks:    visibleForks,
@@ -323,6 +319,61 @@ func BuildForkGraph(ctx context.Context, repo *repo_model.Repository, params For
 	}
 
 	return response, nil
+}
+
+// findForkGraphRoot finds the root of repo's fork graph: the subject's root repository
+// (its first non-empty, non-fork article) when repo has a subject, otherwise the top of
+// its fork chain. foundNonEmptyRoot reports whether a root with content was found.
+func findForkGraphRoot(ctx context.Context, repo *repo_model.Repository) (rootRepo *repo_model.Repository, foundNonEmptyRoot bool) {
+	rootRepo = repo
+
+	// First, try to find the subject's root repository
+	if repo.SubjectID > 0 {
+		subjectRoot, err := repo_model.GetSubjectRootRepository(ctx, repo.SubjectID)
+		if err == nil {
+			if err := subjectRoot.LoadOwner(ctx); err != nil {
+				log.Warn("Failed to load owner for subject root repository %d: %v. Falling back to fork chain traversal.", subjectRoot.ID, err)
+			} else {
+				rootRepo = subjectRoot
+				foundNonEmptyRoot = true
+				log.Debug("Repository %s has subject ID %d, using subject root repository %s for fork graph", repo.FullName(), repo.SubjectID, rootRepo.FullName())
+			}
+		} else if !repo_model.IsErrRepoNotExist(err) {
+			log.Warn("Failed to find subject root repository for subject ID %d: %v. Falling back to fork chain traversal.", repo.SubjectID, err)
+		}
+		// If no subject root exists (all repos are empty), fall through to fork chain traversal
+	}
+
+	// If we didn't find a subject root, traverse up the fork chain
+	if rootRepo.ID == repo.ID && repo.IsFork {
+		current := repo
+		for current.IsFork {
+			parent, err := repo_model.GetRepositoryByID(ctx, current.ForkID)
+			if err != nil {
+				log.Warn("Failed to find parent repository for fork %s (ID: %d, ForkID: %d): %v. Using current repo as root.", current.FullName(), current.ID, current.ForkID, err)
+				break
+			}
+			if err := parent.LoadOwner(ctx); err != nil {
+				log.Warn("Failed to load owner for parent repository %d: %v. Using current repo as root.", parent.ID, err)
+				break
+			}
+			current = parent
+		}
+		rootRepo = current
+		if !rootRepo.IsEmpty {
+			foundNonEmptyRoot = true
+		}
+		log.Debug("Repository %s is a fork, building fork graph from root repository %s", repo.FullName(), rootRepo.FullName())
+	}
+	return rootRepo, foundNonEmptyRoot
+}
+
+// ForkGraphRootIsPrivate reports whether the root of repo's fork graph is private: a
+// graph cached by the API must not outlive a change of the root's visibility, which
+// changes what a reader may see of it.
+func ForkGraphRootIsPrivate(ctx context.Context, repo *repo_model.Repository) bool {
+	root, _ := findForkGraphRoot(ctx, repo)
+	return root.IsPrivate
 }
 
 // buildNode recursively builds a fork node
@@ -350,14 +401,14 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 	// Check depth limit
 	if level >= params.MaxDepth {
 		*maxDepthReached = true
-		return createLeafNode(repo, level, params)
+		return createLeafNode(repo, level), nil
 	}
 
 	// Get direct forks
 	forks, err := getDirectForks(ctx, repo.ID, doer, params)
 	if err != nil {
 		log.Error("Failed to get forks for repo %d: %v", repo.ID, err)
-		return createLeafNode(repo, level, params)
+		return createLeafNode(repo, level), nil
 	}
 
 	// Build children
@@ -382,46 +433,87 @@ func buildNode(ctx context.Context, repo *repo_model.Repository, level int, para
 		}
 	}
 
-	// Create node
-	node := &ForkNode{
+	return newForkNode(repo, level, children), nil
+}
+
+// newForkNode builds the node of repo with its children. The contributor stats are
+// attached once the whole tree is built (attachContributorStats).
+func newForkNode(repo *repo_model.Repository, level int, children []*ForkNode) *ForkNode {
+	return &ForkNode{
 		ID:       fmt.Sprintf("repo_%d", repo.ID),
 		Level:    level,
 		Children: children,
 		repo:     repo, // Store for batch processing
 	}
-
-	// Add contributor stats if requested
-	if params.IncludeContributors {
-		stats, err := getContributorStats(repo, params.ContributorDays, getForkSinceTime(repo))
-		if err != nil {
-			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
-		} else {
-			node.Contributors = stats
-		}
-	}
-
-	return node, nil
 }
 
 // createLeafNode creates a leaf node without children
-func createLeafNode(repo *repo_model.Repository, level int, params ForkGraphParams) (*ForkNode, error) {
-	node := &ForkNode{
-		ID:       fmt.Sprintf("repo_%d", repo.ID),
-		Level:    level,
-		Children: []*ForkNode{},
-		repo:     repo, // Store for batch processing
-	}
+func createLeafNode(repo *repo_model.Repository, level int) *ForkNode {
+	return newForkNode(repo, level, []*ForkNode{})
+}
 
-	if params.IncludeContributors {
-		stats, err := getContributorStats(repo, params.ContributorDays, getForkSinceTime(repo))
-		if err != nil {
-			log.Warn("Failed to get contributor stats for repo %d: %v", repo.ID, err)
-		} else {
-			node.Contributors = stats
+// contributorCountWorkers is how many contributor counts of a graph run at once.
+const contributorCountWorkers = 4
+
+// contributorStatsBudget bounds the whole counting phase of a graph: counts still
+// queued when it is spent are not started, and their nodes show as unknown.
+const contributorStatsBudget = 10 * time.Second
+
+// canReadForkGraphRoot reports whether doer may read the root of a fork graph.
+func canReadForkGraphRoot(ctx context.Context, root *repo_model.Repository, doer *user_model.User) bool {
+	perm, err := access_model.GetUserRepoPermission(ctx, root, doer)
+	if err != nil {
+		log.Warn("GetUserRepoPermission for the fork graph root %d: %v", root.ID, err)
+		return false
+	}
+	return perm.CanRead(unit.TypeCode)
+}
+
+// hideNode turns n into a node the reader may not see (see ForkNode.hidden).
+func hideNode(n *ForkNode) {
+	n.hidden = true
+	n.ID = hiddenNodeID
+	n.repo = nil
+	n.Contributors = nil
+}
+
+// attachContributorStats counts the contributors of every node of the tree, a few at a
+// time rather than one after the other. The branch heads come from the database in one
+// query, so a cached count needs no git at all. ctx carries the phase's budget: a count
+// is only started while it lasts, each has its own budget (nodeContributorStats), and
+// one that fails or is not started leaves its node without stats, which the client
+// shows as unknown.
+func attachContributorStats(ctx context.Context, root *ForkNode) {
+	var nodes []*ForkNode
+	var collect func(*ForkNode)
+	collect = func(n *ForkNode) {
+		if n == nil {
+			return
+		}
+		if n.repo != nil && !n.hidden {
+			nodes = append(nodes, n)
+		}
+		for _, child := range n.Children {
+			collect(child)
 		}
 	}
+	collect(root)
 
-	return node, nil
+	repos := make([]*repo_model.Repository, 0, len(nodes))
+	for _, n := range nodes {
+		repos = append(repos, n.repo)
+	}
+	heads := branchHeads(ctx, repos)
+
+	var g errgroup.Group
+	g.SetLimit(contributorCountWorkers)
+	for _, n := range nodes {
+		g.Go(func() error {
+			n.Contributors = nodeContributorStats(ctx, n.repo, heads[n.repo.ID]) // each goroutine writes its own node
+			return nil
+		})
+	}
+	_ = g.Wait() // the workers never fail: a failed count is an unknown one
 }
 
 // createReadPermission creates a basic read permission for repositories
@@ -496,177 +588,6 @@ func sortRepositories(repos []*repo_model.Repository, sortBy string) {
 	})
 }
 
-// getForkSinceTime returns the appropriate since time for contributor filtering.
-// For forks, returns the fork creation time to exclude inherited history from the parent.
-// For non-forks, returns zero time (no filtering).
-func getForkSinceTime(repo *repo_model.Repository) time.Time {
-	if repo.IsFork && repo.CreatedUnix > 0 {
-		return repo.CreatedUnix.AsTime()
-	}
-	return time.Time{}
-}
-
-// hasCommitsAfter checks if a contributor has any commits after the given time.
-// Returns true if since is zero (no filtering) or if the contributor has at least one commit after since.
-//
-// Due to weekly granularity of contributor data, we use a conservative approach:
-// we only count contributors whose commit weeks START after the fork creation time.
-// This may under-count contributors who have post-fork commits in a week that started
-// before the fork, but it ensures we don't over-count by including contributors who
-// only have pre-fork commits in a week that overlaps with the fork creation.
-//
-// Trade-off: For forks created mid-week, contributors who made commits both before
-// and after the fork in that same week will be excluded. This is acceptable because:
-// 1. It's a conservative approach that avoids inflating fork contributor counts
-// 2. The edge case only affects forks created mid-week with active contributors
-// 3. Accurate per-commit filtering would require querying git directly
-func hasCommitsAfter(contributor *ContributorData, since time.Time) bool {
-	if since.IsZero() {
-		return true
-	}
-	for _, week := range contributor.Weeks {
-		weekTime := time.UnixMilli(week.Week)
-		// Check if the week starts after since (conservative approach)
-		// This ensures we only count contributors with commits in weeks that
-		// definitively started after the fork creation time
-		if !weekTime.Before(since) && week.Commits > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// getContributorStats gets contributor statistics for a repository.
-// If since is non-zero, only counts contributors who made commits after that time.
-// This is useful for forks where we only want to count post-fork contributions.
-//
-// Caching behavior (two-tier):
-// 1. Secondary cache: Pre-filtered results keyed by (repoID, since, days) - 2 minute TTL
-// 2. Primary cache: Raw contributor data keyed by (repo, revision) - 10 minute TTL
-//
-// The secondary cache eliminates redundant post-cache filtering for high-traffic fork
-// repositories where the same contributor statistics are requested frequently with
-// identical parameters (typically the fork creation time and days window).
-//
-// Cache key scoping:
-// - Primary: "GetContributorStats/{repo.FullName()}/{revision}" - forks have separate entries
-// - Secondary: "ForkContributorStats/{repoID}/{since.Unix()}/{days}" - unique per parameter set
-//
-// Stampede prevention:
-// Uses forkStatsComputeLock (sync.Map) to prevent multiple goroutines from simultaneously
-// computing the same cache key. When a cache miss occurs, only the first goroutine will
-// compute and cache the result; concurrent requests compute without caching to avoid blocking.
-//
-// Cache invalidation:
-// Cache keys are registered in forkStatsCacheKeys for each repository. When commits are
-// pushed, InvalidateForkContributorStatsCache is called to delete all cached entries for
-// that repository, ensuring contributor statistics are refreshed promptly.
-//
-// Fallback behavior:
-// If secondary cache operations fail, the function falls back to computing results
-// from the primary cache to ensure system reliability.
-func getContributorStats(repo *repo_model.Repository, days int, since time.Time) (*ContributorStats, error) {
-	// Validate days parameter to prevent future cutoff times
-	if days < 0 {
-		days = 0
-	}
-
-	c := cache.GetCache()
-	if c == nil {
-		return &ContributorStats{TotalCount: 0, RecentCount: 0}, nil
-	}
-
-	// Build secondary cache key for pre-filtered results
-	// Use Unix timestamp for 'since' (0 if zero time) to create stable cache keys
-	sinceUnix := int64(0)
-	if !since.IsZero() {
-		sinceUnix = since.Unix()
-	}
-	secondaryCacheKey := fmt.Sprintf(forkContributorStatsCacheKey, repo.ID, sinceUnix, days)
-
-	// Try to get pre-filtered results from secondary cache
-	var cachedStats ContributorStats
-	if exists, cacheErr := c.GetJSON(secondaryCacheKey, &cachedStats); exists && cacheErr == nil {
-		return &cachedStats, nil
-	}
-
-	// Secondary cache miss - prevent stampede by checking if another goroutine is computing.
-	// LoadOrStore atomically checks if a key exists and stores a value if not.
-	// Returns (value, true) if key already existed, (value, false) if we stored it.
-	//
-	// Stampede prevention strategy:
-	// - First goroutine: acquires lock (shouldCache=true), computes, caches result, releases lock
-	// - Concurrent goroutines: see lock held (shouldCache=false), compute without caching
-	//
-	// This avoids blocking while ensuring exactly one goroutine populates the cache.
-	_, alreadyComputing := forkStatsComputeLock.LoadOrStore(secondaryCacheKey, struct{}{})
-	shouldCache := !alreadyComputing
-	if shouldCache {
-		// This defer will execute when getContributorStats returns, regardless of
-		// which return path is taken. This ensures the lock is always released.
-		defer forkStatsComputeLock.Delete(secondaryCacheKey)
-	}
-
-	// Compute from primary cache
-	ctx := context.Background()
-	stats, err := GetContributorStats(ctx, c, repo, repo.DefaultBranch)
-	if err != nil {
-		// If contributor stats generation is still in progress, return zeros
-		if errors.Is(err, ErrAwaitGeneration) {
-			return &ContributorStats{TotalCount: 0, RecentCount: 0}, nil
-		}
-		return nil, err
-	}
-
-	// Count contributors in a single pass for efficiency
-	// For forks, only count contributors who have commits after the fork creation time
-	cutoffTime := time.Now().AddDate(0, 0, -days)
-	totalCount := 0
-	recentCount := 0
-
-	for email, contributor := range stats {
-		// Skip the "total" summary entry
-		if email == "total" {
-			continue
-		}
-
-		// For forks, skip contributors with no post-fork commits
-		if !hasCommitsAfter(contributor, since) {
-			continue
-		}
-
-		totalCount++
-
-		// Check if contributor has commits in the recent time window
-		for _, week := range contributor.Weeks {
-			weekTime := time.UnixMilli(week.Week)
-			if weekTime.After(cutoffTime) && week.Commits > 0 {
-				recentCount++
-				break
-			}
-		}
-	}
-
-	result := &ContributorStats{
-		TotalCount:  totalCount,
-		RecentCount: recentCount,
-	}
-
-	// Store in secondary cache for future requests (only if we hold the compute lock)
-	// This prevents multiple goroutines from racing to write the same cache entry
-	// Errors are logged but don't fail the request - cache is best-effort
-	if shouldCache {
-		if err := c.PutJSON(secondaryCacheKey, result, forkContributorStatsCacheTimeout); err != nil {
-			log.Warn("Failed to cache fork contributor stats for repo %d: %v", repo.ID, err)
-		} else {
-			// Register the cache key for invalidation on push
-			registerForkStatsCacheKey(repo.ID, secondaryCacheKey)
-		}
-	}
-
-	return result, nil
-}
-
 // countVisibleForks counts the number of visible forks in the tree
 func countVisibleForks(node *ForkNode) int {
 	if node == nil {
@@ -693,11 +614,11 @@ func collectRepositories(node *ForkNode) []*repo_model.Repository {
 
 	var collect func(*ForkNode)
 	collect = func(n *ForkNode) {
-		if n == nil || n.repo == nil {
+		if n == nil {
 			return
 		}
-		// Only add if not already seen
-		if !seen[n.repo.ID] {
+		// a node without a repository (a hidden root) still has forks to collect
+		if n.repo != nil && !seen[n.repo.ID] {
 			seen[n.repo.ID] = true
 			repos = append(repos, n.repo)
 		}
@@ -760,8 +681,12 @@ func convertNodesToAPI(ctx context.Context, node *ForkNode) {
 		return
 	}
 
-	// Convert this node's repository to API format
-	if node.repo != nil {
+	if node.hidden {
+		// structure only: no repository, drawn as a tombstone
+		node.Repository = nil
+		node.IsTombstoned = true
+	} else if node.repo != nil {
+		// Convert this node's repository to API format
 		permission := createReadPermission(ctx, node.repo)
 		node.Repository = convert.ToRepo(ctx, node.repo, permission)
 		node.IsTombstoned = node.repo.IsTombstone()
@@ -772,5 +697,10 @@ func convertNodesToAPI(ctx context.Context, node *ForkNode) {
 	// Recursively convert children
 	for _, child := range node.Children {
 		convertNodesToAPI(ctx, child)
+		// a fork's api.Repository embeds its parent repository: not one the reader
+		// may not see
+		if node.hidden && child.Repository != nil {
+			child.Repository.Parent = nil
+		}
 	}
 }

@@ -1,5 +1,5 @@
 import {expect, test, type Page} from '@playwright/test';
-import {create_first_article, delete_repo, disableGeneratedHooks, load_logged_in_context, login_user} from './utils_e2e.ts';
+import {create_first_article, delete_repo, disableGeneratedHooks, load_logged_in_context, login_user, normalizeSubjectTitle} from './utils_e2e.ts';
 
 const articleDiagram = `flowchart LR
   ArticleAlpha --> ArticleBeta`;
@@ -79,7 +79,7 @@ test.describe('Mermaid rendering', () => {
       // editor's textarea sync dispatches, which is also what enables it for a real user
       await expect(page.locator('#commit-button')).toBeEnabled({timeout: 10000});
       await page.locator('#commit-button').click();
-      await page.waitForURL(`**/subject/${subject}/user2**`, {timeout: 30000});
+      await page.waitForURL(`**/subject/${normalizeSubjectTitle(subject)}/user2**`, {timeout: 30000});
 
       await expectMermaidFrame(page, 0, /ArticleAlpha[\s\S]*ArticleBeta/);
 
@@ -93,7 +93,7 @@ test.describe('Mermaid rendering', () => {
       await expect.poll(() => page.evaluate(() => (window as typeof window & {__copiedText?: string}).__copiedText))
         .toContain(articleDiagram);
 
-      await page.goto(`/user2/${subject}/issues/new`);
+      await page.goto(`/user2/${repoName}/issues/new`);
       await expect(page.locator('#new-issue')).toBeVisible({timeout: 10000});
       await page.locator('input[name="title"]').fill('Mermaid issue');
       await setToastEditorValue(page, '#new-issue .toast-comment-editor', fencedMermaid(issueDiagram));

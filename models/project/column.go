@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
+	"slices"
 
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/modules/setting"
@@ -352,7 +354,7 @@ func GetColumnsByIDs(ctx context.Context, projectID int64, columnsIDs []int64) (
 func MoveColumnsOnProject(ctx context.Context, project *Project, sortedColumnIDs map[int64]int64) error {
 	return db.WithTx(ctx, func(ctx context.Context) error {
 		sess := db.GetEngine(ctx)
-		columnIDs := util.ValuesOfMap(sortedColumnIDs)
+		columnIDs := slices.Collect(maps.Values(sortedColumnIDs))
 		movedColumns, err := GetColumnsByIDs(ctx, project.ID, columnIDs)
 		if err != nil {
 			return err

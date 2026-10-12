@@ -3,6 +3,12 @@ import {
   BUBBLE_HOVER_RADIUS,
   BUBBLE_SIZE_LADDER,
   BUBBLE_UNKNOWN_RUNG,
+  COMPARE_BADGE_ANGLE_DEG,
+  COMPARE_BADGE_DISTANCE,
+  COMPARE_OUTLINE,
+  COMPARE_RING_WIDTH,
+  compareBadgeCenter,
+  compareOrderFor,
   bubbleDiameterFor,
   bubbleLabelDetailFor,
   bubbleRadiusFor,
@@ -237,4 +243,48 @@ test('the count still fits when it is written from a rung the caller already has
     );
   }
   expect(countTextForRung(4, BUBBLE_UNKNOWN_RUNG)).toBe('4');
+});
+
+describe('compare mode drawing (#405 item 6, figma 641:61930)', () => {
+  test('the outline and the ring are the figma constants, the same on every rung', () => {
+    expect(COMPARE_OUTLINE).toEqual({width: 1, dash: 3, gap: 3});
+    expect(COMPARE_RING_WIDTH).toBe(2);
+  });
+
+  test('the badge is the 18px CounterLabel with a 12px number wherever it fits', () => {
+    for (const rung of BUBBLE_SIZE_LADDER) {
+      if (rung.diameter >= 58) expect(rung.compareBadge).toEqual({diameter: 18, fontSize: 12});
+    }
+  });
+
+  test('only the two smallest rungs shrink the badge, never below a readable size', () => {
+    const xs = BUBBLE_SIZE_LADDER.find((r) => r.name === 'XS').compareBadge;
+    const s = BUBBLE_SIZE_LADDER.find((r) => r.name === 'S').compareBadge;
+    expect(xs.diameter).toBeLessThan(s.diameter);
+    expect(s.diameter).toBeLessThan(18);
+    for (const rung of BUBBLE_SIZE_LADDER) {
+      // an 18px disc would cover over half of a 34px bubble: no badge is wider than half
+      // its bubble plus 3px (the slack the XS rung needs: its 22px bubble keeps a 12px,
+      // still readable, disc)
+      expect(rung.compareBadge.diameter).toBeLessThanOrEqual(rung.diameter / 2 + 3);
+      expect(rung.compareBadge.fontSize).toBeGreaterThanOrEqual(8);
+      expect(rung.compareBadge.fontSize).toBeLessThan(rung.compareBadge.diameter);
+    }
+  });
+
+  test('the badge sits where figma puts it: (87, 20) in a 100px bubble', () => {
+    const {x, y} = compareBadgeCenter(50);
+    // from the top-left corner of the 100px bubble
+    expect(50 + x).toBeCloseTo(87, 0);
+    expect(50 + y).toBeCloseTo(20, 0);
+    expect(Math.hypot(x, y)).toBeCloseTo(50 * COMPARE_BADGE_DISTANCE);
+    expect(Math.atan2(-y, x) * 180 / Math.PI).toBeCloseTo(COMPARE_BADGE_ANGLE_DEG);
+  });
+
+  test('the badge number is the place in the comparison', () => {
+    expect(compareOrderFor('first')).toBe(1);
+    expect(compareOrderFor('second')).toBe(2);
+    expect(compareOrderFor('none')).toBeNull();
+    expect(compareOrderFor(undefined)).toBeNull();
+  });
 });

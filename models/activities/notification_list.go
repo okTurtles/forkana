@@ -5,6 +5,8 @@ package activities
 
 import (
 	"context"
+	"maps"
+	"slices"
 
 	"code.gitea.io/gitea/models/db"
 	issues_model "code.gitea.io/gitea/models/issues"
@@ -14,7 +16,6 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/container"
 	"code.gitea.io/gitea/modules/log"
-	"code.gitea.io/gitea/modules/util"
 
 	"xorm.io/builder"
 )
@@ -463,7 +464,7 @@ func (nl NotificationList) LoadIssuePullRequests(ctx context.Context) error {
 		return nil
 	}
 
-	pulls, err := issues_model.GetPullRequestByIssueIDs(ctx, util.KeysOfMap(issues))
+	pulls, err := issues_model.GetPullRequestByIssueIDs(ctx, slices.Collect(maps.Keys(issues)))
 	if err != nil {
 		return err
 	}

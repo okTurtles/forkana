@@ -28,6 +28,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"code.gitea.io/gitea/modules/subjecttitle"
 )
 
 // Pre-compiled regexes for createSlug (Issue 5: avoid recompiling in hot path)
@@ -299,8 +301,22 @@ func (c *giteaClient) processFile(filePath, username string, public bool) bool {
 		return false
 	}
 
+	// Forkana's subject titles follow Wikipedia's title restrictions (issue #401), so a
+	// Wikipedia title such as "Python (programming language)" or "C++" is used as is. The
+	// server's own cleaner still normalizes it (e.g. underscores become spaces) and removes
+	// anything the rule forbids, so the subject is never rejected.
+	subject := subjecttitle.Clean(description)
+	if subject == "" {
+		fmt.Printf("  ✗ Title %q cannot be turned into a valid subject\n", description)
+		c.stats.failed++
+		return false
+	}
+	if subject != description {
+		fmt.Printf("  Subject: %s\n", subject)
+	}
+
 	// Create repository
-	repoURL, err := c.createRepository(repoName, description, description, public)
+	repoURL, err := c.createRepository(repoName, description, subject, public)
 	if err != nil {
 		fmt.Printf("  ✗ Failed to create repository: %v\n", err)
 		c.stats.failed++

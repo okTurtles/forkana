@@ -33,15 +33,23 @@ import LegendFishbone from "./FishboneLegend.vue";
 import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
+import { COMPARE_POPOVER_HEIGHT, COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
+import CompareAnnouncement, { type CompareAnnouncementMessages, type CompareAnnouncementState } from "./CompareAnnouncement.vue";
+import {
+  COMPARE_MODE_STATE_EVENT, COMPARE_MODE_TOGGLE_EVENT, canPickForCompare, compareAnnouncementFor, compareAvailableFor,
+  replayCompareModeRequest, type CompareModeState,
+} from "../../modules/compare-mode-request.ts";
+import type { ForkGraphNode, ForkGraphResponse } from "./fork-graph-api.ts";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
 import { GET } from "../../modules/fetch.ts";
 import { extractArticleSummary } from "./article-summary.ts";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import {
   BUBBLE_HOVER_RADIUS, BUBBLE_UNKNOWN_RUNG, bubbleRungFor, countTextForRung,
-  maxContributors, type BubbleRung,
+  maxContributors, type BubbleRung, type ComparePickState,
 } from "./bubble-size.ts";
 import {
+  BUBBLE_HIDDEN_EVENT,
   DEFAULT_CONTAINER_HEIGHT, DEFAULT_CONTAINER_WIDTH, MAX_LAYOUT_WIDTH,
   SIZE_EPSILON,
   canvasHeightFor, isMeasurable, layoutWidthFor, observeContainerResize,
@@ -49,7 +57,7 @@ import {
   type ContainerSize,
 } from "./graph-viewport.ts";
 import {
-  readStoredSelection, writeStoredSelection,
+  BUBBLE_OPEN_ARTICLE_EVENT, BUBBLE_SELECTED_EVENT, SELECTION_PARAM, SELECTION_UPDATED_EVENT, getCurrentSelection, selectionToParam,
   type RepoSelection as RepoSelectionDetail,
 } from "../../modules/repo-selection.ts";
 
@@ -89,6 +97,9 @@ type Node = {
      below it need the ancestry — and stays interactive; the bubble is only
      drawn as a tombstone so the deletion is visible. */
   isTombstoned?: boolean;
+  /* A node without a repository: the subject root the reader may not see (the server
+     sends its place only). Drawn like a tombstone, it is not an article to select. */
+  isHidden?: boolean;
   /* The API answered 0 contributors for a repository that HAS content, which
      means the stats are still being generated server-side, not that nobody
      wrote it (see buildGraphFromApi). `contributors` carries a placeholder 1
@@ -284,7 +295,7 @@ type EdgeGeom = {
 const nodesList = ref<FrameNode[]>([]);
 const edgesList = ref<EdgeGeom[]>([]);
 const trunksList = ref<{ x: number; y1: number; y2: number; id: string }[]>([]);
-const jointDots = ref<{ x: number; y: number; id: string; sourceId: NodeId; targetId: NodeId; sourceOwner: string; targetOwner: string; subject: string }[]>([]);
+const jointDots = ref<{ x: number; y: number; id: string; sourceId: NodeId; targetId: NodeId; sourceOwner: string; targetOwner: string; subject: string; inert: boolean }[]>([]);
 
 /* SVG/zoom plumbing */
 const svgHeight = ref(DEFAULT_CONTAINER_HEIGHT);
@@ -310,8 +321,8 @@ const isCompareMode = ref(false);
 const compareSelection = ref<Node[]>([]);
 const showComparePopup = ref(false);
 
-/* Computed: get compare state for a node ('none' | 'first' | 'second') */
-function getCompareState(nodeId: string): 'none' | 'first' | 'second' {
+/* Computed: get compare state for a node */
+function getCompareState(nodeId: string): ComparePickState {
   if (!isCompareMode.value) return 'none';
   const idx = compareSelection.value.findIndex(n => n.id === nodeId);
   if (idx === 0) return 'first';
@@ -387,6 +398,9 @@ let pointerCleanup: (() => void) | null = null;
 interface FishboneGraphProps {
   // Core data source
   apiUrl?: string | null;
+  /* The graph already built by the server, in the API's response shape, drawn
+     instead of the first API request. */
+  initialGraph?: ForkGraphResponse | null;
   owner?: string | null;
   repo?: string | null;
   subject?: string | null;
@@ -402,6 +416,7 @@ interface FishboneGraphProps {
 
 const props = withDefaults(defineProps<FishboneGraphProps>(), {
   apiUrl: null,
+  initialGraph: null,
   owner: null,
   repo: null,
   subject: null,
@@ -413,6 +428,9 @@ const props = withDefaults(defineProps<FishboneGraphProps>(), {
   limit: API_LIMIT,
 });
 
+/* props.initialGraph until it has been drawn once (see fetchForkGraphAndSet). */
+let pendingInitialGraph: ForkGraphResponse | null = props.initialGraph ?? null;
+
 const selectedNodeId = ref<NodeId | null>(null);
 let pendingExternalSelection: RepoSelectionDetail | null = null;
 
@@ -421,6 +439,7 @@ function normalize(value?: string | null) {
 }
 
 function getSelectionDetailFromNode(n: Node): RepoSelectionDetail | null {
+  if (n.isHidden) return null;   // it would otherwise borrow the page's own article (props)
   const ownerCandidates = [
     n.repoOwner,
     n.fullName?.split('/')?.[0],
@@ -464,21 +483,14 @@ function findNodeBySelection(detail: RepoSelectionDetail): Node | null {
   const desiredRepo = normalize(detail.repo || detail.subject || '');
   if (!desiredOwner || !desiredRepo) return null;
   for (const node of Object.values(state.graph)) {
-    const ownerCandidates = [
-      node.repoOwner,
-      node.fullName?.split('/')?.[0],
-      node.parentId === null ? (props.owner ?? null) : null,
-    ].filter(Boolean) as string[];
-    const repoCandidates = [
-      node.repoName,
-      node.fullName?.split('/')?.[1],
-      node.repoSubject,
-      node.parentId === null ? (props.repo ?? null) : null,
-    ].filter(Boolean) as string[];
-    if (
-      ownerCandidates.some((c) => normalize(c) === desiredOwner) &&
-      repoCandidates.some((c) => normalize(c) === desiredRepo)
-    ) {
+    /* The node's OWN owner and name, the very selection clicking it would make.
+       The props are only a fallback for a root that carries neither. Matching
+       ANY candidate let the root claim every selection whose owner was the
+       page's (the props name the article the page was rendered for, not the
+       root) and whose repository shares the root's slug — which every article
+       of a subject does. */
+    const own = getSelectionDetailFromNode(node);
+    if (own && normalize(own.owner) === desiredOwner && normalize(own.repo) === desiredRepo) {
       return node;
     }
   }
@@ -506,8 +518,10 @@ function setSelectionFromDetail(detail: RepoSelectionDetail | null) {
   }
 }
 
+/* The page's selection (repo-history.ts owns it, see modules/repo-selection.ts)
+   is applied once the nodes exist; until then it is only remembered. */
 function restoreSelectionAfterGraphLoad() {
-  const desired = pendingExternalSelection ?? readStoredSelection();
+  const desired = pendingExternalSelection ?? getCurrentSelection();
   if (desired) {
     pendingExternalSelection = null;
     setSelectionFromDetail(desired);
@@ -522,21 +536,19 @@ function handleExternalSelection(event: Event) {
   setSelectionFromDetail(normalized);
 }
 
-/* WAITING FOR THE CONTRIBUTOR STATS.
+/* NO CONTRIBUTOR COUNT AT ALL.
 
-   The server computes contributor stats asynchronously and, until they are
-   ready, reports every repository as 0 contributors. Sizes here are RATIOS
-   against the biggest article, so a graph of all-zeros has no scale to draw:
-   rendering it anyway paints every bubble at the top rung (126px) and — since
-   the graph is fetched exactly once, on mount — leaves it that way until the
-   user reloads the page.
+   Every count comes from the server (services/repository ArticleContributorCount),
+   and a real 0 is drawn as 0. A node arrives WITHOUT a count only when the server
+   failed to compute it (a git error, a timeout); buildGraphFromApi marks it
+   `statsPending`. Sizes here are RATIOS against the biggest article, so a graph in
+   which no node has a count has no scale to draw.
 
-   So a graph that is entirely placeholders is not drawn. The loading state is
-   held and the fetch is repeated, backing off, for as long as it is worth
-   waiting. The delays are bounded: stats generation can fail, and a spinner
-   that never resolves is worse than a rough picture. When they run out the
-   graph is drawn from the placeholders, with `statsUnknown` putting every
-   bubble on the bottom rung rather than the top. */
+   Such a graph is not drawn straight away: the loading state is held and the fetch
+   is repeated, backing off, in case the failure was transient. The delays are
+   bounded, since a spinner that never resolves is worse than a rough picture. When
+   they run out the graph is drawn from the placeholders, with BUBBLE_UNKNOWN_RUNG
+   putting every bubble on the bottom rung rather than the top. */
 const STATS_RETRY_DELAYS_MS = [1500, 2500, 4000, 6000] as const;
 let statsRetry = 0;
 let statsRetryTimer: number | null = null;
@@ -559,6 +571,16 @@ async function fetchForkGraphAndSet() {
   cancelStatsRetry();
 
   try {
+    /* The subject page embeds the graph it has just built for its Table view
+       (pageData.subjectForkGraph), so the first draw needs no request: the API
+       used to rebuild the very same graph right after the page loaded. Used
+       once; a retry ("Try Again", or waiting for counts) asks the API. */
+    const embedded = pendingInitialGraph;
+    pendingInitialGraph = null;
+    if (embedded) {
+      await applyGraphResponse(embedded);
+      return;
+    }
     if (!props.apiUrl) {
       console.warn('FishboneGraph: apiUrl not provided');
       errorMessage.value = 'No API URL provided';
@@ -596,49 +618,7 @@ async function fetchForkGraphAndSet() {
       announceToScreenReader(errorText);
       return;
     }
-    const json = await res.json();
-    const graph = buildGraphFromApi(json?.root);
-
-    /* Nothing real to draw yet: stay on the loading state and come back for the
-       numbers rather than rendering a graph of placeholders. state.graph is
-       deliberately NOT set — a half-real graph must never reach the layout. */
-    if (graphIsAllPlaceholder(graph) && statsRetry < STATS_RETRY_DELAYS_MS.length) {
-      const wait = STATS_RETRY_DELAYS_MS[statsRetry];
-      statsRetry++;
-      statsRetryTimer = window.setTimeout(() => {
-        statsRetryTimer = null;
-        void fetchForkGraphAndSet();
-      }, wait);
-      return;                        // isLoading stays true
-    }
-    statsRetry = 0;
-    /* Fresh node objects: what was requested for the old ones no longer
-       says anything about these. */
-    summaryRequested.clear();
-    state.graph = graph;
-
-    // Clear loading state before layout/render
-    isLoading.value = false;
-
-    // Only layout and render if we have data
-    if (Object.keys(graph).length > 0) {
-      // Wait for Vue to update the DOM with the new graph data before calculating layout
-      await nextTick();
-      layoutAndRender();
-      /* One more tick: layoutAndRender() is what makes `hasData` true, so the
-         legend only exists in the DOM after Vue has flushed. resetView() needs
-         its height to know how much canvas the graph actually gets. */
-      await nextTick();
-      resetView();
-      restoreSelectionAfterGraphLoad();
-      announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
-    } else {
-      /* No article yet: the "Create the first article" bubble is centred in the
-         canvas box by CSS, so the box has to be the size of the space it has. */
-      await nextTick();
-      syncCanvasHeight();
-      announceToScreenReader('No fork data available');
-    }
+    await applyGraphResponse(await res.json() as ForkGraphResponse);
   } catch (err) {
     const errorText = err instanceof Error ? err.message : 'Failed to load fork graph';
     console.error('FishboneGraph: failed to fetch graph', err);
@@ -649,25 +629,75 @@ async function fetchForkGraphAndSet() {
   }
 }
 
-function buildGraphFromApi(root: any): Graph {
+/* Draws a fork-graph response (the API's shape), wherever it came from. */
+async function applyGraphResponse(json: ForkGraphResponse | null) {
+  const graph = buildGraphFromApi(json?.root);
+
+  /* Nothing real to draw yet: stay on the loading state and come back for the
+     numbers rather than rendering a graph of placeholders. state.graph is
+     deliberately NOT set — a half-real graph must never reach the layout. */
+  if (graphIsAllPlaceholder(graph) && statsRetry < STATS_RETRY_DELAYS_MS.length) {
+    const wait = STATS_RETRY_DELAYS_MS[statsRetry];
+    statsRetry++;
+    statsRetryTimer = window.setTimeout(() => {
+      statsRetryTimer = null;
+      void fetchForkGraphAndSet();
+    }, wait);
+    return;                        // isLoading stays true
+  }
+  statsRetry = 0;
+  /* Fresh node objects: what was requested for the old ones no longer
+     says anything about these. */
+  summaryRequested.clear();
+  state.graph = graph;
+
+  // Clear loading state before layout/render
+  isLoading.value = false;
+
+  // Only layout and render if we have data
+  if (Object.keys(graph).length > 0) {
+    // Wait for Vue to update the DOM with the new graph data before calculating layout
+    await nextTick();
+    layoutAndRender();
+    /* One more tick: layoutAndRender() is what makes `hasData` true, so the
+       legend only exists in the DOM after Vue has flushed. resetView() needs
+       its height to know how much canvas the graph actually gets. */
+    await nextTick();
+    resetView();
+    restoreSelectionAfterGraphLoad();
+    announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
+  } else {
+    /* No article yet: the "Create the first article" bubble is centred in the
+       canvas box by CSS, so the box has to be the size of the space it has. */
+    await nextTick();
+    syncCanvasHeight();
+    announceToScreenReader('No fork data available');
+  }
+}
+
+function buildGraphFromApi(root: ForkGraphNode | null | undefined): Graph {
   const g: Graph = {};
   if (!root) return g;
 
   // Store the root API data so we can check repository.empty flag
   let rootApiData = root;
 
-  const visit = (n: any, parentId: string | null): string => {
+  const visit = (n: ForkGraphNode | null | undefined, parentId: string | null): string => {
     if (!n) return '';
     const id: string = n?.id ?? (n?.repository?.full_name ?? Math.random().toString(36).slice(2));
-    const baseContrib: number = Number(n?.contributors?.total_count ?? n?.contributors?.recent_count ?? 0);
-    let contributors: number = Number.isFinite(baseContrib) ? baseContrib : 0;
-    const updatedAt: string | undefined = n?.repository?.updated_at ?? n?.repository?.updated ?? undefined;
+    /* total_count is the article's contributor count exactly as the Table and
+       Article views show it (services/repository ArticleContributorCount), so
+       a genuine 0 — a fork nobody has committed to yet — is shown as 0, like
+       its table row. Only a node WITHOUT stats (the server could not count)
+       is unknown. */
+    const baseContrib = Number(n?.contributors?.total_count);
+    const hasCount = n?.contributors != null && Number.isFinite(baseContrib);
+    let contributors: number = hasCount ? baseContrib : 0;
+    const updatedAt: string | undefined = n?.repository?.updated_at ?? undefined;
     const repo = n?.repository ?? {};
-    const ownerName: string | null =
-      repo?.owner?.name ?? repo?.owner_name ?? repo?.owner?.username ?? null;
-    const repoName: string | null = repo?.name ?? repo?.repo_name ?? null;
-    const repoSubject: string | null =
-      repo?.subject ?? repo?.subject_slug ?? repo?.subject_name ?? repoName ?? null;
+    const ownerName: string | null = repo?.owner?.login ?? repo?.owner?.username ?? null;
+    const repoName: string | null = repo?.name ?? null;
+    const repoSubject: string | null = repo?.subject ?? repoName ?? null;
     const fullName: string | null = repo?.full_name ?? (ownerName && repoName ? `${ownerName}/${repoName}` : null);
     const isEmpty: boolean = repo?.empty === true;
     const isArchived: boolean = repo?.archived === true;
@@ -676,14 +706,15 @@ function buildGraphFromApi(root: any): Graph {
     const description: string = typeof repo?.description === 'string' ? repo.description : '';
     const defaultBranch: string = typeof repo?.default_branch === 'string' ? repo.default_branch : '';
 
-    /* A repository with content has at least one commit and therefore at least
-       one contributor, so 0 on a NON-EMPTY repo never means "nobody": it means
-       the server has not finished computing the stats yet (it answers
-       TotalCount 0 while generation is in flight — services/repository/
-       fork_graph.go). Keep the placeholder 1 so a give-up render still draws
-       something, but remember that it IS a placeholder: fed into a ratio as if
-       it were real, it makes every bubble tie for biggest and paint at 126px. */
-    const statsPending: boolean = !isEmpty && contributors === 0;
+    /* No count for a repository with content: the server could not compute
+       it. Keep the placeholder 1 so a give-up render still draws something,
+       but remember that it IS a placeholder: fed into a ratio as if it were
+       real, it makes every bubble tie for biggest and paint at 126px.
+       (#405: a 0 used to be read as "still being computed" too, because the
+       count came from asynchronously generated stats; it no longer does, and
+       reading a real 0 as a placeholder 1 is what made a bubble disagree with
+       its table row.) */
+    const statsPending: boolean = !isEmpty && !hasCount;
     if (statsPending) {
       contributors = 1;
     }
@@ -704,6 +735,7 @@ function buildGraphFromApi(root: any): Graph {
       isArchived,
       articleLink: articleLink ?? undefined,
       isTombstoned,
+      isHidden: n?.repository == null,
       statsPending,
     };
     if (!node.repoSubject && parentId === null && props.subject) {
@@ -759,6 +791,11 @@ function detailFor(n: number) {
    see ./bubble-size.ts. */
 function countTextFor(n: number) {
   return countTextForRung(n, rungFor(n));
+}
+
+/* The Compare-mode order badge of this rung — from the same rung, like its type. */
+function compareBadgeFor(n: number) {
+  return rungFor(n).compareBadge;
 }
 
 function countFontFor(n: number) {
@@ -974,6 +1011,7 @@ function scheduleRemeasure() {
   syncCanvasHeight();
   /* The opened circle is sized from the container, so it has to follow it. */
   if (openArticle.value) { detailSize.value = computeDetailSize(); updateHistoryAnchor(); }
+  updateCompareAnchor();
   if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
   pendingRaf = requestAnimationFrame(() => {
     pendingRaf = null;
@@ -1199,6 +1237,9 @@ function setFrame(g: Graph, placements: Placements) {
     sourceOwner: e.source.node.repoOwner || e.source.node.fullName?.split('/')[0] || '',
     targetOwner: e.target.node.repoOwner || e.target.node.fullName?.split('/')[0] || '',
     subject: e.source.node.repoSubject || e.target.node.repoSubject || props.subject || '',
+    /* a point of contention with a hidden root or a deleted article on one side
+       compares nothing: drawn, but not a control */
+    inert: !canPickForCompare(e.source.node) || !canPickForCompare(e.target.node),
   }));
 
   /* The canvas is the VIEWPORT, not the content. It used to be sized from the
@@ -1533,6 +1574,7 @@ onMounted(async () => {
       worldSel.attr("transform", z.toString());
       /* The History card hangs off a bubble, so it travels with it. */
       if (historyOpen.value) updateHistoryAnchor();
+      updateCompareAnchor();
     });
 
   svgSel.call(zoomBehavior as any);
@@ -1548,9 +1590,8 @@ onMounted(async () => {
       collapseAll();
       applySelection(null, null);
       pendingExternalSelection = null;
-      writeStoredSelection(null);
-      window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: null }));
-      window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: null }));
+      /* repo-history.ts records the change and broadcasts it back. */
+      window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: null }));
     }
   });
 
@@ -1594,11 +1635,27 @@ onMounted(async () => {
   }, {passive: true});
   pointerCleanup = () => window.removeEventListener('pointermove', trackPointer);
 
-  /* Initial fetch from API */
-  await fetchForkGraphAndSet();
-  window.addEventListener('repo:selection-updated', handleExternalSelection as EventListener);
-  window.addEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
+  /* Follow the page's selection from now on: a change made while the graph is
+     still loading is remembered (pendingExternalSelection) and applied with the
+     nodes, rather than lost because nobody was listening yet. */
+  window.addEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
+  /* Before the fetch too: the header's Compare button can be clicked while
+     the graph is loading. */
+  window.addEventListener(COMPARE_MODE_TOGGLE_EVENT, handleCompareModeToggle as EventListener);
+  /* Before the await, like every listener here: onBeforeUnmount may run while
+     the graph is still loading, and must find them to remove them. */
   window.addEventListener('keydown', onGraphKeydown);
+  window.addEventListener(BUBBLE_HIDDEN_EVENT, onBubbleViewHidden);
+  /* The window can change without the graph's box changing (a centred box of
+     fixed width just moves), and that changes which side of the bubbles has
+     room for the Compare box: re-place it on every resize. */
+  window.addEventListener('resize', updateCompareAnchor);
+
+  /* Initial fetch from API. A Compare press that mounted the graph
+     (repo-history.ts switches to the bubble view and leaves it as a request)
+     is replayed once the graph is in: replayed before, it would find no
+     article and say "No forks yet" on a subject that has some. */
+  await replayCompareModeRequest(fetchForkGraphAndSet, handleCompareModeToggle);
 });
 
 onBeforeUnmount(() => {
@@ -1611,9 +1668,12 @@ onBeforeUnmount(() => {
   cancelReflow();
   cancelStatsRetry();
   if (hoverTimer !== null) window.clearTimeout(hoverTimer);
-  window.removeEventListener('repo:selection-updated', handleExternalSelection as EventListener);
-  window.removeEventListener('repo:compare-mode-toggle', handleCompareModeToggle as EventListener);
+  window.removeEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
+  window.removeEventListener(COMPARE_MODE_TOGGLE_EVENT, handleCompareModeToggle as EventListener);
   window.removeEventListener('keydown', onGraphKeydown);
+  window.removeEventListener(BUBBLE_HIDDEN_EVENT, onBubbleViewHidden);
+  narrowQuery?.removeEventListener('change', onNarrowChange);
+  window.removeEventListener('resize', updateCompareAnchor);
 });
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -1657,7 +1717,7 @@ const historyOpen = ref(false);
    fork and the subject becomes an ordinary graph on the next load of the data,
    with no flag left set from before. (`hasData` keeps the no-article state out
    of this: that one belongs to CreateFirstArticleBubble.) */
-const isSoloSubject = computed(() => hasData.value && Object.keys(state.graph).length === 1);
+const isSoloSubject = computed(() => hasData.value && Object.keys(state.graph).length === 1 && !getRoot(state.graph)?.isHidden);
 
 /** The article on screen: the one that was clicked, or — on a solo subject —
    the only one there is. */
@@ -1676,9 +1736,9 @@ const soloPinned = computed(() => detailNode.value === null && openArticle.value
    with nothing to show, the summary is taken from the article itself: its
    README (the article IS its repository's single README, see AGENTS.md) is
    fetched raw and its first paragraph used. Fetched lazily — only for the
-   article actually opened, never for the whole graph — and written back onto
-   the reactive node, so the paragraph appears in the already-open circle and
-   is never fetched twice. */
+   article actually hovered or opened, never for the whole graph — and written
+   back onto the reactive node, so the paragraph appears in the card already
+   showing and is never fetched twice. */
 const summaryRequested = new Set<NodeId>();
 
 async function fetchArticleSummary(n: Node) {
@@ -1709,11 +1769,17 @@ async function fetchArticleSummary(n: Node) {
   }
 }
 
-watch(openArticle, (n) => {
-  /* An empty repository has no README and a tombstoned one deliberately shows
-     no excerpt (see BubbleNode), so neither is fetched. */
+/* An empty repository has no README and a tombstoned one deliberately shows
+   no excerpt (see BubbleNode), so neither is fetched. */
+function wantArticleSummary(n: Node | null | undefined) {
   if (n && !n.description && !n.isEmpty && !n.isTombstoned) void fetchArticleSummary(n);
-}, {immediate: true});
+}
+
+/* #421 item 7: the summary is wanted by the HOVERED bubble's card too, not only
+   by the opened article: it used to be fetched for the opened one only, so a
+   hovered card showed it only for an article that had been opened before. */
+watch(openArticle, (n) => wantArticleSummary(n), {immediate: true});
+watch(hoveredId, (id) => wantArticleSummary(nodeById(id)));
 
 /** The graph is not merely covered while an article is open: its bubbles and
    connectors are not rendered at all. It comes back the moment the close
@@ -1786,8 +1852,10 @@ function reflow() {
       if (!keyboardOwned && under !== hoveredId.value) setHovered(under);
     }
     updateHistoryAnchor();
+    updateCompareAnchor();
   });
   updateHistoryAnchor();
+  updateCompareAnchor();
 }
 
 /** Set (or clear) the hovered bubble, debounced against pointer thrash. */
@@ -1843,11 +1911,13 @@ function onBubbleHover(id: NodeId, on: boolean, pointerType: string) {
     return;
   }
   if (openArticle.value) return;   // the graph is not on screen to be hovered
+  if (on && nodeById(id)?.isHidden) return;   // no card: there is no article to describe
   if (on) setHovered(id);
   else if (hoveredId.value === id) setHovered(null);
 }
 
 function onBubbleClick(n: Node) {
+  if (n.isHidden) return;   // not an article the reader may open or compare
   // In compare mode, use compare selection logic instead
   if (isCompareMode.value) {
     onBubbleClickCompare(n);
@@ -1867,10 +1937,8 @@ function onBubbleClick(n: Node) {
   if (!detail) return;
   const payload = { ...detail };
   applySelection(n, payload);
-  writeStoredSelection(payload);
   announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
-  window.dispatchEvent(new CustomEvent('repo:bubble-selected', { detail: payload }));
-  window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
+  window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: payload }));
 }
 
 /* ── THE OPENED ARTICLE (425px, centred) ──────────────────────────────────
@@ -2116,6 +2184,69 @@ function updateHistoryAnchor() {
   historyAnchor.y = Math.round(Math.max(halfCard, Math.min(boxRect.height - halfCard, y)));
 }
 
+/* ── COMPARE BOX ──────────────────────────────────────────────────────────
+   Once two bubbles are picked, the Compare box sits beside them with its caret
+   pointing back at them (figma 641:61930) — see ./compare-popover.ts.
+   Re-placed whenever the bubbles move on screen: a pan or zoom, a reflow, a
+   resize. On a phone, or when neither side has room for it, the box is a
+   bottom sheet instead (compareBoxMode). */
+/* A phone has no room beside the bubbles: the box is a bottom sheet there.
+   Same breakpoint as the rest of the app (767.98px). */
+const narrowQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(COMPARE_SHEET_QUERY) : null;
+const isNarrow = ref(narrowQuery?.matches ?? false);
+const onNarrowChange = (ev: MediaQueryListEvent) => { isNarrow.value = ev.matches; };
+narrowQuery?.addEventListener('change', onNarrowChange);
+
+const compareLayout = reactive<ComparePopoverLayout>({placement: 'right', left: 0, top: 0, caretY: 0});
+const comparePopoverRef = ref<HTMLElement | null>(null);
+const compareBoxOpen = computed(() => showComparePopup.value && compareSelection.value.length === 2);
+/* Popover beside the bubbles, bottom sheet (a phone, or no room beside the
+   bubbles), or nothing — see compareBoxMode(). Reactive on the breakpoint, so
+   a resize across 768px swaps one for the other with the box open. */
+const compareMode = computed(() => compareBoxMode({open: compareBoxOpen.value, narrow: isNarrow.value, placement: compareLayout.placement}));
+const comparePopoverVisible = computed(() => compareMode.value === 'popover');
+
+function updateCompareAnchor() {
+  if (!compareBoxOpen.value || isNarrow.value) return;
+  const box = containerRef.value?.querySelector('.graph-container') as HTMLElement | null;
+  const svg = svgRef.value;
+  if (!box || !svg) return;
+  const boxRect = box.getBoundingClientRect();
+  const svgBox = svg.getBoundingClientRect();
+  const t = zoomTransform(svg);
+  const bubbles: CompareCircle[] = [];
+  for (const n of compareSelection.value) {
+    const p = framePlacements.get(n.id);
+    if (!p) continue;
+    bubbles.push({
+      cx: (svgBox.left - boxRect.left) + t.applyX(p.x),
+      cy: (svgBox.top - boxRect.top) + t.applyY(p.y),
+      r: p.r * t.k,
+    });
+  }
+  const layout = placeComparePopover({
+    bubbles,
+    containerHeight: boxRect.height,
+    viewportLeft: -boxRect.left,
+    viewportRight: document.documentElement.clientWidth - boxRect.left,
+    boxHeight: comparePopoverRef.value?.offsetHeight || COMPARE_POPOVER_HEIGHT,
+  });
+  Object.assign(compareLayout, {
+    placement: layout.placement,
+    left: Math.round(layout.left),
+    top: Math.round(layout.top),
+    caretY: Math.round(layout.caretY),
+  });
+}
+
+/* Place it as it opens, and again once it is measured (a long name can wrap). */
+watch([compareBoxOpen, isNarrow], async ([open]) => {
+  if (!open) return;
+  updateCompareAnchor();
+  await nextTick();
+  updateCompareAnchor();
+});
+
 /* The circle is sized from the container, and on a solo subject nothing
    "opens" it — it is simply there once the data lands. Size it whenever an
    article appears, after the DOM has settled so the canvas box is measured. */
@@ -2156,7 +2287,8 @@ function onDetailFullHistory() {
    Escape must not be able to leave that user staring at an empty canvas. */
 function onGraphKeydown(ev: KeyboardEvent) {
   if (ev.key !== 'Escape') return;
-  if (historyOpen.value) historyOpen.value = false;
+  if (compareBoxOpen.value) closeComparePopup();   // the Compare box is not modal, but Escape still closes it
+  else if (historyOpen.value) historyOpen.value = false;
   else if (detailNode.value) { closedByKeyboard = true; closeDetail(); }
   else if (expandedId.value !== null) collapseAll();
 }
@@ -2166,17 +2298,35 @@ function onBubbleView(n: Node) {
   if (!detail) return;
   const payload = { ...detail };
   applySelection(n, payload);
-  writeStoredSelection(payload);
-  window.dispatchEvent(new CustomEvent('repo:selection-updated', { detail: payload }));
-  window.dispatchEvent(new CustomEvent('repo:bubble-open-article', { detail: payload }));
+  window.dispatchEvent(new CustomEvent(BUBBLE_OPEN_ARTICLE_EVENT, { detail: payload }));
 }
 
-/* Click handler for joint-parent: navigate to fork comparison page */
-function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string }) {
-  if (!joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
+/* Click handler for joint-parent (a "mini circle", the point of contention
+   between a fork and its parent): navigate to the fork comparison page.
+
+   #406: the click is ALSO a selection, exactly like clicking a bubble — it
+   selects the fork the joint leads to (its target; the parent is shared by
+   every joint on its trunk, the fork is not). The selection is recorded in
+   the current history entry before leaving, so Back lands on the graph with
+   that joint and its bubble highlighted, and it is passed to the compare page
+   as "?selected=", whose view tabs carry it on: the Article view then shows
+   that article and the Table view checks its row, in whatever order the views
+   are visited. */
+function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string; targetId: NodeId; inert: boolean }) {
+  if (joint.inert || !joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
   const suburl = window.config?.suburl || '';
-  const compareUrl = `${suburl}/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`;
-  window.location.href = compareUrl;
+  const compareUrl = new URL(
+    `${suburl}/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`,
+    window.location.origin,
+  );
+  const target = state.graph[joint.targetId];
+  const detail = target ? getSelectionDetailFromNode(target) : null;
+  if (target && detail) {
+    applySelection(target, detail);
+    window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: { ...detail } }));
+    compareUrl.searchParams.set(SELECTION_PARAM, selectionToParam(detail));
+  }
+  window.location.href = compareUrl.pathname + compareUrl.search;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -2186,40 +2336,151 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
 /* Toggle compare mode on/off */
 function toggleCompareMode() {
   isCompareMode.value = !isCompareMode.value;
+  compareUnavailableShown.value = false;
   if (!isCompareMode.value) {
     // Exiting compare mode: clear selections and close popup
     compareSelection.value = [];
     showComparePopup.value = false;
   }
-  announceToScreenReader(isCompareMode.value ? 'Compare mode activated. Select two articles to compare.' : 'Compare mode deactivated.');
+  /* entering is announced with the banner's first message (announcementState);
+     leaving is the reader's own press of "Exit compare mode" */
 }
 
-/* Handle compare mode toggle from external event (header button) */
+/* Handle compare mode toggle from external event (header button). A subject
+   with a single article has nothing to compare: the button is shown as
+   unavailable and a click explains why in the banner (figma "Bubble view /
+   Comparing disabled", 6661:52942) instead of entering compare mode. */
 function handleCompareModeToggle() {
+  if (!isCompareMode.value && !compareAvailable.value) {
+    compareUnavailableShown.value = !compareUnavailableShown.value;
+    return;
+  }
   toggleCompareMode();
 }
 
+/* ── COMPARE MODE BANNER (#421 item 1) ─────────────────────────────────────
+   CompareAnnouncement.vue, teleported under the navbar. Its state follows the
+   selection; the header's Compare button follows compare mode (and whether
+   the subject has anything to compare) through COMPARE_MODE_STATE_EVENT,
+   which web_src/js/features/copycontent.ts applies to it. */
+const compareUnavailableShown = ref(false);
+/* Two live articles to compare. A deleted article cannot be compared, and a graph
+   that failed to load says nothing about the subject: that is not "No forks yet". */
+const liveArticleCount = computed(() => Object.values(state.graph).filter((n) => canPickForCompare(n)).length);
+const compareAvailable = computed(() => compareAvailableFor({loading: isLoading.value, failed: errorMessage.value !== null, liveArticles: liveArticleCount.value}));
+const announcementTarget = typeof document !== 'undefined' ? document.querySelector<HTMLElement>('#compare-announcement-root') : null;
+
+function readAnnouncementMessages(): CompareAnnouncementMessages {
+  const d = announcementTarget?.dataset ?? {};
+  return {
+    select: d.msgSelect || 'Select 2 articles to compare (0/2 selected).',
+    one: d.msgOne || '1/2 selected – select one more to compare.',
+    ready: d.msgReady || '2/2 selected – ready to compare.',
+    unavailable: d.msgNoForks || 'No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.',
+    compareNow: d.msgCompareNow || 'Compare now',
+    dismiss: d.msgDismiss || 'Exit compare mode',
+    dismissNotice: d.msgDismissNotice || 'Dismiss',
+  };
+}
+const announcementMessages = readAnnouncementMessages();
+
+const announcementState = computed<CompareAnnouncementState | null>(() => {
+  if (isCompareMode.value) {
+    const n = compareSelection.value.length;
+    return n >= 2 ? 'ready' : n === 1 ? 'one' : 'select';
+  }
+  return compareUnavailableShown.value ? 'unavailable' : null;
+});
+
+/* The banner is mounted with its first message, which a live region inside it would
+   not announce: the graph's own status region (srAnnouncement) says each one. */
+/* One announcement per compare action: the localized banner message, led by the
+   article the action was about (compareActionArticle, set by the action). Two writes
+   in one tick would leave only the last one to be heard. */
+let compareActionArticle: string | null = null;
+watch(announcementState, (state) => {
+  if (state) announceToScreenReader(compareAnnouncementFor(compareActionArticle, announcementMessages[state]));
+  compareActionArticle = null;
+});
+
+function dismissAnnouncement() {
+  if (isCompareMode.value) toggleCompareMode();
+  else compareUnavailableShown.value = false;
+}
+
+/* Compare mode entered while the graph was still loading, on a subject that
+   turns out to have a single article: leave it, and say why. */
+watch(compareAvailable, (available) => {
+  if (!available && isCompareMode.value) {
+    toggleCompareMode();
+    compareUnavailableShown.value = true;
+  }
+});
+
+watch([isCompareMode, compareAvailable], () => {
+  window.dispatchEvent(new CustomEvent<CompareModeState>(COMPARE_MODE_STATE_EVENT, {
+    detail: {on: isCompareMode.value, available: compareAvailable.value},
+  }));
+}, {immediate: true});
+
 /* Handle bubble click in compare mode */
 function onBubbleClickCompare(n: Node) {
+  // a deleted article (or a hidden root) has nothing to compare: refused, as its look says
+  if (!canPickForCompare(n)) return;
   const existingIdx = compareSelection.value.findIndex(node => node.id === n.id);
+  compareActionArticle = n.fullName || null;
 
   if (existingIdx !== -1) {
     // Node already selected: remove it
     compareSelection.value.splice(existingIdx, 1);
     showComparePopup.value = false;
-    announceToScreenReader(`Deselected ${n.fullName || n.id}. ${compareSelection.value.length} article${compareSelection.value.length === 1 ? '' : 's'} selected.`);
   } else if (compareSelection.value.length < 2) {
     // Add node to selection
     compareSelection.value.push(n);
-
-    if (compareSelection.value.length === 2) {
-      // Two nodes selected: show popup
-      showComparePopup.value = true;
-      announceToScreenReader('Two articles selected. Compare popup opened.');
-    } else {
-      announceToScreenReader(`Selected ${n.fullName || n.id}. Select one more article to compare.`);
-    }
+    // Two nodes selected: show popup
+    if (compareSelection.value.length === 2) showComparePopup.value = true;
   }
+}
+
+/* The bottom sheet is a modal dialog: it takes the focus when it opens, and gives
+   it back to what had it (the bubble just picked) when it closes. */
+const compareSheetRef = ref<HTMLElement | null>(null);
+let focusBeforeSheet: HTMLElement | SVGElement | null = null;
+watch(() => compareMode.value === 'sheet', async (sheet) => {
+  if (sheet) {
+    const active = document.activeElement;
+    /* only a keyboard focus is given back: after a touch, refocusing the bubble
+       would grow its hover card */
+    const keyboard = active instanceof Element && active.matches(':focus-visible');
+    focusBeforeSheet = keyboard && (active instanceof HTMLElement || active instanceof SVGElement) ? active : null;
+    await nextTick();
+    compareSheetRef.value?.querySelector<HTMLElement>('button, a[href]')?.focus();
+  } else if (focusBeforeSheet) {
+    if (focusBeforeSheet.isConnected) focusBeforeSheet.focus();
+    focusBeforeSheet = null;
+  }
+});
+
+/* aria-modal: Tab stays inside the sheet, wrapping at either end. */
+function onCompareSheetKeydown(ev: KeyboardEvent) {
+  if (ev.key !== 'Tab' || !compareSheetRef.value) return;
+  const focusables = [...compareSheetRef.value.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"])')];
+  if (!focusables.length) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (ev.shiftKey && document.activeElement === first) {
+    ev.preventDefault();
+    last.focus();
+  } else if (!ev.shiftKey && document.activeElement === last) {
+    ev.preventDefault();
+    first.focus();
+  }
+}
+
+/* The sheet is teleported to <body>, outside the Bubble view: when that view is left
+   (another view, Back on a phone), the sheet goes too. */
+function onBubbleViewHidden() {
+  closeComparePopup();
 }
 
 /* Close compare popup */
@@ -2323,14 +2584,19 @@ function goToComparison() {
                 opacity="0.9"
               />
 
-              <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks -->
+              <!-- Joint dots (hollow rings) on trunk side - clickable to compare forks.
+                   figma 641:61415 (Ellipse 15-23): 12×12, white, a 1px #818b98 ring
+                   drawn inside, so r = 6 - 0.5 with a 1px stroke. -->
               <circle
                 v-for="j in jointDots" :key="`joint-${j.id}`" :data-edge="j.id" class="joint-parent"
-                :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId}"
-                :cx="j.x" :cy="j.y" r="6"
-                fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="2"
+                :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId, 'is-selected': selectedNodeId === j.targetId}"
+                :aria-current="selectedNodeId === j.targetId ? 'true' : undefined"
+                :cx="j.x" :cy="j.y" r="5.5"
+                fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="1"
                 style="cursor: pointer;"
-                role="button" tabindex="0" :aria-label="`Compare ${j.sourceOwner} with ${j.targetOwner}`"
+                :role="j.inert ? undefined : 'button'" :tabindex="j.inert ? -1 : 0"
+                :aria-hidden="j.inert ? 'true' : undefined"
+                :aria-label="j.inert ? undefined : `Compare ${j.sourceOwner} with ${j.targetOwner}`"
                 @click.stop="() => onJointClick(j)" @keydown.enter.stop="() => onJointClick(j)"
                 @keydown.space.stop="() => onJointClick(j)"
               />
@@ -2345,10 +2611,12 @@ function goToComparison() {
                 :detail="detailFor(f.node.contributors)"
                 :count-text="countTextFor(f.node.contributors)"
                 :count-font-size="countFontFor(f.node.contributors)"
+                :compare-badge-style="compareBadgeFor(f.node.contributors)"
                 :expanded="expandedId === f.node.id" :frozen="labelFrozen.has(f.node.id)"
                 :is-active="selectedNodeId === f.node.id" :is-compare-mode="isCompareMode"
                 :compare-state="getCompareState(f.node.id)"
                 :is-tombstoned="f.node.isTombstoned === true"
+                :is-hidden="f.node.isHidden === true"
                 @click="() => onBubbleClick(f.node)" @hover="(id, on, pt) => onBubbleHover(id, on, pt)"
               />
             </template>
@@ -2441,6 +2709,20 @@ function goToComparison() {
             @close="historyOpen = false" @view-full-history="onDetailFullHistory"
           />
         </div>
+        <!-- The Compare box beside the picked bubbles (figma 641:61930). Inside
+             .graph-container so its coordinates are the graph's; it may reach
+             past the container's sides into the page margin, never past the
+             window (see ./compare-popover.ts). -->
+        <div
+          v-if="comparePopoverVisible" ref="comparePopoverRef" class="compare-anchor"
+          :style="{ left: compareLayout.left + 'px', top: compareLayout.top + 'px' }"
+        >
+          <ArticleComparePopup
+            :articles="compareSelection" :subject="props.subject || ''"
+            :placement="compareLayout.placement === 'left' ? 'left' : 'right'" :caret-y="compareLayout.caretY"
+            @close="closeComparePopup" @compare="goToComparison"
+          />
+        </div>
       </div>
       <!-- End graph-container -->
 
@@ -2448,11 +2730,28 @@ function goToComparison() {
         <LegendFishbone v-if="hasData"/>
       </div>
 
-      <!-- Compare Popup Modal -->
-      <ArticleComparePopup
-        v-if="showComparePopup && compareSelection.length === 2" :articles="compareSelection"
-        :subject="props.subject || ''" @close="closeComparePopup" @compare="goToComparison"
-      />
+      <!-- The Compare mode banner (#421 item 1), drawn under the navbar. -->
+      <Teleport v-if="announcementTarget && announcementState" :to="announcementTarget">
+        <CompareAnnouncement
+          :state="announcementState" :messages="announcementMessages"
+          :show-compare-now="compareMode === 'none'"
+          @dismiss="dismissAnnouncement" @compare="goToComparison"
+        />
+      </Teleport>
+
+      <!-- The Compare box as a bottom sheet (figma "." 641:63496), on a phone or
+           when neither side of the bubbles has room for it: the page behind it
+           is dimmed, and a tap there closes it. Closing keeps the selection;
+           the banner then offers "Compare now". -->
+      <Teleport v-if="compareMode === 'sheet'" to="body">
+        <div class="compare-sheet-backdrop" @click="closeComparePopup"/>
+        <div ref="compareSheetRef" class="compare-sheet" @keydown="onCompareSheetKeydown">
+          <ArticleComparePopup
+            :articles="compareSelection" :subject="props.subject || ''" placement="sheet"
+            @close="closeComparePopup" @compare="goToComparison"
+          />
+        </div>
+      </Teleport>
     </div>
   </div>
 </template>
@@ -2480,6 +2779,30 @@ function goToComparison() {
 /* Graph container for relative positioning of overlays */
 .graph-container {
   position: relative;
+}
+
+/* The Compare box beside the picked bubbles: placed by updateCompareAnchor(). */
+.compare-anchor {
+  position: absolute;
+  z-index: 20;
+}
+
+/* The bottom sheet and the dimmed page behind it. Teleported to <body>, so
+   they are fixed to the window whatever the graph's box does. The backdrop
+   covers the sticky Compare banner too: the sheet is what is being looked at. */
+.compare-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--color-overlay-backdrop);
+}
+
+.compare-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1001;
 }
 
 /* Carries the History card's anchor variables and nothing else. */
@@ -2677,6 +3000,20 @@ function goToComparison() {
   stroke: var(--color-primary, #2563eb) !important;
   stroke-width: 3 !important;
   fill: var(--color-primary-alpha-10) !important;
+}
+
+/* #406: the point of contention leading to the selected article. Clicking it
+   selects that article, and the selection is the page's, not the click's: it
+   stays highlighted when the view comes back to the graph, whichever views
+   were visited in between and in whatever order. */
+.joint-parent.is-selected {
+  stroke: var(--color-primary, #2563eb);
+  stroke-width: 3;
+  fill: var(--color-primary-alpha-20);
+}
+
+.graph-dimmed :deep(.joint-parent.is-selected) {
+  opacity: 1;
 }
 
 .joint-parent:focus {

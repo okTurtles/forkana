@@ -52,6 +52,12 @@
   --color-text-primary: #1f2328;
   --color-text-secondary: #656d76;
   --color-text-tertiary: #969aa5;
+  /* the label of a default (neutral) button in the layout, Primer's fgColor of
+     Button (e.g. "Compare" 484:188986, "Read full article" 1842:35659) */
+  --color-button-text: #25292e;
+  /* an unavailable button (Compare on a single-article subject, 6661:52948) */
+  --color-button-text-disabled: #818b98;
+  --color-button-border-disabled: #818b981a;
 
   /* Border colors */
   --color-border: #d0d7de;

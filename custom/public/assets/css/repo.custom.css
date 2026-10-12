@@ -1092,3 +1092,33 @@ col.col-type-marker {
 :is([data-theme="gitea-dark"], [data-theme="gitea-dark-protanopia-deuteranopia"]) .repository .diff-file-box .code-diff .conflict-inner-table .lines-code-old.conflict-btn-cell {
   background: var(--color-diff-removed-row-bg) !important;
 }
+
+/* #421: the Compare button's colours, as figma's Button 484:188986 draws them
+   (Bubble view 641:61415): a #25292e label on #f6f8fa with a 1px #d1d9e0 border;
+   the brand fill while compare mode is on; and, unavailable (Comparing disabled,
+   6661:52948), a #818b98 label and a #818b98 border at 10%. The sizes are in
+   web_src/css/repo/header.css. */
+#compare-mode-button {
+  border: 1px solid var(--color-border-light);
+  background: var(--color-surface-muted);
+  color: var(--color-button-text);
+}
+
+/* an unavailable button does not react to the pointer as an active one would */
+#compare-mode-button:hover:not(.primary, .is-unavailable) {
+  background: var(--color-secondary);
+}
+
+#compare-mode-button.primary {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+/* A subject with a single article has nothing to compare: the button stays
+   clickable, to explain why in the Compare banner, but reads as unavailable. */
+#compare-mode-button.is-unavailable {
+  border-color: var(--color-button-border-disabled);
+  color: var(--color-button-text-disabled);
+  cursor: default;
+}

@@ -537,7 +537,7 @@ func TestSubjectLookupPrefersActiveRepository(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
 
-	subject, err := repo_model.GetOrCreateSubject(ctx, "physics")
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Physics")
 	assert.NoError(t, err)
 
 	// the archived repository is named exactly like the subject, which is what
@@ -556,7 +556,7 @@ func TestSubjectLookupPrefersActiveRepository(t *testing.T) {
 	active.SubjectID = subject.ID
 	assert.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, active, "subject_id"))
 
-	found, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, archived.OwnerName, "physics")
+	found, err := repo_model.GetRepositoryByOwnerAndSubject(ctx, archived.OwnerName, "Physics")
 	assert.NoError(t, err)
 	assert.Equal(t, active.ID, found.ID)
 

@@ -139,14 +139,14 @@ func Migrate(ctx *context.APIContext) {
 		}
 	}
 
-	// Auto-generate repository name from subject if subject is provided
-	// and repository name is empty or matches the generated name
-	if form.Subject != "" {
-		generatedName := repo_model.GenerateRepoNameFromSubject(form.Subject)
-		if form.RepoName == "" || form.RepoName == generatedName {
-			form.RepoName = generatedName
-		}
+	// Resolve the subject (an existing one is used as-is, a new one must follow the subject
+	// title rule) and derive the repository name from it
+	subjectName, repoName, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.RepoName)
+	if err != nil {
+		handleSubjectNameError(ctx, err)
+		return
 	}
+	form.Subject, form.RepoName = subjectName, repoName
 
 	opts := migrations.MigrateOptions{
 		CloneAddr:      remoteAddr,

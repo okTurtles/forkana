@@ -1,0 +1,48 @@
+/* Subject page: the Table and Article views (the Bubble view lays itself out in
+   ./bubble-graph.css and keeps its own spacing).
+
+   Both views start 3rem below the view submenu (Bubble view / Table view /
+   Article view). The gap lives on the section itself, ONE rule for both,
+   instead of a top margin on whatever happens to be its first child: those
+   used to differ (tw-mt-20 on the table's grid, tw-mt-10 on the article root)
+   and Fomantic's `:first-child` margin rules cancelled one of them, so the
+   "Please select an article" box sat flush against the submenu. Padding,
+   unlike a margin, cannot collapse out of the section either. */
+.history-view-section--table,
+.history-view-section--article {
+  padding-top: 3rem;
+}
+
+/* The table view's grid pulls itself up by its gutter (Fomantic's negative
+   grid margin), which its column padding gives back, so its first row lands
+   exactly on the padding above. Kept explicit so a utility class cannot
+   reintroduce an extra offset. */
+.history-view-section--table > .ui.grid {
+  margin-top: -1rem;
+}
+
+/* The "Please select an article" box: Forkana pulls every message up by 1px
+   (`.ui.message { margin-top: -1px !important }` in
+   custom/public/assets/css/message.custom.css, so stacked messages share a
+   border). That is also what made the old tw-mt-10 on this box a no-op. Here
+   the box stands alone under the gap, which has to be the full 3rem. The
+   !important is what beats that stylesheet's own `-1px !important`, scoped to
+   this one box, with a selector more specific than `.ui.message` because that
+   stylesheet loads after this one. */
+.history-view-section--article .ui.message[data-role="article-empty"] {
+  margin-top: 0 !important;
+}
+
+/* The Compare mode banner (#421 item 1, CompareAnnouncement.vue) is teleported
+   into this root, under the navbar. The root itself takes no box, so the
+   banner is a direct child of .page-content as far as layout goes: it spans
+   the page edge to edge and, on a phone, sticks to the top of the page for as
+   long as the page scrolls. Compare mode belongs to the Bubble view, so the
+   banner is not shown over the Table or Article view. */
+#compare-announcement-root {
+  display: contents;
+}
+
+.page-content:has(.history-view-section--bubble[hidden]) #compare-announcement-root {
+  display: none;
+}

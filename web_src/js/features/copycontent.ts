@@ -3,6 +3,7 @@ import {showTemporaryTooltip} from '../modules/tippy.ts';
 import {convertImage} from '../utils.ts';
 import {GET} from '../modules/fetch.ts';
 import {registerGlobalEventFunc} from '../modules/observer.ts';
+import {COMPARE_MODE_STATE_EVENT, COMPARE_MODE_TOGGLE_EVENT, withCompareRequest, type CompareModeState} from '../modules/compare-mode-request.ts';
 
 const {i18n} = window.config;
 
@@ -54,8 +55,46 @@ export function initCopyContent() {
 }
 
 export function initCompareModeToggle() {
+  /* The bubble view owns compare mode; the button only asks for it. Its look
+     follows the state the graph reports below, so the two cannot disagree. */
   registerGlobalEventFunc('click', 'onCompareModeToggle', (btn: HTMLElement) => {
-    btn.classList.toggle('primary');
-    window.dispatchEvent(new CustomEvent('repo:compare-mode-toggle'));
+    /* No subject views on this page (the compare page, a repository page): nothing
+       here can turn compare mode on, so go to the subject's Bubble view and press it
+       there. */
+    if (!document.querySelector('#repo-history-app')) {
+      const bubbleUrl = btn.getAttribute('data-bubble-url');
+      if (bubbleUrl) window.location.assign(withCompareRequest(bubbleUrl));
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(COMPARE_MODE_TOGGLE_EVENT));
+  });
+
+  /* #421 item 1 (figma 641:61763 / 641:61930): while compare mode is on the
+     button is filled with the brand colour and reads "Compare on"; on a subject
+     with a single article it is shown unavailable, with figma's tooltip (6661:52942). */
+  window.addEventListener(COMPARE_MODE_STATE_EVENT, (event: Event) => {
+    const {on, available} = (event as CustomEvent<CompareModeState>).detail;
+    const btn = document.querySelector<HTMLElement>('#compare-mode-button');
+    if (!btn) return;
+    const label = on ? btn.getAttribute('data-label-on') : btn.getAttribute('data-label-off');
+    btn.classList.toggle('primary', on);
+    btn.classList.toggle('is-unavailable', !available && !on);
+    /* A toggle button keeps one name ("Compare", its aria-label) and says its state
+       through aria-pressed; only the visible text reads "Compare on". */
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (label) {
+      const text = btn.querySelector('[data-role="compare-label"]');
+      if (text) text.textContent = label;
+    }
+    if (!available && !on) {
+      btn.setAttribute('data-tooltip-content', btn.getAttribute('data-unavailable') || '');
+      btn.setAttribute('aria-disabled', 'true');
+    } else {
+      btn.removeAttribute('data-tooltip-content');
+      btn.removeAttribute('aria-disabled');
+      // attachTooltip leaves an existing tippy alone on empty content: destroy it, or
+      // the "No forks yet" tooltip keeps showing on a button that is now available
+      (btn as HTMLElement & {_tippy?: {destroy: () => void}})._tippy?.destroy();
+    }
   });
 }

@@ -2,7 +2,7 @@
 <div role="main" aria-label="{{.Title}}" class="page-content explore subjects">
 	<!-- Back button -->
 	<div class="ui container">
-		<a href="{{AppSubUrl}}/subject/{{PathEscape .Subject.Name}}" class="tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-mt-4 back-button">
+		<a href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .Subject.Name)) "selected" .SubjectSelected}}" class="tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-mt-4 back-button">
 			{{svg "octicon-arrow-left" 16}} Back
 		</a>
 	</div>

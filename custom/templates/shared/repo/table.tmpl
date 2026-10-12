@@ -1,6 +1,6 @@
 {{define "shared/repo/table"}}
 <div class="history-view-section history-view-section--table" data-view="table" {{if not .IsTableView}}hidden{{end}}>
-    <div class="ui stackable grid tw-mt-20">
+    <div class="ui stackable grid">
         <div class="sixteen wide column">
             <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-px-0 tw-border-0">
                 <h2 class="tw-text-xl tw-font-semibold tw-m-0">Articles</h2>
@@ -12,9 +12,9 @@
                         <span class="text tw-ml-1">Sort</span>
                         {{svg "octicon-triangle-down" 16 "tw-ml-1"}}
                         <div class="menu">
-                            <a class="item history-table-sort" data-sort="most_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "sort" "most_contrib"}}">Most contributors</a>
-                            <a class="item history-table-sort" data-sort="least_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "sort" "least_contrib"}}">Least contributors</a>
-                            <a class="item history-table-sort" data-sort="latest" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "sort" "latest"}}">Latest edited</a>
+                            <a class="item history-table-sort" data-sort="most_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "sort" "most_contrib" "selected" .SubjectSelected}}">Most contributors</a>
+                            <a class="item history-table-sort" data-sort="least_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "sort" "least_contrib" "selected" .SubjectSelected}}">Least contributors</a>
+                            <a class="item history-table-sort" data-sort="latest" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "sort" "latest" "selected" .SubjectSelected}}">Latest edited</a>
                         </div>
                     </div>
                 </div>
@@ -50,7 +50,7 @@
                                     <label></label>
                                 </div>
                             </td>
-                            <td class="tw-font-semibold">{{if gt $entry.ContributorCount 0}}{{CountFmt $entry.ContributorCount}}{{else}}-{{end}}</td>
+                            <td class="tw-font-semibold">{{template "shared/repo/contributor_count" (dict "Count" $entry.ContributorCount "Short" true)}}</td>
                             <td>{{if $entry.Updated}}{{DateUtils.AbsoluteShort $entry.Updated}}{{else}}-{{end}}</td>
                             <td>
                                 <div class="tw-flex tw-flex-col tw-gap-1">
@@ -88,6 +88,15 @@
                             </td>
                         </tr>
                         {{end}}
+                        {{else if .SubjectForkGraphFailed}}
+                        {{/* the fork graph failed to build (a timeout, say): there may well be articles */}}
+                        <tr data-role="history-table-error">
+                            <td colspan="5" class="tw-text-center tw-text-sm">
+                                <span class="tw-text-red">{{ctx.Locale.Tr "repo.subject_articles_failed"}}</span>
+                                {{/* an empty href reloads the page as it is: same view, sort and selection */}}
+                                <a class="tw-ml-2" href="">{{ctx.Locale.Tr "repo.subject_articles_retry"}}</a>
+                            </td>
+                        </tr>
                         {{else}}
                         <tr>
                             <td colspan="5" class="tw-text-center tw-text-sm tw-text-gray-500">No forks available.</td>

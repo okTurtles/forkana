@@ -237,6 +237,15 @@ func Search(ctx *context.APIContext) {
 	})
 }
 
+// handleSubjectNameError responds to an error returned by repo_service.PrepareSubjectAndRepoName
+func handleSubjectNameError(ctx *context.APIContext, err error) {
+	if repo_model.IsErrSubjectNameInvalid(err) {
+		ctx.APIError(http.StatusUnprocessableEntity, err)
+		return
+	}
+	ctx.APIErrorInternal(err)
+}
+
 // CreateUserRepo create a repository for a user
 func CreateUserRepo(ctx *context.APIContext, owner *user_model.User, opt api.CreateRepoOption) {
 	if opt.AutoInit && opt.Readme == "" {
@@ -249,14 +258,14 @@ func CreateUserRepo(ctx *context.APIContext, owner *user_model.User, opt api.Cre
 		return
 	}
 
-	// Auto-generate repository name from subject if subject is provided
-	// and repository name is empty or matches the generated name
-	if opt.Subject != "" {
-		generatedName := repo_model.GenerateRepoNameFromSubject(opt.Subject)
-		if opt.Name == "" || opt.Name == generatedName {
-			opt.Name = generatedName
-		}
+	// Resolve the subject (an existing one is used as-is, a new one must follow the subject
+	// title rule) and derive the repository name from it
+	subjectName, repoName, err := repo_service.PrepareSubjectAndRepoName(ctx, opt.Subject, opt.Name)
+	if err != nil {
+		handleSubjectNameError(ctx, err)
+		return
 	}
+	opt.Subject, opt.Name = subjectName, repoName
 
 	repo, err := repo_service.CreateRepository(ctx, ctx.Doer, owner, repo_service.CreateRepoOptions{
 		Name:             opt.Name,
@@ -278,6 +287,7 @@ func CreateUserRepo(ctx *context.APIContext, owner *user_model.User, opt api.Cre
 			ctx.APIError(http.StatusConflict, "The repository with the same name already exists.")
 		} else if db.IsErrNameReserved(err) ||
 			db.IsErrNamePatternNotAllowed(err) ||
+			repo_model.IsErrSubjectNameInvalid(err) ||
 			label.IsErrTemplateLoad(err) {
 			ctx.APIError(http.StatusUnprocessableEntity, err)
 		} else {
@@ -374,14 +384,14 @@ func Generate(ctx *context.APIContext) {
 		return
 	}
 
-	// Auto-generate repository name from subject if subject is provided
-	// and repository name is empty or matches the generated name
-	if form.Subject != "" {
-		generatedName := repo_model.GenerateRepoNameFromSubject(form.Subject)
-		if form.Name == "" || form.Name == generatedName {
-			form.Name = generatedName
-		}
+	// Resolve the subject (an existing one is used as-is, a new one must follow the subject
+	// title rule) and derive the repository name from it
+	subjectName, repoName, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.Name)
+	if err != nil {
+		handleSubjectNameError(ctx, err)
+		return
 	}
+	form.Subject, form.Name = subjectName, repoName
 
 	opts := repo_service.GenerateRepoOptions{
 		Name:            form.Name,
@@ -404,7 +414,6 @@ func Generate(ctx *context.APIContext) {
 	}
 
 	ctxUser := ctx.Doer
-	var err error
 	if form.Owner != ctxUser.Name {
 		ctxUser, err = user_model.GetUserByName(ctx, form.Owner)
 		if err != nil {

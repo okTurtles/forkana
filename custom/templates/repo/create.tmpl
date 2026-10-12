@@ -53,6 +53,7 @@
 						</span>
 					</label>
 					<input id="subject" name="subject" value="{{.subject}}" autofocus required maxlength="255" placeholder="{{ctx.Locale.Tr "repo.repo_subject_placeholder"}}">
+					{{template "repo/subject_title_hint" .}}
                 </div>
 
 					<div class="tw-hidden field">

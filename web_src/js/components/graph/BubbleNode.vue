@@ -25,7 +25,10 @@
 
 import { computed, watch, reactive } from "vue";
 import { formatDateYMD } from '../../utils/time.ts';
-import type { BubbleLabelDetail } from './bubble-size.ts';
+import {
+  COMPARE_OUTLINE, COMPARE_RING_WIDTH, compareBadgeCenter, compareOrderFor,
+  type BubbleLabelDetail, type CompareBadgeStyle, type ComparePickState,
+} from './bubble-size.ts';
 
 /* ──────────────────────────────────────────────────────────────────────────────
    LABEL LAYOUT CONSTANTS (all values explained to avoid "magic numbers")
@@ -90,11 +93,16 @@ const props = defineProps<{
   frozen?: boolean;
   isActive?: boolean;             // selected article (persisted selection)
   isCompareMode?: boolean;        // whether compare mode is active
-  compareState?: 'none' | 'first' | 'second';  // compare selection state
+  compareState?: ComparePickState;  // compare selection state
+  /* The order badge of this bubble's rung in Compare mode (bubble-size.ts). */
+  compareBadgeStyle?: CompareBadgeStyle;
   /* The author deleted this article. The bubble is kept — the forks below it
      need the ancestry — and stays interactive; it is drawn muted and dashed
      and says so in the expanded card. */
   isTombstoned?: boolean;
+  /* the subject root the reader may not see: drawn like a tombstone for its forks'
+     sake, but no article, so neither a control nor anything a screen reader names */
+  isHidden?: boolean;
 }>();
 
 /* Emits so the parent can wire up interactions without D3 binding. The parent
@@ -212,6 +220,66 @@ const gTransform = computed(() => `translate(${props.x},${props.y})`);
 /* Picked for either slot of a comparison — the states that thicken and colour
    the ring. */
 const compareSelected = computed(() => props.compareState === 'first' || props.compareState === 'second');
+/* #405 item 6: in compare mode every bubble not (yet) picked is outlined with a
+   thin dark dashed line, and a picked one gets a solid indigo ring and an
+   order badge instead — as the figma draws them (values and node ids in
+   bubble-size.ts). Both are unfilled in figma, over the white page; here the
+   disc takes the page colour, which reads the same and still hides the
+   connectors behind it, and drops the resting gradient and shadow. */
+/* A deleted article keeps its own look (faded, grey 4/4 dashes) in compare mode
+   until it is picked: the figma's compare frames only draw live articles, and the
+   compare dashes would make it indistinguishable from them. */
+const compareOutlined = computed(() => props.isCompareMode === true && (compareSelected.value || props.isTombstoned !== true));
+const compareOrder = computed(() => props.isCompareMode === true ? compareOrderFor(props.compareState) : null);
+const compareBadge = computed(() => compareBadgeCenter(props.r));
+
+/* What a screen reader hears. In compare mode the order badge (aria-hidden: it is
+   drawn) is said in words, and aria-pressed follows the pick, not the page's
+   selection. */
+const ariaLabel = computed(() => {
+  const count = `${props.contributors} contributor${props.contributors === 1 ? '' : 's'}`;
+  const base = props.isTombstoned ?
+    `Repository node with ${count}, deleted by its author` :
+    `Repository node with ${count}${props.updatedAt ? `, last updated ${props.updatedAt}` : ''}`;
+  const pick = compareOrder.value !== null ? `, selected for comparison (${compareOrder.value} of 2)` : '';
+  return `${base}${pick}. Press Enter to select.`;
+});
+
+/* The compare stroke's width, or 0 where there is no compare outline. */
+const compareStrokeWidth = computed(() => {
+  if (!compareOutlined.value) return 0;
+  return compareSelected.value ? COMPARE_RING_WIDTH : COMPARE_OUTLINE.width;
+});
+
+/* Figma draws both strokes INSIDE the bubble, so the circle is inset by half
+   a stroke: the stroke's outer edge is then the bubble's edge, where the
+   connectors end. */
+const circleRadius = computed(() => Math.max(0, props.r - compareStrokeWidth.value / 2));
+
+/* The circle's paint in compare mode. An inline style rather than the
+   presentation attributes below, so the focus/hover rules in the stylesheet
+   (a 1px primary ring) cannot thin the compare ring of the bubble that was
+   just clicked and therefore holds the focus. Null outside compare mode,
+   where nothing changes. The compare paint intentionally replaces the selection
+   stroke too: figma's compare frames show only the picked rings, and the mini
+   circle (.joint-parent.is-selected) still marks the selected article. */
+const compareCircleStyle = computed(() => {
+  if (!compareOutlined.value) return null;
+  if (compareSelected.value) {
+    return {
+      fill: 'var(--bubble-compare-fill)',
+      stroke: 'var(--bubble-compare-selected)',
+      strokeWidth: `${COMPARE_RING_WIDTH}px`,
+      strokeDasharray: 'none',
+    };
+  }
+  return {
+    fill: 'var(--bubble-compare-fill)',
+    stroke: 'var(--bubble-compare-outline)',
+    strokeWidth: `${COMPARE_OUTLINE.width}px`,
+    strokeDasharray: `${COMPARE_OUTLINE.dash} ${COMPARE_OUTLINE.gap}`,
+  };
+});
 
 /* Pointer handlers relay events upward (so the parent can grow this bubble and
    reflow the graph around it). `pointerType` travels with the event because
@@ -249,25 +317,21 @@ function onKeyDown(ev: KeyboardEvent) {
   <g
     class="node cursor-pointer select-none"
     :class="{ 'is-expanded': expanded, 'is-frozen': frozen, 'is-tombstoned': isTombstoned }"
-    :transform="gTransform" :data-node-id="id" role="button"
-    :aria-label="isTombstoned
-      ? `Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}, deleted by its author. Press Enter to select.`
-      : `Repository node with ${contributors} contributor${contributors === 1 ? '' : 's'}${updatedAt ? ', last updated ' + updatedAt : ''}. Press Enter to select.`"
-    :aria-pressed="isActive ? 'true' : 'false'" tabindex="0" @click="onClick" @keydown="onKeyDown"
+    :transform="gTransform" :data-node-id="id" :role="isHidden ? undefined : 'button'"
+    :aria-label="isHidden ? undefined : ariaLabel" :aria-hidden="isHidden ? 'true' : undefined"
+    :aria-pressed="isHidden ? undefined : (isCompareMode === true ? compareSelected : isActive) ? 'true' : 'false'"
+    :tabindex="isHidden ? -1 : 0" @click="onClick" @keydown="onKeyDown"
     @pointerdown="onPointerDown" @pointerenter="onPointerEnter" @pointerleave="onPointerLeave"
     @focusin="onFocusIn" @focusout="onFocusOut"
   >
     <!-- Bubble circle with soft gradient & subtle stroke/shadow -->
     <circle
-      class="node-circle" :class="{
-        'compare-dashed': props.isCompareMode && props.compareState === 'none',
-        'compare-selected-first': props.compareState === 'first',
-        'compare-selected-second': props.compareState === 'second'
-      }" :r="r" fill="url(#bubbleGrad)"
-      :stroke="compareSelected || isActive || expanded ? 'var(--color-primary)' : 'none'"
-      :stroke-width="compareSelected ? 3 : 1"
-      :stroke-dasharray="props.isCompareMode && props.compareState === 'none' ? '8,4' : props.isTombstoned ? '4,4' : 'none'"
-      filter="url(#softShadow)"
+      class="node-circle" :r="circleRadius" fill="url(#bubbleGrad)"
+      :stroke="isActive || expanded ? 'var(--color-primary)' : 'none'"
+      stroke-width="1"
+      :stroke-dasharray="props.isTombstoned ? '4,4' : 'none'"
+      :filter="compareCircleStyle ? undefined : 'url(#softShadow)'"
+      :style="compareCircleStyle ?? undefined"
     />
 
     <!-- HTML Labels: using foreignObject for efficient text rendering -->
@@ -316,6 +380,21 @@ function onKeyDown(ev: KeyboardEvent) {
         </div>
       </div>
     </foreignObject>
+
+    <!-- Compare mode: the picked bubble's place in the comparison, on its ring
+         and over everything else in the bubble. -->
+    <g
+      v-if="compareOrder !== null && compareBadgeStyle" class="compare-badge" aria-hidden="true"
+      :transform="`translate(${compareBadge.x},${compareBadge.y})`"
+    >
+      <circle :r="compareBadgeStyle.diameter / 2" fill="var(--bubble-compare-selected)"/>
+      <text
+        text-anchor="middle" dominant-baseline="central" fill="var(--bubble-compare-badge-text)"
+        :font-size="compareBadgeStyle.fontSize" font-weight="600"
+      >
+        {{ compareOrder }}
+      </text>
+    </g>
   </g>
 </template>
 
@@ -345,10 +424,10 @@ function onKeyDown(ev: KeyboardEvent) {
 /* ── TOMBSTONE ───────────────────────────────────────────────────────────
    A deleted article keeps its place in the graph so its forks keep their
    ancestry, and it stays selectable like any other bubble; it is only drawn
-   faded with a dashed outline (the dash pattern itself is on the circle, next
-   to the compare-mode one it has to co-exist with). The stroke is set here
-   rather than in the binding so it also wins over the hover/focus rules
-   below. */
+   faded with a dashed outline (the dash pattern itself is on the circle). In
+   compare mode it keeps this look until it is picked (compareOutlined). The
+   stroke is set here rather than in the binding so it also wins over the
+   hover/focus rules below. */
 .node.is-tombstoned {
   opacity: 0.55;
 }
@@ -406,6 +485,12 @@ function onKeyDown(ev: KeyboardEvent) {
   white-space: nowrap;
 }
 
+/* #421 item 4: the bubble's text as figma's Bubble view draws it (641:61415,
+   e.g. the 538 bubble 641:61440-61442), in every mode: the count and
+   "Contributors" in the primary text colour (#1f2328) at weight 600, the
+   date in the same colour at 400 italic. The compare frames use the very same
+   styles (6484:44242-44243), so compare mode needs no override. */
+
 /* Count: always visible, bold and prominent */
 .html-label-wrapper .count {
   color: var(--color-text-primary);
@@ -416,16 +501,24 @@ function onKeyDown(ev: KeyboardEvent) {
 
 /* Label text: "Contributor(s)" */
 .html-label-wrapper .label {
-  color: var(--color-text-secondary);
-  font-weight: 700;
+  color: var(--color-text-primary);
+  font-weight: 600;
   line-height: 1;
   pointer-events: none;
 }
 
 /* Updated date information */
 .html-label-wrapper .updated {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-primary);
+  font-weight: 400;
+  font-style: italic;
   line-height: 1;
+  pointer-events: none;
+}
+
+/* The order badge sits over the bubble's edge; a click on it is a click on the
+   bubble (to deselect it), so it must not catch the pointer itself. */
+.compare-badge {
   pointer-events: none;
 }
 
@@ -455,18 +548,21 @@ function onKeyDown(ev: KeyboardEvent) {
   white-space: nowrap;
 }
 
+/* The hovered bubble's text, as figma's "Bubble view - click + zoom" 335
+   bubble (641:61744-61746): count 22px, "Contributors" 12px, both 600; the
+   date 400 italic; all in the primary text colour, like the resting bubble. */
 .expanded-wrapper .expanded-count-label {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.1;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   white-space: nowrap;
 }
 
 .expanded-description {
   font-size: 10px;
   line-height: 1.35;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   /* Three lines: what the circle's height budget allows next to the count and
      the date. The whole excerpt is in the opened (425px) view. */
   display: -webkit-box;
@@ -486,8 +582,9 @@ function onKeyDown(ev: KeyboardEvent) {
   /* #386 item 10: never SMALLER than the resting bubble's 11px "Last updated"
      lines — text must not shrink while the bubble it sits in grows. */
   font-size: 11px;
+  font-style: italic;
   line-height: 1.3;
-  color: var(--color-text-light-2, #6b7280);
+  color: var(--color-text-primary);
   white-space: nowrap;
 }
 </style>

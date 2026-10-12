@@ -48,6 +48,7 @@
 				<label for="subject">{{ctx.Locale.Tr "repo.repo_subject"}}</label>
 				<input id="subject" name="subject" value="{{.subject}}" required maxlength="255" placeholder="{{ctx.Locale.Tr "repo.repo_subject_placeholder"}}">
 					<span class="help">{{ctx.Locale.Tr "repo.repo_subject_helper"}}</span>
+					{{template "repo/subject_title_hint" .}}
 				</div>
 
 				<div class="inline field">
