@@ -131,3 +131,84 @@ test('the clear filters button still keeps the sort', () => {
   expect(params.get('sort')).toEqual('oldest');
   expect(params.has('clear-filter')).toBe(false);
 });
+
+// The explore page as a tab of its navbar renders it: the active tab links to the keyword on screen,
+// the other one to its plain page (custom/templates/explore/navbar.tmpl).
+function mountExploreTab(active: 'subjects' | 'users', renderedKeyword: string): HTMLInputElement {
+  const tab = (name: string) => (name === active ?
+    `<a class="active item" data-explore-tab-link href="/explore/${name}${renderedKeyword ? `?q=${encodeURIComponent(renderedKeyword)}` : ''}">${name}</a>` :
+    `<a class="item" data-explore-tab-link href="/explore/${name}">${name}</a>`);
+  document.body.innerHTML = `
+    ${tab('subjects')}${tab('users')}
+    <div class="page-content explore">
+      <form id="${active === 'subjects' ? 'subject' : 'user'}-search-form">
+        <input type="search" name="q" value="${renderedKeyword}">
+        <button type="submit">Search</button>
+      </form>
+    </div>
+  `;
+  initExploreSearch();
+  return document.querySelector<HTMLInputElement>('input[name="q"]');
+}
+
+function tabHref(name: string): string {
+  const url = new URL(document.querySelector<HTMLAnchorElement>(`a[href*="/explore/${name}"]`).href);
+  return url.pathname + url.search;
+}
+
+function typeInto(field: HTMLInputElement, text: string): void {
+  field.value = text;
+  field.dispatchEvent(new Event('input', {bubbles: true}));
+}
+
+// Follow a tab link the way a click does, minus the navigation happy-dom cannot perform.
+function switchTo(name: string): void {
+  const tabLink = document.querySelector<HTMLAnchorElement>(`a[href*="/explore/${name}"]`);
+  tabLink.addEventListener('click', (e) => e.preventDefault());
+  tabLink.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+}
+
+describe('each explore tab keeps its own search', () => {
+  beforeEach(() => window.sessionStorage.clear());
+
+  test('typing in one tab never changes the link to the other', () => {
+    const field = mountExploreTab('subjects', 'mars');
+    expect(tabHref('users')).toEqual('/explore/users');
+    typeInto(field, 'forest');
+    expect(tabHref('users')).toEqual('/explore/users');
+    // leaving the edited field does not search either
+    field.dispatchEvent(new Event('change', {bubbles: true}));
+    expect(navigatedTo).toBe(null);
+  });
+
+  test('switching back restores the tab search and what was typed after it', () => {
+    let field = mountExploreTab('subjects', 'mars');
+    typeInto(field, 'forest');
+    switchTo('users');
+
+    field = mountExploreTab('users', '');
+    expect(field.value).toEqual('');
+    // the subjects tab links back to its own search, not to the text typed but never searched
+    expect(tabHref('subjects')).toEqual('/explore/subjects?q=mars');
+    typeInto(field, 'user2');
+    switchTo('subjects');
+
+    field = mountExploreTab('subjects', 'mars');
+    expect(field.value).toEqual('forest');
+    expect(field.defaultValue).toEqual('mars'); // the results on screen are still those of "mars"
+    expect(tabHref('users')).toEqual('/explore/users');
+  });
+
+  test('a searched tab is linked to with its keyword', () => {
+    mountExploreTab('users', 'user two');
+    mountExploreTab('subjects', '');
+    expect(tabHref('users')).toEqual('/explore/users?q=user+two');
+  });
+
+  test('a draft is only restored when the tab is switched to', () => {
+    const field = mountExploreTab('subjects', 'mars');
+    typeInto(field, 'forest');
+    // loaded from its address, the home page search or a bookmark: the address says what to show
+    expect(mountExploreTab('subjects', 'mars').value).toEqual('mars');
+  });
+});
