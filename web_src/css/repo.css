@@ -282,17 +282,18 @@ td .commit-summary {
   text-decoration: underline;
 }
 
+/* #326: "Fork of: <owner> / <subject>" under the title, a 16px fork icon and a 12px/18px
+   link, 4px apart (figma nodes 662:109914-662:109919) */
 .fork-flag {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 14px;
-  color: var(--color-text-light-2);
-  margin-top: 0.25rem;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .fork-flag .svg {
-  color: var(--color-text-light-2);
+  color: var(--color-text-primary, var(--color-text));
 }
 
 .fork-flag a {

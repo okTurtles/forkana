@@ -5,12 +5,20 @@ package integration
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
+	issues_model "code.gitea.io/gitea/models/issues"
+	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unittest"
+	user_model "code.gitea.io/gitea/models/user"
+	repo_service "code.gitea.io/gitea/services/repository"
+	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestPullViewChangeRequestTitleDesc checks that the change request header line is viewer-aware:
@@ -77,6 +85,67 @@ func TestPullViewChangeRequestTitleDescPlural(t *testing.T) {
 			assert.NotContains(t, desc, "1 changes")
 		})
 	}
+}
+
+// TestPullViewChangeRequestForkOf checks the "Fork of: <owner> / <subject>" line under the change
+// request title (#326): it names the article the target article was forked from, and links to it.
+// It describes the target article, never the head repository of the change request.
+func TestPullViewChangeRequestForkOf(t *testing.T) {
+	// a running server is needed for the git hooks of the commit pushed to the fork
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		testPullViewChangeRequestForkOf(t)
+	})
+}
+
+func testPullViewChangeRequestForkOf(t *testing.T) {
+	t.Run("target article is a fork", func(t *testing.T) {
+		repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+		user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		fork, err := repo_service.ForkRepository(t.Context(), user4, user4, repo_service.ForkRepoOptions{
+			BaseRepo:     repo1,
+			Name:         "fork-of-repo1",
+			SingleBranch: repo1.DefaultBranch,
+		})
+		require.NoError(t, err)
+		defer func() {
+			_ = repo_service.DeleteRepositoryDirectly(t.Context(), fork.ID)
+		}()
+		_, err = files_service.ChangeRepoFiles(t.Context(), fork, user4, &files_service.ChangeRepoFilesOptions{
+			NewBranch: "fork-of-change",
+			Files: []*files_service.ChangeRepoFile{
+				{Operation: "update", TreePath: "README.md", ContentReader: strings.NewReader("# Changed in the fork\n")},
+			},
+		})
+		require.NoError(t, err)
+
+		session := loginUser(t, "user4")
+		testPullCreateDirectly(t, session, "user4", fork.Name, fork.DefaultBranch, "", "", "fork-of-change", "Change in a forked article")
+		pr := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{BaseRepoID: fork.ID, HeadBranch: "fork-of-change"})
+
+		for _, user := range []string{"user4", "user2"} {
+			resp := loginUser(t, user).MakeRequest(t, NewRequestf(t, "GET", "/user4/%s/pulls/%d", fork.Name, pr.Index), http.StatusOK)
+			htmlDoc := NewHTMLParser(t, resp.Body)
+			title := htmlDoc.Find(".pr-repo-title a#pr-article-link")
+			assert.Equal(t, "user4 / example-subject", strings.TrimSpace(title.Text()), user)
+			forkOf := htmlDoc.Find(".pr-repo-header #pr-article-fork-of a")
+			assert.Equal(t, 1, forkOf.Length(), user)
+			assert.Equal(t, "Fork of: user2 / example-subject", strings.Join(strings.Fields(forkOf.Text()), " "), user)
+			assert.Equal(t, "/subject/example-subject/user2", forkOf.AttrOr("href", ""), user)
+		}
+	})
+
+	t.Run("target article is not a fork", func(t *testing.T) {
+		// /user2/repo1/pulls/3 is a same-repository change request on an original article
+		resp := loginUser(t, "user2").MakeRequest(t, NewRequest(t, "GET", "/user2/repo1/pulls/3"), http.StatusOK)
+		assert.Equal(t, 0, NewHTMLParser(t, resp.Body).Find(".pr-repo-header .fork-flag").Length())
+	})
+
+	t.Run("change request opened from a fork", func(t *testing.T) {
+		// /user12/repo10/pulls/1 comes from user13/repo11, a fork of repo10: the head's base is
+		// the article itself, which is not a fork, so there is nothing to show
+		resp := loginUser(t, "user12").MakeRequest(t, NewRequest(t, "GET", "/user12/repo10/pulls/1"), http.StatusOK)
+		assert.Equal(t, 0, NewHTMLParser(t, resp.Body).Find(".pr-repo-header .fork-flag").Length())
+	})
 }
 
 // TestPullViewChangeRequestTitleDescOtherLocale checks that the change request header line renders

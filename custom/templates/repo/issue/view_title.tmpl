@@ -20,13 +20,15 @@
 	<div class="pr-repo-title">
 		<a href="{{.Repository.LinkCtx ctx}}" id="pr-article-link">{{.Repository.OwnerName}} / {{.SubjectName}}</a>
 	</div>
-	{{if and .Issue.PullRequest.HeadRepo.IsFork .Issue.PullRequest.HeadRepo.BaseRepo}}
-	<div class="fork-flag">
-		{{svg "octicon-repo-forked" 14}}
-		{{ctx.Locale.Tr "repo.fork"}}:
-		<a href="{{AppSubUrl}}/{{.Issue.PullRequest.HeadRepo.BaseRepo.OwnerName}}">{{.Issue.PullRequest.HeadRepo.BaseRepo.OwnerName}}</a>
-		/
-		<a href="{{.Issue.PullRequest.HeadRepo.BaseRepo.Link}}">{{.Issue.PullRequest.HeadRepo.BaseRepo.Name}}</a>
+	{{/* #326: when the article is itself a fork, "Fork of: <owner> / <subject>" names the
+	     article it was forked from and links to that article's view (figma nodes
+	     662:109914-662:109919). It describes the article above, .Repository, not the head
+	     repository of the change request: for a change request opened from a fork, the
+	     head's base is the article itself. */}}
+	{{if and .Repository.IsFork .Repository.BaseRepo}}
+	<div class="fork-flag" id="pr-article-fork-of">
+		{{svg "octicon-repo-forked" 16}}
+		<a href="{{.Repository.BaseRepo.LinkCtx ctx}}">{{ctx.Locale.Tr "repo.fork"}}: {{.Repository.BaseRepo.OwnerName}} / {{.Repository.BaseRepo.GetSubject ctx}}</a>
 	</div>
 	{{end}}
 </div>
