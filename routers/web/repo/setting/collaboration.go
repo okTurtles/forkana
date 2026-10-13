@@ -137,7 +137,9 @@ func ChangeCollaborationAccessMode(ctx *context.Context) {
 // from the article settings, which keep the article_collaborator records (role and
 // invitation) in step with the write access granted here.
 func refuseArticleCollaboration(ctx *context.Context) bool {
-	if ctx.Repo.Repository.SubjectID == 0 {
+	// the repository is always assigned on a request, the guard only spares handler tests
+	// that build a bare context.Repository
+	if ctx.Repo.Repository == nil || ctx.Repo.Repository.SubjectID == 0 {
 		return false
 	}
 	ctx.NotFound(nil)
