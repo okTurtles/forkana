@@ -216,19 +216,12 @@
 						</div>
 					</div>
 
-					<div class="field tw-mt-8">
-						<div class="ui checkbox">
-							<input id="template_requirements" name="template_requirements" type="checkbox">
-							<label class="tw-text-xs tw-leading-5">{{template "repo/create_requirements" .}}</label>
-						</div>
-					</div>
-
 					<div class="field tw-mt-8 tw-flex tw-justify-end tw-gap-2">
 						<label></label>
 						<button type="button" class="ui button" onclick="history.back(); return false;">
 							{{ctx.Locale.Tr "cancel"}}
 						</button>
-						<button id="create-repo-submit-button" class="ui primary button" disabled>
+						<button id="create-repo-submit-button" class="ui primary button">
 							{{ctx.Locale.Tr "repo.create_repo"}}
 						</button>
 					</div>

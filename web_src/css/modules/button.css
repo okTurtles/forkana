@@ -408,3 +408,100 @@ It needs some tricks to tweak the left/right borders with active state */
 .ui.buttons .button.active + .button {
   border-left: none;
 }
+
+/* ===== Forkana design-system buttons and links =====
+
+   Values from the Button component set of the Design System Figma file (Button canvas 136:1805,
+   component set 30258:5582, "Tertiary or invisible" 40000473:113253). Every variant shares the
+   same box, so a tertiary button lines up with a secondary one next to it:
+   - small 26px tall, 12px/18px label, 8px side padding (30258:5590)
+   - medium 32px tall, 14px/20px label, 12px side padding (30258:5583)
+   - large 40px tall, 14px/20px label, 16px side padding (30258:5597)
+   Figma draws the 1px border inside the box, so the CSS side padding is the Figma padding minus
+   the border; a tertiary button keeps a transparent border for the same reason.
+   Selectors are doubled (.forkana-btn.forkana-btn-…) so they win over the global "a:hover" rule
+   (web_src/css/base.css) when the button is a link. */
+.forkana-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.forkana-btn.forkana-btn-sm {
+  gap: 4px;
+  height: 26px;
+  padding: 0 7px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.forkana-btn.forkana-btn-lg {
+  height: 40px;
+  padding: 0 15px;
+}
+
+/* the 2px #b3a9ff ring of every variant's "focus" state */
+.forkana-btn:focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: -2px;
+}
+
+/* Secondary (30258:5583 rest, 30258:5667 hover, 30258:5646 pressed) */
+.forkana-btn.forkana-btn-secondary {
+  color: var(--color-button-text);
+  background: var(--color-surface-muted);
+  border-color: var(--color-border-light);
+  box-shadow: 0 1px 0 #1f23280a;
+}
+
+.forkana-btn.forkana-btn-secondary:hover {
+  color: var(--color-button-text);
+  background: var(--color-button-secondary-hover-bg);
+  box-shadow: 0 1px 3px #1f232814, 0 1px 0 #1f23280f;
+  text-decoration: none;
+}
+
+.forkana-btn.forkana-btn-secondary:active {
+  background: var(--color-button-secondary-active-bg);
+  box-shadow: inset 0 1px 0 #1f23280a;
+}
+
+/* Tertiary or invisible (30258:5961 rest, 30258:5982 hover): no background, no underline at
+   rest, an underline under the label on hover and while pressed. The label is #25292e unless
+   the button carries its own colour (the sign-in page's "Forgot password?" is brand purple). */
+.forkana-btn.forkana-btn-tertiary {
+  color: var(--color-button-text);
+  background: transparent;
+  text-decoration: none;
+}
+
+.forkana-btn.forkana-btn-tertiary.forkana-btn-primary-text {
+  color: var(--color-primary);
+}
+
+.forkana-btn.forkana-btn-tertiary:hover,
+.forkana-btn.forkana-btn-tertiary:active {
+  text-decoration-line: underline;
+}
+
+/* A link inside body text: brand purple, underlined at rest, no padding, so it flows with the
+   words around it (#404 item 4). */
+.forkana-link {
+  color: var(--color-primary);
+  text-decoration-line: underline;
+}
+
+.forkana-link:hover {
+  color: var(--color-primary-hover);
+}

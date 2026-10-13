@@ -51,6 +51,13 @@
   --color-fork-btn-cancel-bg: #f3f4f6;
   --color-fork-btn-cancel-text: #374151;
   --color-fork-btn-cancel-border: #e5e7eb;
+  /* design-system buttons (.forkana-btn in modules/button.css), light values of colors.custom.css */
+  --color-button-text: #25292e;
+  --color-surface-muted: #f6f8fa;
+  --color-border-light: #d1d9e0;
+  --color-button-secondary-hover-bg: #eff2f5;
+  --color-button-secondary-active-bg: #e6eaef;
+  --color-button-focus-ring: #b3a9ff;
 }
 
 @media (min-width: 768px) and (max-width: 1200px) {
