@@ -24,6 +24,8 @@ test('landing search button is a secondary button and Enter still searches', asy
   await expect(title).toHaveCSS('line-height', '48px');
   await expect(title).toHaveCSS('letter-spacing', 'normal');
   const titleBox = await title.boundingBox();
+  const logoBox = await page.locator('.home-hero img.logo').boundingBox();
+  expect(titleBox.y - (logoBox.y + logoBox.height)).toBe(60);
 
   // the field matches the Landing frame (Figma 641:65360): 348x40, Inter 14/20
   const box = await input.boundingBox();
