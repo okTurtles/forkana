@@ -78,6 +78,7 @@
   --color-text-secondary: #8d96a0;
   --color-text-tertiary: #6e7681;
   --color-button-text: #e6edf3;
+  --color-button-hover: #30363d;
   --color-button-text-disabled: #6e7681;
   --color-button-border-disabled: #6e76811a;
 
@@ -190,6 +191,7 @@
     --color-text-secondary: #8d96a0;
     --color-text-tertiary: #6e7681;
     --color-button-text: #e6edf3;
+    --color-button-hover: #30363d;
     --color-button-text-disabled: #6e7681;
     --color-button-border-disabled: #6e76811a;
 

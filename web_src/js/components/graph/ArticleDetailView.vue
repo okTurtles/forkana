@@ -23,6 +23,7 @@
 
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { formatDateYMD } from '../../utils/time.ts';
+import { DETAIL_DIAMETER_DESIGN, DETAIL_EDGE_MARGIN, DETAIL_VIEWPORT_CAP } from './detail-size.ts';
 
 /* Screen-space circle the detail view grows out of / shrinks back into: the
    bubble that was clicked, in viewport px. Null when there is nothing to grow
@@ -45,6 +46,12 @@ const props = defineProps<{
   /* Flipped by the parent to ask for the closing animation; the parent unmounts
      us when we emit "closed". */
   closing?: boolean;
+  /* The reader's zoom of the circle (#422: a pinch over the opened article
+     zooms it, not the page), about its centre. 1 = the design size. */
+  zoom?: number;
+  /* How far the circle moves left to make room for the History card beside it
+     (#423), in px. */
+  shift?: number;
 }>();
 
 const emit = defineEmits<{
@@ -54,7 +61,9 @@ const emit = defineEmits<{
   (e: 'closed'): void;
 }>();
 
-const diameter = computed(() => props.size ?? 425);
+const diameter = computed(() => props.size ?? DETAIL_DIAMETER_DESIGN);
+/* The CSS spelling of the viewport cap (see ./detail-size.ts). */
+const viewportCap = `${DETAIL_VIEWPORT_CAP * 100}vw`;
 const label = computed(() => (props.contributors === 1 ? 'Contributor' : 'Contributors'));
 const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 const showBack = computed(() => props.showBack !== false);
@@ -98,9 +107,13 @@ function updateCenterY() {
   const visTop = Math.max(r.top, 0);
   const visBottom = Math.min(r.bottom, window.innerHeight);
   if (visBottom <= visTop) return;   // box fully off-screen: keep the last spot
+  /* Half the circle, plus the breathing room the canvas keeps around it
+     (DETAIL_EDGE_MARGIN, ./detail-size.ts) when the box has room for it, so
+     the circle never touches the view tabs above it or the legend below. */
   const half = (bubbleRef.value?.offsetHeight || diameter.value) / 2;
+  const reach = Math.min(half + DETAIL_EDGE_MARGIN, r.height / 2);
   const y = (visTop + visBottom) / 2 - r.top;
-  centerY.value = `${Math.round(Math.max(half, Math.min(r.height - half, y)))}px`;
+  centerY.value = `${Math.round(Math.max(reach, Math.min(r.height - reach, y)))}px`;
   /* Written straight to the node as well: the opening flight measures the
      circle's resting rect synchronously in onMounted, before Vue would apply
      the reactive binding, and it must measure the final spot. */
@@ -117,16 +130,29 @@ function prefersReducedMotion(): boolean {
 
 /* The transform that maps this circle, at its resting size and position, onto
    the bubble it came from. Measured rather than derived from `size` because the
-   circle is also clamped by `min(--detail-size, 84vw)`. */
+   circle is also clamped by `min(--detail-size, 84vw)`.
+
+   The circle sits inside .detail-viewport, which carries the reader's zoom
+   (`scale`) and the History card's shift (`translate`). The measured rect
+   already includes both, so the scale needs no correction — but the circle's
+   own translate is applied INSIDE the viewport's scale, so a displacement in
+   screen px is divided by the zoom. And the shift may be on its way back to
+   another value (closing the History card hands the circle its centre back,
+   in the same tick as a close): the flight is aimed from where the circle
+   will REST, not from where the viewport happens to be right now. */
 function originTransform(): string | null {
   const el = bubbleRef.value;
   const o = props.origin;
   if (!el || !o || !(o.r > 0)) return null;
   const b = el.getBoundingClientRect();
   if (!b.width) return null;
+  const zoom = props.zoom || 1;
+  const viewport = el.parentElement;
+  const translateNow = viewport ? parseFloat(getComputedStyle(viewport).translate) || 0 : 0;   // 'none' -> 0
+  const restCx = b.left + b.width / 2 - translateNow - (props.shift ?? 0);
   const scale = (o.r * 2) / b.width;
-  const dx = o.cx - (b.left + b.width / 2);
-  const dy = o.cy - (b.top + b.height / 2);
+  const dx = (o.cx - restCx) / zoom;
+  const dy = (o.cy - (b.top + b.height / 2)) / zoom;
   return `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px) scale(${scale.toFixed(4)})`;
 }
 
@@ -206,7 +232,7 @@ onBeforeUnmount(() => {
   <div
     class="detail-layer" :class="{'is-open': entered, 'is-closing': leaving}"
     ref="layerRef"
-    :style="{'--detail-size': diameter + 'px', '--detail-center-y': centerY}"
+    :style="{'--detail-size': diameter + 'px', '--detail-center-y': centerY, '--detail-viewport-cap': viewportCap}"
   >
     <button v-if="showBack" ref="backRef" class="detail-back" @click="emit('back')">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -220,7 +246,10 @@ onBeforeUnmount(() => {
          than the screen the circle rests where the reader is instead of at a
          centre below the fold. The box (and the graph underneath) keeps its
          size, and the wrapper is click-transparent so Back stays reachable. -->
-    <div class="detail-viewport">
+    <!-- `scale` and `translate` are the individual transform properties, so
+         they compose with the centring transform below instead of replacing
+         it, and never touch the circle's own (flight) transform. -->
+    <div class="detail-viewport" :style="{scale: String(zoom ?? 1), translate: `${-(shift ?? 0)}px 0`}">
       <!-- `transform` on this element is owned by the open/close animation above
          and written straight to the node, so it must not appear in this
          binding — Vue would patch it away on the next render. -->
@@ -261,6 +290,9 @@ onBeforeUnmount(() => {
      keep the circle and the history card clipped to it. */
   border-radius: inherit;
   overflow: hidden;
+  /* A pinch here zooms the circle (FishboneGraph's zoom gestures, #422), not
+     the page; a one-finger vertical drag still scrolls the page. */
+  touch-action: pan-y;
 
   /* Single source of truth for the open/close motion. The JS above mirrors
      these numbers only to know when it may unmount. */
@@ -296,8 +328,10 @@ onBeforeUnmount(() => {
    without resizing the box (which would relayout the whole graph on every
    open and close). The mockup drew the circle left of centre with the
    history card beside it, but a bubble off-centre in an empty box reads as a
-   layout bug — so the circle owns the centre and the history card overlaps
-   its right edge instead (see ArticleHistoryPopup). */
+   layout bug — so the circle owns the centre, and the history card sits 43px
+   to its right as the design draws it. Only a window too narrow for both
+   moves the circle left (the `shift` prop, see updateHistoryAnchor in
+   FishboneGraph): the card never covers the circle (#423). */
 .detail-viewport {
   position: absolute;
   left: 0;
@@ -307,6 +341,9 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   pointer-events: none;
+  /* Making room for the History card glides the circle aside, at the open
+     flight's pace; a zoom follows the fingers, so it is not eased. */
+  transition: translate var(--detail-zoom-ms) var(--detail-zoom-ease);
 }
 
 .detail-viewport > * {
@@ -339,8 +376,8 @@ onBeforeUnmount(() => {
 .detail-bubble {
   /* Never wider than the viewport allows — on a phone the design's 425px
      circle would be clipped on both sides. */
-  width: min(var(--detail-size, 425px), 84vw);
-  height: min(var(--detail-size, 425px), 84vw);
+  width: min(var(--detail-size, 425px), var(--detail-viewport-cap, 84vw));
+  height: min(var(--detail-size, 425px), var(--detail-viewport-cap, 84vw));
   flex: none;
   display: flex;
   align-items: center;
@@ -390,6 +427,7 @@ onBeforeUnmount(() => {
 /* Reduced motion: the same states, swapped instantly. */
 @media (prefers-reduced-motion: reduce) {
   .detail-layer::before,
+  .detail-viewport,
   .detail-bubble,
   .detail-content,
   .detail-back {
@@ -462,8 +500,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-/* .btn-neutral itself is global — web_src/css/features/bubble-graph.css, shared
-   with ArticleHistoryPopup. Only this button's no-wrap sits here: it is side by
+/* .btn-neutral itself is global — web_src/css/features/bubble-graph.css. Only this button's no-wrap sits here: it is side by
    side with another control, where a wrap would jump the row. */
 .detail-read {
   white-space: nowrap;
