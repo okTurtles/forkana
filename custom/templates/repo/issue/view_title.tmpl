@@ -10,21 +10,28 @@
 	data-issue-repo-id="{{$.Repository.ID}}"
 	{{if .Issue.IsPull}}data-issue-head-branch="{{.HeadTarget}}"{{end}}
 ></div>
-{{if and .Issue.IsPull .Issue.PullRequest.HeadRepo}}
+{{if .Issue.IsPull}}
+{{/* The header only depends on .Repository, the article the change request targets, so it stays
+     when the head repository is gone; the back link's no-history fallback then uses the article. */}}
+{{$backRepo := or .Issue.PullRequest.HeadRepo .Repository}}
 <div class="pr-repo-header">
-	<a href="{{.Issue.PullRequest.HeadRepo.Link}}/pulls" data-global-init="initPrBackLink" class="pr-back-link">{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "repo.pulls.back"}}</a>
+	<a href="{{$backRepo.Link}}/pulls" data-global-init="initPrBackLink" class="pr-back-link">{{svg "octicon-chevron-left" 14}} {{ctx.Locale.Tr "repo.pulls.back"}}</a>
+	{{/* #326: the <owner> / <subject> title is the way back to the article the change
+	     request targets, so it is one link to that article's view, drawn as a link
+	     (figma node 662:109913). A change request is made within the article's own
+	     repository, so .Repository is that article. */}}
 	<div class="pr-repo-title">
-		<a href="{{AppSubUrl}}/{{.Issue.PullRequest.HeadRepo.OwnerName}}">{{.Issue.PullRequest.HeadRepo.OwnerName}}</a>
-		/
-		<a href="{{.Issue.PullRequest.HeadRepo.Link}}"><strong>{{.Issue.PullRequest.HeadRepo.Name}}</strong></a>
+		<a href="{{.Repository.LinkCtx ctx}}" id="pr-article-link">{{.Repository.OwnerName}} / {{.SubjectName}}</a>
 	</div>
-	{{if and .Issue.PullRequest.HeadRepo.IsFork .Issue.PullRequest.HeadRepo.BaseRepo}}
-	<div class="fork-flag">
-		{{svg "octicon-repo-forked" 14}}
-		{{ctx.Locale.Tr "repo.fork"}}:
-		<a href="{{AppSubUrl}}/{{.Issue.PullRequest.HeadRepo.BaseRepo.OwnerName}}">{{.Issue.PullRequest.HeadRepo.BaseRepo.OwnerName}}</a>
-		/
-		<a href="{{.Issue.PullRequest.HeadRepo.BaseRepo.Link}}">{{.Issue.PullRequest.HeadRepo.BaseRepo.Name}}</a>
+	{{/* #326: when the article is itself a fork, "Fork of: <owner> / <subject>" names the
+	     article it was forked from and links to that article's view (figma nodes
+	     662:109914-662:109919). It describes the article above, .Repository, not the head
+	     repository of the change request: for a change request opened from a fork, the
+	     head's base is the article itself. */}}
+	{{if and .Repository.IsFork .Repository.BaseRepo}}
+	<div class="fork-flag" id="pr-article-fork-of">
+		{{svg "octicon-repo-forked" 16}}
+		<a href="{{.Repository.BaseRepo.LinkCtx ctx}}">{{ctx.Locale.Tr "repo.fork"}}: {{.Repository.BaseRepo.OwnerName}} / {{.Repository.BaseRepo.GetSubject ctx}}</a>
 	</div>
 	{{end}}
 </div>
@@ -92,31 +99,34 @@
 						{{$baseHref = HTMLFormat `<a href="%s">%s/%s</a>` (.Repository.LinkCtx ctx) .Repository.OwnerName .SubjectName}}
 					{{end}}
 				{{end}}
+				{{/* Forkana: the description keys (pulls.merged_title_desc_article, pulls.title_desc_owner, ...) are the
+				fork's own, not upstream's pulls.merged_title_desc / pulls.title_desc: those keep their upstream translations
+				with different arguments, which would render "%!s(MISSING)" in every non-English locale. */}}
 				{{if .Issue.PullRequest.HasMerged}}
 					{{$mergedStr:= DateUtils.TimeSince .Issue.PullRequest.MergedUnix}}
 					{{if .Issue.OriginalAuthor}}
 						{{.Issue.OriginalAuthor}}
-						<span class="pull-desc">{{ctx.Locale.Tr "repo.pulls.merged_title_desc" .NumCommits $baseHref $mergedStr}}</span>
+						<span class="pull-desc">{{ctx.Locale.Tr "repo.pulls.merged_title_desc_article" .NumCommits $baseHref $mergedStr}}</span>
 					{{else}}
 						<a {{if gt .Issue.PullRequest.Merger.ID 0}}href="{{.Issue.PullRequest.Merger.HomeLink}}"{{end}}>{{.Issue.PullRequest.Merger.GetDisplayName}}</a>
-						<span class="pull-desc">{{ctx.Locale.Tr "repo.pulls.merged_title_desc" .NumCommits $baseHref $mergedStr}}</span>
+						<span class="pull-desc">{{ctx.Locale.Tr "repo.pulls.merged_title_desc_article" .NumCommits $baseHref $mergedStr}}</span>
 					{{end}}
 				{{else}}
-					{{$articleRef := print .Repository.OwnerName "/" .Repository.Name}}
 					{{/* Forkana: the description is viewer-aware - the change author reads it in the first person,
-					the article owner keeps the possessive form, and anyone else gets the neutral form. */}}
-					{{$titleDescKey := Iif .IsBaseRepoOwner "repo.pulls.title_desc" "repo.pulls.title_desc_neutral"}}
+					the article owner keeps the possessive form, and anyone else gets the neutral form.
+					It no longer names the article (#326): the title above already links to it. */}}
+					{{$titleDescKey := Iif .IsBaseRepoOwner "repo.pulls.title_desc_owner" "repo.pulls.title_desc_neutral"}}
 					{{if .Issue.OriginalAuthor}}
 						{{/* an imported change request has no local poster, so it never reads in the first person */}}
-						<span id="pull-desc-display" class="pull-desc">{{.Issue.OriginalAuthor}} {{ctx.Locale.TrN .NumCommits (print $titleDescKey "_1") $titleDescKey .NumCommits $articleRef}}</span>
+						<span id="pull-desc-display" class="pull-desc">{{.Issue.OriginalAuthor}} {{ctx.Locale.TrN .NumCommits (print $titleDescKey "_1") $titleDescKey .NumCommits}}</span>
 					{{else if .IsIssuePoster}}
 						<span id="pull-desc-display" class="pull-desc">
-							{{ctx.Locale.TrN .NumCommits "repo.pulls.title_desc_self_1" "repo.pulls.title_desc_self" .NumCommits $articleRef}}
+							{{ctx.Locale.TrN .NumCommits "repo.pulls.title_desc_self_1" "repo.pulls.title_desc_self" .NumCommits}}
 						</span>
 					{{else}}
 						<span id="pull-desc-display" class="pull-desc">
 							<a {{if gt .Issue.Poster.ID 0}}href="{{.Issue.Poster.HomeLink}}"{{end}}>{{.Issue.Poster.GetDisplayName}}</a>
-							{{ctx.Locale.TrN .NumCommits (print $titleDescKey "_1") $titleDescKey .NumCommits $articleRef}}
+							{{ctx.Locale.TrN .NumCommits (print $titleDescKey "_1") $titleDescKey .NumCommits}}
 						</span>
 					{{end}}
 				{{end}}

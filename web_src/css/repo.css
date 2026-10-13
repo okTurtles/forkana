@@ -240,9 +240,11 @@ td .commit-summary {
   display: inline-block;
 }
 
-/* PR repo header (shows head repo info above title) */
+/* PR repo header: the article title and its "Fork of" line, above the change request title.
+   18px to the change request title: the header's 12px bottom padding plus the 6px gap
+   (figma nodes 662:109911, 662:109912) */
 .pr-repo-header {
-  margin-bottom: 1rem;
+  margin-bottom: 18px;
 }
 
 .pr-back-link {
@@ -264,35 +266,32 @@ td .commit-summary {
   text-decoration: underline;
 }
 
+/* #326: the title links back to the article, so it is drawn as a link, in the
+   primary colour, semibold 16px/24px (figma node 662:109913) */
 .pr-repo-title {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 24px;
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text);
 }
 
 .pr-repo-title a {
-  color: var(--color-text);
+  color: var(--color-primary);
 }
 
 .pr-repo-title a:hover {
   text-decoration: underline;
-  color: var(--color-primary);
 }
 
+/* #326: "Fork of: <owner> / <subject>" under the title, a 16px fork icon and a 12px/18px
+   link, 4px apart (figma nodes 662:109914-662:109919) */
 .fork-flag {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 14px;
-  color: var(--color-text-light-2);
-  margin-top: 0.25rem;
-}
-
-.fork-flag .svg {
-  color: var(--color-text-light-2);
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .fork-flag a {
