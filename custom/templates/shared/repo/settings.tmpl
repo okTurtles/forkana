@@ -94,31 +94,32 @@
 
 {{if not .Repository.IsArchived}}
 <style>
-/* give the user search results room to breathe, without the fomantic separators */
-.article-user-search > .results .result {
+/* give the user search results room to breathe, without the fomantic separators;
+   the .ui.search prefix lets these rules outrank fomantic's own result styles */
+.ui.search.article-user-search > .results .result {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
     border: none !important;
 }
-.article-user-search > .results .result .image,
-.article-user-search > .results .result .image img,
-.article-user-search > .results .result > img {
+.ui.search.article-user-search > .results .result .image,
+.ui.search.article-user-search > .results .result .image img,
+.ui.search.article-user-search > .results .result > img {
     flex-shrink: 0;
     width: 28px;
     height: 28px;
     border-radius: 50%;
     object-fit: cover;
 }
-.article-user-search > .results .result .content {
+.ui.search.article-user-search > .results .result .content {
     display: flex;
     flex-direction: column;
     justify-content: center;
     overflow: hidden;
     margin: 0;
 }
-.article-user-search > .results .result .title {
+.ui.search.article-user-search > .results .result .title {
     margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;

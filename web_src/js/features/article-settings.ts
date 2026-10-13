@@ -204,10 +204,7 @@ function initArticleCollaborators(): void {
       elSelectAll.indeterminate = checked > 0 && checked < checkboxes.length;
       elSelectAll.disabled = checkboxes.length === 0;
     }
-    if (elRemoveSelected) {
-      elRemoveSelected.disabled = checked === 0;
-      elRemoveSelected.classList.toggle('disabled', checked === 0);
-    }
+    if (elRemoveSelected) toggleElem(elRemoveSelected, checked > 0);
   };
 
   const applyFilter = () => {
@@ -235,9 +232,17 @@ function initArticleCollaborators(): void {
 
   const elRoleFilter = root.querySelector<HTMLElement>('#article-collaborators-role-filter');
   if (elRoleFilter) {
-    fomanticQuery(elRoleFilter).dropdown({
-      onChange(value: string) {
+    // the filter is only an arrow next to the "Role" header, so picking a role must not
+    // write the role into it; the arrow is highlighted instead while a role is filtered
+    const $roleFilter = fomanticQuery(elRoleFilter);
+    $roleFilter.dropdown({
+      action(_text: string, value: string) {
+        $roleFilter.dropdown('hide');
         roleFilter = value;
+        for (const item of elRoleFilter.querySelectorAll('.menu > .item')) {
+          item.classList.toggle('active', item.getAttribute('data-value') === value);
+        }
+        elRoleFilter.classList.toggle('tw-text-primary', Boolean(value));
         applyFilter();
       },
     });
