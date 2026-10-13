@@ -240,9 +240,11 @@ td .commit-summary {
   display: inline-block;
 }
 
-/* PR repo header (shows head repo info above title) */
+/* PR repo header: the article title and its "Fork of" line, above the change request title.
+   18px to the change request title: the header's 12px bottom padding plus the 6px gap
+   (figma nodes 662:109911, 662:109912) */
 .pr-repo-header {
-  margin-bottom: 1rem;
+  margin-bottom: 18px;
 }
 
 .pr-back-link {
