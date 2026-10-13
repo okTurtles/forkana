@@ -11,30 +11,50 @@ test.beforeAll(async ({browser}, workerInfo) => {
   await login_user(browser, workerInfo, 'user5');
 });
 
+// The landing hero after the two Landing frames of Figma. Each test pins the frame's own viewport,
+// so the values are the same in every Playwright project (the mobile ones run at 390-393px):
+// Desktop 6313:56396 (1440 wide) and Mobile 6313:56412 (375 wide, below tailwind's 640px "sm").
+const landingFrames = [
+  {name: 'Desktop', viewport: {width: 1440, height: 900}, titleSize: '32px', titleLineHeight: '48px', logo: [124, 122], logoGap: 60, fieldWidth: 348, fieldX: 546},
+  {name: 'Mobile', viewport: {width: 375, height: 812}, titleSize: '24px', titleLineHeight: '36px', logo: [68, 67], logoGap: 48, fieldWidth: 343, fieldX: 16},
+];
+
+for (const frame of landingFrames) {
+  test(`landing hero matches the ${frame.name} Landing frame`, async ({page}) => {
+    await page.setViewportSize(frame.viewport);
+    await page.goto('/');
+
+    // logo, then the title in Inter 700 (6313:56405 / 6313:56424)
+    const logoBox = await page.locator('.home-hero img.logo').boundingBox();
+    expect([logoBox.width, logoBox.height]).toEqual(frame.logo);
+    const title = page.locator('.home-hero-title');
+    await expect(title).toHaveCSS('font-size', frame.titleSize);
+    await expect(title).toHaveCSS('font-weight', '700');
+    await expect(title).toHaveCSS('line-height', frame.titleLineHeight);
+    await expect(title).toHaveCSS('letter-spacing', 'normal');
+    const titleBox = await title.boundingBox();
+    expect(titleBox.y - (logoBox.y + logoBox.height)).toBeCloseTo(frame.logoGap, 0);
+
+    // the field (641:65360 / 6313:56425): 16px under the title, 40px tall, Inter 14/20,
+    // 12px side padding + 16px icon + 8px gap before the text (35px inside the 1px border);
+    // on mobile it spans the 375px frame minus 16px on each side
+    const input = page.locator('#home-search-input');
+    const box = await input.boundingBox();
+    expect(box.y - (titleBox.y + titleBox.height)).toBeCloseTo(16, 0);
+    expect(box.x).toBeCloseTo(frame.fieldX, 0);
+    expect(box.width).toBeCloseTo(frame.fieldWidth, 0);
+    expect(box.height).toBeCloseTo(40, 0);
+    await expect(input).toHaveCSS('font-size', '14px');
+    await expect(input).toHaveCSS('line-height', '20px');
+    await expect(input).toHaveCSS('padding-left', '35px');
+  });
+}
+
 test('landing search button is a secondary button and Enter still searches', async ({page}) => {
   await page.goto('/');
   const input = page.locator('#home-search-input');
   const button = page.locator('#home-search-button');
   await expect(button).toBeHidden();
-
-  // the title matches the Landing frame (Figma 6313:56405): Inter 700 32/48, 16px above the field
-  const title = page.locator('.home-hero-title');
-  await expect(title).toHaveCSS('font-size', '32px');
-  await expect(title).toHaveCSS('font-weight', '700');
-  await expect(title).toHaveCSS('line-height', '48px');
-  await expect(title).toHaveCSS('letter-spacing', 'normal');
-  const titleBox = await title.boundingBox();
-  const logoBox = await page.locator('.home-hero img.logo').boundingBox();
-  expect(titleBox.y - (logoBox.y + logoBox.height)).toBe(60);
-
-  // the field matches the Landing frame (Figma 641:65360): 348x40, Inter 14/20
-  const box = await input.boundingBox();
-  expect(box.y - (titleBox.y + titleBox.height)).toBe(16);
-  expect(box.width).toBe(348);
-  expect(box.height).toBe(40);
-  await expect(input).toHaveCSS('font-size', '14px');
-  await expect(input).toHaveCSS('line-height', '20px');
-  await expect(input).toHaveCSS('padding-left', '35px');
 
   await input.fill('moon');
   await expect(button).toBeVisible();
