@@ -17,6 +17,14 @@ test('landing search button is a secondary button and Enter still searches', asy
   const button = page.locator('#home-search-button');
   await expect(button).toBeHidden();
 
+  // the field matches the Landing frame (Figma 641:65360): 348x40, Inter 14/20
+  const box = await input.boundingBox();
+  expect(box.width).toBe(348);
+  expect(box.height).toBe(40);
+  await expect(input).toHaveCSS('font-size', '14px');
+  await expect(input).toHaveCSS('line-height', '20px');
+  await expect(input).toHaveCSS('padding-left', '35px');
+
   await input.fill('moon');
   await expect(button).toBeVisible();
   await expect(button).toHaveCSS('background-color', secondaryBg);

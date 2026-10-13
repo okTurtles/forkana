@@ -101,6 +101,11 @@
   background: var(--color-hover);
 }
 
+/* The decorative search icon in the field, #59636e like the placeholder (Figma 641:65360) */
+.home-search-icon {
+  color: var(--color-placeholder-text);
+}
+
 /* ===== Homepage search button =====
 
    Sits inside the right end of the search field and only shows while the field holds
@@ -115,7 +120,7 @@
   transform: translateY(-50%);
 }
 
-/* Overrides the "tw-pr-4" utility of the field while the button is shown, so a long keyword
+/* Overrides the "tw-pr-[11px]" utility of the field while the button is shown, so a long keyword
    scrolls instead of running underneath the button. The inset is set from the rendered button's
    width (updateButton in web_src/js/features/home-search.ts), so a longer translated label still
    fits; the fallback only exists as a safety net (the class and the variable are set in the same
