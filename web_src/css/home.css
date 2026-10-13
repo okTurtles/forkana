@@ -47,6 +47,13 @@
   justify-content: center;
 }
 
+/* "What's on your mind?" -- #000 in the Landing frame (Figma 6313:56405), #f0f6fc in the
+   dark one (5629:47735); see --color-home-title in colors*.custom.css */
+.home-hero-title {
+  color: var(--color-home-title, var(--color-text));
+  letter-spacing: 0;
+}
+
 /* ===== Homepage search suggestions ===== */
 
 .home-search {

@@ -17,8 +17,17 @@ test('landing search button is a secondary button and Enter still searches', asy
   const button = page.locator('#home-search-button');
   await expect(button).toBeHidden();
 
+  // the title matches the Landing frame (Figma 6313:56405): Inter 700 32/48, 16px above the field
+  const title = page.locator('.home-hero-title');
+  await expect(title).toHaveCSS('font-size', '32px');
+  await expect(title).toHaveCSS('font-weight', '700');
+  await expect(title).toHaveCSS('line-height', '48px');
+  await expect(title).toHaveCSS('letter-spacing', 'normal');
+  const titleBox = await title.boundingBox();
+
   // the field matches the Landing frame (Figma 641:65360): 348x40, Inter 14/20
   const box = await input.boundingBox();
+  expect(box.y - (titleBox.y + titleBox.height)).toBe(16);
   expect(box.width).toBe(348);
   expect(box.height).toBe(40);
   await expect(input).toHaveCSS('font-size', '14px');

@@ -1,18 +1,21 @@
 {{template "base/head" .}}
 <main class="tw-flex tw-flex-col tw-items-center home-hero">
-	<section class="tw-w-full tw-max-w-[720px] tw-px-6 sm:tw-px-8 tw-py-16 sm:tw-py-8 tw-text-center">
+	<!-- Hero sized after the Landing frames of Figma: Desktop 6313:56396 (logo 124x122, 60px to
+			 the title, Inter 700 32/48, 16px to the field) and Mobile 6313:56415 (16px side padding,
+			 logo 68x67, 48px to the title, Inter 700 24/36, 16px to the field). -->
+	<section class="tw-w-full tw-max-w-[720px] tw-px-[16px] sm:tw-px-8 tw-py-16 sm:tw-py-8 tw-text-center">
 		<!-- Logo -->
-		<div class="tw-mx-auto tw-mb-10 tw-rounded-full tw-bg-transparent">
-			<img class="logo" width="124" height="122" src="{{AssetUrlPrefix}}/img/logo.svg" alt="{{ctx.Locale.Tr "logo"}}">
+		<div class="tw-mx-auto tw-mb-[48px] sm:tw-mb-[60px] tw-rounded-full tw-bg-transparent">
+			<img class="logo tw-w-[68px] tw-h-[67px] sm:tw-w-[124px] sm:tw-h-[122px]" width="124" height="122" src="{{AssetUrlPrefix}}/img/logo.svg" alt="{{ctx.Locale.Tr "logo"}}">
 		</div>
 
 		<!-- Heading -->
-		<h1 class="tw-text-3xl sm:tw-text-5xl tw-font-semibold tw-tracking-tight tw-mb-10">
+		<h1 class="home-hero-title tw-text-[24px] tw-leading-[36px] sm:tw-text-[32px] sm:tw-leading-[48px] tw-font-bold tw-m-0 tw-mb-[16px]">
 			{{ctx.Locale.Tr "home.whats_on_your_mind"}}
 		</h1>
 
 		<!-- Search + Dropdown -->
-		<!-- Field sized after the Landing frame (Figma 641:65360): 348x40, 1px border, radius 6, 12px
+		<!-- Field sized after the Landing frame (Figma 641:65360 / 6313:56406): 348x40, 1px border, radius 6, 12px
 				 side padding, 16px icon 8px before the text, Inter 14/20. -->
 		<div class="home-search tw-mx-auto tw-max-w-[348px]">
 			<!-- "ignore-dirty" keeps the global leave-confirmation (initGlobalFormDirtyLeaveConfirm)

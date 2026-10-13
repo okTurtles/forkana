@@ -65,6 +65,8 @@
   --color-button-secondary-hover-bg: #eff2f5;
   --color-button-secondary-active-bg: #e6eaef;
   --color-button-focus-ring: #b3a9ff;
+  /* the landing title "What's on your mind?" (Figma 6313:56405) */
+  --color-home-title: #000000;
 
   /* Border colors */
   --color-border: #d0d7de;
