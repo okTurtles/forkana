@@ -5,6 +5,7 @@ package markdown_test
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -52,7 +53,7 @@ func renderArticle(t *testing.T, input string) string {
 func TestRender_ForkanaInternalLinks(t *testing.T) {
 	defer test.MockVariableValue(&setting.AppURL, "https://forkana.example/")()
 	defer test.MockVariableValue(&setting.AppSubURL, "")()
-	withSubjects(t, "Solar System", "Solar System\x00pierre", "Mercury (planet)")
+	withSubjects(t, "Solar System", "Solar System\x00pierre", "Mercury (planet)", `Operation "Desert Storm"`)
 
 	cases := []struct {
 		name, input, expected string
@@ -66,6 +67,12 @@ func TestRender_ForkanaInternalLinks(t *testing.T) {
 			"article in a subject",
 			"See [Pierre's](subject/Solar System/pierre).",
 			`<p>See <a href="/subject/Solar%20System/pierre" class="internal-link" rel="nofollow">Pierre&#39;s</a>.</p>`,
+		},
+		{
+			// the editor encodes the quotes, which would otherwise make a link title
+			"quoted subject name",
+			"[Desert Storm](subject/Operation %22Desert Storm%22)",
+			`<p><a href="/subject/Operation%20%22Desert%20Storm%22" class="internal-link" rel="nofollow">Desert Storm</a></p>`,
 		},
 		{
 			"escaped spaces",
@@ -163,13 +170,18 @@ func TestRender_ForkanaSpecialPagesOnlyInArticles(t *testing.T) {
 // TestRender_InternalLinkParserIsLinear is the regression test of review #1: the parser runs at
 // every "[", and an unbounded scan of each candidate made this line quadratic. It compares the
 // render time of an input with that of an input 4 times longer (4x when linear, 16x when
-// quadratic) rather than using a fixed budget, which CI's race detector makes unreliable.
+// quadratic) rather than using a fixed budget, which CI's race detector makes unreliable; each
+// is the fastest of a few runs, so that one noisy run does not fail the test.
 func TestRender_InternalLinkParserIsLinear(t *testing.T) {
 	render := func(input string) time.Duration {
-		start := time.Now()
-		_, err := markdown.RenderString(markup.NewTestRenderContext(), input)
-		require.NoError(t, err)
-		return time.Since(start)
+		fastest := time.Duration(math.MaxInt64)
+		for range 3 {
+			start := time.Now()
+			_, err := markdown.RenderString(markup.NewTestRenderContext(), input)
+			require.NoError(t, err)
+			fastest = min(fastest, time.Since(start))
+		}
+		return fastest
 	}
 	for name, build := range map[string]func(n int) string{
 		"empty destinations": func(n int) string { return strings.Repeat("[a]( ", n) },
@@ -178,9 +190,8 @@ func TestRender_InternalLinkParserIsLinear(t *testing.T) {
 		"nested parentheses": func(n int) string { return "[a](subject/" + strings.Repeat("(", 2*n) },
 	} {
 		t.Run(name, func(t *testing.T) {
-			small, large := build(12500), build(50000)
-			render(small) // warm up
-			base := max(render(small), 20*time.Millisecond)
+			small, large := build(3000), build(12000)
+			base := max(render(small), 2*time.Millisecond)
 			assert.Less(t, render(large), 10*base)
 		})
 	}

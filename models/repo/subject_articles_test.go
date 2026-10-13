@@ -46,6 +46,11 @@ func TestReadableArticlesBySubject(t *testing.T) {
 	assign(38, subject.ID, nil) // limited_org: only for signed-in users
 	assign(40, subject.ID, nil) // privated_org: hidden
 	assign(16, other.ID, nil)   // user2, private
+	// user33, a limited user: only for signed-in users
+	assign(17, subject.ID, func(r *repo_model.Repository) []string {
+		r.OwnerID, r.OwnerName, r.IsEmpty = 33, "user33", false
+		return []string{"owner_id", "owner_name", "is_empty"}
+	})
 
 	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
 
@@ -63,7 +68,7 @@ func TestReadableArticlesBySubject(t *testing.T) {
 	// signed in as user2: the limited org too, and user2 once although it has two articles
 	owners, err = repo_model.FindReadableArticleOwners(ctx, subject.ID, user2)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"user2", "user5", "limited_org"}, owners)
+	assert.ElementsMatch(t, []string{"user2", "user5", "limited_org", "user33"}, owners)
 
 	for _, c := range []struct {
 		owner string
@@ -78,6 +83,8 @@ func TestReadableArticlesBySubject(t *testing.T) {
 		{"privated_org", nil, false}, // private owner
 		{"limited_org", nil, false},
 		{"limited_org", user2, true},
+		{"user33", nil, false}, // limited user
+		{"user33", user2, true},
 	} {
 		got, err := repo_model.HasReadableArticle(ctx, subject.ID, c.owner, c.doer)
 		require.NoError(t, err)

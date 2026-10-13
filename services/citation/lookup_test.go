@@ -14,6 +14,7 @@ import (
 
 	"code.gitea.io/gitea/modules/test"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -94,6 +95,33 @@ func TestParsePage_NewsJSONLD(t *testing.T) {
 		Authors:   []string{"Sheetz, Michael"},
 		Published: "2024-01-19",
 	}, src)
+}
+
+func TestParsePage_JSONLDArrayWithGraph(t *testing.T) {
+	src := parse(t, "https://news.example.org/2024/im1", `<html><head>
+<script type="application/ld+json">[{"@context":"https://schema.org","@graph":[{"@type":"WebPage"},
+{"@type":"NewsArticle","headline":"Odysseus lands on the Moon"}]}]</script>
+</head><body></body></html>`)
+	assert.Equal(t, TypeNews, src.Type)
+	assert.Equal(t, "Odysseus lands on the Moon", src.Title)
+}
+
+func TestParsePage_JournalTitleWhiteSpace(t *testing.T) {
+	src := parse(t, "https://journal.example.org/a/1", `<html><head>
+<meta name="citation_journal_title" content="Icarus">
+<title>
+  Lunar   regolith
+</title></head></html>`)
+	assert.Equal(t, TypeJournal, src.Type)
+	assert.Equal(t, "Lunar regolith", src.Title)
+}
+
+func TestClient_NoIdleConnections(t *testing.T) {
+	// the hosts are user-chosen: no connection to them may stay open after a lookup
+	transport := client().Transport.(*http.Transport)
+	assert.True(t, transport.DisableKeepAlives)
+	assert.Equal(t, lookupTimeout, transport.TLSHandshakeTimeout)
+	assert.Equal(t, lookupTimeout, transport.ResponseHeaderTimeout)
 }
 
 func TestParsePage_Journal(t *testing.T) {
@@ -210,9 +238,12 @@ func TestLookup_RefusesPrivateHosts(t *testing.T) {
 	}
 	assert.Zero(t, hits.Load())
 
-	// a redirect may not go to another port either
+	// a redirect may not go to another port either; the query itself was fine, so it is not
+	// ErrUnsupported (which the endpoint answers with 400)
 	redirect := &http.Request{URL: &url.URL{Scheme: "http", Host: "example.com:8080", Path: "/"}}
-	assert.ErrorIs(t, client().CheckRedirect(redirect, nil), ErrUnsupported)
+	err = client().CheckRedirect(redirect, nil)
+	assert.ErrorIs(t, err, ErrRedirectRefused)
+	assert.NotErrorIs(t, err, ErrUnsupported)
 	assert.NoError(t, client().CheckRedirect(&http.Request{URL: &url.URL{Scheme: "https", Host: "example.com", Path: "/"}}, nil))
 }
 
@@ -221,7 +252,15 @@ func TestParsePage_IgnoresTitlesAfterHead(t *testing.T) {
 	assert.Empty(t, src.Title)
 }
 
+// resetLimits gives the test an empty cache and rate limit (they are package-level).
+func resetLimits(t *testing.T) {
+	t.Cleanup(test.MockVariableValue(&cache, expirable.NewLRU[string, *Source](cacheSize, nil, cacheTTL)))
+	t.Cleanup(test.MockVariableValue(&limitWindow, time.Time{}))
+	t.Cleanup(test.MockVariableValue(&limitCounts, map[int64]int{}))
+}
+
 func TestLookupFor_CacheAndRateLimit(t *testing.T) {
+	resetLimits(t)
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -246,4 +285,14 @@ func TestLookupFor_CacheAndRateLimit(t *testing.T) {
 	assert.False(t, allowLookup(42, now), "over the limit")
 	assert.True(t, allowLookup(43, now), "other users are not limited")
 	assert.True(t, allowLookup(42, now.Add(time.Minute)), "a new minute")
+}
+
+func TestLookupFor_UnsupportedNotCounted(t *testing.T) {
+	resetLimits(t)
+	// a query that is not a URL, DOI or ISBN fetches nothing: it does not use up the quota
+	for range lookupsPerMinute + 1 {
+		_, err := LookupFor(t.Context(), 7, "not a source")
+		require.ErrorIs(t, err, ErrUnsupported)
+	}
+	assert.Zero(t, limitCounts[7])
 }
