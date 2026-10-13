@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 func TestCleanValue(t *testing.T) {
@@ -68,4 +71,24 @@ func TestFootnoteBackLinkLetter(t *testing.T) {
 func TestFootnoteRefID(t *testing.T) {
 	assert.Equal(t, "fnref:user-content-1", FootnoteRefID([]byte("user-content-1"), 1))
 	assert.Equal(t, "fnref:user-content-1:3", FootnoteRefID([]byte("user-content-1"), 3))
+}
+
+func TestFootnoteEmptyDefinitionChildCount(t *testing.T) {
+	// the back-link of an empty definition is its only child, counted once
+	md := goldmark.New(goldmark.WithExtensions(FootnoteExtension))
+	source := []byte("Text[^x].\n\n[^x]:\n")
+	doc := md.Parser().Parse(text.NewReader(source))
+	found := false
+	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if fn, ok := n.(*Footnote); ok && entering {
+			found = true
+			children := 0
+			for c := fn.FirstChild(); c != nil; c = c.NextSibling() {
+				children++
+			}
+			assert.Equal(t, children, fn.ChildCount())
+		}
+		return ast.WalkContinue, nil
+	})
+	assert.True(t, found)
 }

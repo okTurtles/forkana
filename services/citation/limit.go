@@ -6,7 +6,6 @@ package citation
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"time"
 
@@ -50,28 +49,21 @@ func allowLookup(userID int64, now time.Time) bool {
 	return true
 }
 
-// cacheKey is the query in a canonical form: the DOI, the ISBN or the URL.
-func cacheKey(query string) string {
-	query = strings.TrimSpace(query)
-	if doi := NormalizeDOI(query); doi != "" {
-		return "doi:" + strings.ToLower(doi)
+// LookupFor is Lookup for a user: answered from the cache when possible, and rate-limited
+// (a query that is not a URL, DOI or ISBN fetches nothing, so it is not counted).
+func LookupFor(ctx context.Context, userID int64, raw string) (*Source, error) {
+	q, err := parseQuery(raw)
+	if err != nil {
+		return nil, err
 	}
-	if isbn := NormalizeISBN(query); isbn != "" {
-		return "isbn:" + isbn
-	}
-	return "url:" + query
-}
-
-// LookupFor is Lookup for a user: answered from the cache when possible, and rate-limited.
-func LookupFor(ctx context.Context, userID int64, query string) (*Source, error) {
-	key := cacheKey(query)
+	key := q.cacheKey()
 	if src, ok := cache.Get(key); ok {
 		return src, nil
 	}
 	if !allowLookup(userID, time.Now()) {
 		return nil, ErrRateLimited
 	}
-	src, err := Lookup(ctx, query)
+	src, err := q.lookup(ctx)
 	if err != nil {
 		return nil, err
 	}

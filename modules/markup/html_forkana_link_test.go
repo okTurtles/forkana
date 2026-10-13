@@ -45,6 +45,13 @@ func TestParseForkanaInternalLink(t *testing.T) {
 		// the instance's URL with another scheme or host case
 		{"http://FORKANA.example/subject/Moon", true, ForkanaInternalLink{Path: "subject/Moon", Subject: "Moon"}},
 		{"https://forkana.example.evil/subject/Moon", false, ForkanaInternalLink{}},
+		// dot segments: the link would go to another page than the one checked
+		{"explore/../subject/Nobody", false, ForkanaInternalLink{}},
+		{"subject/Moon/pierre/../../Sun", false, ForkanaInternalLink{}},
+		{"subject/./Moon", false, ForkanaInternalLink{}},
+		{"subject/%2E%2E/x", false, ForkanaInternalLink{}},
+		// a quoted subject name, encoded by the editor
+		{"subject/Operation%20%22Desert%20Storm%22", true, ForkanaInternalLink{Path: "subject/Operation%20%22Desert%20Storm%22", Subject: `Operation "Desert Storm"`}},
 	}
 	for _, c := range cases {
 		got, ok := ParseForkanaInternalLink(c.href, true)
@@ -70,4 +77,15 @@ func TestIsExternalLink(t *testing.T) {
 	assert.False(t, isExternalLink("https://forkana.example/explore"))
 	assert.False(t, isExternalLink("mailto:a@b.c"))
 	assert.False(t, isExternalLink("subject/Moon"))
+	// the instance root
+	for _, href := range []string{"https://forkana.example", "https://forkana.example/", "https://forkana.example?x=1", "https://forkana.example#top"} {
+		assert.False(t, isExternalLink(href), href)
+	}
+	assert.True(t, isExternalLink("https://forkana.example.evil"))
+
+	defer test.MockVariableValue(&setting.AppURL, "https://example.org/forkana/")()
+	assert.False(t, isExternalLink("https://example.org/forkana"))
+	assert.False(t, isExternalLink("https://example.org/forkana?x=1"))
+	assert.True(t, isExternalLink("https://example.org/forkanax"))
+	assert.True(t, isExternalLink("https://example.org/"))
 }

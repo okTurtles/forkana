@@ -18,18 +18,23 @@ import (
 // readableArticleCond selects the articles of a subject the doer (nil when signed out) can
 // open: repositories they can access (AccessibleRepositoryCondition, which hides the public
 // repositories of private and, signed out, limited organizations), whose owner is not a
-// private user, that are not deleted (tombstones) and have content.
+// private user (nor, signed out, a limited one), that are not deleted (tombstones) and have
+// content.
 func readableArticleCond(doer *user_model.User) builder.Cond {
 	cond := AccessibleRepositoryCondition(doer, unit.TypeInvalid).And(builder.Eq{
 		"`repository`.is_tombstoned": false,
 		"`repository`.is_empty":      false,
 	})
 	if doer == nil || !doer.IsAdmin {
-		privateUsers := builder.Select("id").From("`user`").Where(builder.Eq{
-			"type":       user_model.UserTypeIndividual,
-			"visibility": structs.VisibleTypePrivate,
-		})
-		hidden := builder.NotIn("`repository`.owner_id", privateUsers)
+		// signed out, only public owners are visible (HasOrgOrUserVisible)
+		hiddenVisibilities := []structs.VisibleType{structs.VisibleTypePrivate}
+		if doer == nil {
+			hiddenVisibilities = append(hiddenVisibilities, structs.VisibleTypeLimited)
+		}
+		hiddenUsers := builder.Select("id").From("`user`").Where(builder.Eq{
+			"type": user_model.UserTypeIndividual,
+		}.And(builder.In("visibility", hiddenVisibilities)))
+		hidden := builder.NotIn("`repository`.owner_id", hiddenUsers)
 		if doer != nil {
 			hidden = hidden.Or(builder.Eq{"`repository`.owner_id": doer.ID})
 		}
@@ -95,12 +100,13 @@ func FindReadableArticleOwners(ctx context.Context, subjectID int64, doer *user_
 }
 
 // HasReadableArticle reports whether the subject has an article the doer can open (see
-// readableArticleCond), by ownerName when it is not empty.
+// readableArticleCond), by ownerName when it is not empty. The owner is matched by its
+// current name, as the link resolves it.
 func HasReadableArticle(ctx context.Context, subjectID int64, ownerName string, doer *user_model.User) (bool, error) {
 	cond := builder.Eq{"`repository`.subject_id": subjectID}.And(readableArticleCond(doer))
 	if ownerName != "" {
-		cond = cond.And(builder.Eq{"`repository`.owner_name": ownerName}.Or(
-			builder.In("`repository`.owner_id", builder.Select("id").From("`user`").Where(builder.Eq{"lower_name": strings.ToLower(ownerName)}))))
+		cond = cond.And(builder.In("`repository`.owner_id",
+			builder.Select("id").From("`user`").Where(builder.Eq{"lower_name": strings.ToLower(ownerName)})))
 	}
 	return db.GetEngine(ctx).Table("repository").Where(cond).Exist()
 }

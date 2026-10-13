@@ -164,6 +164,9 @@ func NewFootnote(ref []byte) *Footnote {
 type FootnoteList struct {
 	ast.BaseBlock
 	Count int
+	// backToText is the back-links' label in the document's language, resolved once when the
+	// list is rendered (before its entries).
+	backToText string
 }
 
 // Dump implements Node.Dump.
@@ -382,7 +385,13 @@ func (a *footnoteASTTransformer) Transform(node *ast.Document, reader text.Reade
 		if index < 0 {
 			list.RemoveChild(list, footnote)
 		} else {
-			container.InsertBefore(container, container.FirstChild(), NewFootnoteBackLink(index, name, footnoteNode.RefCount))
+			backLink := NewFootnoteBackLink(index, name, footnoteNode.RefCount)
+			if fc := container.FirstChild(); fc != nil {
+				container.InsertBefore(container, fc, backLink)
+			} else {
+				// an empty definition (InsertBefore would count the child twice)
+				container.AppendChild(container, backLink)
+			}
 		}
 		footnote = next
 	}
@@ -507,7 +516,16 @@ func (r *FootnoteHTMLRenderer) renderFootnoteBackLink(w util.BufWriter, source [
 		return ast.WalkContinue, nil
 	}
 	n := node.(*FootnoteBackLink)
-	label := documentLocale(node).TrString("citation.back_to_text")
+	label := ""
+	for p := node.Parent(); p != nil; p = p.Parent() {
+		if list, ok := p.(*FootnoteList); ok {
+			label = list.backToText
+			break
+		}
+	}
+	if label == "" {
+		label = documentLocale(node).TrString("citation.back_to_text")
+	}
 	r.writeHTML(w, `<span class="footnote-backrefs">`)
 	if n.RefCount <= 1 {
 		r.writeHTML(w, htmlutil.HTMLFormat(`<a href="#%s" class="footnote-backref" role="doc-backlink" aria-label="%s">^</a>`,
@@ -543,9 +561,11 @@ func (r *FootnoteHTMLRenderer) renderFootnote(w util.BufWriter, source []byte, n
 
 func (r *FootnoteHTMLRenderer) renderFootnoteList(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
+		locale := documentLocale(node)
+		node.(*FootnoteList).backToText = locale.TrString("citation.back_to_text")
 		r.writeHTML(w, `<div class="footnotes" role="doc-endnotes">`)
 		r.writeHTML(w, htmlutil.HTMLFormat("\n<h2 class=\"footnotes-heading\">%s</h2>\n",
-			documentLocale(node).TrString("citation.references")))
+			locale.TrString("citation.references")))
 		_, _ = w.WriteString("<ol>\n")
 	} else {
 		_, _ = w.WriteString("</ol>\n")

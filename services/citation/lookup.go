@@ -84,36 +84,39 @@ var (
 	openLibraryAPI = "https://openlibrary.org/api/books"
 )
 
-var (
-	httpClientOnce sync.Once
-	httpClient     *http.Client
-)
+// ErrRedirectRefused is returned when a page redirects somewhere a lookup may not go.
+var ErrRedirectRefused = errors.New("redirect refused")
 
 // client is the HTTP client of the lookups, which may only reach public internet hosts
-// (in tests, testClient replaces it to reach the local test server).
-var client = func() *http.Client {
-	httpClientOnce.Do(func() {
-		allow := hostmatcher.ParseHostMatchList("citation lookup", hostmatcher.MatchBuiltinExternal)
-		// "external" still lets through carrier-grade NAT (where some clouds put their
-		// metadata service), benchmarking and IPv6 translation ranges
-		block := hostmatcher.ParseHostMatchList("citation lookup", "100.64.0.0/10,198.18.0.0/15,64:ff9b::/96,64:ff9b:1::/48,2002::/16")
-		httpClient = &http.Client{
-			Timeout: lookupTimeout,
-			Transport: &http.Transport{
-				// no proxy: through one, the dialer would only see the proxy's address
-				Proxy:       nil,
-				DialContext: hostmatcher.NewDialContext("citation lookup", allow, block, nil),
-			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 5 {
-					return errors.New("too many redirects")
-				}
-				return checkURL(req.URL)
-			},
-		}
-	})
-	return httpClient
-}
+// (the tests replace it to reach their local server).
+var client = sync.OnceValue(func() *http.Client {
+	allow := hostmatcher.ParseHostMatchList("citation lookup", hostmatcher.MatchBuiltinExternal)
+	// "external" still lets through carrier-grade NAT (where some clouds put their
+	// metadata service), benchmarking and IPv6 translation ranges
+	block := hostmatcher.ParseHostMatchList("citation lookup", "100.64.0.0/10,198.18.0.0/15,64:ff9b::/96,64:ff9b:1::/48,2002::/16")
+	return &http.Client{
+		Timeout: lookupTimeout,
+		Transport: &http.Transport{
+			// no proxy: through one, the dialer would only see the proxy's address
+			Proxy:       nil,
+			DialContext: hostmatcher.NewDialContext("citation lookup", allow, block, nil),
+			// the hosts are user-chosen and rarely reused: keep no idle connection to them
+			DisableKeepAlives:     true,
+			TLSHandshakeTimeout:   lookupTimeout,
+			ResponseHeaderTimeout: lookupTimeout,
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("%w: too many redirects", ErrRedirectRefused)
+			}
+			if err := checkURL(req.URL); err != nil {
+				// not ErrUnsupported: the query itself was fine
+				return fmt.Errorf("%w: %s", ErrRedirectRefused, err.Error())
+			}
+			return nil
+		},
+	}
+})
 
 // checkURL allows only http(s) URLs on the standard ports.
 func checkURL(u *url.URL) error {
@@ -183,25 +186,63 @@ func NormalizeISBN(s string) string {
 	return ""
 }
 
-// Lookup finds the details of the source query names: a DOI, an ISBN or an http(s) URL.
-func Lookup(ctx context.Context, query string) (*Source, error) {
-	ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
-	defer cancel()
-	query = strings.TrimSpace(query)
-	if doi := NormalizeDOI(query); doi != "" {
-		return lookupDOI(ctx, doi)
+// query is a parsed lookup query: one of doi, isbn and pageURL is set.
+type query struct {
+	doi, isbn, pageURL string
+}
+
+// parseQuery reads a DOI, an ISBN or an http(s) URL on a standard port, or returns
+// ErrUnsupported.
+func parseQuery(raw string) (query, error) {
+	raw = strings.TrimSpace(raw)
+	if doi := NormalizeDOI(raw); doi != "" {
+		return query{doi: doi}, nil
 	}
-	if isbn := NormalizeISBN(query); isbn != "" {
-		return lookupISBN(ctx, isbn)
+	if isbn := NormalizeISBN(raw); isbn != "" {
+		return query{isbn: isbn}, nil
 	}
-	u, err := url.Parse(query)
+	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
-		return nil, ErrUnsupported
+		return query{}, ErrUnsupported
 	}
 	if err := checkURL(u); err != nil {
+		return query{}, err
+	}
+	return query{pageURL: u.String()}, nil
+}
+
+// Lookup finds the details of the source query names: a DOI, an ISBN or an http(s) URL.
+func Lookup(ctx context.Context, raw string) (*Source, error) {
+	q, err := parseQuery(raw)
+	if err != nil {
 		return nil, err
 	}
-	return lookupPage(ctx, u.String())
+	return q.lookup(ctx)
+}
+
+func (q query) lookup(ctx context.Context) (*Source, error) {
+	ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
+	defer cancel()
+	switch {
+	case q.doi != "":
+		return lookupDOI(ctx, q.doi)
+	case q.isbn != "":
+		return lookupISBN(ctx, q.isbn)
+	default:
+		return lookupPage(ctx, q.pageURL)
+	}
+}
+
+// cacheKey is the query in a canonical form.
+func (q query) cacheKey() string {
+	switch {
+	case q.doi != "":
+		return "doi:" + strings.ToLower(q.doi)
+	case q.isbn != "":
+		return "isbn:" + q.isbn
+	default:
+		return "url:" + q.pageURL
+	}
 }
 
 func get(ctx context.Context, rawURL, accept string) (*http.Response, error) {
@@ -433,6 +474,11 @@ func (m *pageMeta) first(keys ...string) string {
 	return ""
 }
 
+// pageTitle is the page's <title>, its white space collapsed.
+func (m *pageMeta) pageTitle() string {
+	return strings.Join(strings.Fields(m.title), " ")
+}
+
 func (m *pageMeta) all(key string) []string {
 	var out []string
 	for _, v := range m.values[key] {
@@ -565,7 +611,10 @@ func articleLD(blocks []string) *ldObject {
 		}
 		var many []ldObject
 		if json.Unmarshal([]byte(b), &many) == nil {
-			candidates = append(candidates, many...)
+			for _, item := range many {
+				candidates = append(candidates, item)
+				candidates = append(candidates, item.Graph...)
+			}
 		}
 	}
 	for i := range candidates {
@@ -622,7 +671,7 @@ func ParsePage(r io.Reader, pageURL *url.URL) *Source {
 		src.Authors = m.all("citation_author")
 		src.Publisher = m.first("citation_publisher", "dc.publisher")
 		if src.Title == "" {
-			src.Title = strings.TrimSpace(m.title)
+			src.Title = m.pageTitle()
 		}
 		return src
 	}
@@ -632,7 +681,7 @@ func ParsePage(r io.Reader, pageURL *url.URL) *Source {
 		src.Title = strings.TrimSpace(ld.Headline)
 	}
 	if src.Title == "" {
-		src.Title = strings.Join(strings.Fields(m.title), " ")
+		src.Title = m.pageTitle()
 	}
 	src.Site = m.first("og:site_name", "application-name")
 	if src.Site == "" && ld != nil {

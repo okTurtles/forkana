@@ -54,13 +54,15 @@ type ForkanaInternalLink struct {
 	Suffix string
 	// Subject and Owner are the unescaped subject name and article owner of a subject link
 	// (Owner is empty for a link to the subject itself); both are empty for other pages.
+	// A link to one of the owner's numbered articles ("subject/X/pierre/2") is checked as a
+	// link to the owner's articles on the subject: the number is not checked.
 	Subject string
 	Owner   string
 }
 
 // instanceRelativePath returns the part of href after this instance's root when href is the
 // full URL of a page on this instance (the scheme and the host's case may differ from
-// AppURL's) or a path starting with AppSubURL + "/".
+// AppURL's), the instance root included, or a path starting with AppSubURL + "/".
 func instanceRelativePath(href string) (rest string, ok bool) {
 	if strings.HasPrefix(href, setting.AppSubURL+"/") && !strings.HasPrefix(href, "//") {
 		return href[len(setting.AppSubURL)+1:], true
@@ -78,7 +80,11 @@ func instanceRelativePath(href string) (rest string, ok bool) {
 	}
 	// keep the path as written (escaped), with its query and fragment
 	afterHost := href[strings.Index(href, "://")+3+len(u.Host):]
-	prefix := strings.TrimSuffix(app.Path, "/") + "/"
+	root := strings.TrimSuffix(app.Path, "/")
+	if rest, ok := strings.CutPrefix(afterHost, root); ok && (rest == "" || rest[0] == '?' || rest[0] == '#') {
+		return rest, true // the instance root itself
+	}
+	prefix := root + "/"
 	if !strings.HasPrefix(afterHost, prefix) {
 		return "", false
 	}
@@ -122,6 +128,10 @@ func ParseForkanaInternalLink(href string, specialPages bool) (link ForkanaInter
 		}
 		if i > 0 && unescaped == "" {
 			return link, false // "subject//x": not a valid page
+		}
+		if unescaped == "." || unescaped == ".." {
+			// the link would be resolved to another page than the one checked
+			return link, false
 		}
 		if segments[0] == "subject" {
 			switch i {
