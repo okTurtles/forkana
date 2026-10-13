@@ -31,13 +31,8 @@ export function textBeforeCaretInBlock(view: any): string {
   return $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc');
 }
 
-// textBeforeCaret is the document's text before the caret, one block per line. In the
-// Source editor it is the Markdown before the caret, which the reference numbering reads.
-export function textBeforeCaret(view: any): string {
-  return textBefore(view, view.state.selection.from);
-}
-
-// textBefore is the document's text before pos, one block per line.
+// textBefore is the document's text before pos, one block per line. In the Source editor it
+// is the Markdown before pos, which the reference numbering reads.
 export function textBefore(view: any, pos: number): string {
   return view.state.doc.textBetween(0, pos, '\n', '\ufffc');
 }
@@ -46,10 +41,6 @@ export function textBefore(view: any, pos: number): string {
 export function focusEditor(editor: ToolsEditor): void {
   const view = currentView(editor);
   if (!view.hasFocus()) view.focus();
-}
-
-export function caretPosition(view: any): number {
-  return view.state.selection.from;
 }
 
 // caretRect returns the screen rectangle of the caret, where the popovers are anchored.
@@ -87,25 +78,14 @@ export function insertLink(editor: ToolsEditor, from: number, to: number, label:
     const text = `[${escapeMarkdownText(label)}](${dest})`;
     view.dispatch(state.tr.insertText(text, from, to).scrollIntoView());
   } else {
-    const mark = state.schema.marks.link.create({linkUrl: url});
+    // Toast UI writes the mark's URL as it is in "[label](url)": encode what would end it
+    const linkUrl = url.startsWith('subject/') ? url : url.replace(/[\s()<>]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`);
+    const mark = state.schema.marks.link.create({linkUrl});
     const tr = state.tr.replaceWith(from, to, state.schema.text(label, [mark]));
     // typing after the link must not extend it
     tr.removeStoredMark(state.schema.marks.link);
     view.dispatch(tr.scrollIntoView());
   }
-  focusEditor(editor);
-}
-
-// deleteRange removes [from, to) of the current view.
-export function deleteRange(editor: ToolsEditor, from: number, to: number): void {
-  const view = currentView(editor);
-  if (to > from) view.dispatch(view.state.tr.delete(from, to));
-}
-
-// insertText inserts plain text at [from, to) of the current view.
-export function insertText(editor: ToolsEditor, from: number, to: number, text: string): void {
-  const view = currentView(editor);
-  view.dispatch(view.state.tr.insertText(text, from, to).scrollIntoView());
   focusEditor(editor);
 }
 

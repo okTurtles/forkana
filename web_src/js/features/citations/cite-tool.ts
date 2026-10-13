@@ -17,11 +17,12 @@ import {
   normalizeDOI,
   normalizeISBN,
   parseHttpURL,
+  requiredFields,
   sourceTypes,
   type CitationFields,
   type SourceType,
 } from './citation-format.ts';
-import {footnoteSources, nextFootnoteLabel, plainCitationSummary, referenceNumberAt, type FootnoteSource} from './footnote-markdown.ts';
+import {footnoteDefinitions, footnoteSources, nextFootnoteLabel, plainCitationSummary, referenceNumberAt, type FootnoteSource} from './footnote-markdown.ts';
 import {caretRect, currentView, focusEditor, insertFootnote, isInCode, textBefore, type ToolsEditor} from './editor-ops.ts';
 import {showErrorToast} from '../../modules/toast.ts';
 import {closePopover, openPopover} from './popover.ts';
@@ -190,9 +191,11 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
   const markdown = editor.getMarkdown();
   const sources = footnoteSources(markdown);
   const label = nextFootnoteLabel(markdown);
-  const number = referenceNumberAt(textBefore(currentView(editor), opts.from), label);
+  const number = referenceNumberAt(textBefore(currentView(editor), opts.from), label, new Set(footnoteDefinitions(markdown).keys()));
   const query = opts.query?.trim() ?? '';
   let type: SourceType = (query && detectSourceType(query)) || 'website';
+  // once the writer picked a type, a lookup fills in its fields but does not change it
+  let typeChosen = false;
   const values: Record<SourceType, CitationFields> = {website: {}, news: {}, journal: {}, book: {}, other: {}};
   if (query) values[type] = fieldsFromQuery(type, query);
   // the fields a lookup filled in, as "type:field": a later lookup may replace them, the
@@ -300,7 +303,7 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
     }
     status.hidden = true;
     const found = fieldsFromLookup(src);
-    const t = sourceTypes.includes(src.type) ? src.type : type;
+    const t = !typeChosen && sourceTypes.includes(src.type) ? src.type : type;
     // what the previous lookup filled in belongs to the previous source
     for (const key of Array.from(filled)) {
       const [ft, fk] = key.split(':') as [SourceType, keyof CitationFields];
@@ -326,13 +329,17 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
   }
 
   function renderFields() {
+    // a lookup may render the fields again while the writer types in one: keep the caret
+    const active = document.activeElement instanceof HTMLInputElement && fieldsEl.contains(document.activeElement) ? document.activeElement : null;
+    const activeKey = active?.closest<HTMLElement>('.citation-field')?.getAttribute('data-key');
+    const caret = active?.selectionStart ?? null;
     fieldsEl.textContent = '';
-    const required = new Set(missingRequiredFieldsAll(type));
+    const required = new Set(requiredFields[type]);
     for (const spec of typeFields[type]) {
       const placeholder = spec.placeholder?.startsWith('=') ? spec.placeholder.slice(1) : spec.placeholder ? citationText(spec.placeholder) : '';
       const filledLabel = filled.has(`${type}:${spec.key}`) ? citationText(spec.key === 'title' || spec.key === 'url' ? 'filled_from_page' : 'filled_auto') : '';
       const field = createElementFromHTML(html`
-        <label class="citation-field${spec.half ? ' citation-field-half' : ''}">
+        <label class="citation-field${spec.half ? ' citation-field-half' : ''}" data-key="${spec.key}">
           <span class="citation-field-label-row">
             <span class="citation-field-label">${citationText(spec.label)}${required.has(spec.key) ? ' *' : ''}</span>
             ${htmlRaw(filledLabel ? html`<span class="citation-field-filled">${filledLabel}</span>` : '')}
@@ -359,6 +366,15 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
       fieldsEl.append(field);
     }
     updatePreview();
+    const again = activeKey ? fieldsEl.querySelector<HTMLInputElement>(`.citation-field[data-key="${activeKey}"] input`) : null;
+    if (again) {
+      again.focus();
+      try {
+        if (caret !== null) again.setSelectionRange(caret, caret);
+      } catch {
+        // an input type="url" has no selection
+      }
+    }
   }
 
   const picker = dialog.querySelector('.citation-type-picker');
@@ -371,6 +387,7 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
         </button>
       `);
       tab.addEventListener('click', () => {
+        typeChosen = true;
         if (t === type) return;
         // carry what the writer already typed that the other type also has
         for (const [k, v] of Object.entries(values[type]) as Array<[keyof CitationFields, string]>) {
@@ -379,6 +396,8 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
         type = t;
         renderPicker();
         renderFields();
+        // the tab was rendered again: give the focus to the new one
+        picker.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
       });
       picker.append(tab);
     }
@@ -405,11 +424,6 @@ function openCiteDialog(editor: ToolsEditor, opts: CiteOptions): void {
   document.body.append(dialog);
   if (query) runLookup(query);
   dialog.querySelector<HTMLInputElement>('.citation-dialog-fields input')?.focus();
-}
-
-// missingRequiredFieldsAll lists the required fields of a type (for the "*" marks).
-function missingRequiredFieldsAll(type: SourceType): Array<keyof CitationFields> {
-  return missingRequiredFields(type, {});
 }
 
 // openCitePopover opens "Cite a source" at the caret.

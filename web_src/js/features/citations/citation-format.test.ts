@@ -94,6 +94,22 @@ test('formatCitation escapes Markdown in the fields', () => {
     .toBe('["T \\[x\\]"](<https://example.com/a (b)>). Retrieved 1 October 2026.');
 });
 
+test('formatCitation keeps the edition (review 2 #7)', () => {
+  const book = (edition: string) => formatCitation('book', {title: 'T', authors: 'A', edition}, today);
+  expect(book('Revised')).toBe('A. *T* (Revised ed.).');
+  expect(book('Illustrated')).toBe('A. *T* (Illustrated ed.).');
+  expect(book('2nd edition')).toBe('A. *T* (2nd ed.).');
+  expect(book('2nd ed.')).toBe('A. *T* (2nd ed.).');
+  expect(book('3rd Ed')).toBe('A. *T* (3rd ed.).');
+});
+
+test('an "Other" citation does not start a list or a heading (review 2 #19)', () => {
+  expect(formatCitation('other', {citation: '1984. Orwell estate letters'}, today)).toBe('1984\\. Orwell estate letters.');
+  expect(formatCitation('other', {citation: '- Interview notes'}, today)).toBe('\\- Interview notes.');
+  expect(formatCitation('other', {citation: '# 12 Report'}, today)).toBe('\\# 12 Report.');
+  expect(formatCitation('other', {citation: '1984 was a year'}, today)).toBe('1984 was a year.');
+});
+
 test('missingRequiredFields', () => {
   expect(missingRequiredFields('website', {})).toEqual(['url']);
   expect(missingRequiredFields('news', {url: 'https://apnews.com/x'})).toEqual(['site']);
@@ -115,6 +131,12 @@ test('classifyCitation reads back what formatCitation wrote', () => {
     .toBe('journal');
   expect(classifyCitation(citationElement('Chaikin, Andrew (1994). <em>A Man on the Moon</em> (1st ed.). Viking. ISBN 978-0-670-81446-6.')))
     .toEqual({type: 'book', publisher: 'Viking', sourceURL: '', archived: false});
+  // the title or an initial is not the publisher (review 2 #8)
+  expect(classifyCitation(citationElement('Sagan, C. (1980). <em>Cosmos</em>. ISBN 978-0-394-50294-6.')).publisher).toBe('');
+  expect(classifyCitation(citationElement('Kubrick, S. (1964). <em>Dr. Strangelove</em>. ISBN 978-0-394-50294-6.')).publisher).toBe('');
+  expect(classifyCitation(citationElement('<a href="https://archive.org/x"><em>Dr. Strangelove</em></a> (2nd ed.). Univ. Press. 1964. ISBN 978-0-394-50294-6.')).publisher)
+    .toBe('Univ. Press');
+  expect(classifyCitation(citationElement('<em>T</em>. 1964. ISBN 978-0-394-50294-6.')).publisher).toBe('');
   expect(classifyCitation(citationElement('Armstrong, Neil. Oral history interview.')))
     .toEqual({type: 'other', publisher: '', sourceURL: '', archived: false});
 });
