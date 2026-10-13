@@ -146,6 +146,19 @@ func testPullViewChangeRequestForkOf(t *testing.T) {
 		resp := loginUser(t, "user12").MakeRequest(t, NewRequest(t, "GET", "/user12/repo10/pulls/1"), http.StatusOK)
 		assert.Equal(t, 0, NewHTMLParser(t, resp.Body).Find(".pr-repo-header .fork-flag").Length())
 	})
+
+	t.Run("head repository is gone", func(t *testing.T) {
+		// deleting user13/repo11 leaves /user12/repo10/pulls/1 without a head repository:
+		// the title must still lead back to the article
+		require.NoError(t, repo_service.DeleteRepositoryDirectly(t.Context(), 11))
+		resp := loginUser(t, "user12").MakeRequest(t, NewRequest(t, "GET", "/user12/repo10/pulls/1"), http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+		repo10 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+		title := htmlDoc.Find(".pr-repo-header #pr-article-link")
+		assert.Equal(t, 1, title.Length())
+		assert.Equal(t, repo10.Link(), title.AttrOr("href", ""))
+		assert.Equal(t, 1, htmlDoc.Find(".pr-repo-header .pr-back-link").Length())
+	})
 }
 
 // TestPullViewChangeRequestTitleDescOtherLocale checks that the change request header line renders

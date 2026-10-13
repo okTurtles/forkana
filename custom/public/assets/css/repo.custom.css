@@ -1109,3 +1109,10 @@ col.col-type-marker {
   color: var(--color-button-text-disabled);
   cursor: default;
 }
+
+/* #326: the fork icon of the change request header's "Fork of" line is #1f2328
+   (figma node 662:109916). Forkana's token lives here, not in web_src/css (repo.css
+   holds the line's layout), so it needs no fallback for the web_src theme lint. */
+.fork-flag .svg {
+  color: var(--color-text-primary);
+}

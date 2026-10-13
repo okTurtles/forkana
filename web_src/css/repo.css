@@ -294,10 +294,6 @@ td .commit-summary {
   line-height: 18px;
 }
 
-.fork-flag .svg {
-  color: var(--color-text-primary, var(--color-text));
-}
-
 .fork-flag a {
   color: var(--color-primary);
 }
