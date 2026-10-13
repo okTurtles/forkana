@@ -10,10 +10,11 @@
 //     (6597:45566, "Source summary" 6597:45570).
 //
 // Jumping between a marker and its reference, and highlighting the target, is plain anchor
-// navigation styled with :target (citations.custom.css).
+// navigation styled with :target (citations.custom.css). The hover card is a tooltip of the
+// marker: keyboard users reach the same citation and links in the References list.
 
 import {citationText} from '../features/citations/i18n.ts';
-import {classifyCitation, type CitationInfo, type SourceType} from '../features/citations/citation-format.ts';
+import {classifyCitation, sourceTypes, type CitationInfo, type SourceType} from '../features/citations/citation-format.ts';
 import {svg, type SvgName} from '../svg.ts';
 import {createElementFromHTML} from '../utils/dom.ts';
 import {html} from '../utils/html.ts';
@@ -70,6 +71,15 @@ function referencesOf(footnotes: Element): Map<string, Reference> {
   return refs;
 }
 
+// revealReference shows all the references again when a filter hides the one a link jumps to.
+function revealReference(ref: Reference): void {
+  if (ref.item.hidden) ref.item.closest('.footnotes')?.querySelector<HTMLButtonElement>('.citation-filter')?.click();
+}
+
+function referenceTitle(ref: Reference): string {
+  return citationText('type_reference', typeName(ref.info.type), ref.number);
+}
+
 // cardContent builds the content shared by the hover card and the bottom sheet.
 function cardContent(ref: Reference, mobile: boolean): HTMLElement {
   const card = createElementFromHTML(html`
@@ -86,7 +96,7 @@ function cardContent(ref: Reference, mobile: boolean): HTMLElement {
   `);
   const type = card.querySelector('.citation-card-type');
   type.innerHTML = svg(typeIcons[ref.info.type], mobile ? 14 : 12);
-  type.append(citationText('type_reference', typeName(ref.info.type), ref.number));
+  type.append(referenceTitle(ref));
   if (ref.info.archived) {
     card.querySelector('.citation-card-meta').append(createElementFromHTML(
       html`<span class="citation-chip citation-chip-archived">${citationText('archived_copy')}</span>`));
@@ -98,18 +108,28 @@ function cardContent(ref: Reference, mobile: boolean): HTMLElement {
   if (ref.info.sourceURL) {
     links.append(createElementFromHTML(html`<a class="citation-card-action" href="${ref.info.sourceURL}" target="_blank" rel="nofollow noopener">${citationText(mobile ? 'open_source' : 'visit_source')}</a>`));
   }
-  links.append(createElementFromHTML(html`<a class="citation-card-action" href="#${ref.item.id}" data-citation-goto>${citationText('go_to_reference')}</a>`));
+  const goto = createElementFromHTML(html`<a class="citation-card-action" href="#${ref.item.id}" data-citation-goto>${citationText('go_to_reference')}</a>`);
+  goto.addEventListener('click', () => revealReference(ref));
+  links.append(goto);
   card.querySelector('.citation-card-uses').textContent = ref.uses === 1 ? citationText('used_once') : citationText('used_times', ref.uses);
   return card;
 }
 
 let openCard: {card: HTMLElement, marker: HTMLElement, hideTimer?: ReturnType<typeof setTimeout>} | null = null;
+let cardSeq = 0;
+
+// Escape dismisses the card, however it was opened (WCAG 1.4.13)
+function onCardKey(e: KeyboardEvent): void {
+  if (e.key === 'Escape') closeCard();
+}
 
 function closeCard(): void {
   if (!openCard) return;
   openCard.marker.classList.remove('is-active');
+  openCard.marker.querySelector('a')?.removeAttribute('aria-describedby');
   openCard.card.remove();
   openCard = null;
+  document.removeEventListener('keydown', onCardKey);
 }
 
 function placeCard(card: HTMLElement, marker: HTMLElement): void {
@@ -140,10 +160,13 @@ function showHoverCard(marker: HTMLElement, ref: Reference): void {
   closeCard();
   const card = cardContent(ref, false);
   card.classList.add('citation-hover-card');
-  card.setAttribute('role', 'dialog');
+  card.setAttribute('role', 'tooltip');
+  card.id = `citation-hover-card-${++cardSeq}`;
   document.body.append(card);
   placeCard(card, marker);
   marker.classList.add('is-active');
+  marker.querySelector('a')?.setAttribute('aria-describedby', card.id);
+  document.addEventListener('keydown', onCardKey);
   const state = {card, marker} as NonNullable<typeof openCard>;
   openCard = state;
   card.addEventListener('mouseenter', () => clearTimeout(state.hideTimer));
@@ -155,7 +178,7 @@ function showBottomSheet(marker: HTMLElement, ref: Reference): void {
   closeCard();
   const sheet = createElementFromHTML(html`
     <div class="citation-sheet-backdrop">
-      <div class="citation-sheet" role="dialog" aria-modal="true">
+      <div class="citation-sheet" role="dialog" aria-modal="true" aria-label="${referenceTitle(ref)}">
         <div class="citation-sheet-handle"></div>
       </div>
     </div>
@@ -165,17 +188,26 @@ function showBottomSheet(marker: HTMLElement, ref: Reference): void {
     if (e.key === 'Escape') close(); // eslint-disable-line @typescript-eslint/no-use-before-define
   };
   const close = () => {
+    const hadFocus = sheet.contains(document.activeElement);
     sheet.remove();
     marker.classList.remove('is-active');
     document.removeEventListener('keydown', onKey);
+    // back to the marker, unless the writer jumped to the reference
+    if (hadFocus || document.activeElement === document.body) marker.querySelector('a')?.focus({preventScroll: true});
   };
   sheet.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
-    if (target === sheet || target.closest('[data-citation-goto]')) close();
+    if (target === sheet) close();
+    if (target.closest('[data-citation-goto]')) {
+      sheet.remove(); // the link moves the focus to the reference
+      marker.classList.remove('is-active');
+      document.removeEventListener('keydown', onKey);
+    }
   });
   document.addEventListener('keydown', onKey);
   marker.classList.add('is-active');
   document.body.append(sheet);
+  sheet.querySelector<HTMLElement>('.citation-card-action')?.focus();
 }
 
 function isPhone(): boolean {
@@ -201,9 +233,6 @@ function initReferenceMarkers(container: HTMLElement, refs: Map<string, Referenc
       if (!isPhone()) showHoverCard(sup, ref);
     });
     link.addEventListener('blur', () => scheduleHideFor(sup));
-    link.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && openCard?.marker === sup) closeCard(); // dismissable (WCAG 1.4.13)
-    });
     link.addEventListener('click', (e) => {
       if (!isPhone()) {
         closeCard();
@@ -213,9 +242,7 @@ function initReferenceMarkers(container: HTMLElement, refs: Map<string, Referenc
       showBottomSheet(sup, ref);
     });
     // a filter may hide the reference the marker jumps to
-    link.addEventListener('click', () => {
-      if (ref.item.hidden) ref.item.closest('.footnotes')?.querySelector<HTMLButtonElement>('.citation-filter')?.click();
-    });
+    link.addEventListener('click', () => revealReference(ref));
   }
 }
 
@@ -253,7 +280,7 @@ function initReferenceSummary(footnotes: HTMLElement, refs: Reference[]): void {
     </div>
   `);
   const bar = card.querySelector('.citation-summary-bar');
-  for (const type of ['website', 'news', 'journal', 'book', 'other'] as SourceType[]) {
+  for (const type of sourceTypes) {
     const n = counts.get(type) ?? 0;
     if (!n) continue;
     const segment = document.createElement('span');
@@ -276,7 +303,7 @@ function initReferenceSummary(footnotes: HTMLElement, refs: Reference[]): void {
   const chips: Array<{label: string, accepts: (ref: Reference) => boolean}> = [
     {label: citationText('filter_all', refs.length), accepts: () => true},
   ];
-  for (const type of ['website', 'news', 'journal', 'book', 'other'] as SourceType[]) {
+  for (const type of sourceTypes) {
     if (counts.get(type)) chips.push({label: typeName(type), accepts: (ref) => ref.info.type === type});
   }
   if (refs.some((ref) => ref.info.archived)) chips.push({label: citationText('filter_archived'), accepts: (ref) => ref.info.archived});
