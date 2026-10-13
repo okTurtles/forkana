@@ -10,13 +10,14 @@
 //     searches for it in a field and turns it into the link;
 // Results are subjects, with how many articles they hold. "Link to … as a new subject" links
 // to a subject nobody created yet (a red link). A web address typed or pasted there is an
-// outside source: the tool offers to cite it instead, which is the default, or to insert it
-// as a plain link.
+// outside source: once it is pasted or Enter is pressed, the tool offers to cite it instead,
+// which is the default, or to insert it as a plain link. Another page of this instance is
+// offered as a plain link.
 
 import {citationText} from './i18n.ts';
 import {caretRect, currentView, focusEditor, insertLink, isInCode, textBefore, textBeforeCaretInBlock, type ToolsEditor} from './editor-ops.ts';
 import {closePopover, isPhoneLayout, openPopover, type Popover} from './popover.ts';
-import {nextFootnoteLabel, referenceNumberAt} from './footnote-markdown.ts';
+import {footnoteDefinitions, nextFootnoteLabel, referenceNumberAt} from './footnote-markdown.ts';
 import {parseHttpURL} from './citation-format.ts';
 import {openCiteTool} from './cite-tool.ts';
 import {GET} from '../../modules/fetch.ts';
@@ -28,7 +29,8 @@ type SubjectResult = {name: string, articles: number | null};
 type Row =
   | {kind: 'subject', subject: SubjectResult} |
   {kind: 'new', name: string} |
-  {kind: 'author', subject: string, owner: string};
+  {kind: 'author', subject: string, owner: string} |
+  {kind: 'page', url: string, path: string}; // another page of this instance
 
 type Session = {
   editor: ToolsEditor,
@@ -45,8 +47,12 @@ type Session = {
   authorsOf: string | null, // the subject whose articles are listed
   popover: Popover | null,
   searchSeq: number,
+  loading?: boolean, // the authors' list is loading
   // a phone turned the "[[" session into a field session: Esc drops the "[[" too
   fromBrackets?: boolean,
+  // a web address in the query is offered as a citation: it was pasted, Enter was pressed,
+  // or it is the selected text (not while the writer is still typing it)
+  urlReady?: boolean,
 };
 
 let session: Session | null = null;
@@ -72,6 +78,8 @@ const FORBIDDEN_TITLE_CHARS = /[#<>[\]|{}]/;
 // would break the link or the path escaped.
 export function subjectLinkURL(subject: string, owner?: string): string {
   let name = subject.replaceAll('%', '%25').replaceAll('/', '%2F').replaceAll('#', '%23').replaceAll('?', '%3F').replace(/[\n\\]/g, encodeURIComponent);
+  // a quoted word at the end would be read as the link's title
+  name = name.replaceAll('"', '%22').replace(/'$/, '%27');
   let depth = 0;
   let balanced = true;
   for (const c of name) {
@@ -107,7 +115,10 @@ function chooseRow(s: Session, row: Row): void {
   const {from, to} = range(s);
   let label: string;
   let url: string;
-  if (row.kind === 'author') {
+  if (row.kind === 'page') {
+    label = s.label || row.path;
+    url = row.url;
+  } else if (row.kind === 'author') {
     label = s.label || row.subject;
     url = subjectLinkURL(row.subject, row.owner);
   } else {
@@ -151,7 +162,8 @@ function renderRows(s: Session): void {
   if (!list) return;
   list.textContent = '';
   if (!s.rows.length) {
-    list.append(createElementFromHTML(html`<div class="citation-subject-empty">${s.authorsOf ? citationText('no_articles') : citationText('search_subjects')}</div>`));
+    const empty = s.loading ? citationText('loading_articles') : s.authorsOf ? citationText('no_articles') : citationText('search_subjects');
+    list.append(createElementFromHTML(html`<div class="citation-subject-empty">${empty}</div>`));
     return;
   }
   for (const [i, row] of s.rows.entries()) {
@@ -162,6 +174,13 @@ function renderRows(s: Session): void {
           ${htmlRaw(svg('octicon-goal', 16, 'citation-subject-icon'))}
           <span class="citation-subject-text"><span class="citation-subject-name">${row.subject.name}</span><span class="citation-subject-meta">${articlesText(row.subject.articles)}</span></span>
           ${htmlRaw(row.subject.articles ? svg('octicon-chevron-right', 12, 'citation-subject-chevron') : '')}
+        </div>
+      `);
+    } else if (row.kind === 'page') {
+      el = createElementFromHTML(html`
+        <div class="citation-subject-row" role="option">
+          ${htmlRaw(svg('octicon-link', 16, 'citation-subject-icon'))}
+          <span class="citation-subject-text"><span class="citation-subject-name">${row.path}</span></span>
         </div>
       `);
     } else if (row.kind === 'author') {
@@ -192,9 +211,12 @@ function renderRows(s: Session): void {
 }
 
 async function showAuthors(s: Session, subject: string): Promise<void> {
+  // a pending search would drop the authors' list, and then its own results
+  clearTimeout(searchTimer);
   s.authorsOf = subject;
   s.rows = [];
   s.active = 0;
+  s.loading = true;
   renderRows(s);
   const seq = ++s.searchSeq;
   let rows: Row[] = [];
@@ -206,6 +228,7 @@ async function showAuthors(s: Session, subject: string): Promise<void> {
     rows = [];
   }
   if (session !== s || seq !== s.searchSeq) return;
+  s.loading = false;
   s.rows = rows;
   s.popover?.el.classList.add('is-authors');
   renderRows(s);
@@ -213,6 +236,7 @@ async function showAuthors(s: Session, subject: string): Promise<void> {
 
 function showSubjects(s: Session): void {
   s.authorsOf = null;
+  s.loading = false;
   s.popover?.el.classList.remove('is-authors');
   search(s);
 }
@@ -224,7 +248,9 @@ function showURLDetected(s: Session, url: string): void {
   const label = s.label;
   const markdown = editor.getMarkdown();
   const view = currentView(editor);
-  const number = referenceNumberAt(textBefore(view, from), nextFootnoteLabel(markdown));
+  // a selected text stays: the reference goes after it
+  const citeAt = label ? to : from;
+  const number = referenceNumberAt(textBefore(view, citeAt), nextFootnoteLabel(markdown), new Set(footnoteDefinitions(markdown).keys()));
   endSession();
   const el = createElementFromHTML(html`
     <div class="citation-link-url" role="dialog" aria-label="${citationText('add_a_citation')}">
@@ -255,7 +281,7 @@ function showURLDetected(s: Session, url: string): void {
   const cite = () => {
     const target = input.value.trim() || url;
     popover.close();
-    openCiteTool(editor, {from, to, query: target, manual: true});
+    openCiteTool(editor, {from: citeAt, to, query: target, manual: true});
   };
   el.querySelector('[data-action="cite"]').addEventListener('click', cite);
   input.addEventListener('keydown', (e) => {
@@ -271,10 +297,24 @@ async function search(s: Session): Promise<void> {
   if (session !== s) return;
   const query = s.query.trim();
   const seq = ++s.searchSeq;
-  if (parseHttpURL(query)) {
+  s.loading = false;
+  const u = parseHttpURL(query);
+  if (u) {
     const internal = internalSubjectOfURL(query);
+    if (!internal && u.origin === window.location.origin) {
+      // another page of this instance: a plain link
+      s.rows = [{kind: 'page', url: u.href, path: u.pathname.slice(window.config.appSubUrl.length) + u.search + u.hash}];
+      s.active = 0;
+      renderRows(s);
+      return;
+    }
     if (!internal) {
-      showURLDetected(s, query);
+      if (s.urlReady) {
+        showURLDetected(s, query);
+      } else {
+        s.rows = []; // still being typed
+        renderRows(s);
+      }
       return;
     }
     s.rows = internal.owner ?
@@ -329,7 +369,12 @@ function openSession(s: Session): void {
     </div>
   `);
   s.popover = openPopover(el, caretRect(currentView(s.editor)), () => {
-    if (session === s) session = null;
+    // closed from outside (a click, Escape, another tool): the list is gone
+    setComboboxState(s, false);
+    if (session === s) {
+      clearTimeout(searchTimer);
+      session = null;
+    }
   });
   el.querySelector('.citation-popover-close')?.addEventListener('click', () => endSession());
   const field = el.querySelector<HTMLInputElement>('input[type="search"]');
@@ -348,6 +393,9 @@ function openSession(s: Session): void {
       scheduleSearch(s);
     });
     field.addEventListener('keydown', (e) => handleKey(s, e));
+    field.addEventListener('paste', () => {
+      s.urlReady = true;
+    });
     setTimeout(() => field.focus(), 0);
   }
   renderRows(s);
@@ -365,10 +413,21 @@ function handleKey(s: Session, e: KeyboardEvent): boolean {
       s.active = (s.active + (e.key === 'ArrowDown' ? 1 : count - 1)) % count;
       renderRows(s);
       break;
-    case 'Enter':
+    case 'Enter': {
+      // a web address typed in full (the list may still show an earlier search's rows):
+      // offer to cite it
+      const q = s.query.trim();
+      const u = parseHttpURL(q);
+      if (u && !internalSubjectOfURL(q) && u.origin !== window.location.origin) {
+        s.urlReady = true;
+        clearTimeout(searchTimer);
+        search(s);
+        break;
+      }
       if (!count) return false;
       chooseRow(s, s.rows[s.active]);
       break;
+    }
     case 'Tab': {
       const row = s.rows[s.active];
       if (e.shiftKey && s.authorsOf) {
@@ -439,7 +498,7 @@ export function openSubjectLinkTool(editor: ToolsEditor): void {
   const {from, to} = view.state.selection;
   if (to > from) {
     const label = view.state.doc.textBetween(from, to, ' ');
-    session = {editor, mode: 'field', start: from, from, to, label, query: label, rows: [], active: 0, authorsOf: null, popover: null, searchSeq: 0};
+    session = {editor, mode: 'field', start: from, from, to, label, query: label, rows: [], active: 0, authorsOf: null, popover: null, searchSeq: 0, urlReady: Boolean(parseHttpURL(label))};
     openSession(session);
     return;
   }
@@ -456,6 +515,9 @@ export function installSubjectLinkTool(editor: ToolsEditor, container: HTMLEleme
   });
   container.addEventListener('keydown', (e) => {
     if (session?.editor === editor && session.mode === 'brackets') handleKey(session, e);
+  }, true);
+  container.addEventListener('paste', () => {
+    if (session?.editor === editor && session.mode === 'brackets') session.urlReady = true;
   }, true);
   editor.on('changeMode', () => endSession());
 }

@@ -90,6 +90,8 @@ test.describe('Citations and internal links', () => {
 
     await page.locator('.forkana-subject-link').click();
     await page.keyboard.type('https://www.nasa.gov/');
+    // a typed address is offered as a citation on Enter (or when pasted), not while typing
+    await page.keyboard.press('Enter');
     const popover = page.locator('.citation-link-url');
     await expect(popover).toBeVisible({timeout: 10000});
     await expect(popover.locator('.citation-banner')).toContainText('reference [1]');

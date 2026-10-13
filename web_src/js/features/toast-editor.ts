@@ -55,8 +55,11 @@ export async function createToastEditor(
   } = options;
 
   // The article editor's link button links to a Forkana subject, and a Cite button cites a
-  // source (issue #399).
-  const articleTools = toolbarItems === defaultToolbarItems ? articleToolbarItems(defaultToolbarItems) : null;
+  // source (issue #399). Only where the page has the tools' texts (shared/citation_editor):
+  // not, e.g., in the "Apply patch" editor.
+  const articleTools = toolbarItems === defaultToolbarItems && document.querySelector('#forkana-citation-editor-i18n') ?
+    articleToolbarItems(defaultToolbarItems) :
+    null;
 
   // Use the existing container from the template
   let container = document.querySelector<ToastEditorContainer>(toastEditorContainerSelector);

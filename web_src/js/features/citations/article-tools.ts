@@ -28,7 +28,8 @@ function toolbarButton(name: string, tooltip: string, icon: string): ToolbarButt
 // button replaced by the subject link and cite buttons.
 export function articleToolbarItems(defaultItems: string[][]): {items: Array<Array<string | ToolbarButton>>, link: ToolbarButton, cite: ToolbarButton} {
   const link = toolbarButton('forkana-subject-link', citationText('tool_link'), svg('octicon-link', 16));
-  const cite = toolbarButton('forkana-cite', `${citationText('tool_cite')} (Ctrl+Shift+K)`, citeIcon);
+  const shortcut = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘⇧K' : 'Ctrl+Shift+K';
+  const cite = toolbarButton('forkana-cite', `${citationText('tool_cite')} (${shortcut})`, citeIcon);
   const items = defaultItems.map((group) => group.flatMap((item): Array<string | ToolbarButton> => (item === 'link' ? [link, cite] : [item])));
   return {items, link, cite};
 }

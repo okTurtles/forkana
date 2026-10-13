@@ -139,6 +139,9 @@ test('subjectLinkURL keeps the name readable', () => {
   expect(subjectLinkURL('Smile :)')).toBe('subject/Smile :%29');
   expect(subjectLinkURL('Solar System', 'pierre')).toBe('subject/Solar System/pierre');
   expect(subjectLinkURL('What? #1')).toBe('subject/What%3F %231');
+  // a quoted word at the end would be the link's title (review 2 #10)
+  expect(subjectLinkURL('Operation "Desert Storm"')).toBe('subject/Operation %22Desert Storm%22');
+  expect(subjectLinkURL("The 'Moon'")).toBe("subject/The 'Moon%27");
 });
 
 test('a quoted title stays a title in the Visual editor (review #7)', () => {
@@ -185,4 +188,12 @@ test('insertLink in the Source editor keeps a plain address a link (review #17)'
   const at = findText(view, 'x');
   insertLink(editor, at, at + 1, 'C*-algebra*', 'https://example.com/a b(c');
   expect(editor.getMarkdown()).toBe('See [C\\*-algebra\\*](<https://example.com/a b(c>).');
+});
+
+test('insertLink in the Visual editor keeps an address with a parenthesis a link (review 2 #11)', () => {
+  const {editor} = createEditor('See x.\n');
+  const view = currentView(editor);
+  const at = findText(view, 'x');
+  insertLink(editor, at, at + 1, 'page', 'https://example.com/a(b c');
+  expect(editor.getMarkdown().trim()).toBe('See [page](https://example.com/a%28b%20c).');
 });

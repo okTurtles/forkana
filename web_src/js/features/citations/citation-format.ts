@@ -213,7 +213,8 @@ export function formatCitation(type: SourceType, f: CitationFields, today: strin
       const link = (f.link ?? '').trim();
       const titleText = `*${escapeMarkdownText(f.title ?? '')}*`;
       let title = link ? `[${titleText}](${markdownDestination(link)})` : titleText;
-      const edition = escapeMarkdownText(f.edition ?? '').replace(/\s*ed\.?$/i, '');
+      // "2nd ed.", "2nd edition" → "2nd"; "Revised" stays
+      const edition = escapeMarkdownText(f.edition ?? '').replace(/\s*\b(?:ed\.?|edition)$/i, '');
       if (edition) title += ` (${edition} ed.)`;
       parts.push(`${title}.`);
       if (f.publisher?.trim()) parts.push(sentence(escapeMarkdownText(f.publisher)));
@@ -229,7 +230,13 @@ export function formatCitation(type: SourceType, f: CitationFields, today: strin
     }
   }
   if (f.location?.trim()) parts.push(sentence(escapeMarkdownText(f.location)));
-  return parts.filter(Boolean).join(' ');
+  return escapeBlockStart(parts.filter(Boolean).join(' '));
+}
+
+// escapeBlockStart escapes what would make the start of a footnote definition, which is block
+// content, a list or a heading: "1984. Letters", "- Notes", "# 12 Report".
+function escapeBlockStart(s: string): string {
+  return s.replace(/^(\d+)([.)])(?=\s|$)/, '$1\\$2').replace(/^([-+#=])/, '\\$1');
 }
 
 // A citation as readers see it, read from its rendered HTML.
@@ -249,6 +256,28 @@ function firstExternalLink(el: Element): HTMLAnchorElement | null {
   return null;
 }
 
+// bookPublisher reads the publisher of a rendered book citation, "Author (1994). *Title*
+// (1st ed.). Publisher. ISBN …" or, without authors, "*Title*. Publisher. 1994. ISBN …": what
+// follows the title (in italics, maybe linked) and its edition, up to the ISBN and without the
+// year. "" when there is none.
+function bookPublisher(el: Element): string {
+  const em = el.querySelector('em');
+  if (!em) return '';
+  const link = em.closest('a');
+  const title = link && el.contains(link) ? link : em;
+  const range = document.createRange();
+  range.setStartAfter(title);
+  range.setEnd(el, el.childNodes.length);
+  const after = range.toString().split(/\bISBN\b/)[0];
+  return after
+    .replace(/^\s*\([^)]*\)/, '') // the edition
+    .replace(/^\s*\.\s*/, '')
+    .trim()
+    .replace(/\.$/, '')
+    .replace(/(?:^|\.\s+)\d{4}$/, '') // the year, when there are no authors
+    .trim();
+}
+
 // classifyCitation reads the type, publisher and source link of a rendered citation (the
 // content of a reference, without its back-links).
 export function classifyCitation(el: Element): CitationInfo {
@@ -264,10 +293,7 @@ export function classifyCitation(el: Element): CitationInfo {
 
   let publisher = '';
   if (type === 'book') {
-    // "Author (1994). *Title* (1st ed.). Publisher. ISBN …": the sentence before the ISBN
-    const before = text.split(/\bISBN\b/)[0].trim().replace(/\.$/, '');
-    const sentences = before.split(/\.\s+/);
-    if (sentences.length > 2) publisher = sentences[sentences.length - 1].trim();
+    publisher = bookPublisher(el);
   } else {
     for (const em of el.querySelectorAll('em')) {
       if (em.closest('a')) continue; // a linked title, not the publisher
