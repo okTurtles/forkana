@@ -195,12 +195,9 @@ func ArticleCollaboratorsRemove(ctx *context.Context) {
 	}
 	redirectURL := articleCollaboratorsURL(ctx)
 
-	if err := ctx.Req.ParseForm(); err != nil {
-		ctx.ServerError("ParseForm", err)
-		return
-	}
-	userIDs := make([]int64, 0, len(ctx.Req.Form["uid"]))
-	for _, value := range ctx.Req.Form["uid"] {
+	values := ctx.FormStrings("uid")
+	userIDs := make([]int64, 0, len(values))
+	for _, value := range values {
 		if id, err := strconv.ParseInt(value, 10, 64); err == nil && id > 0 {
 			userIDs = append(userIDs, id)
 		}
