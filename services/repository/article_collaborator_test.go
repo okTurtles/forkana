@@ -134,6 +134,23 @@ func TestArticleCollaborators(t *testing.T) {
 		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: other.ID})
 	})
 
+	t.Run("StaleRowRefused", func(t *testing.T) {
+		require.NoError(t, InviteArticleCollaborator(t.Context(), owner, repo, other, repo_model.ArticleCollaboratorRoleMaintainer))
+		stale := unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: other.ID})
+
+		// accepted concurrently: deleting the row read as pending must not succeed
+		accepted := *stale
+		accepted.Status = repo_model.ArticleCollaboratorStatusAccepted
+		require.NoError(t, repo_model.UpdateArticleCollaboratorCols(t.Context(), &accepted, "status"))
+		assert.ErrorIs(t, repo_model.DeleteArticleCollaboratorRow(t.Context(), stale), util.ErrNotExist)
+		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: other.ID})
+
+		// removed concurrently: updating the row must not succeed
+		require.NoError(t, repo_model.DeleteArticleCollaboratorRow(t.Context(), &accepted))
+		assert.ErrorIs(t, repo_model.UpdateArticleCollaboratorCols(t.Context(), stale, "status"), util.ErrNotExist)
+		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: other.ID})
+	})
+
 	t.Run("SubjectOwnerRefused", func(t *testing.T) {
 		// the invitee owns another active article on the subject
 		require.NoError(t, db.Insert(t.Context(), &repo_model.Repository{

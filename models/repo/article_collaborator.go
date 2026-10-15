@@ -13,6 +13,7 @@ import (
 	"code.gitea.io/gitea/models/db"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/timeutil"
+	"code.gitea.io/gitea/modules/util"
 
 	"xorm.io/builder"
 )
@@ -196,10 +197,33 @@ func CreateArticleCollaborator(ctx context.Context, c *ArticleCollaborator) erro
 	return db.Insert(ctx, c)
 }
 
-// UpdateArticleCollaboratorCols updates the given columns of a collaborator row.
+// UpdateArticleCollaboratorCols updates the given columns of a collaborator row. It fails
+// with a not-exist error when the row is gone, so a transaction racing with a removal
+// rolls back instead of acting on a deleted row.
 func UpdateArticleCollaboratorCols(ctx context.Context, c *ArticleCollaborator, cols ...string) error {
-	_, err := db.GetEngine(ctx).ID(c.ID).Cols(cols...).Update(c)
-	return err
+	affected, err := db.GetEngine(ctx).ID(c.ID).Cols(cols...).Update(c)
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return util.NewNotExistErrorf("article collaborator %d no longer exists", c.ID)
+	}
+	return nil
+}
+
+// DeleteArticleCollaboratorRow removes the row c was read from. It fails with a not-exist
+// error when the row is gone or its status changed since, so a transaction racing with
+// another answer to the invitation rolls back instead of leaving the write access granted
+// alongside it out of step with the row.
+func DeleteArticleCollaboratorRow(ctx context.Context, c *ArticleCollaborator) error {
+	affected, err := db.GetEngine(ctx).Where(builder.Eq{"id": c.ID, "status": c.Status}).Delete(new(ArticleCollaborator))
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return util.NewNotExistErrorf("article collaborator %d changed or no longer exists", c.ID)
+	}
+	return nil
 }
 
 // DeleteArticleCollaborator removes a user's collaborator row from an article.

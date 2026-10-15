@@ -5,6 +5,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	activities_model "code.gitea.io/gitea/models/activities"
@@ -178,12 +179,9 @@ func AcceptArticleCollaboratorInvite(ctx context.Context, doer *user_model.User,
 	}
 
 	return db.WithTx(ctx, func(ctx context.Context) error {
-		c, err := repo_model.GetArticleCollaborator(ctx, repo.ID, doer.ID)
+		c, err := getPendingArticleCollaboratorInvite(ctx, repo.ID, doer.ID)
 		if err != nil {
 			return err
-		}
-		if c == nil || !c.IsPending() {
-			return ErrArticleCollaboratorNoInvite
 		}
 		// the invitee may have created their own article for the subject since the invitation
 		if err := checkArticleCollaboratorSubject(ctx, repo, doer); err != nil {
@@ -192,6 +190,10 @@ func AcceptArticleCollaboratorInvite(ctx context.Context, doer *user_model.User,
 
 		c.Status = repo_model.ArticleCollaboratorStatusAccepted
 		if err := repo_model.UpdateArticleCollaboratorCols(ctx, c, "status"); err != nil {
+			if errors.Is(err, util.ErrNotExist) {
+				// withdrawn concurrently
+				return ErrArticleCollaboratorNoInvite
+			}
 			return fmt.Errorf("accept article collaborator invitation: %w", err)
 		}
 		if err := AddOrUpdateCollaborator(ctx, repo, doer, perm.AccessModeWrite); err != nil {
@@ -204,18 +206,32 @@ func AcceptArticleCollaboratorInvite(ctx context.Context, doer *user_model.User,
 // DeclineArticleCollaboratorInvite declines the doer's pending invitation.
 func DeclineArticleCollaboratorInvite(ctx context.Context, doer *user_model.User, repo *repo_model.Repository) error {
 	return db.WithTx(ctx, func(ctx context.Context) error {
-		c, err := repo_model.GetArticleCollaborator(ctx, repo.ID, doer.ID)
+		c, err := getPendingArticleCollaboratorInvite(ctx, repo.ID, doer.ID)
 		if err != nil {
 			return err
 		}
-		if c == nil || !c.IsPending() {
-			return ErrArticleCollaboratorNoInvite
-		}
-		if err := repo_model.DeleteArticleCollaborator(ctx, repo.ID, doer.ID); err != nil {
+		if err := repo_model.DeleteArticleCollaboratorRow(ctx, c); err != nil {
+			if errors.Is(err, util.ErrNotExist) {
+				// accepted or withdrawn concurrently
+				return ErrArticleCollaboratorNoInvite
+			}
 			return err
 		}
 		return activities_model.MarkArticleCollaboratorInviteNotificationsRead(ctx, repo.ID, doer.ID)
 	})
+}
+
+// getPendingArticleCollaboratorInvite returns the user's pending invitation to the article,
+// or ErrArticleCollaboratorNoInvite when there is none.
+func getPendingArticleCollaboratorInvite(ctx context.Context, repoID, userID int64) (*repo_model.ArticleCollaborator, error) {
+	c, err := repo_model.GetArticleCollaborator(ctx, repoID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil || !c.IsPending() {
+		return nil, ErrArticleCollaboratorNoInvite
+	}
+	return c, nil
 }
 
 // ChangeArticleCollaboratorRole changes the role of a collaborator, pending or accepted.
@@ -290,7 +306,9 @@ func RemoveArticleCollaborators(ctx context.Context, doer *user_model.User, repo
 }
 
 func removeArticleCollaborator(ctx context.Context, repo *repo_model.Repository, c *repo_model.ArticleCollaborator) error {
-	if err := repo_model.DeleteArticleCollaborator(ctx, repo.ID, c.UserID); err != nil {
+	// an invitation accepted concurrently fails the delete: removing it as pending would
+	// leave the write access just granted in place
+	if err := repo_model.DeleteArticleCollaboratorRow(ctx, c); err != nil {
 		return err
 	}
 	if c.IsPending() {
