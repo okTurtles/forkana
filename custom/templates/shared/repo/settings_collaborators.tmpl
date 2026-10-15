@@ -173,8 +173,10 @@
             </div>
             <div class="required field">
                 <label class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators_access"}}</label>
-                <div class="ui fluid selection dropdown" id="article-collaborator-role">
-                    <input type="hidden" name="role" value="1">
+                {{/* the maintainer role, data-default-value restores it when the modal is reopened */}}
+                {{$defaultRole := "1"}}
+                <div class="ui fluid selection dropdown" id="article-collaborator-role" data-default-value="{{$defaultRole}}">
+                    <input type="hidden" name="role" value="{{$defaultRole}}">
                     <div class="text">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer"}}</div>
                     {{svg "octicon-triangle-down" 14 "dropdown icon"}}
                     {{template "shared/repo/settings_collaborators_role_menu" (dict "IsOwner" .ArticleCollaboratorPerm.IsOwner)}}

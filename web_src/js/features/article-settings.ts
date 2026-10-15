@@ -156,8 +156,10 @@ function resetArticleSettingsModal(modal: HTMLElement): void {
   syncTransferConfirmInput();
   syncInviteSubmit(null);
 
+  // the hidden input carries the last selection, the default comes from the markup
   const elRole = modal.querySelector<HTMLElement>('#article-collaborator-role');
-  if (elRole) fomanticQuery(elRole).dropdown('set selected', '1');
+  const defaultRole = elRole?.getAttribute('data-default-value');
+  if (elRole && defaultRole) fomanticQuery(elRole).dropdown('set selected', defaultRole);
 
   for (const input of modal.querySelectorAll<HTMLInputElement>('[data-article-confirm-value]')) {
     input.value = '';
