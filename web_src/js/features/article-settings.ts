@@ -1,6 +1,6 @@
 import {fomanticQuery} from '../modules/fomantic/base.ts';
 import {POST} from '../modules/fetch.ts';
-import {showErrorToast} from '../modules/toast.ts';
+import {showErrorToast, showInfoToast} from '../modules/toast.ts';
 import {addDelegatedEventListener, hideElem, showElem, toggleElem} from '../utils/dom.ts';
 import {htmlEscape} from '../utils/html.ts';
 
@@ -291,6 +291,9 @@ function initArticleCollaborators(): void {
           dropdownEl.setAttribute('data-last-value', value);
           row?.setAttribute('data-role', value);
           applyFilter();
+          // the server escapes the message, it is HTML
+          const {message} = await response.json();
+          if (message) showInfoToast(message, {useHtmlBody: true});
         } catch (err) {
           showErrorToast(err.message);
         } finally {

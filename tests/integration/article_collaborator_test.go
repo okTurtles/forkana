@@ -113,6 +113,28 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		AssertHTMLElement(t, articlePage(t, maintainerSession, "read"), `[data-article-tab="settings"]`, false)
 	})
 
+	t.Run("OwnerChangesRole", func(t *testing.T) {
+		changeRole := func(t *testing.T, role repo_model.ArticleCollaboratorRole) map[string]any {
+			t.Helper()
+			values := map[string]string{
+				"_csrf": GetUserCSRFToken(t, ownerSession),
+				"uid":   strconv.FormatInt(maintainer.ID, 10),
+				"role":  strconv.Itoa(int(role)),
+			}
+			resp := ownerSession.MakeRequest(t, NewRequestWithValues(t, "POST", collaboratorsURL+"/role", values), http.StatusOK)
+			data := map[string]any{}
+			DecodeJSON(t, resp, &data)
+			return data
+		}
+
+		data := changeRole(t, repo_model.ArticleCollaboratorRoleMaintainerDelegate)
+		assert.Equal(t, fmt.Sprintf("The role of %s has been updated.", maintainer.DisplayName()), data["message"])
+		c := unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+		assert.Equal(t, repo_model.ArticleCollaboratorRoleMaintainerDelegate, c.Role)
+
+		changeRole(t, repo_model.ArticleCollaboratorRoleMaintainer)
+	})
+
 	t.Run("OutsiderCannotManage", func(t *testing.T) {
 		values := map[string]string{"_csrf": GetUserCSRFToken(t, outsiderSession), "invitee_name": outsider.Name, "role": "1"}
 		outsiderSession.MakeRequest(t, NewRequestWithValues(t, "POST", collaboratorsURL+"/invite", values), http.StatusNotFound)

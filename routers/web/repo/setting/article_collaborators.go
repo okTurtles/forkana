@@ -165,10 +165,19 @@ func ArticleCollaboratorChangeRole(ctx *context.Context) {
 	}
 
 	role := repo_model.ArticleCollaboratorRole(ctx.FormInt("role"))
-	err := repo_service.ChangeArticleCollaboratorRole(ctx, ctx.Doer, ctx.Repo.Repository, ctx.FormInt64("uid"), role)
+	uid := ctx.FormInt64("uid")
+	err := repo_service.ChangeArticleCollaboratorRole(ctx, ctx.Doer, ctx.Repo.Repository, uid, role)
 	switch {
 	case err == nil:
-		ctx.JSONOK()
+		collaborator, err := user_model.GetUserByID(ctx, uid)
+		if err != nil {
+			ctx.ServerError("GetUserByID", err)
+			return
+		}
+		// Tr escapes the name, the message is HTML
+		ctx.JSON(http.StatusOK, map[string]any{
+			"message": ctx.Tr("repo.settings.article_collaborators_role_success", collaborator.DisplayName()),
+		})
 	case errors.Is(err, util.ErrPermissionDenied):
 		ctx.JSONError(ctx.Tr("repo.settings.article_collaborators_no_permission"))
 	case errors.Is(err, util.ErrNotExist), errors.Is(err, util.ErrInvalidArgument):
