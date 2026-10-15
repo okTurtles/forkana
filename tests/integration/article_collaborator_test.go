@@ -17,6 +17,8 @@ import (
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/test"
+	repo_service "code.gitea.io/gitea/services/repository"
+	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -229,4 +231,31 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		post(t, ownerSession, "remove", map[string]string{"uid": strconv.FormatInt(maintainer.ID, 10)})
 		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
 	})
+}
+
+// TestArticleCollaboratorPrivateInvite checks that a user invited to a private article can
+// open it and answer the invitation: the write access only comes with accepting, so without
+// the read access granted to the invitee the article and its answer routes answered 404.
+func TestArticleCollaboratorPrivateInvite(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	invitee := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+	outsider := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 8})
+
+	repo.IsPrivate = true
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "is_private"))
+	require.NoError(t, repo_service.InviteArticleCollaborator(t.Context(), owner, repo, invitee, repo_model.ArticleCollaboratorRoleMaintainer))
+
+	articleURL := fmt.Sprintf("/subject/%s/%s?view=article", subjectName, owner.Name)
+	loginUser(t, outsider.Name).MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusNotFound)
+
+	session := loginUser(t, invitee.Name)
+	resp := session.MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK)
+	AssertHTMLElement(t, NewHTMLParser(t, resp.Body), "#article-collaborator-invite-notice", true)
+
+	acceptURL := fmt.Sprintf("/%s/%s/article_collaborators/accept", owner.Name, repo.Name)
+	session.MakeRequest(t, NewRequestWithValues(t, "POST", acceptURL, map[string]string{"_csrf": GetUserCSRFToken(t, session)}), http.StatusSeeOther)
+	c := unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: invitee.ID})
+	assert.True(t, c.IsAccepted())
 }
