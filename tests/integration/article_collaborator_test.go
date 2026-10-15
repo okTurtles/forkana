@@ -81,29 +81,12 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		AssertHTMLElement(t, htmlDoc, `[data-article-tab="settings"]`, false)
 	})
 
-	t.Run("AcceptedMaintainerCommitsDirectly", func(t *testing.T) {
+	t.Run("AcceptOffersDirectEdit", func(t *testing.T) {
 		post(t, delegateSession, "accept", map[string]string{})
 
 		htmlDoc := articlePage(t, delegateSession, "edit")
 		AssertHTMLElement(t, htmlDoc, "#article-collaborator-invite-notice", false)
 		AssertHTMLElement(t, htmlDoc, "#submit-changes-button", true)
-
-		pullsBefore := unittest.GetCount(t, &issues_model.PullRequest{BaseRepoID: repo.ID})
-
-		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
-		resp := delegateSession.MakeRequest(t, NewRequest(t, "GET", editURL), http.StatusOK)
-		editDoc := NewHTMLParser(t, resp.Body)
-		req := NewRequestWithValues(t, "POST", editURL, map[string]string{
-			"_csrf":         editDoc.GetCSRF(),
-			"last_commit":   editDoc.GetInputValueByName("last_commit"),
-			"tree_path":     "README.md",
-			"content":       "# Edited by a maintainer\n",
-			"commit_choice": "direct",
-		})
-		delegateSession.MakeRequest(t, req, http.StatusOK)
-
-		assert.Equal(t, pullsBefore, unittest.GetCount(t, &issues_model.PullRequest{BaseRepoID: repo.ID}),
-			"a maintainer's edit must not open a change request")
 	})
 
 	t.Run("DelegateSeesOnlyCollaborators", func(t *testing.T) {
@@ -145,8 +128,29 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		resp := outsiderSession.MakeRequest(t, NewRequestWithValues(t, "POST", mergeURL, mergeForm(outsiderSession)), NoExpectedStatus)
 		assert.Contains(t, resp.Body.String(), "Only the article owner and its maintainers can accept change requests.")
 
-		resp = maintainerSession.MakeRequest(t, NewRequestWithValues(t, "POST", mergeURL, mergeForm(maintainerSession)), NoExpectedStatus)
-		assert.NotContains(t, resp.Body.String(), "Only the article owner and its maintainers can accept change requests.")
+		maintainerSession.MakeRequest(t, NewRequestWithValues(t, "POST", mergeURL, mergeForm(maintainerSession)), http.StatusOK)
+		pull := unittest.AssertExistsAndLoadBean(t, &issues_model.PullRequest{BaseRepoID: repo.ID, Index: 3})
+		assert.True(t, pull.HasMerged)
+	})
+
+	// runs after MergeGate: editing README.md first would make the fixture pull conflict
+	t.Run("AcceptedMaintainerCommitsDirectly", func(t *testing.T) {
+		pullsBefore := unittest.GetCount(t, &issues_model.PullRequest{BaseRepoID: repo.ID})
+
+		editURL := path.Join(owner.Name, repo.Name, "_edit", repo.DefaultBranch, "README.md")
+		resp := delegateSession.MakeRequest(t, NewRequest(t, "GET", editURL), http.StatusOK)
+		editDoc := NewHTMLParser(t, resp.Body)
+		req := NewRequestWithValues(t, "POST", editURL, map[string]string{
+			"_csrf":         editDoc.GetCSRF(),
+			"last_commit":   editDoc.GetInputValueByName("last_commit"),
+			"tree_path":     "README.md",
+			"content":       "# Edited by a maintainer\n",
+			"commit_choice": "direct",
+		})
+		delegateSession.MakeRequest(t, req, http.StatusOK)
+
+		assert.Equal(t, pullsBefore, unittest.GetCount(t, &issues_model.PullRequest{BaseRepoID: repo.ID}),
+			"a maintainer's edit must not open a change request")
 	})
 
 	t.Run("RemoveRevokesAccess", func(t *testing.T) {
