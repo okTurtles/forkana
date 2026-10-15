@@ -177,5 +177,10 @@ func sanitizeEmailAddress(raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// net/mail unquotes a quoted local part without re-quoting it, so `"a> SIZE=1"@b` would come
+	// back as `a> SIZE=1@b` and break out of the <...> path. Fail closed on such addresses.
+	if strings.ContainsAny(addr.Address, " \t<>\"\\\r\n") {
+		return "", fmt.Errorf("address %q is not a valid SMTP path", addr.Address)
+	}
 	return addr.Address, nil
 }

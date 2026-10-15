@@ -31,6 +31,12 @@ func TestSanitizeEmailAddress(t *testing.T) {
 		{raw: "a@example.com> SIZE=1", wantErr: true},
 		{raw: "a@example.com NOTIFY=NEVER", wantErr: true},
 		{raw: "a@example.com>,<b@example.com", wantErr: true},
+		{raw: `"ab"@example.com`, want: "ab@example.com"},
+		{raw: "a@[1.2.3.4]", want: "a@[1.2.3.4]"},
+		// quoted local parts that net/mail would unquote into an unsafe SMTP path
+		{raw: `"a> SIZE=1"@example.com`, wantErr: true},
+		{raw: `"a b"@example.com`, wantErr: true},
+		{raw: `"a\"b"@example.com`, wantErr: true},
 	}
 	for _, c := range cases {
 		got, err := sanitizeEmailAddress(c.raw)
@@ -95,10 +101,12 @@ func TestSMTPSenderEnvelope(t *testing.T) {
 		envelopeFrom string
 		override     bool
 		wantMail     string
+		wantErr      string
 	}{
 		{name: "message from", wantMail: "MAIL FROM:<from@example.com>"},
 		{name: "override", envelopeFrom: "bounce@example.com", override: true, wantMail: "MAIL FROM:<bounce@example.com>"},
 		{name: "null reverse-path", override: true, wantMail: "MAIL FROM:<>"},
+		{name: "invalid override", envelopeFrom: "not-an-address", override: true, wantErr: "invalid envelope from address"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -113,6 +121,13 @@ func TestSMTPSenderEnvelope(t *testing.T) {
 
 			msg := NewMessageFrom("to@example.com", "Sender", "from@example.com", "subject", "body").ToMessage()
 			err := (&SMTPSender{}).Send("from@example.com", []string{"to@example.com", "Bob <bob@example.com>"}, msg)
+			if c.wantErr != "" {
+				require.ErrorContains(t, err, c.wantErr)
+				for line := range commands {
+					assert.NotRegexp(t, `^(MAIL|RCPT) `, line, "no envelope command should reach the server")
+				}
+				return
+			}
 			require.NoError(t, err)
 
 			var got []string
