@@ -43,9 +43,9 @@ func (r ArticleCollaboratorRole) IsDelegate() bool {
 // LocaleKey returns the translation key of the role name.
 func (r ArticleCollaboratorRole) LocaleKey() string {
 	if r.IsDelegate() {
-		return "repo.settings.article_collaborators.role_delegate"
+		return "repo.settings.article_collaborators_role_delegate"
 	}
-	return "repo.settings.article_collaborators.role_maintainer"
+	return "repo.settings.article_collaborators_role_maintainer"
 }
 
 // ArticleCollaboratorStatus tells whether an invited collaborator has accepted yet.

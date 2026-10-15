@@ -36,8 +36,8 @@
                     {{svg "octicon-triangle-down" 14}}
                     <div class="menu">
                         <div class="item" data-value="">{{ctx.Locale.Tr "repo.settings.article_collaborators_filter_all"}}</div>
-                        <div class="item" data-value="1">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer"}}</div>
-                        <div class="item" data-value="2">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_delegate"}}</div>
+                        <div class="item" data-value="1">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_maintainer"}}</div>
+                        <div class="item" data-value="2">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_delegate"}}</div>
                     </div>
                 </div>
             </div>
@@ -125,14 +125,14 @@
 {{/* The access levels with their descriptions, the delegate level only for the owner:
      a delegate can never grant delegation. */}}
 <div class="menu">
-    <div class="item" data-value="1" data-text="{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer"}}">
-        <div class="tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer"}}</div>
-        <div class="text grey tw-text-sm tw-whitespace-normal">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer_desc"}}</div>
+    <div class="item" data-value="1" data-text="{{ctx.Locale.Tr "repo.settings.article_collaborators_role_maintainer"}}">
+        <div class="tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_maintainer"}}</div>
+        <div class="text grey tw-text-sm tw-whitespace-normal">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_maintainer_desc"}}</div>
     </div>
     {{if .IsOwner}}
-        <div class="item" data-value="2" data-text="{{ctx.Locale.Tr "repo.settings.article_collaborators.role_delegate"}}">
-            <div class="tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_delegate"}}</div>
-            <div class="text grey tw-text-sm tw-whitespace-normal">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_delegate_desc"}}</div>
+        <div class="item" data-value="2" data-text="{{ctx.Locale.Tr "repo.settings.article_collaborators_role_delegate"}}">
+            <div class="tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_delegate"}}</div>
+            <div class="text grey tw-text-sm tw-whitespace-normal">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_delegate_desc"}}</div>
         </div>
     {{end}}
 </div>
@@ -177,7 +177,7 @@
                 {{$defaultRole := "1"}}
                 <div class="ui fluid selection dropdown" id="article-collaborator-role" data-default-value="{{$defaultRole}}">
                     <input type="hidden" name="role" value="{{$defaultRole}}">
-                    <div class="text">{{ctx.Locale.Tr "repo.settings.article_collaborators.role_maintainer"}}</div>
+                    <div class="text">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_maintainer"}}</div>
                     {{svg "octicon-triangle-down" 14 "dropdown icon"}}
                     {{template "shared/repo/settings_collaborators_role_menu" (dict "IsOwner" .ArticleCollaboratorPerm.IsOwner)}}
                 </div>
