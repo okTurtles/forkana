@@ -142,7 +142,7 @@ function initArticleUserSearches(): void {
       syncTransferConfirmInput();
     });
   }
-  const elInvite = document.querySelector<HTMLElement>('#article-collaborator-search');
+  const elInvite = document.querySelector<HTMLElement>('#article-collaborator-invite-search');
   if (elInvite) bindArticleUserSearch(elInvite, syncInviteSubmit);
 }
 
