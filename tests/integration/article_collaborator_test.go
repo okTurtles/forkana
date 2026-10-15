@@ -167,5 +167,9 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		values := map[string]string{"_csrf": GetUserCSRFToken(t, ownerSession), "collaborator": outsider.Name}
 		collaborationURL := fmt.Sprintf("/%s/%s/settings/collaboration", owner.Name, repo.Name)
 		ownerSession.MakeRequest(t, NewRequestWithValues(t, "POST", collaborationURL, values), http.StatusNotFound)
+
+		// the page itself sends the owner to the article settings
+		resp := ownerSession.MakeRequest(t, NewRequest(t, "GET", collaborationURL), http.StatusSeeOther)
+		assert.Contains(t, test.RedirectURL(resp), "mode=settings&section=collaborators")
 	})
 }

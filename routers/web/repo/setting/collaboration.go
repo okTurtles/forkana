@@ -22,6 +22,12 @@ import (
 
 // Collaboration render a repository's collaboration page
 func Collaboration(ctx *context.Context) {
+	// an article's collaborators are managed from the article settings (see
+	// refuseArticleCollaboration); redirect rather than refuse, the settings navbar links here
+	if ctx.Repo.Repository != nil && ctx.Repo.Repository.SubjectID != 0 {
+		ctx.Redirect(articleCollaboratorsURL(ctx))
+		return
+	}
 	ctx.Data["Title"] = ctx.Tr("repo.settings.collaboration")
 	ctx.Data["PageIsSettingsCollaboration"] = true
 
