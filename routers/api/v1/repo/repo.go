@@ -5,7 +5,6 @@
 package repo
 
 import (
-	gocontext "context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -1073,17 +1072,7 @@ func updateRepoArchivedState(ctx *context.APIContext, opts api.EditRepoOption) e
 			return err
 		}
 		if *opts.Archived {
-			// an article's pending collaborator invitations are withdrawn along with the
-			// archive: an archived article takes no new collaborators
-			if err := db.WithTx(ctx, func(ctx gocontext.Context) error {
-				if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {
-					return err
-				}
-				if repo.SubjectID == 0 {
-					return nil
-				}
-				return repo_service.WithdrawPendingArticleCollaboratorInvites(ctx, repo)
-			}); err != nil {
+			if err := repo_service.ArchiveRepository(ctx, repo); err != nil {
 				log.Error("Tried to archive a repo: %s", err)
 				ctx.APIErrorInternal(err)
 				return err

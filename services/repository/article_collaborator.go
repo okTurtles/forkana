@@ -311,6 +311,21 @@ func RemoveArticleCollaborators(ctx context.Context, doer *user_model.User, repo
 	})
 }
 
+// ArchiveRepository archives the repository. An article's pending collaborator invitations
+// are withdrawn along with it: an archived article takes no new collaborators. Archiving
+// must go through here rather than repo_model.SetArchiveRepoState for that reason.
+func ArchiveRepository(ctx context.Context, repo *repo_model.Repository) error {
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {
+			return err
+		}
+		if repo.SubjectID == 0 {
+			return nil
+		}
+		return WithdrawPendingArticleCollaboratorInvites(ctx, repo)
+	})
+}
+
 // WithdrawPendingArticleCollaboratorInvites withdraws every pending invitation of the
 // article, called when it is archived: an archived article takes no new collaborators, so
 // the invitations could no longer be accepted.
