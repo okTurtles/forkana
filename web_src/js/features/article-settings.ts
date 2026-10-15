@@ -50,18 +50,18 @@ type ArticleUserSearchParts = {
   clear: HTMLElement,
 };
 
+// Returns the parts of a user search, or null when any is missing, so callers can use
+// every part without guarding it.
 function articleUserSearchParts(elSearch: HTMLElement): ArticleUserSearchParts | null {
   const input = elSearch.querySelector<HTMLInputElement>('input.prompt');
   const selection = elSearch.querySelector<HTMLElement>('.article-user-search-selection');
   if (!input || !selection) return null;
-  return {
-    input,
-    prompt: input.closest<HTMLElement>('.ui.input'),
-    selection,
-    avatar: selection.querySelector<HTMLImageElement>('.article-user-search-avatar'),
-    name: selection.querySelector<HTMLElement>('.article-user-search-name'),
-    clear: selection.querySelector<HTMLElement>('.article-user-search-clear'),
-  };
+  const prompt = input.closest<HTMLElement>('.ui.input');
+  const avatar = selection.querySelector<HTMLImageElement>('.article-user-search-avatar');
+  const name = selection.querySelector<HTMLElement>('.article-user-search-name');
+  const clear = selection.querySelector<HTMLElement>('.article-user-search-clear');
+  if (!prompt || !avatar || !name || !clear) return null;
+  return {input, prompt, selection, avatar, name, clear};
 }
 
 // Resets a user search back to its searchable state, called when the user is cleared
@@ -70,10 +70,10 @@ function resetArticleUserSearch(elSearch: HTMLElement): void {
   const parts = articleUserSearchParts(elSearch);
   if (!parts) return;
   parts.input.value = '';
-  if (parts.avatar) parts.avatar.src = '';
-  if (parts.name) parts.name.textContent = '';
+  parts.avatar.src = '';
+  parts.name.textContent = '';
   hideElem(parts.selection);
-  if (parts.prompt) showElem(parts.prompt);
+  showElem(parts.prompt);
 }
 
 // Turns a user field into a search box listing the users returned by its search url. A
