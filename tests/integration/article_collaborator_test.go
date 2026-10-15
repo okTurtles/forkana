@@ -198,4 +198,35 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		resp := ownerSession.MakeRequest(t, NewRequest(t, "GET", collaborationURL), http.StatusSeeOther)
 		assert.Contains(t, test.RedirectURL(resp), "mode=settings&section=collaborators")
 	})
+
+	t.Run("ArchivedTakesNoNewCollaborators", func(t *testing.T) {
+		// listed before the article is archived
+		invite(t, ownerSession, maintainer, repo_model.ArticleCollaboratorRoleMaintainerDelegate)
+		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, true))
+		defer func() {
+			require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), repo, false))
+		}()
+
+		htmlDoc := articlePage(t, ownerSession, "settings")
+		AssertHTMLElement(t, htmlDoc, "#article-collaborator-invite-modal", false)
+		AssertHTMLElement(t, htmlDoc, `[data-article-settings-modal="#article-collaborator-invite-modal"]`, false)
+		AssertHTMLElement(t, htmlDoc, "#article-collaborators-remove-modal", true)
+		AssertHTMLElement(t, htmlDoc, ".article-collaborator-role", true)
+		AssertHTMLElement(t, htmlDoc, "[data-article-collaborator-remove]", true)
+
+		post(t, ownerSession, "invite", map[string]string{"invitee_name": outsider.Name, "role": "1"})
+		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: outsider.ID})
+
+		values := map[string]string{
+			"_csrf": GetUserCSRFToken(t, ownerSession),
+			"uid":   strconv.FormatInt(maintainer.ID, 10),
+			"role":  strconv.Itoa(int(repo_model.ArticleCollaboratorRoleMaintainer)),
+		}
+		ownerSession.MakeRequest(t, NewRequestWithValues(t, "POST", collaboratorsURL+"/role", values), http.StatusOK)
+		c := unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+		assert.Equal(t, repo_model.ArticleCollaboratorRoleMaintainer, c.Role)
+
+		post(t, ownerSession, "remove", map[string]string{"uid": strconv.FormatInt(maintainer.ID, 10)})
+		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+	})
 }

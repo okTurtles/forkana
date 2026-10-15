@@ -28,8 +28,9 @@ var (
 	ErrArticleCollaboratorNotEligible = util.NewInvalidArgumentErrorf("user cannot collaborate on the article")
 	// ErrArticleCollaboratorNoInvite is returned when the doer has no pending invitation.
 	ErrArticleCollaboratorNoInvite = util.NewNotExistErrorf("no pending article collaborator invitation")
-	// ErrArticleArchived is returned when a collaborator change targets an archived article,
-	// which is read-only.
+	// ErrArticleArchived is returned when inviting or accepting an invitation to an archived
+	// article: it takes no new collaborators, while the existing ones can still have their
+	// role changed or be removed.
 	ErrArticleArchived = util.NewPermissionDeniedErrorf("article is archived")
 )
 
@@ -240,9 +241,6 @@ func getPendingArticleCollaboratorInvite(ctx context.Context, repoID, userID int
 // ChangeArticleCollaboratorRole changes the role of a collaborator, pending or accepted.
 // Both roles map to the same write access, so only the article record changes.
 func ChangeArticleCollaboratorRole(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, userID int64, role repo_model.ArticleCollaboratorRole) error {
-	if repo.IsArchived {
-		return ErrArticleArchived
-	}
 	if !role.IsValid() {
 		return util.NewInvalidArgumentErrorf("invalid article collaborator role %d", role)
 	}
@@ -275,9 +273,6 @@ func ChangeArticleCollaboratorRole(ctx context.Context, doer *user_model.User, r
 func RemoveArticleCollaborators(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, userIDs []int64) error {
 	if len(userIDs) == 0 {
 		return nil
-	}
-	if repo.IsArchived {
-		return ErrArticleArchived
 	}
 
 	p, err := GetArticleCollaboratorPermission(ctx, doer, repo)

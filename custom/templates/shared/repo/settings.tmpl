@@ -126,8 +126,9 @@
     white-space: nowrap;
 }
 </style>
-{{template "shared/repo/settings_collaborators_modals" .}}
 {{end}}
+{{/* the remove modal is needed on an archived article too, the template leaves out the invite one */}}
+{{template "shared/repo/settings_collaborators_modals" .}}
 
 {{if .IsRepoOwner}}
 {{if not .Repository.IsArchived}}

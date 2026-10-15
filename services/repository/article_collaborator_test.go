@@ -172,6 +172,24 @@ func TestArticleCollaborators(t *testing.T) {
 		assert.True(t, c.IsPending())
 	})
 
+	t.Run("ArchivedTakesNoNewCollaborators", func(t *testing.T) {
+		archived := *repo
+		archived.IsArchived = true
+
+		err := InviteArticleCollaborator(t.Context(), owner, &archived, other, repo_model.ArticleCollaboratorRoleMaintainer)
+		assert.ErrorIs(t, err, ErrArticleArchived)
+		assert.ErrorIs(t, AcceptArticleCollaboratorInvite(t.Context(), maintainer, &archived), ErrArticleArchived)
+
+		// the existing collaborators can still have their role changed or be removed
+		require.NoError(t, ChangeArticleCollaboratorRole(t.Context(), owner, &archived, delegate.ID, repo_model.ArticleCollaboratorRoleMaintainer))
+		c := unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: delegate.ID})
+		assert.Equal(t, repo_model.ArticleCollaboratorRoleMaintainer, c.Role)
+		require.NoError(t, ChangeArticleCollaboratorRole(t.Context(), owner, &archived, delegate.ID, repo_model.ArticleCollaboratorRoleMaintainerDelegate))
+
+		require.NoError(t, RemoveArticleCollaborators(t.Context(), owner, &archived, []int64{maintainer.ID}))
+		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+	})
+
 	t.Run("OwnerRemovesDelegate", func(t *testing.T) {
 		require.NoError(t, RemoveArticleCollaborators(t.Context(), owner, repo, []int64{delegate.ID, maintainer.ID}))
 		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID})

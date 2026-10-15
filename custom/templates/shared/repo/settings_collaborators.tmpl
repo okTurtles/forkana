@@ -1,11 +1,12 @@
 {{define "shared/repo/settings_collaborators"}}
 {{/* The collaborators section of the article settings, shown to the owner and to the
-     delegates. Collaborators are read-only on an archived article. The role values are
+     delegates. An archived article takes no new collaborators, the existing ones can still
+     have their role changed or be removed. The role values are
      repo_model.ArticleCollaboratorRole: 1 is Maintainer, 2 is Maintainer (Delegate). */}}
 {{$perm := .ArticleCollaboratorPerm}}
-{{$editable := not .Repository.IsArchived}}
+{{$canInvite := not .Repository.IsArchived}}
 <div class="tw-flex tw-flex-col tw-gap-3">
-{{if and $editable .ArticleCollaborators}}
+{{if and $canInvite .ArticleCollaborators}}
     <div class="tw-flex tw-justify-end">
         <button type="button" class="ui small primary button tw-m-0" data-article-settings-modal="#article-collaborator-invite-modal">
             {{svg "octicon-person-add" 16}} {{ctx.Locale.Tr "repo.settings.article_collaborators_invite_button"}}
@@ -17,16 +18,14 @@
     {{if .ArticleCollaborators}}
         <div class="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary tw-rounded-t-[inherit]">
             <div class="tw-flex tw-items-center tw-gap-3">
-                {{if $editable}}
-                    <label class="tw-flex tw-items-center tw-gap-2 tw-cursor-pointer">
-                        <input type="checkbox" id="article-collaborators-select-all" aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_select_all"}}">
-                        {{ctx.Locale.Tr "repo.settings.article_collaborators_select_all_label"}}
-                    </label>
-                    {{/* only shown while at least one collaborator is selected */}}
-                    <button type="button" id="article-collaborators-remove-selected" class="ui mini button tw-m-0 tw-text-red tw-whitespace-nowrap tw-hidden">
-                        {{svg "octicon-trash" 14}} {{ctx.Locale.Tr "repo.settings.article_collaborators_remove_selected"}}
-                    </button>
-                {{end}}
+                <label class="tw-flex tw-items-center tw-gap-2 tw-cursor-pointer">
+                    <input type="checkbox" id="article-collaborators-select-all" aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_select_all"}}">
+                    {{ctx.Locale.Tr "repo.settings.article_collaborators_select_all_label"}}
+                </label>
+                {{/* only shown while at least one collaborator is selected */}}
+                <button type="button" id="article-collaborators-remove-selected" class="ui mini button tw-m-0 tw-text-red tw-whitespace-nowrap tw-hidden">
+                    {{svg "octicon-trash" 14}} {{ctx.Locale.Tr "repo.settings.article_collaborators_remove_selected"}}
+                </button>
             </div>
             {{/* only the arrow opens the filter, the bar keeps reading "Role" */}}
             <div class="tw-flex tw-items-center tw-gap-1">
@@ -55,25 +54,23 @@
             <table class="ui very basic unstackable table tw-m-0">
                 <tbody>
                     {{range .ArticleCollaborators}}
-                        {{$canRemove := and $editable ($perm.CanRemove .)}}
+                        {{$canRemove := $perm.CanRemove .}}
                         <tr data-article-collaborator data-role="{{.Role}}" data-search="{{.User.LowerName}} {{.User.FullName}}">
-                            {{if $editable}}
-                                <td class="collapsing tw-pl-3">
-                                    {{if $canRemove}}
-                                        <input type="checkbox" name="uid" value="{{.UserID}}" data-article-collaborator-select
-                                            aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_select" .User.DisplayName}}">
-                                    {{end}}
-                                </td>
-                            {{end}}
+                            <td class="collapsing tw-pl-3">
+                                {{if $canRemove}}
+                                    <input type="checkbox" name="uid" value="{{.UserID}}" data-article-collaborator-select
+                                        aria-label="{{ctx.Locale.Tr "repo.settings.article_collaborators_select" .User.DisplayName}}">
+                                {{end}}
+                            </td>
                             {{/* the full name, falling back to the username */}}
-                            <td class="tw-w-2/5{{if not $editable}} tw-pl-3{{end}}">
+                            <td class="tw-w-2/5">
                                 <a class="tw-flex tw-items-center tw-gap-2 tw-min-w-0 muted" href="{{.User.HomeLink}}">
                                     {{ctx.AvatarUtils.Avatar .User 20}}
                                     <span class="tw-font-bold tw-truncate">{{.User.DisplayName}}</span>
                                 </a>
                             </td>
                             <td class="tw-w-1/5">
-                                {{if and $editable $perm.CanChangeRoles}}
+                                {{if $perm.CanChangeRoles}}
                                     <div class="ui dropdown custom article-collaborator-role" data-uid="{{.UserID}}" data-last-value="{{.Role}}"
                                         data-url="{{$.RepoOperationsLink}}/article_collaborators/role">
                                         <div class="text">{{ctx.Locale.Tr .Role.LocaleKey}}</div>
@@ -110,7 +107,7 @@
             {{svg "octicon-people" 32 "text grey"}}
             <p class="tw-m-0 tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_collaborators_empty"}}</p>
             <p class="tw-m-0 text grey">{{ctx.Locale.Tr "repo.settings.article_collaborators_empty_desc"}}</p>
-            {{if $editable}}
+            {{if $canInvite}}
                 <button type="button" class="ui primary button tw-mt-2" data-article-settings-modal="#article-collaborator-invite-modal">
                     {{svg "octicon-person-add" 16}} {{ctx.Locale.Tr "repo.settings.article_collaborators_invite_button"}}
                 </button>
@@ -139,7 +136,8 @@
 {{end}}
 
 {{define "shared/repo/settings_collaborators_modals"}}
-{{/* The invite and remove modals, only rendered while the collaborators can change. */}}
+{{/* The invite and remove modals, the invite one only while the article takes new collaborators. */}}
+{{if not .Repository.IsArchived}}
 <div class="ui small modal" id="article-collaborator-invite-modal">
     <div class="content">
         <div class="tw-flex tw-flex-col tw-items-center tw-gap-2 tw-mb-4 tw-text-center">
@@ -191,6 +189,7 @@
         </form>
     </div>
 </div>
+{{end}}
 
 <div class="ui small modal" id="article-collaborators-remove-modal">
     <div class="header">{{svg "octicon-trash"}} {{ctx.Locale.Tr "repo.settings.article_collaborators_remove_modal_header"}}</div>
