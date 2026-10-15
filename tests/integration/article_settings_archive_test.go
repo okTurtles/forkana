@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	activities_model "code.gitea.io/gitea/models/activities"
 	"code.gitea.io/gitea/models/perm"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
@@ -81,6 +82,42 @@ func TestArticleSettingsArchiveSuccess(t *testing.T) {
 
 	archived := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
 	assert.True(t, archived.IsArchived)
+}
+
+// TestArticleSettingsArchiveWithdrawsInvites checks that archiving an article withdraws
+// its pending collaborator invitations, which could no longer be accepted, while the
+// accepted collaborators stay.
+func TestArticleSettingsArchiveWithdrawsInvites(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	owner, repo, subjectName := loadArticleRepo(t, 1)
+	accepted := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	invitee := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+	require.NoError(t, repo_service.InviteArticleCollaborator(t.Context(), owner, repo, accepted, repo_model.ArticleCollaboratorRoleMaintainer))
+	require.NoError(t, repo_service.AcceptArticleCollaboratorInvite(t.Context(), accepted, repo))
+	require.NoError(t, repo_service.InviteArticleCollaborator(t.Context(), owner, repo, invitee, repo_model.ArticleCollaboratorRoleMaintainer))
+	// a fresh bean per lookup: loading fills in the status, which would then filter the next one
+	inviteNotification := func() *activities_model.Notification {
+		return unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{
+			RepoID: repo.ID,
+			UserID: invitee.ID,
+			Source: activities_model.NotificationSourceArticleCollaboratorInvite,
+		})
+	}
+	assert.Equal(t, activities_model.NotificationStatusUnread, inviteNotification().Status)
+
+	session := loginUser(t, owner.Name)
+	req := NewRequestWithValues(t, "POST", fmt.Sprintf("/%s/%s/settings", owner.Name, repo.Name),
+		archiveForm(GetUserCSRFToken(t, session), owner.Name, subjectName))
+	session.MakeRequest(t, req, http.StatusSeeOther)
+
+	assert.True(t, unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID}).IsArchived)
+	unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: invitee.ID})
+	assert.Equal(t, activities_model.NotificationStatusRead, inviteNotification().Status)
+
+	c := unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: accepted.ID})
+	assert.True(t, c.IsAccepted())
 }
 
 func TestArticleArchivedReadOnly(t *testing.T) {

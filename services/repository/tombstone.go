@@ -28,12 +28,18 @@ func TombstoneRepository(ctx context.Context, repo *repo_model.Repository) error
 		return nil
 	}
 
-	repo.IsTombstoned = true
-	repo.TombstonedUnix = timeutil.TimeStampNow()
-	if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "is_tombstoned", "tombstoned_unix"); err != nil {
-		return fmt.Errorf("tombstone repository %d: %w", repo.ID, err)
-	}
-	return nil
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		repo.IsTombstoned = true
+		repo.TombstonedUnix = timeutil.TimeStampNow()
+		if err := repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "is_tombstoned", "tombstoned_unix"); err != nil {
+			return fmt.Errorf("tombstone repository %d: %w", repo.ID, err)
+		}
+		// a tombstoned article can no longer be answered, its invitations would linger
+		if repo.SubjectID == 0 {
+			return nil
+		}
+		return WithdrawPendingArticleCollaboratorInvites(ctx, repo)
+	})
 }
 
 // repoHasForks reports whether the repository still has descendants that would

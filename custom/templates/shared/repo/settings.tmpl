@@ -1,18 +1,25 @@
 {{define "shared/repo/settings"}}
-{{if and .IsArticleModeSettings .IsRepoOwner}}
+{{/* The owner gets every section, a delegate only the collaborators one. */}}
+{{if and .IsArticleModeSettings .CanManageArticleCollaborators}}
 {{$subjectName := .Repository.GetSubject ctx}}
-<div class="ui bottom attached">
+{{$section := .ArticleSettingsSection}}
+<div class="ui bottom attached" id="article-settings-root">
     {{template "base/alert" .}}
     <div class="tw-flex tw-flex-col md:tw-flex-row tw-gap-[10%]">
         <div class="md:tw-w-[20%]">
             <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden">
                 <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.sidebar_header"}}</h4>
                 <div class="ui vertical fluid secondary menu tw-mt-0 tw-pt-0">
-                    <a class="active item" href="#article-settings-general">{{svg "octicon-gear" 16}}{{ctx.Locale.Tr "repo.settings.article_general"}}</a>
+                    {{if .IsRepoOwner}}
+                        <a class="{{if eq $section "general"}}active {{end}}item" href="#article-settings-general" data-article-settings-section="general">{{svg "octicon-gear" 16}}{{ctx.Locale.Tr "repo.settings.article_general"}}</a>
+                    {{end}}
+                    <a class="{{if eq $section "collaborators"}}active {{end}}item" href="#article-settings-collaborators" data-article-settings-section="collaborators">{{svg "octicon-people" 16}}{{ctx.Locale.Tr "repo.settings.article_collaborators"}}</a>
                 </div>
             </div>
         </div>
-        <div class="md:tw-w-[70%] tw-flex tw-flex-col tw-gap-4">
+        <div class="md:tw-w-[70%]">
+            {{if .IsRepoOwner}}
+            <div class="tw-flex tw-flex-col tw-gap-4{{if ne $section "general"}} tw-hidden{{end}}" data-article-settings-panel="general">
             <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-general">
                 <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_general"}}</h4>
                 <div class="ui form tw-flex tw-flex-col tw-gap-4 tw-p-4">
@@ -76,43 +83,55 @@
                     <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold" data-article-settings-modal="#article-delete-modal">{{ctx.Locale.Tr "repo.settings.article_delete_button"}}</button>
                 </div>
             </div>
+            </div>
+            {{end}}
+            <div class="{{if ne $section "collaborators"}}tw-hidden{{end}}" data-article-settings-panel="collaborators">
+                {{template "shared/repo/settings_collaborators" .}}
+            </div>
         </div>
     </div>
 </div>
 
 {{if not .Repository.IsArchived}}
 <style>
-/* give the owner search results room to breathe, without the fomantic separators */
-#article-transfer-owner-search > .results .result {
+/* give the user search results room to breathe, without the fomantic separators;
+   the .ui.search prefix lets these rules outrank fomantic's own result styles */
+.ui.search.article-user-search > .results .result {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
     border: none !important;
 }
-#article-transfer-owner-search > .results .result .image,
-#article-transfer-owner-search > .results .result .image img,
-#article-transfer-owner-search > .results .result > img {
+.ui.search.article-user-search > .results .result .image,
+.ui.search.article-user-search > .results .result .image img,
+.ui.search.article-user-search > .results .result > img {
     flex-shrink: 0;
     width: 28px;
     height: 28px;
     border-radius: 50%;
     object-fit: cover;
 }
-#article-transfer-owner-search > .results .result .content {
+.ui.search.article-user-search > .results .result .content {
     display: flex;
     flex-direction: column;
     justify-content: center;
     overflow: hidden;
     margin: 0;
 }
-#article-transfer-owner-search > .results .result .title {
+.ui.search.article-user-search > .results .result .title {
     margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 </style>
+{{end}}
+{{/* the remove modal is needed on an archived article too, the template leaves out the invite one */}}
+{{template "shared/repo/settings_collaborators_modals" .}}
+
+{{if .IsRepoOwner}}
+{{if not .Repository.IsArchived}}
 <div class="ui small modal" id="article-transfer-modal">
     <div class="header">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_header"}}</div>
     <div class="content">
@@ -131,7 +150,7 @@
             <input type="hidden" name="redirect_to_article" value="true">
             <div class="required field">
                 <label for="article-transfer-new-owner" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_recipient"}}</label>
-                <div id="article-transfer-owner-search" class="ui fluid search"
+                <div id="article-transfer-owner-search" class="ui fluid search article-user-search"
                     data-search-url="{{.RepoLink}}/settings/transfer_candidates"
                     data-confirm-target="#article-transfer-submit">
                     <div class="ui fluid input">
@@ -139,12 +158,12 @@
                             autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
                             placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_placeholder"}}">
                     </div>
-                    <div id="article-transfer-owner-selection" class="tw-hidden tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded">
+                    <div id="article-transfer-owner-selection" class="article-user-search-selection tw-hidden tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded">
                         <div class="tw-flex tw-items-center tw-gap-2">
-                            <img id="article-transfer-owner-avatar" class="ui avatar image" width="20" height="20" src="" alt aria-hidden="true">
-                            <span id="article-transfer-owner-name" class="tw-font-bold"></span>
+                            <img id="article-transfer-owner-avatar" class="article-user-search-avatar ui avatar image" width="20" height="20" src="" alt aria-hidden="true">
+                            <span id="article-transfer-owner-name" class="article-user-search-name tw-font-bold"></span>
                         </div>
-                        <button type="button" id="article-transfer-owner-clear" class="btn interact-fg"
+                        <button type="button" id="article-transfer-owner-clear" class="article-user-search-clear btn interact-fg"
                             data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_clear"}}"
                             aria-label="{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_clear"}}">{{svg "octicon-x" 16}}</button>
                     </div>
@@ -239,5 +258,6 @@
         </form>
     </div>
 </div>
+{{end}}
 {{end}}
 {{end}}

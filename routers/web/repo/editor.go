@@ -690,6 +690,12 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		return nil
 	}
 
+	// Maintainers commit their edits directly, like the owner
+	if perms.IsArticleMaintainer {
+		ctx.JSONError(ctx.Tr("repo.editor.cannot_submit_change_request_as_maintainer"))
+		return nil
+	}
+
 	// Block users who own an independent article for this subject
 	if perms.BlockedBySubject {
 		ctx.JSONError(ctx.Tr("repo.fork.already_own_subject_repo"))
