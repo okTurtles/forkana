@@ -13,9 +13,11 @@ import (
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	api "code.gitea.io/gitea/modules/structs"
+	repo_service "code.gitea.io/gitea/services/repository"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAPIRepoCollaboratorPermission(t *testing.T) {
@@ -153,5 +155,34 @@ func TestAPIRepoCollaboratorPermission(t *testing.T) {
 		DecodeJSON(t, resp, &repoPermission)
 
 		assert.Equal(t, "read", repoPermission.Permission)
+	})
+}
+
+// TestAPIRepoCollaboratorArticle checks that the collaborator API refuses to change the
+// collaborators of an article: they are managed from the article settings, which keep the
+// article_collaborator records in step with the write access.
+func TestAPIRepoCollaboratorArticle(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	// repo1 is an article on subject 1
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	repo1Owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo1.OwnerID})
+	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+
+	testCtx := NewAPITestContext(t, repo1Owner.Name, repo1.Name, auth_model.AccessTokenScopeWriteRepository)
+
+	t.Run("AddIsRefused", func(t *testing.T) {
+		ctx := testCtx
+		ctx.ExpectedCode = http.StatusNotFound
+		doAPIAddCollaborator(ctx, user4.Name, perm.AccessModeWrite)(t)
+		unittest.AssertNotExistsBean(t, &repo_model.Collaboration{RepoID: repo1.ID, UserID: user4.ID})
+	})
+
+	t.Run("DeleteIsRefused", func(t *testing.T) {
+		require.NoError(t, repo_service.AddOrUpdateCollaborator(t.Context(), repo1, user4, perm.AccessModeWrite))
+
+		req := NewRequestf(t, "DELETE", "/api/v1/repos/%s/%s/collaborators/%s", repo1Owner.Name, repo1.Name, user4.Name).
+			AddTokenAuth(testCtx.Token)
+		MakeRequest(t, req, http.StatusNotFound)
+		unittest.AssertExistsAndLoadBean(t, &repo_model.Collaboration{RepoID: repo1.ID, UserID: user4.ID})
 	})
 }

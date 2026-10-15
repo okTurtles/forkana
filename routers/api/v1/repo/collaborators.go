@@ -162,6 +162,10 @@ func AddOrUpdateCollaborator(ctx *context.APIContext) {
 	//   "422":
 	//     "$ref": "#/responses/validationError"
 
+	if refuseArticleCollaboration(ctx) {
+		return
+	}
+
 	form := web.GetForm(ctx).(*api.AddCollaboratorOption)
 
 	collaborator, err := user_model.GetUserByName(ctx, ctx.PathParam("collaborator"))
@@ -227,6 +231,10 @@ func DeleteCollaborator(ctx *context.APIContext) {
 	//   "422":
 	//     "$ref": "#/responses/validationError"
 
+	if refuseArticleCollaboration(ctx) {
+		return
+	}
+
 	collaborator, err := user_model.GetUserByName(ctx, ctx.PathParam("collaborator"))
 	if err != nil {
 		if user_model.IsErrUserNotExist(err) {
@@ -242,6 +250,18 @@ func DeleteCollaborator(ctx *context.APIContext) {
 		return
 	}
 	ctx.Status(http.StatusNoContent)
+}
+
+// refuseArticleCollaboration answers 404 for an article: its collaborators are managed
+// from the article settings, which keep the article_collaborator records (role and
+// invitation) in step with the write access granted here. Write access granted outside
+// them would let a user commit directly, bypassing the change request workflow.
+func refuseArticleCollaboration(ctx *context.APIContext) bool {
+	if ctx.Repo.Repository.SubjectID == 0 {
+		return false
+	}
+	ctx.APIErrorNotFound()
+	return true
 }
 
 // GetRepoPermissions gets repository permissions for a user
