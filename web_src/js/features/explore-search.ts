@@ -5,27 +5,124 @@ import type {DOMEvent} from '../utils/dom.ts';
 // design, each rendered as its own <form> with one of these ids.
 const searchFormSelectors = '#repo-search-form, #subject-search-form, #user-search-form';
 
-// Tab links of the explore navbar (custom/templates/explore/navbar.tmpl). They are server-rendered
-// with the submitted keyword already appended as "?q=...", this selector is used to also carry over
-// a keyword that has been typed but not submitted yet.
+// Tab links of the explore navbar (custom/templates/explore/navbar.tmpl). The active tab is
+// server-rendered with the keyword of the page on screen, the other tabs with no keyword at all.
 const tabLinkSelector = 'a[data-explore-tab-link]';
 
 // Search field of the explore page, every tab searches with the same "q" parameter.
 const searchInputSelector = '.page-content.explore input[type="search"][name="q"]';
 
-// Update the "q" parameter of the explore tab links so switching tabs keeps whatever is currently
-// in the search field, without relying on any browser storage (explore is available to anonymous
-// users, and switching tabs is a plain server-rendered page load).
-function updateTabLinks(keyword: string): void {
-  queryElems<HTMLAnchorElement>(document, tabLinkSelector, (tabLink) => {
-    // the "href" property of an anchor is already resolved against the document
+// Each explore tab keeps its own search (#420): switching to another tab shows that tab's own last
+// search, or its plain page if it has none, and coming back restores this one, including any text
+// typed into the field but not searched yet. Nothing is ever searched with another tab's text.
+//
+// The searches live in sessionStorage, per tab of the explore navbar (keyed by its path):
+//  - "query" is the keyword that tab was last rendered for, which its link points back to;
+//  - "draft" is whatever its field held when it was left, put back into the field (without
+//    searching it) when the user comes back to that tab through the navbar.
+// sessionStorage rather than extra query parameters on the tab links: the state belongs to this
+// browser tab only, works for anonymous users, needs nothing from the server, and keeps the
+// addresses of the explore pages the plain, shareable "?q=..." ones.
+type TabSearch = {query: string, draft: string};
+
+const storageKeyPrefix = 'explore-search:';
+
+// Set when a tab link is followed, to the path of the tab it leads to, so that tab knows it has
+// been switched to (and may restore its draft), as opposed to being loaded from an address, the
+// home page search, a bookmark or a pagination link, where the address alone says what to show.
+const switchStorageKey = `${storageKeyPrefix}switched-to`;
+
+function storageGet(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null; // storage disabled: the other tabs simply open unsearched
+  }
+}
+
+function storageSet(key: string, value: string): void {
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {}
+}
+
+function storageRemove(key: string): void {
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {}
+}
+
+function tabPath(tabLink: HTMLAnchorElement): string {
+  // the "href" property of an anchor is already resolved against the document
+  return new URL(tabLink.href).pathname;
+}
+
+function loadTabSearch(path: string): TabSearch | null {
+  try {
+    const value = JSON.parse(storageGet(storageKeyPrefix + path) ?? 'null');
+    if (typeof value?.query !== 'string' || typeof value?.draft !== 'string') return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function saveTabSearch(path: string, search: TabSearch): void {
+  storageSet(storageKeyPrefix + path, JSON.stringify(search));
+}
+
+// Point every inactive tab link at the keyword last searched on that tab (or at its plain page).
+// Only "q" is set: sort and filter values are tab specific, and an unsupported "sort" makes the
+// users tab return 404.
+function updateInactiveTabLinks(): void {
+  queryElems<HTMLAnchorElement>(document, `${tabLinkSelector}:not(.active)`, (tabLink) => {
     const url = new URL(tabLink.href);
-    if (keyword) {
-      url.searchParams.set('q', keyword);
+    const query = loadTabSearch(url.pathname)?.query;
+    if (query) {
+      url.searchParams.set('q', query);
     } else {
       url.searchParams.delete('q');
     }
     tabLink.href = url.toString();
+  });
+}
+
+function initExploreTabSearches(): void {
+  const activeTabLink = document.querySelector<HTMLAnchorElement>(`${tabLinkSelector}.active`);
+  const searchInput = document.querySelector<HTMLInputElement>(searchInputSelector);
+  if (!activeTabLink || !searchInput) return;
+  const activePath = tabPath(activeTabLink);
+
+  // the page's keyword is the one the server filled into the field, whatever the browser restored
+  const renderedKeyword = searchInput.defaultValue.trim();
+  const switchedHere = storageGet(switchStorageKey) === activePath;
+  storageRemove(switchStorageKey);
+
+  const stored = loadTabSearch(activePath);
+  if (switchedHere && stored?.query === renderedKeyword) {
+    searchInput.value = stored.draft; // shown as it was left, searched on Enter like any typed text
+  }
+  const saveDraft = () => saveTabSearch(activePath, {query: renderedKeyword, draft: searchInput.value.trim()});
+  saveDraft();
+  searchInput.addEventListener('input', saveDraft);
+
+  updateInactiveTabLinks();
+  // a page restored from the back/forward cache keeps the links it had when it was left, while the
+  // other tabs may have searched something else since
+  window.addEventListener('pageshow', (e: PageTransitionEvent) => {
+    if (e.persisted) updateInactiveTabLinks();
+  });
+
+  // Only a plain primary click that is still going to navigate switches tabs in this browser tab. A
+  // middle click or a modified one (Cmd/Ctrl/Shift/Alt) opens or downloads the link elsewhere, and a
+  // click some other script has already cancelled goes nowhere: recording either here would leave a
+  // stale flag behind that could later restore a draft over what an address asks for.
+  queryElems<HTMLAnchorElement>(document, tabLinkSelector, (tabLink) => {
+    tabLink.addEventListener('click', (e: MouseEvent) => {
+      if (e.defaultPrevented) return;
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      storageSet(switchStorageKey, tabPath(tabLink));
+    });
   });
 }
 
@@ -88,10 +185,10 @@ export function buildSearchParams(searchForm: HTMLFormElement): URLSearchParams 
 }
 
 export function initExploreSearch() {
-  // The explore navbar carries the keyword over in its tab links (see updateTabLinks), which also
+  // The explore navbar keeps a search per tab (see initExploreTabSearches), which also
   // changes how the keyword field itself is submitted, see below. The same search bar is rendered
   // without that navbar on other pages (profiles, organizations, the admin repository list).
-  const tabsCarryKeyword = Boolean(document.querySelector(tabLinkSelector));
+  const hasExploreTabs = Boolean(document.querySelector(tabLinkSelector));
 
   for (const searchForm of document.querySelectorAll<HTMLFormElement>(searchFormSelectors)) {
     searchForm.addEventListener('change', (e: DOMEvent<Event, HTMLInputElement>) => {
@@ -101,9 +198,9 @@ export function initExploreSearch() {
       // the user does next: click a tab, move the focus towards one with the keyboard (which first
       // steps through the search button), or click anywhere else. Reloading the current tab from
       // here cancels that tab switch and takes the focus with it, so on the explore pages the
-      // keyword field keeps its own submit paths (the Enter key and the search button) and the tab
-      // links carry whatever has been typed over themselves.
-      if (tabsCarryKeyword && e.target.name === 'q') return;
+      // keyword field keeps its own submit paths (the Enter key and the search button), and what
+      // has been typed is kept as this tab's draft instead (see initExploreTabSearches).
+      if (hasExploreTabs && e.target.name === 'q') return;
 
       const params = buildSearchParams(searchForm);
       if (e.target.name === 'clear-filter') {
@@ -154,9 +251,5 @@ export function initExploreSearch() {
     });
   }
 
-  if (!tabsCarryKeyword) return;
-
-  queryElems<HTMLInputElement>(document, searchInputSelector, (searchInput) => {
-    searchInput.addEventListener('input', () => updateTabLinks(searchInput.value.trim()));
-  });
+  if (hasExploreTabs) initExploreTabSearches();
 }

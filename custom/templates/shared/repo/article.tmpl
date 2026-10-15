@@ -70,14 +70,10 @@
                         </a>
                     {{end}}
                     <div class="tw-flex tw-items-center tw-gap-2 tw-ml-auto">
-                        {{if .IsArticleModeRead}}
-                            <div class="ui icon top left pointing dropdown button mini tw-px-3">
-                                {{svg "octicon-kebab-horizontal" 14}}
-                                <div class="menu">
-                                    <div class="item">Something</div>
-                                </div>
-                            </div>
-                        {{end}}
+                        {{/* #408: no "..." menu in the Read and History modes. It held a
+                             "Something" placeholder; the only items the figma gives it (Watch and
+                             Report, node 662:98305) are the Follow star in the subject header and
+                             a report flow that does not exist yet. */}}
                         {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}
                             <div class="tw-flex tw-items-center tw-justify-between tw-mb-4">
                                 <div class="tw-flex tw-items-center tw-gap-2">
@@ -155,14 +151,6 @@
                                             </button>
                                         </span>
                                     {{end}}
-                                </div>
-                            </div>
-                        {{end}}
-                        {{if .IsArticleModeHistory}}
-                            <div class="ui icon top left pointing dropdown button mini tw-px-3">
-                                {{svg "octicon-kebab-horizontal" 14}}
-                                <div class="menu">
-                                    <div class="item">Something</div>
                                 </div>
                             </div>
                         {{end}}

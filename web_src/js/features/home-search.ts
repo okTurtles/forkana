@@ -9,10 +9,10 @@ const {appSubUrl} = window.config;
 const inputSelector = '#home-search-input';
 const suggestionsSelector = '#home-search-suggestions';
 const buttonSelector = '#home-search-button';
-// The button's "right: 8px" offset (web_src/css/home.css) plus a 16px text gap,
+// The button's "right: 5px" offset (web_src/css/home.css) plus a 16px text gap,
 // so the typed keyword never runs underneath the button. Change the CSS offset
 // and this together.
-const buttonInsetGapPx = 24;
+const buttonInsetGapPx = 21;
 
 // How long the typing has to pause before the suggestions are fetched.
 const debounceMs = 200;

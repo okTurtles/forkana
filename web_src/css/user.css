@@ -352,3 +352,22 @@
   margin-top: auto;
   margin-bottom: auto;
 }
+
+/* "New to Forkana? Create an account" below the sign-in card, and its sign-up page
+   counterpart: a sentence with a link in it (.forkana-link), not a button, in the
+   box the Sign in/up frame draws around it (Figma 641:65416: 32px tall, #f6f8fa,
+   1px #d1d9e0 border, 6px radius, 14px/20px semibold #25292e text). */
+.auth-alternative-box {
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 11px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  box-shadow: 0 1px 0 #1f23280a;
+  color: var(--color-button-text);
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  text-align: center;
+}

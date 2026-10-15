@@ -55,9 +55,21 @@
   /* the label of a default (neutral) button in the layout, Primer's fgColor of
      Button (e.g. "Compare" 484:188986, "Read full article" 1842:35659) */
   --color-button-text: #25292e;
+  /* the hover of a default (neutral) button: Primer's bgColor-hover of Button, the
+     "gray on hover" of #423's "View full history" */
+  --color-button-hover: #eff2f5;
   /* an unavailable button (Compare on a single-article subject, 6661:52948) */
   --color-button-text-disabled: #818b98;
   --color-button-border-disabled: #818b981a;
+  /* the design system's secondary button (Button 30258:5582 in the Design System file):
+     #f6f8fa at rest (= --color-surface-muted), #eff2f5 on hover, #e6eaef pressed; and the
+     #b3a9ff 2px ring every variant draws when focused. See .forkana-btn in
+     web_src/css/modules/button.css. */
+  --color-button-secondary-hover-bg: #eff2f5;
+  --color-button-secondary-active-bg: #e6eaef;
+  --color-button-focus-ring: #b3a9ff;
+  /* the landing title "What's on your mind?" (Figma 6313:56405) */
+  --color-home-title: #000000;
 
   /* Border colors */
   --color-border: #d0d7de;

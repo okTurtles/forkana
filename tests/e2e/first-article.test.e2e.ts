@@ -36,12 +36,10 @@ test.describe('First Article Becomes Root', () => {
       // Step 2: Verify subject field is populated with the normalized title
       await expect(page.locator('input#subject')).toHaveValue(subjectName);
 
-      // Step 3: Check the template requirements checkbox (required to enable submit button)
-      const templateRequirementsCheckbox = page.locator('input#template_requirements');
-      await templateRequirementsCheckbox.waitFor({state: 'visible', timeout: 10000});
-      await templateRequirementsCheckbox.check();
+      // Step 3: The page no longer asks to acknowledge a declaration (#404 item 3)
+      await expect(page.locator('input#template_requirements')).toHaveCount(0);
 
-      // Step 4: Wait for submit button to be enabled and click
+      // Step 4: The submit button is enabled right away; click it
       const submitButton = page.locator('#create-repo-submit-button');
       await expect(submitButton).toBeEnabled({timeout: 5000});
       // eslint-disable-next-line playwright/no-force-option

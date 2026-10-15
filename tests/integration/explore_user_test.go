@@ -50,9 +50,10 @@ func TestExploreUser(t *testing.T) {
 func TestExploreSearchKeywordAcrossTabs(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	// switching explore tabs must keep the search keyword, it is carried over by the "q" query
-	// parameter of the tab links themselves (the navigation is a plain page load, so nothing can
-	// be kept in memory, and anonymous users have no session to store it in)
+	// each explore tab keeps its own search keyword (#420): the server links only the active tab to
+	// the keyword on screen, the other tabs to their plain page, so switching tabs never searches
+	// with another tab's keyword. The keyword last searched on each tab is put back into its link
+	// by web_src/js/features/explore-search.ts, which keeps it in sessionStorage.
 	tabHref := func(path, tabPrefix string) string {
 		req := NewRequest(t, "GET", path)
 		resp := MakeRequest(t, req, http.StatusOK)
@@ -62,18 +63,21 @@ func TestExploreSearchKeywordAcrossTabs(t *testing.T) {
 		return href
 	}
 
-	// the reported round trip: search on one tab, switch to the other, switch back
-	assert.Equal(t, "/explore/subjects?q=user+two", tabHref("/explore/users?q=user%20two", "/explore/subjects"))
-	assert.Equal(t, "/explore/users?q=user+two", tabHref("/explore/subjects?q=user+two", "/explore/users"))
+	// the keyword of one tab is not carried over to the other
+	assert.Equal(t, "/explore/subjects", tabHref("/explore/users?q=user%20two", "/explore/subjects"))
+	assert.Equal(t, "/explore/users", tabHref("/explore/subjects?q=user+two", "/explore/users"))
+	// the active tab links to its own search
+	assert.Equal(t, "/explore/users?q=user+two", tabHref("/explore/users?q=user%20two", "/explore/users"))
+	assert.Equal(t, "/explore/subjects?q=user+two", tabHref("/explore/subjects?q=user+two", "/explore/subjects"))
 	// an empty keyword must not add an empty "q" parameter
-	assert.Equal(t, "/explore/subjects", tabHref("/explore/users", "/explore/subjects"))
-	assert.Equal(t, "/explore/subjects", tabHref("/explore/users?q=", "/explore/subjects"))
+	assert.Equal(t, "/explore/users", tabHref("/explore/users", "/explore/users"))
+	assert.Equal(t, "/explore/users", tabHref("/explore/users?q=", "/explore/users"))
 	// the sort order is not carried over, it is tab specific and unsupported values are rejected
-	assert.Equal(t, "/explore/subjects?q=user+two", tabHref("/explore/users?q=user%20two&sort=oldest", "/explore/subjects"))
+	assert.Equal(t, "/explore/subjects", tabHref("/explore/users?q=user%20two&sort=oldest", "/explore/subjects"))
 	// the keyword lands in an href, so it must arrive query-escaped and never as raw markup
-	assert.Equal(t, "/explore/users?q=%3Cscript%3E", tabHref("/explore/subjects?q=%3Cscript%3E", "/explore/users"))
+	assert.Equal(t, "/explore/subjects?q=%3Cscript%3E", tabHref("/explore/subjects?q=%3Cscript%3E", "/explore/subjects"))
 	hostile := "%22%3E%3Cscript%3Ealert%281%29%3C%2Fscript%3E" // "><script>alert(1)</script>
-	assert.Equal(t, "/explore/subjects?q="+hostile, tabHref("/explore/users?q="+hostile, "/explore/subjects"))
+	assert.Equal(t, "/explore/users?q="+hostile, tabHref("/explore/users?q="+hostile, "/explore/users"))
 }
 
 func TestExploreUserSearchSplit(t *testing.T) {

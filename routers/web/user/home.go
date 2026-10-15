@@ -105,6 +105,9 @@ func Feeds(ctx *context.Context) {
 	if page <= 1 {
 		page = 1
 	}
+	// A present-but-empty "?filter=" would otherwise count as an active filter, so the
+	// template would say "No results found." instead of showing the quiet empty state.
+	filters = slices.DeleteFunc(filters, func(s string) bool { return s == "" })
 
 	filtersMap := make(map[string]bool)
 	for _, f := range filters {
