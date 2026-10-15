@@ -33,9 +33,10 @@ function syncInviteSubmit(name: string | null): void {
   const button = document.querySelector<HTMLButtonElement>('#article-collaborator-invite-submit');
   if (!button) return;
   const enabled = Boolean(name);
+  // a replacer function inserts the name literally, a string would expand "$&" and the like
   button.textContent = enabled ?
-    button.getAttribute('data-label-invite').replace('%s', name) :
-    button.getAttribute('data-label-select');
+    (button.getAttribute('data-label-invite') ?? '').replace('%s', () => name) :
+    (button.getAttribute('data-label-select') ?? '');
   button.classList.toggle('disabled', !enabled);
   button.disabled = !enabled;
 }
