@@ -86,6 +86,8 @@ func flashArticleCollaboratorError(ctx *context.Context, err error) bool {
 		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_already_listed"))
 	case errors.Is(err, repo_service.ErrArticleCollaboratorOwnsSubject):
 		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_owns_subject"))
+	case errors.Is(err, repo_service.ErrArticleCollaboratorInvalidRole):
+		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_invalid_role"))
 	case errors.Is(err, repo_service.ErrArticleCollaboratorNotEligible), errors.Is(err, user_model.ErrBlockedUser):
 		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_not_eligible"))
 	case errors.Is(err, repo_service.ErrArticleCollaboratorNoInvite):
@@ -180,7 +182,7 @@ func ArticleCollaboratorChangeRole(ctx *context.Context) {
 		})
 	case errors.Is(err, util.ErrPermissionDenied):
 		ctx.JSONError(ctx.Tr("repo.settings.article_collaborators_no_permission"))
-	case errors.Is(err, util.ErrInvalidArgument):
+	case errors.Is(err, repo_service.ErrArticleCollaboratorInvalidRole):
 		ctx.JSONError(ctx.Tr("repo.settings.article_collaborators_invalid_role"))
 	case errors.Is(err, util.ErrNotExist):
 		ctx.JSONError(ctx.Tr("repo.settings.article_collaborators_user_not_found"))

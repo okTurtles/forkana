@@ -146,6 +146,12 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		outsiderSession.MakeRequest(t, NewRequestWithValues(t, "POST", collaboratorsURL+"/invite", values), http.StatusNotFound)
 	})
 
+	t.Run("InviteWithoutRoleRefused", func(t *testing.T) {
+		post(t, ownerSession, "invite", map[string]string{"invitee_name": outsider.Name})
+		assert.Equal(t, "That role is not valid.", ownerSession.GetCookieFlashMessage().ErrorMsg)
+		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: outsider.ID})
+	})
+
 	t.Run("MergeGate", func(t *testing.T) {
 		mergeForm := func(session *TestSession) map[string]string {
 			return map[string]string{"_csrf": GetUserCSRFToken(t, session), "do": string(repo_model.MergeStyleMerge)}

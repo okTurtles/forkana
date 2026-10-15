@@ -26,6 +26,8 @@ var (
 	// ErrArticleCollaboratorNotEligible is returned when the invitee cannot collaborate at all
 	// (the owner, an organization, an inactive or a blocked user).
 	ErrArticleCollaboratorNotEligible = util.NewInvalidArgumentErrorf("user cannot collaborate on the article")
+	// ErrArticleCollaboratorInvalidRole is returned for a role that is neither maintainer nor delegate.
+	ErrArticleCollaboratorInvalidRole = util.NewInvalidArgumentErrorf("invalid article collaborator role")
 	// ErrArticleCollaboratorNoInvite is returned when the doer has no pending invitation.
 	ErrArticleCollaboratorNoInvite = util.NewNotExistErrorf("no pending article collaborator invitation")
 	// ErrArticleArchived is returned when inviting or accepting an invitation to an archived
@@ -110,6 +112,11 @@ func CanUserMergeArticleChangeRequest(ctx context.Context, doer *user_model.User
 func InviteArticleCollaborator(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, invitee *user_model.User, role repo_model.ArticleCollaboratorRole) error {
 	if repo.IsArchived {
 		return ErrArticleArchived
+	}
+
+	// checked before the permission, which an invalid role would fail as well
+	if !role.IsValid() {
+		return ErrArticleCollaboratorInvalidRole
 	}
 
 	p, err := GetArticleCollaboratorPermission(ctx, doer, repo)
@@ -250,7 +257,7 @@ func getPendingArticleCollaboratorInvite(ctx context.Context, repoID, userID int
 // Both roles map to the same write access, so only the article record changes.
 func ChangeArticleCollaboratorRole(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, userID int64, role repo_model.ArticleCollaboratorRole) error {
 	if !role.IsValid() {
-		return util.NewInvalidArgumentErrorf("invalid article collaborator role %d", role)
+		return ErrArticleCollaboratorInvalidRole
 	}
 
 	p, err := GetArticleCollaboratorPermission(ctx, doer, repo)
