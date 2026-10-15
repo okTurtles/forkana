@@ -190,6 +190,19 @@ func TestArticleCollaborators(t *testing.T) {
 		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
 	})
 
+	t.Run("InviteeBlockedDelegateRefused", func(t *testing.T) {
+		invitee := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 10})
+		require.NoError(t, db.Insert(t.Context(), &user_model.Blocking{BlockerID: invitee.ID, BlockeeID: delegate.ID}))
+		defer func() {
+			_, err := db.DeleteByBean(t.Context(), &user_model.Blocking{BlockerID: invitee.ID, BlockeeID: delegate.ID})
+			require.NoError(t, err)
+		}()
+
+		err := InviteArticleCollaborator(t.Context(), delegate, repo, invitee, repo_model.ArticleCollaboratorRoleMaintainer)
+		assert.ErrorIs(t, err, ErrArticleCollaboratorNotEligible)
+		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: invitee.ID})
+	})
+
 	t.Run("WithdrawPendingInvites", func(t *testing.T) {
 		// "other" owns an article on the subject since SubjectOwnerRefused
 		invitee := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 10})

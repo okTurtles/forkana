@@ -129,6 +129,10 @@ func InviteArticleCollaborator(ctx context.Context, doer *user_model.User, repo 
 	if user_model.IsUserBlockedBy(ctx, invitee, repo.OwnerID) || user_model.IsUserBlockedBy(ctx, repo.Owner, invitee.ID) {
 		return ErrArticleCollaboratorNotEligible
 	}
+	// a delegate inviting is checked too: the invitee is notified by them
+	if doer.ID != repo.OwnerID && (user_model.IsUserBlockedBy(ctx, invitee, doer.ID) || user_model.IsUserBlockedBy(ctx, doer, invitee.ID)) {
+		return ErrArticleCollaboratorNotEligible
+	}
 	if err := checkArticleCollaboratorSubject(ctx, repo, invitee); err != nil {
 		return err
 	}
