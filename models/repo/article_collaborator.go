@@ -216,6 +216,15 @@ func DeleteArticleCollaboratorRow(ctx context.Context, c *ArticleCollaborator) e
 	return nil
 }
 
+// DeletePendingArticleCollaborators removes every pending invitation of an article.
+func DeletePendingArticleCollaborators(ctx context.Context, repoID int64) error {
+	_, err := db.GetEngine(ctx).Where(builder.Eq{
+		"repo_id": repoID,
+		"status":  ArticleCollaboratorStatusPending,
+	}).Delete(new(ArticleCollaborator))
+	return err
+}
+
 // DeleteArticleCollaborator removes a user's collaborator row from an article.
 func DeleteArticleCollaborator(ctx context.Context, repoID, userID int64) error {
 	_, err := db.GetEngine(ctx).Where(builder.Eq{"repo_id": repoID, "user_id": userID}).Delete(new(ArticleCollaborator))

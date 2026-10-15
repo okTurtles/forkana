@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -185,4 +186,24 @@ func TestAPIRepoCollaboratorArticle(t *testing.T) {
 		MakeRequest(t, req, http.StatusNotFound)
 		unittest.AssertExistsAndLoadBean(t, &repo_model.Collaboration{RepoID: repo1.ID, UserID: user4.ID})
 	})
+}
+
+// TestAPIRepoArchiveArticleWithdrawsInvites checks that archiving an article through the API
+// withdraws its pending collaborator invitations, like the article settings do.
+func TestAPIRepoArchiveArticleWithdrawsInvites(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	// repo1 is an article on subject 1
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	repo1Owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo1.OwnerID})
+	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	require.NoError(t, repo_service.InviteArticleCollaborator(t.Context(), repo1Owner, repo1, user4, repo_model.ArticleCollaboratorRoleMaintainer))
+
+	testCtx := NewAPITestContext(t, repo1Owner.Name, repo1.Name, auth_model.AccessTokenScopeWriteRepository)
+	archived := true
+	req := NewRequestWithJSON(t, "PATCH", fmt.Sprintf("/api/v1/repos/%s/%s", repo1Owner.Name, repo1.Name), &api.EditRepoOption{Archived: &archived}).
+		AddTokenAuth(testCtx.Token)
+	MakeRequest(t, req, http.StatusOK)
+
+	assert.True(t, unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo1.ID}).IsArchived)
+	unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo1.ID, UserID: user4.ID})
 }

@@ -220,6 +220,18 @@ func MarkArticleCollaboratorInviteNotificationsRead(ctx context.Context, repoID,
 	return err
 }
 
+// MarkRepoArticleCollaboratorInviteNotificationsRead marks every unread collaborator
+// invitation notification of an article as read, for when all its pending invitations are
+// withdrawn at once.
+func MarkRepoArticleCollaboratorInviteNotificationsRead(ctx context.Context, repoID int64) error {
+	_, err := db.GetEngine(ctx).Where(builder.Eq{
+		"repo_id": repoID,
+		"status":  NotificationStatusUnread,
+		"source":  NotificationSourceArticleCollaboratorInvite,
+	}).Cols("status").Update(&Notification{Status: NotificationStatusRead})
+	return err
+}
+
 // MarkRepoTransferNotificationsRead marks every unread pending-transfer notification of a
 // repository as read. The pending row claims a response is still awaited, so it has to stop
 // saying that once the transfer has been accepted, rejected or cancelled — including for the

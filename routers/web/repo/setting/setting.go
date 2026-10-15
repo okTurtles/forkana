@@ -5,6 +5,7 @@
 package setting
 
 import (
+	gocontext "context"
 	"errors"
 	"net/http"
 	"strings"
@@ -1159,6 +1160,20 @@ func handleSettingsPostDeleteWiki(ctx *context.Context) {
 	ctx.Redirect(ctx.Repo.RepoLink + "/settings")
 }
 
+// archiveRepo archives the repository. An article's pending collaborator invitations are
+// withdrawn along with it: an archived article takes no new collaborators.
+func archiveRepo(ctx *context.Context, repo *repo_model.Repository) error {
+	return db.WithTx(ctx, func(ctx gocontext.Context) error {
+		if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {
+			return err
+		}
+		if repo.SubjectID == 0 {
+			return nil
+		}
+		return repo_service.WithdrawPendingArticleCollaboratorInvites(ctx, repo)
+	})
+}
+
 func handleSettingsPostArchive(ctx *context.Context) {
 	repo := ctx.Repo.Repository
 	if !ctx.Repo.IsOwner() {
@@ -1197,7 +1212,7 @@ func handleSettingsPostArchive(ctx *context.Context) {
 		}
 	}
 
-	if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {
+	if err := archiveRepo(ctx, repo); err != nil {
 		log.Error("Tried to archive a repo: %s", err)
 		ctx.Flash.Error(ctx.Tr("repo.settings.archive.error"))
 		ctx.Redirect(redirectURL)

@@ -303,6 +303,20 @@ func RemoveArticleCollaborators(ctx context.Context, doer *user_model.User, repo
 	})
 }
 
+// WithdrawPendingArticleCollaboratorInvites withdraws every pending invitation of the
+// article, called when it is archived: an archived article takes no new collaborators, so
+// the invitations could no longer be accepted.
+func WithdrawPendingArticleCollaboratorInvites(ctx context.Context, repo *repo_model.Repository) error {
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		if err := repo_model.DeletePendingArticleCollaborators(ctx, repo.ID); err != nil {
+			return err
+		}
+		// accepting marks the invitee's notifications read, so the unread ones left are
+		// exactly those of the withdrawn invitations
+		return activities_model.MarkRepoArticleCollaboratorInviteNotificationsRead(ctx, repo.ID)
+	})
+}
+
 func removeArticleCollaborator(ctx context.Context, repo *repo_model.Repository, c *repo_model.ArticleCollaborator) error {
 	// an invitation accepted concurrently fails the delete: removing it as pending would
 	// leave the write access just granted in place
