@@ -2498,7 +2498,7 @@ func MergePullRequest(ctx *context.Context) {
 
 	// Only the repository owner and the article maintainers can merge pull requests
 	// This check is based on the base repository (target of the PR)
-	canMergeChangeRequest, err := repo_service.CanUserMergeArticleChangeRequest(ctx, ctx.Repo.Repository, ctx.Doer)
+	canMergeChangeRequest, err := repo_service.CanUserMergeArticleChangeRequest(ctx, ctx.Doer, ctx.Repo.Repository)
 	if err != nil {
 		ctx.ServerError("CanUserMergeArticleChangeRequest", err)
 		return

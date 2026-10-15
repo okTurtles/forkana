@@ -918,7 +918,7 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 
 	// Check if the current user is the owner or a maintainer of the base repository (target
 	// of the PR). This is used to restrict merge operations to them
-	canMergeChangeRequest, err := repo_service.CanUserMergeArticleChangeRequest(ctx, pull.BaseRepo, ctx.Doer)
+	canMergeChangeRequest, err := repo_service.CanUserMergeArticleChangeRequest(ctx, ctx.Doer, pull.BaseRepo)
 	if err != nil {
 		ctx.ServerError("CanUserMergeArticleChangeRequest", err)
 		return

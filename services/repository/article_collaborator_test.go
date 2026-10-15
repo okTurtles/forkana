@@ -42,7 +42,7 @@ func TestArticleCollaborators(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, p.CanManage)
 
-		canMerge, err := CanUserMergeArticleChangeRequest(t.Context(), repo, delegate)
+		canMerge, err := CanUserMergeArticleChangeRequest(t.Context(), delegate, repo)
 		require.NoError(t, err)
 		assert.False(t, canMerge)
 	})
@@ -70,7 +70,7 @@ func TestArticleCollaborators(t *testing.T) {
 		assert.True(t, perms.IsArticleMaintainer)
 		assert.False(t, perms.CanSubmitChangeRequest)
 
-		canMerge, err := CanUserMergeArticleChangeRequest(t.Context(), repo, delegate)
+		canMerge, err := CanUserMergeArticleChangeRequest(t.Context(), delegate, repo)
 		require.NoError(t, err)
 		assert.True(t, canMerge)
 

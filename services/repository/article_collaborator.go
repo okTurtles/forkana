@@ -69,8 +69,11 @@ func (p ArticleCollaboratorPermission) CanRemove(c *repo_model.ArticleCollaborat
 // the article. A signed-out user, or one who is neither the owner nor an accepted delegate,
 // gets no permission.
 func GetArticleCollaboratorPermission(ctx context.Context, doer *user_model.User, repo *repo_model.Repository) (ArticleCollaboratorPermission, error) {
-	if doer == nil || repo.OwnerID == doer.ID {
-		return NewArticleCollaboratorPermission(doer != nil, nil), nil
+	if doer == nil {
+		return ArticleCollaboratorPermission{}, nil
+	}
+	if repo.OwnerID == doer.ID {
+		return NewArticleCollaboratorPermission(true, nil), nil
 	}
 	c, err := repo_model.GetArticleCollaborator(ctx, repo.ID, doer.ID)
 	if err != nil {
@@ -91,7 +94,7 @@ func NewArticleCollaboratorPermission(isOwner bool, c *repo_model.ArticleCollabo
 
 // CanUserMergeArticleChangeRequest reports whether the doer may merge change requests of
 // the article: its owner and its accepted maintainers.
-func CanUserMergeArticleChangeRequest(ctx context.Context, repo *repo_model.Repository, doer *user_model.User) (bool, error) {
+func CanUserMergeArticleChangeRequest(ctx context.Context, doer *user_model.User, repo *repo_model.Repository) (bool, error) {
 	if doer == nil {
 		return false, nil
 	}
