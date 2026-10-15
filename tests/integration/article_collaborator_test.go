@@ -146,6 +146,17 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		outsiderSession.MakeRequest(t, NewRequestWithValues(t, "POST", collaboratorsURL+"/invite", values), http.StatusNotFound)
 	})
 
+	t.Run("CandidatesExcludeBlockedUsers", func(t *testing.T) {
+		candidates := func(t *testing.T, q string) string {
+			t.Helper()
+			candidatesURL := fmt.Sprintf("/subject/%s/%s/settings/collaborator_candidates?q=%s", subjectName, owner.Name, q)
+			return ownerSession.MakeRequest(t, NewRequest(t, "GET", candidatesURL), http.StatusOK).Body.String()
+		}
+		// the owner blocked user29 (user_blocking.yml)
+		assert.NotContains(t, candidates(t, "user29"), `"login":"user29"`)
+		assert.Contains(t, candidates(t, "user28"), `"login":"user28"`)
+	})
+
 	t.Run("InviteWithoutRoleRefused", func(t *testing.T) {
 		post(t, ownerSession, "invite", map[string]string{"invitee_name": outsider.Name})
 		assert.Equal(t, "That role is not valid.", ownerSession.GetCookieFlashMessage().ErrorMsg)

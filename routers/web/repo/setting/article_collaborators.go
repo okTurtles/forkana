@@ -65,7 +65,9 @@ func ArticleCollaboratorCandidates(ctx *context.Context) {
 		IsActive:                 optional.Some(true),
 		ExcludeUserIDs:           append(listedIDs, repo.OwnerID),
 		ExcludeOwnersOfSubjectID: repo.SubjectID,
-		ListOptions:              db.ListOptions{PageSize: setting.UI.MembersPagingNum},
+		// the invitation refuses users in a block with the owner or the inviting delegate
+		ExcludeBlockedWithUserIDs: []int64{repo.OwnerID, ctx.Doer.ID},
+		ListOptions:               db.ListOptions{PageSize: setting.UI.MembersPagingNum},
 	})
 	if err != nil {
 		ctx.ServerError("SearchUsers", err)
