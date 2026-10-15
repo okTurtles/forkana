@@ -299,18 +299,25 @@ func RemoveArticleCollaborators(ctx context.Context, doer *user_model.User, repo
 	}
 
 	return db.WithTx(ctx, func(ctx context.Context) error {
-		for _, userID := range userIDs {
-			c, err := repo_model.GetArticleCollaborator(ctx, repo.ID, userID)
-			if err != nil {
-				return err
-			}
-			if c == nil {
-				continue
-			}
+		collaborators, err := repo_model.GetArticleCollaboratorsByUserIDs(ctx, repo.ID, userIDs)
+		if err != nil {
+			return err
+		}
+		acceptedIDs := make([]int64, 0, len(collaborators))
+		for _, c := range collaborators {
 			if !p.CanRemove(c) {
-				return util.NewPermissionDeniedErrorf("cannot remove article collaborator %d", userID)
+				return util.NewPermissionDeniedErrorf("cannot remove article collaborator %d", c.UserID)
 			}
-			if err := removeArticleCollaborator(ctx, repo, c); err != nil {
+			if c.IsAccepted() {
+				acceptedIDs = append(acceptedIDs, c.UserID)
+			}
+		}
+		users, err := user_model.GetUsersMapByIDs(ctx, acceptedIDs)
+		if err != nil {
+			return err
+		}
+		for _, c := range collaborators {
+			if err := removeArticleCollaborator(ctx, repo, c, users[c.UserID]); err != nil {
 				return err
 			}
 		}
@@ -367,7 +374,9 @@ func RemoveArticleCollaboratorsOfOwner(ctx context.Context, ownerID, userID int6
 	return nil
 }
 
-func removeArticleCollaborator(ctx context.Context, repo *repo_model.Repository, c *repo_model.ArticleCollaborator) error {
+// removeArticleCollaborator removes the collaborator row c and, for an accepted collaborator,
+// their write access; u is their user, nil when the account is gone.
+func removeArticleCollaborator(ctx context.Context, repo *repo_model.Repository, c *repo_model.ArticleCollaborator, u *user_model.User) error {
 	// an invitation accepted concurrently fails the delete: removing it as pending would
 	// leave the write access just granted in place
 	if err := repo_model.DeleteArticleCollaboratorRow(ctx, c); err != nil {
@@ -376,13 +385,9 @@ func removeArticleCollaborator(ctx context.Context, repo *repo_model.Repository,
 	if c.IsPending() {
 		return activities_model.MarkArticleCollaboratorInviteNotificationsRead(ctx, repo.ID, c.UserID)
 	}
-
-	u, err := user_model.GetUserByID(ctx, c.UserID)
-	if err != nil {
-		if user_model.IsErrUserNotExist(err) {
-			return nil
-		}
-		return err
+	if u == nil {
+		return nil
 	}
+	// per user: besides the access, their watches and assignments are reconsidered
 	return DeleteCollaboration(ctx, repo, u)
 }
