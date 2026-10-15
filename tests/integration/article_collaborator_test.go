@@ -133,6 +133,10 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		assert.Equal(t, repo_model.ArticleCollaboratorRoleMaintainerDelegate, c.Role)
 
 		changeRole(t, repo_model.ArticleCollaboratorRoleMaintainer)
+
+		values := map[string]string{"_csrf": GetUserCSRFToken(t, ownerSession), "uid": strconv.FormatInt(maintainer.ID, 10), "role": "99"}
+		resp := ownerSession.MakeRequest(t, NewRequestWithValues(t, "POST", collaboratorsURL+"/role", values), http.StatusBadRequest)
+		assert.Contains(t, resp.Body.String(), "That role is not valid.")
 	})
 
 	t.Run("OutsiderCannotManage", func(t *testing.T) {

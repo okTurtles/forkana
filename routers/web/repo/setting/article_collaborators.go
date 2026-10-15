@@ -180,7 +180,9 @@ func ArticleCollaboratorChangeRole(ctx *context.Context) {
 		})
 	case errors.Is(err, util.ErrPermissionDenied):
 		ctx.JSONError(ctx.Tr("repo.settings.article_collaborators_no_permission"))
-	case errors.Is(err, util.ErrNotExist), errors.Is(err, util.ErrInvalidArgument):
+	case errors.Is(err, util.ErrInvalidArgument):
+		ctx.JSONError(ctx.Tr("repo.settings.article_collaborators_invalid_role"))
+	case errors.Is(err, util.ErrNotExist):
 		ctx.JSONError(ctx.Tr("repo.settings.article_collaborators_user_not_found"))
 	default:
 		ctx.ServerError("ChangeArticleCollaboratorRole", err)
