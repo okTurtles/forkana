@@ -317,6 +317,26 @@ func WithdrawPendingArticleCollaboratorInvites(ctx context.Context, repo *repo_m
 	})
 }
 
+// RemoveArticleCollaboratorsOfOwner removes the user from the collaborators of every article
+// owned by ownerID, withdrawing pending invitations and revoking accepted ones, called when
+// either of them blocks the other.
+func RemoveArticleCollaboratorsOfOwner(ctx context.Context, ownerID, userID int64) error {
+	collaborators, err := repo_model.GetArticleCollaboratorsOfOwner(ctx, ownerID, userID)
+	if err != nil {
+		return err
+	}
+	for _, c := range collaborators {
+		// the Gitea collaboration is removed by the block itself
+		if err := repo_model.DeleteArticleCollaboratorRow(ctx, c); err != nil {
+			return err
+		}
+		if err := activities_model.MarkArticleCollaboratorInviteNotificationsRead(ctx, c.RepoID, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func removeArticleCollaborator(ctx context.Context, repo *repo_model.Repository, c *repo_model.ArticleCollaborator) error {
 	// an invitation accepted concurrently fails the delete: removing it as pending would
 	// leave the write access just granted in place

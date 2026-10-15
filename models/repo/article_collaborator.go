@@ -174,6 +174,17 @@ func sortArticleCollaborators(collaborators []*ArticleCollaborator) {
 	})
 }
 
+// GetArticleCollaboratorsOfOwner returns the collaborator rows, pending or accepted, of a
+// user on every article owned by ownerID.
+func GetArticleCollaboratorsOfOwner(ctx context.Context, ownerID, userID int64) ([]*ArticleCollaborator, error) {
+	var collaborators []*ArticleCollaborator
+	err := db.GetEngine(ctx).
+		Join("INNER", "repository", "repository.id = article_collaborator.repo_id").
+		Where(builder.Eq{"repository.owner_id": ownerID, "article_collaborator.user_id": userID}).
+		Find(&collaborators)
+	return collaborators, err
+}
+
 // GetArticleCollaboratorUserIDs returns the IDs of every user listed on the article,
 // pending or accepted.
 func GetArticleCollaboratorUserIDs(ctx context.Context, repoID int64) ([]int64, error) {

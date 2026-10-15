@@ -115,6 +115,14 @@ func BlockUser(ctx context.Context, doer, blocker, blockee *user_model.User, not
 		if err := removeCollaborations(ctx, blockee, blocker); err != nil {
 			return err
 		}
+		// and from article collaborations, whose rows would otherwise keep the delegate and
+		// maintainer rights, and pending invitations, that the collaborations above do not cover
+		if err := repo_service.RemoveArticleCollaboratorsOfOwner(ctx, blocker.ID, blockee.ID); err != nil {
+			return err
+		}
+		if err := repo_service.RemoveArticleCollaboratorsOfOwner(ctx, blockee.ID, blocker.ID); err != nil {
+			return err
+		}
 
 		// cancel each other repository transfers
 		if err := cancelRepositoryTransfers(ctx, doer, blocker, blockee); err != nil {
