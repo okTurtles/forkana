@@ -78,7 +78,7 @@
                                         data-url="{{$.RepoOperationsLink}}/article_collaborators/role">
                                         <div class="text">{{ctx.Locale.Tr .Role.LocaleKey}}</div>
                                         {{svg "octicon-triangle-down" 14 "dropdown icon"}}
-                                        {{template "shared/repo/settings_collaborators_role_menu" (dict "IsOwner" true)}}
+                                        {{template "shared/repo/settings_collaborators_role_menu" (dict "IsOwner" $perm.IsOwner)}}
                                     </div>
                                 {{else}}
                                     <span data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_collaborators_role_readonly"}}">{{ctx.Locale.Tr .Role.LocaleKey}}</span>
