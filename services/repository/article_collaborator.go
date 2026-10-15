@@ -185,6 +185,10 @@ func AcceptArticleCollaboratorInvite(ctx context.Context, doer *user_model.User,
 	if repo.IsArchived {
 		return ErrArticleArchived
 	}
+	// tombstoning withdraws the invitations, this only guards a caller holding a stale row
+	if repo.IsTombstone() {
+		return ErrArticleCollaboratorNoInvite
+	}
 
 	return db.WithTx(ctx, func(ctx context.Context) error {
 		c, err := getPendingArticleCollaboratorInvite(ctx, repo.ID, doer.ID)
