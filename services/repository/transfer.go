@@ -212,6 +212,10 @@ func transferOwnership(ctx context.Context, doer *user_model.User, newOwnerName 
 	if err := repo_model.DeleteArticleCollaborator(ctx, repo.ID, newOwner.ID); err != nil {
 		return fmt.Errorf("remove article collaborator '%d': %w", newOwner.ID, err)
 	}
+	// a pending invitation goes with the row, its notification must stop offering it
+	if err := activities_model.MarkArticleCollaboratorInviteNotificationsRead(ctx, repo.ID, newOwner.ID); err != nil {
+		return fmt.Errorf("mark article collaborator invitation read '%d': %w", newOwner.ID, err)
+	}
 
 	if oldOwner.IsOrganization() {
 		// Remove old team-repository relations.
