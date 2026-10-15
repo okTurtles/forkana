@@ -121,16 +121,6 @@ func GetArticleCollaborator(ctx context.Context, repoID, userID int64) (*Article
 	return c, nil
 }
 
-// GetAcceptedArticleCollaborator returns the collaborator row of a user who accepted
-// an invitation to the article, or nil when there is none.
-func GetAcceptedArticleCollaborator(ctx context.Context, repoID, userID int64) (*ArticleCollaborator, error) {
-	c, err := GetArticleCollaborator(ctx, repoID, userID)
-	if err != nil || c == nil || !c.IsAccepted() {
-		return nil, err
-	}
-	return c, nil
-}
-
 // IsAcceptedArticleMaintainer reports whether the user is an active collaborator of
 // the article, in either role.
 func IsAcceptedArticleMaintainer(ctx context.Context, repoID, userID int64) (bool, error) {
