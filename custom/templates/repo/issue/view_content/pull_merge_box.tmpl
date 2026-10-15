@@ -1,4 +1,4 @@
-{{/* Forkana: only the article owner may merge a change request, so the "viewer can merge"
+{{/* Forkana: only the article owner and its accepted maintainers may merge a change request, so the "viewer can merge"
      predicate is hoisted here instead of being spelled out at every use site. */}}
 {{$viewerCanMerge := and .AllowMerge .CanMergeChangeRequest}}
 {{$mergeColor := "red"}}
@@ -213,7 +213,7 @@
 								{{svg "octicon-check"}}
 							</div>
 							{{/* Forkana: the upstream "only those with write access can merge" hint is dropped -
-							     merging is owner-only here, and the messages below already say so accurately. */}}
+							     merging is limited to the owner and its maintainers here, and the messages below already say so accurately. */}}
 							<div class="tw-font-semibold">
 								{{ctx.Locale.Tr "repo.pulls.can_auto_merge_desc"}}
 							</div>
@@ -231,7 +231,7 @@
 					</div>
 				{{end}}
 
-				{{if $viewerCanMerge}} {{/* user is allowed to merge and is the repository owner */}}
+				{{if $viewerCanMerge}} {{/* user is allowed to merge and is the article owner or a maintainer */}}
 					{{$prUnit := .Repository.MustGetUnit ctx ctx.Consts.RepoUnitTypePullRequests}}
 					{{if $prUnit.PullRequestsConfig.AllowSquash}} {{/* Forkana: only squash merge is supported */}}
 						{{$hasPendingPullRequestMergeTip := ""}}
@@ -288,7 +288,7 @@
 						</div>
 					{{end}} {{/* end if the repo was set to use any merge style */}}
 				{{else}}
-					{{/* user is not allowed to merge (either no permission or not the repository owner) */}}
+					{{/* user is not allowed to merge (either no permission or neither the article owner nor a maintainer) */}}
 					<div class="divider"></div>
 					<div class="item">
 						{{svg "octicon-info"}}
@@ -298,7 +298,7 @@
 							{{ctx.Locale.Tr "repo.pulls.no_merge_access"}}
 						{{end}}
 					</div>
-				{{end}} {{/* end if user is allowed to merge and is repository owner */}}
+				{{end}} {{/* end if user is allowed to merge and is the article owner or a maintainer */}}
 			{{else}}
 				{{/* Merge conflict without specific file. Suggest manual merge, only if all reviews and status checks OK. */}}
 				{{if .IsBlockedByApprovals}}
@@ -360,7 +360,7 @@
 			* - Merge the pull request branch locally and push the merged commit to Gitea
 			* - Make some conflicts between the base branch and the pull request branch
 			* Then the Manually Merged form will be shown in the merge form
-			* Note: Only repository owners can perform manual merge operations
+			* Note: Only the article owner and its maintainers can perform manual merge operations
 			*/}}
 			{{if and $.StillCanManualMerge (not $showGeneralMergeForm) $.CanMergeChangeRequest}}
 				<div class="divider"></div>

@@ -73,8 +73,8 @@ func TestPullViewChangeRequestTitleDescPlural(t *testing.T) {
 }
 
 // TestPullViewMergePermissionHint checks that the upstream "only those with write access ... can
-// merge change requests" hint is gone: merging is owner-only in Forkana, so that copy contradicted
-// the owner-scoped message shown right below it to every non-owner viewer.
+// merge change requests" hint is gone: merging is limited to the article owner and its maintainers
+// in Forkana, so that copy contradicted the message shown right below it to every other viewer.
 func TestPullViewMergePermissionHint(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
