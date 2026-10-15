@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/mail"
 	"os"
 	"strings"
 
@@ -123,18 +124,31 @@ func (s *SMTPSender) Send(from string, to []string, msg io.WriterTo) error {
 		}
 	}
 
+	// Since go-mail 0.7.1 (CVE-2025-59937) the smtp package sends addresses verbatim,
+	// so they must be validated and wrapped in angle brackets here to keep user-controlled
+	// input from injecting ESMTP parameters.
+	fromAddr := from
 	if opts.OverrideEnvelopeFrom {
-		if err = client.Mail(opts.EnvelopeFrom); err != nil {
-			return fmt.Errorf("failed to issue MAIL command: %w", err)
+		fromAddr = opts.EnvelopeFrom
+	}
+	smtpFrom := "<>" // an empty override is the null reverse-path (ENVELOPE_FROM = <>)
+	if fromAddr != "" {
+		addr, err := sanitizeEmailAddress(fromAddr)
+		if err != nil {
+			return fmt.Errorf("invalid envelope from address: %w", err)
 		}
-	} else {
-		if err = client.Mail(from); err != nil {
-			return fmt.Errorf("failed to issue MAIL command: %w", err)
-		}
+		smtpFrom = "<" + addr + ">"
+	}
+	if err = client.Mail(smtpFrom); err != nil {
+		return fmt.Errorf("failed to issue MAIL command: %w", err)
 	}
 
 	for _, rec := range to {
-		if err = client.Rcpt(rec); err != nil {
+		addr, err := sanitizeEmailAddress(rec)
+		if err != nil {
+			return fmt.Errorf("invalid recipient address %q: %w", rec, err)
+		}
+		if err = client.Rcpt("<" + addr + ">"); err != nil {
 			return fmt.Errorf("failed to issue RCPT command: %w", err)
 		}
 	}
@@ -154,4 +168,14 @@ func (s *SMTPSender) Send(from string, to []string, msg io.WriterTo) error {
 	}
 
 	return nil
+}
+
+// sanitizeEmailAddress parses raw as a single RFC 5322 address and returns the bare addr-spec,
+// rejecting trailing data such as ESMTP parameters.
+func sanitizeEmailAddress(raw string) (string, error) {
+	addr, err := mail.ParseAddress(strings.TrimSpace(raw))
+	if err != nil {
+		return "", err
+	}
+	return addr.Address, nil
 }
