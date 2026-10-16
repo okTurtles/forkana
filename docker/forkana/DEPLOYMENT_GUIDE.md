@@ -1216,6 +1216,14 @@ docker restart <forkana-container>
   is needed.
 - To turn mail off, delete the file and restart.
 
+**With `deploy.sh`:** instead of writing the file by hand, save it as
+`~/forkana/compose/msmtprc`, next to `.env`, and run `chmod 600` on it. Every deploy then
+copies it to `/etc/gitea/msmtprc` before starting the new image. The copy is made by a
+throwaway container of that image, running as UID 1000 with no network. The deploy
+fails, without changing anything, if the source file can be read by group or others.
+If the source file is missing, the deploy leaves `/etc/gitea/msmtprc` as it is. So to
+turn mail off, delete both files: the source, and `~/forkana/config/msmtprc`.
+
 Rolling back to an image built before msmtp support does **not** turn mail off. That
 image never rewrites the `[mailer]` keys, so `app.ini` keeps `ENABLED = true` and every
 send fails. Turn mail off before rolling back that far.

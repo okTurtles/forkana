@@ -36,6 +36,40 @@ read_env_var() {
 }
 
 # ---------------------------------------------------------------------------
+# install_msmtp_config - Copy ${MSMTP_SOURCE} into the config volume as
+# /etc/gitea/msmtprc, where the image's docker-setup.sh turns outgoing mail on
+# at boot (see "Outgoing Mail (msmtp)" in DEPLOYMENT_GUIDE.md).
+#
+# The file is written by a throwaway container of the image being deployed,
+# running as the image's UID 1000 with no network, so it ends up owned by the
+# container user with mode 0600 (msmtp refuses anything looser) without any
+# host-side chown.  It is written to a temporary name and renamed so a running
+# container never reads a partial file.
+#
+# Without ${MSMTP_SOURCE} the config volume is left untouched, so a file an
+# operator placed with `docker exec` keeps working.
+#
+# Expects deploy_init to have been called and PINNED_REF to be set.
+# ---------------------------------------------------------------------------
+install_msmtp_config() {
+  if [[ ! -f "${MSMTP_SOURCE}" ]]; then
+    log "No ${MSMTP_SOURCE} - leaving the mail relay config in ${DEPLOY_DIR}/config as is."
+    return 0
+  fi
+
+  log "Installing ${MSMTP_SOURCE} as /etc/gitea/msmtprc ..."
+  docker run --rm -i \
+    --user 1000:1000 \
+    --network none \
+    --entrypoint /bin/sh \
+    -v "${DEPLOY_DIR}/config:/etc/gitea" \
+    "${PINNED_REF}" \
+    -c 'umask 077 && cat > /etc/gitea/msmtprc.new && mv -f /etc/gitea/msmtprc.new /etc/gitea/msmtprc' \
+    < "${MSMTP_SOURCE}" \
+    || die "Failed to install ${MSMTP_SOURCE} into ${DEPLOY_DIR}/config."
+}
+
+# ---------------------------------------------------------------------------
 # deploy_init - Set up configuration variables and resolve commit SHA.
 #
 # Arguments:
@@ -70,6 +104,8 @@ deploy_init() {
   COMPOSE_BASE="${COMPOSE_DIR}/dev.yml"
   COMPOSE_OVERRIDE="${COMPOSE_DIR}/compose.override.yml"
   ENV_FILE="${COMPOSE_DIR}/.env"
+  # Optional msmtp relay config; installed into the config volume by step 7b.
+  MSMTP_SOURCE="${COMPOSE_DIR}/msmtprc"
 
   # Resolve HOST_PORT for the health-check probe.  Prefer the exported shell
   # variable; otherwise read FORKANA_HOST_PORT from ${ENV_FILE} so the probe
@@ -189,6 +225,16 @@ deploy_run() {
     die "Missing or empty required variables in ${ENV_FILE}: ${missing[*]}. Please set valid values before deploying."
   fi
 
+  # The relay config holds the SMTP password: refuse it while others can read it,
+  # before anything has been changed on the host.
+  if [[ -f "${MSMTP_SOURCE}" ]]; then
+    local msmtp_mode
+    msmtp_mode="$(stat -c '%a' "${MSMTP_SOURCE}" 2>/dev/null || stat -f '%Lp' "${MSMTP_SOURCE}")"
+    if (( (8#${msmtp_mode}) & 8#077 )); then
+      die "${MSMTP_SOURCE} has mode ${msmtp_mode}; run 'chmod 600 ${MSMTP_SOURCE}' and redeploy."
+    fi
+  fi
+
   # --- Step 2: Ensure the local registry is running ---
   # The registry on 127.0.0.1:${REGISTRY_PORT} may be shared infrastructure
   # (not owned by Forkana).  Reuse it if already reachable; only start the
@@ -291,6 +337,9 @@ deploy_run() {
   printf 'services:\n  forkana:\n    image: %s\n' "${PINNED_REF}" \
     > "${COMPOSE_OVERRIDE}"
   log "Wrote ${COMPOSE_OVERRIDE}"
+
+  # --- Step 7b: Install the msmtp relay config (optional) ---
+  install_msmtp_config
 
   # --- Step 8: Deploy with docker compose ---
   # Select services explicitly so we do not try to (re)bind port
