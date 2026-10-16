@@ -1163,17 +1163,62 @@ Examples:
 # Set log level to debug
 GITEA__log__LEVEL=debug
 
-# Enable email notifications
-GITEA__mailer__ENABLED=true
-GITEA__mailer__SMTP_ADDR=smtp.example.com
-GITEA__mailer__SMTP_PORT=587
-
 # Configure OAuth2
 GITEA__oauth2__JWT_SECRET=your-jwt-secret
 ```
 
 A section name containing `.` is written with `_0X2E_`, for example
 `GITEA__cron_0X2E_gc_article_attachments__ENABLED` for `[cron.gc_article_attachments] ENABLED`.
+
+### Outgoing Mail (msmtp)
+
+The image ships [msmtp](https://marlam.de/msmtp/) and sends mail through it with the
+`sendmail` protocol. Mail is **off** unless the config volume holds a relay config at
+`/etc/gitea/msmtprc`. On every boot, `docker-setup.sh` checks for it:
+
+- **File present and owned by the container user:** the file is set to mode `0600`, and
+  `[mailer]` gets `ENABLED = true`, `PROTOCOL = sendmail`,
+  `SENDMAIL_PATH = /usr/bin/msmtp` and `SENDMAIL_ARGS = --file=/etc/gitea/msmtprc`. If
+  `FROM` isn't set, it becomes `<APP_NAME> <address>`, using the file's first `from` line.
+- **File present but owned by someone else:** a warning is printed and mail stays off.
+- **File missing:** `ENABLED = false`.
+
+Any `GITEA__mailer__*` variable you set takes precedence over these defaults.
+
+Write the file from **inside** the container, so it belongs to the container user and
+other users can't read it. `docker cp` would create it as root, and msmtp would refuse it.
+
+```bash
+docker exec -i <forkana-container> sh -c 'umask 077 && cat > /etc/gitea/msmtprc' <<'EOF'
+defaults
+tls              on
+tls_starttls     off
+tls_trust_file   /etc/ssl/certs/ca-certificates.crt
+auth             on
+timeout          30
+
+account          relay
+host             smtp.example.com
+port             465
+from             info@forkana.org
+user             info@forkana.org
+password         <relay password>
+
+account default : relay
+EOF
+docker restart <forkana-container>
+```
+
+- `from` must be an address the relay account is allowed to send as.
+- Use **Send Testing Email** in Site Administration → Configuration to check delivery.
+  When msmtp fails, its error is logged with `Failed to send emails`.
+- To change the password, rewrite the file. msmtp reads it on every send, so no restart
+  is needed.
+- To turn mail off, delete the file and restart.
+
+Rolling back to an image built before msmtp support does **not** turn mail off. That
+image never rewrites the `[mailer]` keys, so `app.ini` keeps `ENABLED = true` and every
+send fails. Turn mail off before rolling back that far.
 
 ### Article Attachments
 
