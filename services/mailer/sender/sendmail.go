@@ -4,6 +4,7 @@
 package sender
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os/exec"
@@ -14,6 +15,27 @@ import (
 	"code.gitea.io/gitea/modules/process"
 	"code.gitea.io/gitea/modules/setting"
 )
+
+// sendmailStderrLimit caps how much of the sendmail program's stderr is kept for the error message
+const sendmailStderrLimit = 4096
+
+// limitedBuffer keeps the first max bytes written to it and silently drops the rest,
+// so a misbehaving sendmail can neither grow memory without bound nor be blocked on stderr
+type limitedBuffer struct {
+	buf bytes.Buffer
+	max int
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if remaining := b.max - b.buf.Len(); remaining > 0 {
+		b.buf.Write(p[:min(len(p), remaining)])
+	}
+	return len(p), nil
+}
+
+func (b *limitedBuffer) String() string {
+	return b.buf.String()
+}
 
 // SendmailSender Sender sendmail mail sender
 type SendmailSender struct{}
@@ -46,6 +68,9 @@ func (s *SendmailSender) Send(from string, to []string, msg io.WriterTo) error {
 	if err != nil {
 		return err
 	}
+	// Without this, a failing sendmail (e.g. msmtp) is only reported as its exit status
+	stderr := &limitedBuffer{max: sendmailStderrLimit}
+	cmd.Stderr = stderr
 	process.SetSysProcAttribute(cmd)
 
 	if err = cmd.Start(); err != nil {
@@ -71,6 +96,11 @@ func (s *SendmailSender) Send(from string, to []string, msg io.WriterTo) error {
 		return err
 	} else if closeError != nil {
 		return closeError
+	}
+	if waitError != nil {
+		if output := strings.TrimSpace(stderr.String()); output != "" {
+			return fmt.Errorf("%w: %s", waitError, output)
+		}
 	}
 	return waitError
 }
