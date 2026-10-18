@@ -230,6 +230,8 @@ deploy_run() {
   if [[ -f "${MSMTP_SOURCE}" ]]; then
     local msmtp_mode
     msmtp_mode="$(stat -c '%a' "${MSMTP_SOURCE}" 2>/dev/null || stat -f '%Lp' "${MSMTP_SOURCE}")"
+    # A non-octal mode would make the check below a silent arithmetic error that passes.
+    [[ "${msmtp_mode}" =~ ^[0-7]+$ ]] || die "Cannot determine the permissions of ${MSMTP_SOURCE}."
     if (( (8#${msmtp_mode}) & 8#077 )); then
       die "${MSMTP_SOURCE} has mode ${msmtp_mode}; run 'chmod 600 ${MSMTP_SOURCE}' and redeploy."
     fi
