@@ -92,15 +92,19 @@ func (s *SendmailSender) Send(from string, to []string, msg io.WriterTo) error {
 	// Also we should wait on our sendmail command even if something fails
 	closeError = pipe.Close()
 	waitError = cmd.Wait()
-	if err != nil {
-		return err
-	} else if closeError != nil {
-		return closeError
-	}
-	if waitError != nil {
-		if output := strings.TrimSpace(stderr.String()); output != "" {
-			return fmt.Errorf("%w: %s", waitError, output)
+	// Whichever error is returned gets sendmail's stderr: when the relay refuses the
+	// envelope, sendmail exits before reading the body, so a large message fails the
+	// write with a broken pipe while the actual reason is only in stderr.
+	withStderr := func(e error) error {
+		if output := strings.TrimSpace(stderr.String()); e != nil && output != "" {
+			return fmt.Errorf("%w: %s", e, output)
 		}
+		return e
 	}
-	return waitError
+	if err != nil {
+		return withStderr(err)
+	} else if closeError != nil {
+		return withStderr(closeError)
+	}
+	return withStderr(waitError)
 }

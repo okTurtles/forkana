@@ -66,6 +66,21 @@ func TestSendmailSender(t *testing.T) {
 		assert.Contains(t, err.Error(), "msmtp: cannot connect to relay")
 	})
 
+	t.Run("FailureBeforeReadingBodyIncludesStderr", func(t *testing.T) {
+		// Like msmtp when the relay refuses RCPT TO: exit without reading stdin, so a
+		// message larger than the pipe buffer fails the write itself.
+		script := writeSendmailScript(t, "echo 'msmtp: recipient address to@example.com not accepted by the server' >&2; exit 69")
+		defer test.MockVariableValue(&setting.MailService, &setting.Mailer{
+			SendmailPath:    script,
+			SendmailTimeout: time.Minute,
+		})()
+
+		body := strings.Repeat("x", 1<<20)
+		err := (&SendmailSender{}).Send("from@example.com", []string{"to@example.com"}, strings.NewReader(body))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "msmtp: recipient address to@example.com not accepted by the server")
+	})
+
 	t.Run("FailureWithoutStderr", func(t *testing.T) {
 		script := writeSendmailScript(t, "cat > /dev/null; exit 75")
 		defer test.MockVariableValue(&setting.MailService, &setting.Mailer{
