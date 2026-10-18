@@ -56,7 +56,8 @@ elif [ -f "${MSMTP_CONFIG}" ]; then
     export GITEA__mailer__SENDMAIL_ARGS=${GITEA__mailer__SENDMAIL_ARGS:-"--file=${MSMTP_CONFIG}"}
     if [ -z "${GITEA__mailer__FROM}" ]; then
         # Default to the relay account's sender so the envelope matches what the relay allows.
-        MSMTP_FROM=$(awk '$1 == "from" { print $2; exit }' "${MSMTP_CONFIG}")
+        # msmtp keywords are case-sensitive, but msmtp strips double quotes around values.
+        MSMTP_FROM=$(awk '$1 == "from" { gsub(/"/, "", $2); print $2; exit }' "${MSMTP_CONFIG}")
         if [ -n "${MSMTP_FROM}" ]; then
             export GITEA__mailer__FROM="${APP_NAME:-Forkana} <${MSMTP_FROM}>"
         fi
