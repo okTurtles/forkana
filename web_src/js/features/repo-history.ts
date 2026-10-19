@@ -11,7 +11,8 @@ import {
   type RepoSelection,
 } from '../modules/repo-selection.ts';
 import {parseSubjectLocation, pickInitialSelection, selectionFromHistoryState, withCarriedQuery, type HistoryState, type ViewKey} from './repo-history-state.ts';
-import {COMPARE_MODE_TOGGLE_EVENT, requestCompareMode, takeCompareRequestFromUrl} from '../modules/compare-mode-request.ts';
+import {COMPARE_MODE_TOGGLE_EVENT, requestCompareMode, takeCompareModeRequest, takeCompareRequestFromUrl} from '../modules/compare-mode-request.ts';
+import {initHistoryTable, type HistoryTable} from './repo-history-table.ts';
 
 function buildSubjectUrl(base: string, view?: ViewKey): string {
   if (!view) return base;
@@ -102,8 +103,6 @@ export function initRepoHistory() {
   const bubbleSection = root.querySelector<HTMLElement>('[data-view="bubble"]');
   const tableSection = root.querySelector<HTMLElement>('[data-view="table"]');
   const articleSection = root.querySelector<HTMLElement>('[data-view="article"]');
-
-  const table = root.querySelector<HTMLTableElement>('#articles-table');
 
   const navEl = document.querySelector('#subject-view-tabs');
 
@@ -309,14 +308,12 @@ export function initRepoHistory() {
     updateArchivedNoticeVisibility();
   }
 
+  // The Table view (./repo-history-table.ts): its rows show the selection, and its
+  // checkboxes are compare mode's picks (figma 641:61176 / 641:61039).
+  let historyTable: HistoryTable | null = null;
+
   function updateCheckboxes() {
-    if (!table) return;
-    const selection = selectedRepo.value;
-    for (const checkbox of table.querySelectorAll<HTMLInputElement>('tbody .row-check')) {
-      const row = checkbox.closest<HTMLTableRowElement>('tr.article-row');
-      if (!row) continue;
-      checkbox.checked = matchesSelection(selection, selectionFromElement(row));
-    }
+    historyTable?.syncSelection();
   }
 
   function updateArticleStatus() {
@@ -369,71 +366,29 @@ export function initRepoHistory() {
     const selection = selectionFromElement(el);
     if (!selection) return;
     // the clicked row becomes the selection of the table entry as well, so Back returns
-    // to the table with that row checked
+    // to the table with that row highlighted
     setSelection(selection, 'replace');
     switchView('article', {mode: 'read', pushState: true});
   }
 
   function bindTableInteractions() {
-    if (tableBound || !table) return;
-
-    table.addEventListener('click', (event) => {
-      const target = event.target as HTMLElement;
-      if (!target) return;
-
-      if (target.closest('.row-toggle')) {
-        event.preventDefault();
-        const btn = target.closest<HTMLButtonElement>('.row-toggle');
-        if (!btn) return;
-        const targetId = btn.getAttribute('data-target');
-        if (!targetId) return;
-        const detailRow = document.querySelector<HTMLElement>(`#${targetId}`);
-        if (!detailRow) return;
-        detailRow.classList.toggle('tw-hidden');
-        const down = btn.querySelector<HTMLElement>('.icon-down');
-        const up = btn.querySelector<HTMLElement>('.icon-up');
-        const isHidden = detailRow.classList.contains('tw-hidden');
-        if (down && up) {
-          down.classList.toggle('tw-hidden', !isHidden);
-          up.classList.toggle('tw-hidden', isHidden);
-        }
-        return;
-      }
-
-      const goTo = target.closest('.go-to-article');
-      if (goTo) {
-        event.preventDefault();
-        openArticleFrom(goTo);
-        return;
-      }
-
-      const row = target.closest<HTMLTableRowElement>('tr.article-row');
-      if (!row) return;
-      if (target.closest('input') || target.closest('label')) return;
-      if (target.closest('.ui.checkbox')) return;
-      openArticleFrom(row);
-    });
-
-    table.addEventListener('change', (event) => {
-      const target = event.target as HTMLInputElement;
-      if (!target || target.type !== 'checkbox' || !target.classList.contains('row-check')) return;
-      const row = target.closest<HTMLTableRowElement>('tr.article-row');
-      const selection = row ? selectionFromElement(row) : null;
-      if (!selection) return;
-      if (target.checked) {
-        setSelection(selection, 'replace');
-      } else if (matchesSelection(selectedRepo.value, selection)) {
-        setSelection(null, 'replace');
-      }
-      // one checkbox at most: the others follow the selection
-      updateCheckboxes();
-    });
-
+    if (tableBound || !tableSection) return;
     tableBound = true;
+    historyTable = initHistoryTable({
+      section: tableSection,
+      appSubUrl,
+      subject: initialSubject || '',
+      selectionOf: selectionFromElement,
+      getSelection: () => selectedRepo.value,
+      // opening a row selects its article (figma 641:61208 highlights the open row)
+      select: (selection) => setSelection(selection, 'replace'),
+      openArticle: openArticleFrom,
+    });
+    historyTable?.setActive(activeView.value === 'table');
 
     const $ = (window as unknown as {$?: any}).$;
     if ($ && typeof $.fn?.dropdown === 'function') {
-      $('.ui.dropdown').dropdown();
+      $(tableSection).find('.ui.dropdown').dropdown();
     }
   }
 
@@ -629,7 +584,9 @@ export function initRepoHistory() {
     updateSectionVisibility();
     syncNavActive();
     if (activeView.value === 'bubble') ensureBubbleView();
-    if (activeView.value === 'table') bindTableInteractions();
+    // bound whatever the view, so the table keeps up with the Bubble view's compare state
+    bindTableInteractions();
+    historyTable?.setActive(view === 'table');
   }, {immediate: true});
 
   watch(selectedRepo, () => {
@@ -674,14 +631,25 @@ export function initRepoHistory() {
 
   window.addEventListener(BUBBLE_SELECTED_EVENT, handleBubbleSelection as EventListener);
   window.addEventListener(BUBBLE_OPEN_ARTICLE_EVENT, handleBubbleOpenArticle as EventListener);
-  // Compare mode lives in the bubble view: pressing Compare on another view goes there.
-  // A graph already mounted (hidden) handles the press itself; one that is not yet gets
-  // it as a request when it mounts.
-  window.addEventListener(COMPARE_MODE_TOGGLE_EVENT, () => {
+  // The Table view has a compare mode of its own (#437, figma "Table view / Comparing
+  // articles" 641:61039): pressed there, Compare stays on the table. Listened to in the
+  // capture phase, which runs before the Bubble view's own listener, so a mounted (hidden)
+  // graph does not turn its compare mode on as well.
+  // On the Article view, compare mode is the Bubble view's: the press goes there. A graph
+  // already mounted (hidden) handles the press itself; one that is not yet gets it as a
+  // request when it mounts.
+  window.addEventListener(COMPARE_MODE_TOGGLE_EVENT, (event) => {
+    if (activeView.value === 'table' && historyTable) {
+      event.stopImmediatePropagation();
+      historyTable.toggleCompare();
+      return;
+    }
     if (activeView.value === 'bubble') return;
     if (!bubbleMounted) requestCompareMode();
     switchView('bubble', {pushState: true});
-  });
+  }, {capture: true});
+  // a Compare press that sent the reader to the Table view (?view=table&compare=1)
+  if (activeView.value === 'table' && historyTable && takeCompareModeRequest()) historyTable.toggleCompare();
   if (navEl) navEl.addEventListener('click', handleNavClick as EventListener);
   articleSection?.addEventListener('click', handleArticleSectionClick);
   window.addEventListener('popstate', handlePopState);

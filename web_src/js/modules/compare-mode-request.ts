@@ -1,7 +1,7 @@
-// The header's Compare button can be pressed on the Table or Article view, before the
-// bubble view (which owns compare mode) has ever been mounted. repo-history.ts then
-// switches to the bubble view and leaves the request here; FishboneGraph takes it once
-// it listens for the button.
+// The header's Compare button can be pressed on the Article view, before the bubble view
+// (which owns compare mode there) has ever been mounted. repo-history.ts then switches to
+// the bubble view and leaves the request here; FishboneGraph takes it once it listens for
+// the button. (The Table view has a compare mode of its own: repo-history-table.ts.)
 let pending = false;
 
 /** Sent by the header's Compare button: compare mode is to be turned on or off. */

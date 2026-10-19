@@ -549,6 +549,7 @@ func RenderRepositoryHistory(ctx *context.Context) {
 
 	// The subject's articles, for every page of it (a tombstone's and an empty
 	// article's too, which return early below): neither needs the git repository.
+	ctx.Data["HistoryTableSort"] = historyTableSort(ctx.FormString("sort"))
 	ctx.Data["HistoryForkEntries"] = buildHistoryTableEntries(ctx)
 	// The Bubble view draws this same graph instead of requesting it from the API
 	// again. A page opened on the Article view (an article url, the editor, a version)
@@ -704,8 +705,20 @@ func buildHistoryTableEntries(ctx *context.Context) []*historyTableEntry {
 			Description:      e.Repo.Description,
 		})
 	}
-	sortHistoryTableEntries(entries, ctx.FormString("sort"))
+	sortHistoryTableEntries(entries, historyTableSort(ctx.FormString("sort")))
 	return entries
+}
+
+// historyTableSort is the Table view's sort order, one of its Sort menu's
+// (custom/templates/shared/repo/table.tmpl): "most_contrib" when the url names none
+// or an unknown one. Figma's Table view (641:61176) opens on "Most contributors",
+// checked in the menu, with the rows in that order (#436 item 1).
+func historyTableSort(sortBy string) string {
+	switch sortBy {
+	case "most_contrib", "least_contrib", "latest":
+		return sortBy
+	}
+	return "most_contrib"
 }
 
 // sortHistoryTableEntries orders the Table view's rows by its Sort menu

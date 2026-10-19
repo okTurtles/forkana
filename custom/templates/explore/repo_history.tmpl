@@ -133,9 +133,6 @@
 .fork-level-3 { margin-left: 60px !important; }
 .fork-level-4 { margin-left: 80px !important; }
 .fork-level-5 { margin-left: 100px !important; }
-/* Articles table spacing */
-#articles-table col.checkbox { width: 10px; }
-#articles-table col.actions { width: 80px; }
 /* The bubble view root (.history-bubble-root) is laid out in
    web_src/css/features/bubble-graph.css: it fills the space between the repo
    header and the footer through the page's flex layout instead of the
@@ -155,6 +152,12 @@
         data-msg-compare-now="{{ctx.Locale.Tr "repo.compare_mode_compare_now"}}"
         data-msg-dismiss="{{ctx.Locale.Tr "repo.compare_mode_dismiss"}}"
         data-msg-dismiss-notice="{{ctx.Locale.Tr "repo.compare_mode_dismiss_notice"}}"></div>
+    {{/* The same banner for the Table view's own compare mode (figma "Table view / Comparing
+         articles" 641:61039, its Announcement 641:61046), drawn by
+         web_src/js/features/repo-history-table.ts with the messages above, but its own
+         one-picked message. */}}
+    <div id="table-compare-announcement-root"
+        data-msg-one="{{ctx.Locale.Tr "repo.compare_mode_one_selected_table"}}"></div>
     {{/* Rendered outside the article section so it stays visible on every article
     mode (read, edit, history, settings); repo-history.ts keeps it in sync when the
     article section is swapped or another view is selected. */}}

@@ -13,12 +13,336 @@
   padding-top: 3rem;
 }
 
-/* The table view's grid pulls itself up by its gutter (Fomantic's negative
-   grid margin), which its column padding gives back, so its first row lands
-   exactly on the padding above. Kept explicit so a utility class cannot
-   reintroduce an extra offset. */
-.history-view-section--table > .ui.grid {
-  margin-top: -1rem;
+/* ── Table view ──────────────────────────────────────────────────────────────
+   figma "Table view / Articles" (641:61176) and "Table view / Comparing
+   articles" (641:61039). Figma px; the table is figma's 802px wide ("Frame 742"
+   641:61183), centred, and shrinks with the window. */
+.history-table {
+  max-width: 802px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;          /* between the heading and the table (641:61183) */
+}
+
+/* "Articles" (641:61186), Inter 600 16/24, and the Sort button */
+.history-table-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 28px;
+}
+
+.history-table-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 24px;
+  color: var(--color-text-primary);
+}
+
+/* Sort (Button 641:61187): 28px tall, 4px 8px, radius 6, transparent; its
+   arrow-switch icon, "Sort" in Inter 600 12/20 and the caret 4px apart */
+.ui.dropdown.history-table-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  color: var(--color-button-text);
+}
+
+.ui.dropdown.history-table-sort-button:hover {
+  background: var(--color-hover);
+}
+
+.history-table-sort-icon {
+  display: inline-flex;
+  transform: rotate(90deg);
+  color: var(--color-text-primary);
+}
+
+.history-table-sort-caret {
+  color: var(--color-muted-text);
+}
+
+/* The menu (ActionMenu/Content 641:61313): 180px wide, 8px padding, radius 12
+   and figma's three shadows; each item (ActionList.Item/SingleSelect) 32px
+   tall, 6px 8px, radius 6, a 16px check slot then the label 8px apart, Inter
+   400 12/20. The current order is marked by the check only (its
+   "currentSelection" fill is hidden in figma). */
+.ui.dropdown.history-table-sort-button > .menu.history-table-sort-menu {
+  /* right under the button, its right edge on the button's (641:61312) */
+  left: auto;
+  right: 0;
+  margin-top: 0;
+  min-width: 180px;
+  padding: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-body);
+  box-shadow: 0 6px 18px 0 color-mix(in srgb, var(--color-button-text) 12%, transparent),
+    0 6px 12px -3px color-mix(in srgb, var(--color-button-text) 4%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
+}
+
+.ui.dropdown.history-table-sort-button > .menu.history-table-sort-menu > .item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 6px 8px !important;
+  border: 0;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: var(--font-weight-normal);
+  line-height: 20px;
+  color: var(--color-text-primary);
+  background: transparent;
+}
+
+.ui.dropdown.history-table-sort-button > .menu.history-table-sort-menu > .item:hover {
+  background: color-mix(in srgb, var(--color-grey) 10%, transparent);
+}
+
+.history-table-sort-check {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 16px;
+  color: var(--color-text-primary);
+}
+
+/* The table (641:61188): a 1px #d1d9e0 frame, radius 6 */
+.history-table-box {
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--color-box-body);
+}
+
+.history-table-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+/* Columns: the checkbox 32, Contributors 228, Last edited 240, Owner 250 and
+   the chevron 52 (of 802): the column headers' x in 641:61189 */
+.history-table-col-check { width: 32px; }
+.history-table-col-count { width: 28.4%; }
+.history-table-col-date { width: 29.9%; }
+.history-table-col-owner { width: 31.2%; }
+.history-table-col-toggle { width: 52px; }
+
+/* Column headers (DataTable/ColumnHeaderCell): 28px, #f6f8fa, 4px 8px, Inter
+   600 14/20 in #59636e, a 1px #d1d9e0 line under them */
+.history-table-grid > thead > tr > th {
+  height: 28px;
+  padding: 4px 8px;
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  color: var(--color-muted-text);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The checkbox column holds the 16px box 8px from the edge; Contributors'
+   text then starts at 32px, in the header and in the rows */
+.history-table-grid > thead > tr > th:nth-child(2),
+.history-table-grid > tbody > tr.article-row > td:nth-child(2) {
+  padding-left: 0;
+}
+
+/* Rows (DataTable/TextCell): 32px, 4px 8px, Inter 400 12/20, the count in 600 */
+.history-table-grid > tbody > tr > td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: middle;
+}
+
+.history-table-grid > tbody > tr.article-row > td {
+  height: 32px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-table-grid > tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+
+.history-table-grid > tbody > tr.article-row {
+  cursor: pointer;
+}
+
+.history-table-grid > tbody > tr.article-row:hover {
+  background: var(--color-hover);
+}
+
+.history-table-count {
+  font-weight: var(--font-weight-semibold);
+}
+
+.history-table-grid > tbody > tr.article-row > td.history-table-check {
+  padding: 0 0 0 8px;
+  cursor: default;
+}
+
+/* The selected article's row (Row 20, 641:61208): #e9e7ff at 40% (= --color-hover)
+   and its owner in the brand colour (641:61216) */
+.history-table-grid > tbody > tr.article-row.is-selected {
+  background: var(--color-hover);
+}
+
+.history-table-grid > tbody > tr.article-row.is-selected .history-table-owner {
+  color: var(--color-primary);
+}
+
+/* _CheckboxInput (484:190738): 16px, white, a 1px #818b98 border, radius 3;
+   checked (484:190743, 641:61075), filled with the brand colour */
+.history-table-grid .row-check {
+  appearance: none;
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--color-button-text-disabled, #818b98);
+  border-radius: 3px;
+  background: var(--color-body);
+  cursor: pointer;
+}
+
+.history-table-grid .row-check:checked {
+  border-color: var(--color-primary);
+  background: var(--color-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='white' d='M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z'/%3E%3C/svg%3E") center / 12px no-repeat;
+}
+
+.history-table-grid .row-check:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.history-table-grid .row-check:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* The chevron (641:61304…): 16px in #59636e, #1f2328 on the selected row */
+.history-table-grid > tbody > tr.article-row > td.history-table-toggle-cell {
+  padding: 2px 12px;
+  text-align: center;
+}
+
+.history-table-grid .row-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-muted-text);
+  cursor: pointer;
+}
+
+.history-table-grid .row-toggle:hover {
+  background: color-mix(in srgb, var(--color-grey) 10%, transparent);
+}
+
+.history-table-grid > tbody > tr.article-row.is-selected .row-toggle {
+  color: var(--color-text-primary);
+}
+
+/* The open row (Frame 169, 641:61219): white, never highlighted (#436 item 7),
+   12px 35px around the summary, Inter 400 12/20 in #59636e, and "Go to
+   article" 12px below it on the right */
+.history-table-grid > tbody > tr.article-detail-row > td {
+  padding: 12px 35px;
+  background: var(--color-box-body);
+  cursor: default;
+}
+
+.history-table-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.history-table-summary {
+  align-self: stretch;
+  margin: 0;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-muted-text);
+  white-space: normal;
+}
+
+.history-table-summary.is-loading {
+  min-height: 20px;
+}
+
+/* Footer (DataTable/Footer 641:61303): 46px; the counter "8 of 12" 8px 16px,
+   Inter 400 12/20 in #59636e; Previous / Next (Pagination.PageDirection) 30px,
+   5px 10px, radius 6, 4px between chevron and text: in the brand colour while
+   they lead somewhere, in #59636e otherwise */
+.history-table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 46px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--color-border-light);
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-muted-text);
+}
+
+.history-table-pagination {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.history-table-page-direction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.history-table-page-direction:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-grey) 10%, transparent);
+}
+
+.history-table-page-direction:disabled {
+  color: var(--color-muted-text);
+  cursor: default;
 }
 
 /* The "Please select an article" box: Forkana pulls every message up by 1px
@@ -37,12 +361,21 @@
    into this root, under the navbar. The root itself takes no box, so the
    banner is a direct child of .page-content as far as layout goes: it spans
    the page edge to edge and, on a phone, sticks to the top of the page for as
-   long as the page scrolls. Compare mode belongs to the Bubble view, so the
-   banner is not shown over the Table or Article view. */
+   long as the page scrolls. It is the Bubble view's banner, so it is not shown
+   over the Table view (which has its own, below) or the Article view. */
 #compare-announcement-root {
   display: contents;
 }
 
 .page-content:has(.history-view-section--bubble[hidden]) #compare-announcement-root {
+  display: none;
+}
+
+/* The Table view's own compare mode banner (#437): shown with the Table view only. */
+#table-compare-announcement-root {
+  display: contents;
+}
+
+.page-content:has(.history-view-section--table[hidden]) #table-compare-announcement-root {
   display: none;
 }
