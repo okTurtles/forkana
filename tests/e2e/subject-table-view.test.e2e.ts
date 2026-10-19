@@ -1,12 +1,14 @@
 // #436 / #437: the subject's Table view after figma "Table view / Articles" (641:61176) and
 // "Table view / Comparing articles" (641:61039).
-import {test, expect, type Browser, type WorkerInfo} from '@playwright/test';
-import {create_repo_with_subject, load_logged_in_context, login_user} from './utils_e2e.ts';
+import {test, expect} from '@playwright/test';
+import {create_article_via_api} from './utils_e2e.ts';
 
 // Subjects of their own: one with an article by each of two users (compare mode needs
 // two), and one with more articles than a page of the table holds (8, as in figma).
-const subject = `table-view-${Date.now()}`;
-const pagedSubject = `table-paged-${Date.now()}`;
+// Every project (and retry) runs the setup again, with subjects of its own.
+const run = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+const subject = `table-view-${run}`;
+const pagedSubject = `table-paged-${run}`;
 const pagedUsers = ['user2', 'user4', 'user8', 'user10', 'user11', 'user12', 'user13', 'user14', 'user15'];
 
 // Light-theme values of the tokens figma names (they differ in the dark theme):
@@ -16,17 +18,13 @@ const selectedRowBg = 'rgba(233, 231, 255, 0.4)';
 const brand = 'rgb(78, 64, 250)';
 const white = 'rgb(255, 255, 255)';
 
-async function addArticle(browser: Browser, workerInfo: WorkerInfo, user: string, subjectName: string) {
-  await login_user(browser, workerInfo, user);
-  const context = await load_logged_in_context(browser, workerInfo, user);
-  const page = await context.newPage();
-  await create_repo_with_subject(page, workerInfo, subjectName, undefined, {autoInit: true, description: `An article by ${user}`});
-  await context.close();
+// through the API: the create form's layout is not what this spec is about
+function addArticle(user: string, subjectName: string) {
+  return create_article_via_api(user, subjectName, `${subjectName}-${user}`, `An article by ${user}`);
 }
 
-test.beforeAll(async ({browser}, workerInfo) => {
-  test.setTimeout(120000);
-  for (const user of ['user12', 'user13']) await addArticle(browser, workerInfo, user, subject);
+test.beforeAll(async () => {
+  for (const user of ['user12', 'user13']) await addArticle(user, subject);
 });
 
 test('the Table view matches figma 641:61176', async ({page}) => {
@@ -108,9 +106,8 @@ test('Compare on the Table view stays on the table (#437)', async ({page}) => {
   await expect(page.locator('#compare-mode-button')).toHaveClass(/primary/);
 });
 
-test('the Table view is paged 8 rows at a time (641:61303)', async ({browser, page}, workerInfo) => {
-  test.setTimeout(180000);
-  for (const user of pagedUsers) await addArticle(browser, workerInfo, user, pagedSubject);
+test('the Table view is paged 8 rows at a time (641:61303)', async ({page}) => {
+  for (const user of pagedUsers) await addArticle(user, pagedSubject);
 
   await page.goto(`/subject/${encodeURIComponent(pagedSubject)}?view=table`);
   const visibleRows = page.locator('#articles-table tr.article-row:not([hidden])');

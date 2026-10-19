@@ -1,4 +1,4 @@
-import {expect} from '@playwright/test';
+import {expect, request} from '@playwright/test';
 import {chmod, readFile, writeFile} from 'node:fs/promises';
 import {isAbsolute, join, resolve} from 'node:path';
 import {cwd, env} from 'node:process';
@@ -157,13 +157,29 @@ export async function disableGeneratedHooks(owner: string, repoName: string): Pr
 }
 
 /**
+ * Create an article of `subjectName` owned by the fixture user `user`, through the API
+ * (POST /api/v1/user/repos, basic auth): a repository named `repoName`, with
+ * `description` and the default README, so that it is an article of the subject's fork
+ * graph (an empty repository is not). Independent of the create form's layout, which
+ * differs on a phone.
+ */
+export async function create_article_via_api(user: string, subjectName: string, repoName: string, description = ''): Promise<void> {
+  const api = await request.newContext({
+    baseURL: env.GITEA_URL || 'http://localhost:3000/',
+    extraHTTPHeaders: {Authorization: `Basic ${Buffer.from(`${user}:${LOGIN_PASSWORD}`).toString('base64')}`},
+  });
+  const response = await api.post('api/v1/user/repos', {
+    data: {name: repoName, subject: subjectName, description, auto_init: true, readme: 'Default'},
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  await api.dispose();
+}
+
+/**
  * Create an article by going through the standard repo create form.
  * This is useful when we want to create an empty repo without auto-redirect to editor.
- * With `autoInit`, the repository starts with the default README instead (an empty
- * repository is no article of the subject's fork graph), and `description` becomes its
- * description: the form's fields for both are hidden, so they are set directly.
  */
-export async function create_repo_with_subject(page: Page, _workerInfo: WorkerInfo, subjectName: string, repoName?: string, {autoInit = false, description = ''}: {autoInit?: boolean, description?: string} = {}): Promise<string> {
+export async function create_repo_with_subject(page: Page, _workerInfo: WorkerInfo, subjectName: string, repoName?: string): Promise<string> {
   // Navigate to create repository page with subject pre-filled
   const response = await page.goto(`/repo/create?subject=${encodeURIComponent(subjectName)}`);
   expect(response?.status()).toBe(200);
@@ -171,15 +187,6 @@ export async function create_repo_with_subject(page: Page, _workerInfo: WorkerIn
   // If a custom repo name is provided, fill it in
   if (repoName) {
     await page.locator('input[name=repo_name]').fill(repoName);
-  }
-  if (autoInit || description) {
-    await page.evaluate(({autoInit, description}) => {
-      document.querySelector<HTMLTextAreaElement>('textarea[name=description]').value = description;
-      if (autoInit) {
-        document.querySelector<HTMLInputElement>('input[name=auto_init]').checked = true;
-        document.querySelector<HTMLInputElement>('input[name=readme]').value = 'Default';
-      }
-    }, {autoInit, description});
   }
 
   // Submit the form - button text is "Create subject" in the custom locale
