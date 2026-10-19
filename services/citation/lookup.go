@@ -110,8 +110,9 @@ var client = sync.OnceValue(func() *http.Client {
 				return fmt.Errorf("%w: too many redirects", ErrRedirectRefused)
 			}
 			if err := checkURL(req.URL); err != nil {
-				// not ErrUnsupported: the query itself was fine
-				return fmt.Errorf("%w: %s", ErrRedirectRefused, err.Error())
+				// still ErrUnsupported underneath, but the query itself was fine: callers
+				// check ErrRedirectRefused first
+				return fmt.Errorf("%w: %w", ErrRedirectRefused, err)
 			}
 			return nil
 		},
@@ -133,7 +134,11 @@ func checkURL(u *url.URL) error {
 func NormalizeDOI(s string) string {
 	s = strings.TrimSpace(s)
 	if u, err := url.Parse(s); err == nil && (u.Host == "doi.org" || u.Host == "dx.doi.org") {
-		s, _ = url.PathUnescape(strings.TrimPrefix(u.Path, "/"))
+		unescaped, err := url.PathUnescape(strings.TrimPrefix(u.Path, "/"))
+		if err != nil {
+			return ""
+		}
+		s = unescaped
 	}
 	s = strings.TrimPrefix(strings.TrimPrefix(s, "doi:"), "DOI:")
 	m := doiRe.FindStringSubmatch(strings.TrimSpace(s))
@@ -208,6 +213,9 @@ func parseQuery(raw string) (query, error) {
 	if err := checkURL(u); err != nil {
 		return query{}, err
 	}
+	// the fragment is never sent (and would make the same page another cache entry); user
+	// info pasted by mistake must not be sent to the site nor kept in the cache
+	u.Fragment, u.RawFragment, u.User = "", "", nil
 	return query{pageURL: u.String()}, nil
 }
 
@@ -248,13 +256,13 @@ func (q query) cacheKey() string {
 func get(ctx context.Context, rawURL, accept string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("request %s: %w", rawURL, err)
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", accept)
 	resp, err := client().Do(req)
 	if err != nil {
-		return nil, err
+		return nil, err // a *url.Error, which names the method and URL
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
@@ -285,7 +293,8 @@ type cslItem struct {
 	Type      string          `json:"type"`
 }
 
-// cslString reads a CSL field that is a string, a number or a list of strings.
+// cslString reads a CSL field that is a string, a number or a list of strings. Each failed
+// json.Unmarshal only means "not this shape": the next shape is tried.
 func cslString(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -432,7 +441,7 @@ func invertName(name string) string {
 func lookupPage(ctx context.Context, rawURL string) (*Source, error) {
 	resp, err := get(ctx, rawURL, "text/html,application/xhtml+xml")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("page %s: %w", rawURL, err)
 	}
 	defer resp.Body.Close()
 	contentType := resp.Header.Get("Content-Type")
@@ -442,7 +451,7 @@ func lookupPage(ctx context.Context, rawURL string) (*Source, error) {
 	}
 	body, err := charset.NewReader(io.LimitReader(resp.Body, maxResponseSize), contentType)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("page %s: charset: %w", rawURL, err)
 	}
 	src := ParsePage(body, resp.Request.URL)
 	src.URL = rawURL
@@ -561,6 +570,8 @@ type ldObject struct {
 	Graph         []ldObject      `json:"@graph"`
 }
 
+// ldTypes reads an "@type" that is a string or a list of strings; a failed json.Unmarshal
+// only means "not this shape" (the next one is tried, or there is no type).
 func ldTypes(raw json.RawMessage) []string {
 	var one string
 	if json.Unmarshal(raw, &one) == nil {
@@ -571,6 +582,8 @@ func ldTypes(raw json.RawMessage) []string {
 	return many
 }
 
+// ldNames reads the names of an object, a list of objects or a string; a failed
+// json.Unmarshal only means "not this shape", and the next one is tried.
 func ldNames(raw json.RawMessage) []string {
 	if len(raw) == 0 {
 		return nil

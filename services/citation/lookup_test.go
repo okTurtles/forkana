@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
 )
 
 func TestNormalizeDOI(t *testing.T) {
@@ -243,7 +245,7 @@ func TestLookup_RefusesPrivateHosts(t *testing.T) {
 	redirect := &http.Request{URL: &url.URL{Scheme: "http", Host: "example.com:8080", Path: "/"}}
 	err = client().CheckRedirect(redirect, nil)
 	assert.ErrorIs(t, err, ErrRedirectRefused)
-	assert.NotErrorIs(t, err, ErrUnsupported)
+	assert.ErrorIs(t, err, ErrUnsupported, "the reason is kept (review R1)")
 	assert.NoError(t, client().CheckRedirect(&http.Request{URL: &url.URL{Scheme: "https", Host: "example.com", Path: "/"}}, nil))
 }
 
@@ -255,8 +257,8 @@ func TestParsePage_IgnoresTitlesAfterHead(t *testing.T) {
 // resetLimits gives the test an empty cache and rate limit (they are package-level).
 func resetLimits(t *testing.T) {
 	t.Cleanup(test.MockVariableValue(&cache, expirable.NewLRU[string, *Source](cacheSize, nil, cacheTTL)))
-	t.Cleanup(test.MockVariableValue(&limitWindow, time.Time{}))
-	t.Cleanup(test.MockVariableValue(&limitCounts, map[int64]int{}))
+	t.Cleanup(test.MockVariableValue(&failures, expirable.NewLRU[string, error](cacheSize, nil, failureTTL)))
+	t.Cleanup(test.MockVariableValue(&limiters, expirable.NewLRU[int64, *rate.Limiter](limiterCacheSize, nil, time.Minute)))
 }
 
 func TestLookupFor_CacheAndRateLimit(t *testing.T) {
@@ -294,5 +296,79 @@ func TestLookupFor_UnsupportedNotCounted(t *testing.T) {
 		_, err := LookupFor(t.Context(), 7, "not a source")
 		require.ErrorIs(t, err, ErrUnsupported)
 	}
-	assert.Zero(t, limitCounts[7])
+	_, has := limiters.Get(7)
+	assert.False(t, has)
+}
+
+func TestAllowLookup_PerUserBucket(t *testing.T) {
+	resetLimits(t)
+	// each user has their own bucket: no shared window to reset everyone at once (review M3)
+	now := time.Now()
+	for range lookupsPerMinute {
+		require.True(t, allowLookup(1, now))
+	}
+	assert.False(t, allowLookup(1, now.Add(time.Second)), "the bucket is empty")
+	assert.True(t, allowLookup(1, now.Add(3*time.Second)), "one lookup back every 3 seconds")
+	assert.False(t, allowLookup(1, now.Add(4*time.Second)))
+	// a user arriving later gets a full bucket, whatever the first user did
+	for range lookupsPerMinute {
+		require.True(t, allowLookup(2, now.Add(4*time.Second)))
+	}
+}
+
+func TestLookupFor_SharedFetchCachedFailureAndCopies(t *testing.T) {
+	resetLimits(t)
+	var hits atomic.Int32
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if strings.Contains(r.URL.Path, "missing") {
+			http.NotFound(w, r)
+			return
+		}
+		<-release
+		_, _ = w.Write([]byte(`{"type":"article-journal","title":"T","author":[{"family":"A","given":"B"}]}`))
+	}))
+	defer srv.Close()
+	defer test.MockVariableValue(&doiAPI, srv.URL+"/")()
+	defer test.MockVariableValue(&client, func() *http.Client { return srv.Client() })()
+
+	// two concurrent lookups of one source make one fetch
+	var wg sync.WaitGroup
+	results := make([]*Source, 2)
+	for i := range results {
+		wg.Go(func() {
+			src, err := LookupFor(t.Context(), int64(i+1), "10.1234/shared")
+			assert.NoError(t, err)
+			results[i] = src
+		})
+	}
+	for hits.Load() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(20 * time.Millisecond) // let the second lookup join the first
+	close(release)
+	wg.Wait()
+	assert.EqualValues(t, 1, hits.Load())
+
+	// each caller gets its own copy: changing it does not change the cache
+	results[0].Title = "changed"
+	results[0].Authors[0] = "changed"
+	src, err := LookupFor(t.Context(), 3, "10.1234/shared")
+	require.NoError(t, err)
+	assert.Equal(t, "T", src.Title)
+	assert.Equal(t, []string{"A, B"}, src.Authors)
+
+	// a failed lookup is remembered for a while
+	_, err = LookupFor(t.Context(), 1, "10.1234/missing")
+	require.Error(t, err)
+	_, err = LookupFor(t.Context(), 1, "10.1234/missing")
+	require.Error(t, err)
+	assert.EqualValues(t, 2, hits.Load())
+}
+
+func TestParseQuery_DropsFragmentAndUserInfo(t *testing.T) {
+	q, err := parseQuery("https://user:secret@example.com/page?a=1#section")
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/page?a=1", q.pageURL)
 }

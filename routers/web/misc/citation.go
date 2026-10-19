@@ -22,7 +22,8 @@ func CitationLookup(ctx *context.Context) {
 	src, err := citation.LookupFor(ctx, ctx.Doer.ID, query)
 	if err != nil {
 		switch {
-		case errors.Is(err, citation.ErrUnsupported):
+		// a site redirecting somewhere a lookup may not go is "not found", not a bad query
+		case errors.Is(err, citation.ErrUnsupported) && !errors.Is(err, citation.ErrRedirectRefused):
 			ctx.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		case errors.Is(err, citation.ErrRateLimited):
 			ctx.JSON(http.StatusTooManyRequests, map[string]string{"error": err.Error()})

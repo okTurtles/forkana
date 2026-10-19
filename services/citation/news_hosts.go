@@ -23,6 +23,8 @@ var newsHostsJSON []byte
 var newsHosts = sync.OnceValue(func() map[string]bool {
 	var hosts []string
 	if err := json.Unmarshal(newsHostsJSON, &hosts); err != nil {
+		// the file is embedded in the binary, so this can only fail with a broken build,
+		// which TestIsNewsHost catches
 		panic("citation: invalid news_hosts.json: " + err.Error())
 	}
 	set := make(map[string]bool, len(hosts))
@@ -37,9 +39,10 @@ func IsNewsHost(u *url.URL) bool {
 	if u == nil {
 		return false
 	}
+	hosts := newsHosts()
 	host := strings.ToLower(u.Hostname())
 	for host != "" {
-		if newsHosts()[host] {
+		if hosts[host] {
 			return true
 		}
 		i := strings.IndexByte(host, '.')
