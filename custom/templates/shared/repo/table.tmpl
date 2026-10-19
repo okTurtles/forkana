@@ -5,7 +5,7 @@
      web_src/js/features/repo-history-table.ts. */}}
 {{$subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)}}
 <div class="history-view-section history-view-section--table" data-view="table" {{if not .IsTableView}}hidden{{end}}>
-    <div class="history-table" data-page-size="8">
+    <div class="history-table">
         <div class="history-table-heading">
             <h2 class="history-table-title">Articles</h2>
             <div class="ui floating dropdown history-table-sort-button">
@@ -31,11 +31,11 @@
                 </colgroup>
                 <thead>
                     <tr>
-                        <th><span class="tw-sr-only">Compare</span></th>
+                        <th><span class="tw-sr-only">{{ctx.Locale.Tr "repo.history_table_compare_column"}}</span></th>
                         <th>Contributors</th>
                         <th>Last edited</th>
                         <th>Owner</th>
-                        <th><span class="tw-sr-only">Summary</span></th>
+                        <th><span class="tw-sr-only">{{ctx.Locale.Tr "repo.history_table_summary_column"}}</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -45,17 +45,18 @@
                     {{$repoLink := $repo.LinkCtx ctx}}
                     <tr class="article-row" data-row="{{$idx}}" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repoLink}}" {{if $repo.IsTombstone}}data-tombstone="true"{{end}}>
                         <td class="history-table-check">
-                            <input type="checkbox" class="row-check" aria-label="Compare {{$repo.OwnerName}}/{{$repo.Name}}" {{if $repo.IsTombstone}}disabled{{end}}>
+                            <input type="checkbox" class="row-check" aria-label="{{ctx.Locale.Tr "repo.history_table_compare_article" (printf "%s/%s" $repo.OwnerName $repo.Name)}}" {{if $repo.IsTombstone}}disabled{{end}}>
                         </td>
                         <td class="history-table-count">{{template "shared/repo/contributor_count" (dict "Count" $entry.ContributorCount "Short" true)}}</td>
-                        {{/* figma's date format, "03 Feb 2025" (641:61205) */}}
-                        <td>{{if $entry.Updated}}<time datetime="{{$entry.Updated.Format "2006-01-02"}}">{{$entry.Updated.Format "02 Jan 2006"}}</time>{{else}}-{{end}}</td>
+                        {{/* figma's date format, "03 Feb 2025" (641:61205): drawn on the server, then again in
+                             the reader's time zone (and month names) by repo-history-table.ts */}}
+                        <td>{{if $entry.Updated}}<time data-unix="{{$entry.Updated}}" datetime="{{$entry.Updated.FormatDate}}">{{$entry.Updated.Format "02 Jan 2006"}}</time>{{else}}-{{end}}</td>
                         <td class="history-table-owner">
                             {{$repo.OwnerName}}
                             {{if $repo.IsTombstone}}<span class="ui basic label">{{ctx.Locale.Tr "repo.tombstone.label"}}</span>{{end}}
                         </td>
                         <td class="history-table-toggle-cell">
-                            <button type="button" class="row-toggle" data-target="desc-{{$idx}}" aria-expanded="false" aria-controls="desc-{{$idx}}" aria-label="Show the summary of {{$repo.OwnerName}}/{{$repo.Name}}">
+                            <button type="button" class="row-toggle" data-target="desc-{{$idx}}" aria-expanded="false" aria-controls="desc-{{$idx}}" aria-label="{{ctx.Locale.Tr "repo.history_table_show_summary" (printf "%s/%s" $repo.OwnerName $repo.Name)}}">
                                 <span class="icon-down">{{svg "octicon-chevron-down"}}</span>
                                 <span class="icon-up tw-hidden">{{svg "octicon-chevron-up"}}</span>
                             </button>
@@ -72,7 +73,7 @@
                                     {{if not (or $entry.Description $repo.IsEmpty $repo.IsTombstone)}}data-summary-src="{{AppSubUrl}}/{{PathEscape $repo.OwnerName}}/{{PathEscape $repo.Name}}/raw/branch/{{PathEscapeSegments $repo.DefaultBranch}}/README.md"{{end}}
                                     data-empty="{{ctx.Locale.Tr "repo_no_desc"}}">{{$entry.Description}}</p>
                                 <button type="button" class="forkana-btn forkana-btn-secondary go-to-article" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repoLink}}">
-                                    Go to article
+                                    {{ctx.Locale.Tr "repo.history_table_go_to_article"}}
                                 </button>
                             </div>
                         </td>
@@ -98,19 +99,19 @@
             {{/* DataTable/Footer (641:61303): "8 of 12", then Previous / Next. Figma's page
                  numbers are collapsed out of the design, so there are none here. */}}
             <div class="history-table-footer" data-role="table-footer">
-                <span class="history-table-counter" data-role="table-counter"></span>
-                <nav class="history-table-pagination" aria-label="Articles pages">
+                <span class="history-table-counter" data-role="table-counter" data-msg-counter="{{ctx.Locale.Tr "repo.history_table_counter"}}"></span>
+                <nav class="history-table-pagination" aria-label="{{ctx.Locale.Tr "repo.history_table_pages"}}">
                     <button type="button" class="history-table-page-direction" data-role="table-prev">
-                        {{svg "octicon-chevron-left" 16}}<span>Previous</span>
+                        {{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "repo.issues.previous"}}</span>
                     </button>
                     <button type="button" class="history-table-page-direction" data-role="table-next">
-                        <span>Next</span>{{svg "octicon-chevron-right" 16}}
+                        <span>{{ctx.Locale.Tr "repo.issues.next"}}</span>{{svg "octicon-chevron-right" 16}}
                     </button>
                 </nav>
             </div>
             {{end}}
         </div>
-        <div class="tw-sr-only" role="status" aria-live="polite" aria-atomic="true" data-role="table-status"></div>
+        <div class="tw-sr-only" role="status" aria-live="polite" aria-atomic="true" data-role="table-status" data-msg-page="{{ctx.Locale.Tr "repo.history_table_page_status"}}"></div>
     </div>
 </div>
 {{end}}

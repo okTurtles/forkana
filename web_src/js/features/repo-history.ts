@@ -312,7 +312,7 @@ export function initRepoHistory() {
   // checkboxes are compare mode's picks (figma 641:61176 / 641:61039).
   let historyTable: HistoryTable | null = null;
 
-  function updateCheckboxes() {
+  function syncTableSelection() {
     historyTable?.syncSelection();
   }
 
@@ -384,12 +384,6 @@ export function initRepoHistory() {
       select: (selection) => setSelection(selection, 'replace'),
       openArticle: openArticleFrom,
     });
-    historyTable?.setActive(activeView.value === 'table');
-
-    const $ = (window as unknown as {$?: any}).$;
-    if ($ && typeof $.fn?.dropdown === 'function') {
-      $(tableSection).find('.ui.dropdown').dropdown();
-    }
   }
 
   function bindArticleTabs() {
@@ -475,7 +469,7 @@ export function initRepoHistory() {
 
     if (view === 'table') {
       bindTableInteractions();
-      updateCheckboxes();
+      syncTableSelection();
       if (options.pushState) writeHistory('table', articleMode.value, selectedRepo.value, 'push');
       return;
     }
@@ -590,7 +584,7 @@ export function initRepoHistory() {
   }, {immediate: true});
 
   watch(selectedRepo, () => {
-    updateCheckboxes();
+    syncTableSelection();
     updateArchivedNoticeVisibility();
     syncNavLinks();
   }, {immediate: true});
@@ -648,7 +642,8 @@ export function initRepoHistory() {
     if (!bubbleMounted) requestCompareMode();
     switchView('bubble', {pushState: true});
   }, {capture: true});
-  // a Compare press that sent the reader to the Table view (?view=table&compare=1)
+  // a Compare press carried by the url (?compare=1, see takeCompareRequestFromUrl) on a
+  // page opened on the Table view is the table's
   if (activeView.value === 'table' && historyTable && takeCompareModeRequest()) historyTable.toggleCompare();
   if (navEl) navEl.addEventListener('click', handleNavClick as EventListener);
   articleSection?.addEventListener('click', handleArticleSectionClick);

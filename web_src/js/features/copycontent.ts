@@ -55,8 +55,9 @@ export function initCopyContent() {
 }
 
 export function initCompareModeToggle() {
-  /* The bubble view owns compare mode; the button only asks for it. Its look
-     follows the state the graph reports below, so the two cannot disagree. */
+  /* The view on screen owns compare mode (the Bubble view's graph, or the Table view);
+     the button only asks for it. Its look follows the state the view reports below, so
+     the two cannot disagree. */
   registerGlobalEventFunc('click', 'onCompareModeToggle', (btn: HTMLElement) => {
     /* No subject views on this page (the compare page, a repository page): nothing
        here can turn compare mode on, so go to the subject's Bubble view and press it

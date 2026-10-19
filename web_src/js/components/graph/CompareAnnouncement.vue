@@ -22,18 +22,10 @@ import {computed} from 'vue';
    (641:61937); once the box is closed, `showCompareNow` brings it back so the
    comparison is still one tap away. */
 
-export type CompareAnnouncementState = 'select' | 'one' | 'ready' | 'unavailable';
-export type CompareAnnouncementMessages = {
-  select: string;
-  one: string;
-  ready: string;
-  unavailable: string;
-  compareNow: string;
-  /** The x's label while compare mode is on: it exits compare mode. */
-  dismiss: string;
-  /** The x's label on the `unavailable` notice, which it only hides. */
-  dismissNotice: string;
-};
+// the banner's states and messages live with the rest of compare mode
+import type {CompareAnnouncementMessages, CompareAnnouncementState} from '../../modules/compare-mode-request.ts';
+
+export type {CompareAnnouncementMessages, CompareAnnouncementState};
 
 const props = withDefaults(defineProps<{
   state: CompareAnnouncementState;

@@ -189,7 +189,7 @@
 }
 
 .history-table-grid > tbody > tr.article-row:hover {
-  background: var(--color-hover);
+  background: color-mix(in srgb, var(--color-grey) 6%, transparent);
 }
 
 .history-table-count {
@@ -219,7 +219,7 @@
   width: 16px;
   height: 16px;
   margin: 0;
-  border: 1px solid var(--color-button-text-disabled, #818b98);
+  border: 1px solid var(--color-button-text-disabled);
   border-radius: 3px;
   background: var(--color-body);
   cursor: pointer;
@@ -336,11 +336,11 @@
   cursor: pointer;
 }
 
-.history-table-page-direction:hover:not(:disabled) {
+.history-table-page-direction:hover:not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--color-grey) 10%, transparent);
 }
 
-.history-table-page-direction:disabled {
+.history-table-page-direction[aria-disabled="true"] {
   color: var(--color-muted-text);
   cursor: default;
 }

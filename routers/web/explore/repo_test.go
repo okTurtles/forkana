@@ -40,10 +40,6 @@ func TestSortHistoryTableEntries(t *testing.T) {
 	latest := rows()
 	sortHistoryTableEntries(latest, "latest")
 	assert.Equal(t, []string{"b", "d", "c", "a"}, names(latest))
-
-	unsorted := rows()
-	sortHistoryTableEntries(unsorted, "")
-	assert.Equal(t, []string{"a", "b", "c", "d"}, names(unsorted), "anything else keeps the graph's order")
 }
 
 func TestHistoryTableSort(t *testing.T) {

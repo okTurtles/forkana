@@ -549,8 +549,9 @@ func RenderRepositoryHistory(ctx *context.Context) {
 
 	// The subject's articles, for every page of it (a tombstone's and an empty
 	// article's too, which return early below): neither needs the git repository.
-	ctx.Data["HistoryTableSort"] = historyTableSort(ctx.FormString("sort"))
-	ctx.Data["HistoryForkEntries"] = buildHistoryTableEntries(ctx)
+	sortBy := historyTableSort(ctx.FormString("sort"))
+	ctx.Data["HistoryTableSort"] = sortBy
+	ctx.Data["HistoryForkEntries"] = buildHistoryTableEntries(ctx, sortBy)
 	// The Bubble view draws this same graph instead of requesting it from the API
 	// again. A page opened on the Article view (an article url, the editor, a version)
 	// does not embed it: the Bubble view is not on screen there, and if the reader
@@ -689,7 +690,8 @@ type historyTableEntry struct {
 // parameters, so the table has exactly one row per bubble, forks of forks included,
 // and each row carries the bubble's contributor count (#405). It used to list the
 // direct forks of the requested repository only, with counts computed differently.
-func buildHistoryTableEntries(ctx *context.Context) []*historyTableEntry {
+// sortBy is the Sort menu's order, from historyTableSort.
+func buildHistoryTableEntries(ctx *context.Context, sortBy string) []*historyTableEntry {
 	graph := subjectForkGraph(ctx)
 	if graph == nil {
 		return nil
@@ -705,7 +707,7 @@ func buildHistoryTableEntries(ctx *context.Context) []*historyTableEntry {
 			Description:      e.Repo.Description,
 		})
 	}
-	sortHistoryTableEntries(entries, historyTableSort(ctx.FormString("sort")))
+	sortHistoryTableEntries(entries, sortBy)
 	return entries
 }
 
@@ -724,7 +726,8 @@ func historyTableSort(sortBy string) string {
 // sortHistoryTableEntries orders the Table view's rows by its Sort menu
 // (custom/templates/shared/repo/table.tmpl): "most_contrib" and "least_contrib" by
 // contributor count, rows whose count is unknown last either way; "latest" by last
-// update, newest first. Anything else keeps the fork graph's own order. Ties keep it too.
+// update, newest first. sortBy is one of these, as historyTableSort returns it; rows that
+// tie keep the fork graph's own order.
 func sortHistoryTableEntries(entries []*historyTableEntry, sortBy string) {
 	switch sortBy {
 	case "most_contrib", "least_contrib":

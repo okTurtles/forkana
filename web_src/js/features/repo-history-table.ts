@@ -1,9 +1,11 @@
 import {createApp, h, reactive} from 'vue';
-import CompareAnnouncement, {type CompareAnnouncementMessages} from '../components/graph/CompareAnnouncement.vue';
-import {extractArticleSummary} from '../components/graph/article-summary.ts';
-import {GET} from '../modules/fetch.ts';
+import CompareAnnouncement from '../components/graph/CompareAnnouncement.vue';
+import {fetchReadmeSummary} from '../components/graph/article-summary.ts';
 import {matchesSelection, type RepoSelection} from '../modules/repo-selection.ts';
-import {COMPARE_MODE_STATE_EVENT, compareAnnouncementFor, type CompareModeState} from '../modules/compare-mode-request.ts';
+import {
+  COMPARE_MODE_STATE_EVENT, compareAnnouncementFor, readCompareMessages, subjectCompareUrl,
+  type CompareAnnouncementState, type CompareModeState,
+} from '../modules/compare-mode-request.ts';
 
 /* The subject's Table view (custom/templates/shared/repo/table.tmpl): figma "Table view /
    Articles" (641:61176) and "Table view / Comparing articles" (641:61039).
@@ -14,9 +16,10 @@ import {COMPARE_MODE_STATE_EVENT, compareAnnouncementFor, type CompareModeState}
      Opening a row selects its article.
    - The selected article's row is highlighted (641:61208).
    - Compare mode of its own (#437): the header's Compare button, pressed on the Table view,
-     keeps the table on screen; the rows' checkboxes pick the two articles to compare and
-     the Compare banner (CompareAnnouncement.vue) says how many are picked. Checking a box
-     outside compare mode enters it with that article picked. */
+     keeps the table on screen; the rows (their checkboxes, or the rows themselves) pick
+     the two articles to compare and the Compare banner (CompareAnnouncement.vue) says how
+     many are picked. Checking a box outside compare mode enters it with that article
+     picked. */
 
 /** Figma's table shows 8 rows a page ("8 of 12", 641:61303). */
 export const TABLE_PAGE_SIZE = 8;
@@ -38,14 +41,24 @@ export function tablePageRange(page: number, size: number, total: number): [numb
   return [start, Math.min(total, start + size)];
 }
 
-/** The footer's counter, figma's "8 of 12": how far into the articles this page reaches. */
-export function tableCounterText(page: number, size: number, total: number): string {
-  return `${tablePageRange(page, size, total)[1]} of ${total}`;
+/** Fills a localized message's {name} placeholders. */
+export function fillMessage(template: string, values: Record<string, number | string>): string {
+  return template.replace(/\{(\w+)\}/g, (all, name: string) => (name in values ? String(values[name]) : all));
 }
 
-/** The compare page of two articles of a subject, as the Bubble view opens it. */
-export function tableCompareUrl(appSubUrl: string, subject: string, first: RepoSelection, second: RepoSelection): string {
-  return `${appSubUrl}/subject/${encodeURIComponent(subject)}/compare/${encodeURIComponent(first.owner)}...${encodeURIComponent(second.owner)}`;
+/** The footer's counter, figma's "8 of 12": how far into the articles this page reaches,
+   in the localized `template` ("{shown} of {total}"). */
+export function tableCounterText(template: string, page: number, size: number, total: number): string {
+  return fillMessage(template, {shown: tablePageRange(page, size, total)[1], total});
+}
+
+/** Figma's date, "03 Feb 2025" (641:61205): day, short month and year in that order
+   whatever the locale's own order, in `lang`'s month names and the reader's time zone
+   (or `timeZone`). */
+export function formatTableDate(date: Date, lang?: string, timeZone?: string): string {
+  const parts = new Intl.DateTimeFormat(lang || undefined, {day: '2-digit', month: 'short', year: 'numeric', timeZone}).formatToParts(date);
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${part('day')} ${part('month')} ${part('year')}`;
 }
 
 /** The compare picks after a checkbox of `article` is (un)checked: two at most, in the
@@ -59,10 +72,7 @@ export function nextComparePicks(picks: RepoSelection[], article: RepoSelection,
 
 /** The banner's state: the picks while compare mode is on, else the "No forks yet"
    notice when it was asked for, else none. */
-/** The states of CompareAnnouncement.vue (its CompareAnnouncementState). */
-export type TableCompareState = 'select' | 'one' | 'ready' | 'unavailable';
-
-export function tableCompareState(on: boolean, picks: number, unavailableShown: boolean): TableCompareState | null {
+export function tableCompareState(on: boolean, picks: number, unavailableShown: boolean): CompareAnnouncementState | null {
   if (on) return picks >= 2 ? 'ready' : picks === 1 ? 'one' : 'select';
   return unavailableShown ? 'unavailable' : null;
 }
@@ -87,21 +97,6 @@ export type HistoryTable = {
   toggleCompare: () => void;
 };
 
-function readMessages(): CompareAnnouncementMessages {
-  const bubbleRoot = document.querySelector('#compare-announcement-root');
-  const tableRoot = document.querySelector('#table-compare-announcement-root');
-  const bubble = (name: string) => bubbleRoot?.getAttribute(`data-msg-${name}`);
-  return {
-    select: bubble('select') || 'Select 2 articles to compare (0/2 selected).',
-    one: tableRoot?.getAttribute('data-msg-one') || bubble('one') || '1/2 article selected. Select another to compare.',
-    ready: bubble('ready') || '2/2 selected – ready to compare.',
-    unavailable: bubble('no-forks') || 'No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.',
-    compareNow: bubble('compare-now') || 'Compare now',
-    dismiss: bubble('dismiss') || 'Exit compare mode',
-    dismissNotice: bubble('dismiss-notice') || 'Dismiss',
-  };
-}
-
 export function initHistoryTable(opts: TableOptions): HistoryTable | null {
   const {section, appSubUrl, selectionOf, getSelection, select, openArticle} = opts;
   const table = section.querySelector<HTMLTableElement>('#articles-table');
@@ -112,17 +107,21 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
     const id = row.querySelector('.row-toggle')?.getAttribute('data-target');
     return id ? section.querySelector<HTMLTableRowElement>(`#${CSS.escape(id)}`) : null;
   };
+  const checkboxOf = (row: Element) => row.querySelector<HTMLInputElement>('.row-check');
   const isTombstone = (row: Element) => row.getAttribute('data-tombstone') === 'true';
   const liveRows = rows.filter((row) => !isTombstone(row)).length;
   const compareAvailable = liveRows >= 2;
 
-  const pageSize = Number(section.querySelector('.history-table')?.getAttribute('data-page-size')) || TABLE_PAGE_SIZE;
   let page = 1;
   const counterEl = section.querySelector<HTMLElement>('[data-role="table-counter"]');
+  const counterMsg = counterEl?.getAttribute('data-msg-counter') || '{shown} of {total}';
   const prevBtn = section.querySelector<HTMLButtonElement>('[data-role="table-prev"]');
   const nextBtn = section.querySelector<HTMLButtonElement>('[data-role="table-next"]');
   const statusEl = section.querySelector<HTMLElement>('[data-role="table-status"]');
-  const messages = readMessages();
+  const pageMsg = statusEl?.getAttribute('data-msg-page') || 'Articles {first} to {last} of {total}';
+  const messages = readCompareMessages(document.querySelector('#compare-announcement-root'), {
+    one: document.querySelector('#table-compare-announcement-root')?.getAttribute('data-msg-one') || undefined,
+  });
 
   let active = false;
   const compare = reactive({on: false, picks: [] as RepoSelection[], unavailableShown: false});
@@ -131,17 +130,35 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
   let bubbleState: CompareModeState | null = null;
   let dispatching = false;
 
-  function showPage(next: number) {
-    page = Math.min(Math.max(1, next), tablePageCount(rows.length, pageSize));
-    const [start, end] = tablePageRange(page, pageSize, rows.length);
+  // The dates in the reader's time zone and month names, in figma's order.
+  const lang = document.documentElement.getAttribute('lang') || undefined;
+  for (const time of table.querySelectorAll<HTMLTimeElement>('time[data-unix]')) {
+    const unix = Number(time.getAttribute('data-unix'));
+    if (unix > 0) time.textContent = formatTableDate(new Date(unix * 1000), lang);
+  }
+
+  function lastPage() {
+    return tablePageCount(rows.length, TABLE_PAGE_SIZE);
+  }
+
+  function setDirection(btn: HTMLButtonElement | null, enabled: boolean) {
+    // aria-disabled rather than disabled: a disabled button would drop the keyboard
+    // focus of whoever just pressed it onto the first or last page
+    btn?.setAttribute('aria-disabled', String(!enabled));
+  }
+
+  function showPage(next: number, announce = false) {
+    page = Math.min(Math.max(1, next), lastPage());
+    const [start, end] = tablePageRange(page, TABLE_PAGE_SIZE, rows.length);
     for (const [idx, row] of rows.entries()) {
       const off = idx < start || idx >= end;
       row.toggleAttribute('hidden', off);
       detailOf(row)?.toggleAttribute('hidden', off);
     }
-    if (counterEl) counterEl.textContent = tableCounterText(page, pageSize, rows.length);
-    if (prevBtn) prevBtn.disabled = page <= 1;
-    if (nextBtn) nextBtn.disabled = page >= tablePageCount(rows.length, pageSize);
+    if (counterEl) counterEl.textContent = tableCounterText(counterMsg, page, TABLE_PAGE_SIZE, rows.length);
+    setDirection(prevBtn, page > 1);
+    setDirection(nextBtn, page < lastPage());
+    if (announce && statusEl) statusEl.textContent = fillMessage(pageMsg, {first: start + 1, last: end, total: rows.length});
   }
 
   function rowOf(selection: RepoSelection | null): number {
@@ -151,11 +168,16 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
 
   function syncRows() {
     const selection = getSelection();
+    const full = compare.on && compare.picks.length >= 2;
     for (const row of rows) {
       const article = selectionOf(row);
       const picked = compare.picks.some((p) => matchesSelection(p, article));
-      const checkbox = row.querySelector<HTMLInputElement>('.row-check');
-      if (checkbox) checkbox.checked = picked;
+      const checkbox = checkboxOf(row);
+      if (checkbox) {
+        checkbox.checked = picked;
+        // two picked: the other rows cannot be picked until one is let go
+        checkbox.disabled = isTombstone(row) || (full && !picked);
+      }
       // in compare mode the picked rows are the highlighted ones (641:61072), otherwise
       // the selected article's (641:61208)
       row.classList.toggle('is-selected', compare.on ? picked : matchesSelection(selection, article));
@@ -174,32 +196,22 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
     if (open) loadSummary(detail);
   }
 
+  // The README's summary, fetched while the source is pending: a 404 is final, a server
+  // or network error keeps the source so that opening the row again retries it.
   async function loadSummary(detail: HTMLElement) {
     const el = detail.querySelector<HTMLElement>('[data-role="summary"]');
-    if (!el || el.textContent.trim()) return;
+    if (!el || el.classList.contains('is-loading')) return;
     const src = el.getAttribute('data-summary-src');
     const empty = el.getAttribute('data-empty') || '';
     if (!src) {
-      el.textContent = empty;
+      if (!el.textContent.trim()) el.textContent = empty;
       return;
     }
-    if (el.classList.contains('is-loading')) return;
     el.classList.add('is-loading');
-    try {
-      const res = await GET(src);
-      // a 404 (no README) is final; a server error may be retried by opening the row again
-      if (!res.ok) {
-        if (res.status < 500) el.removeAttribute('data-summary-src');
-        el.textContent = empty;
-        return;
-      }
-      el.removeAttribute('data-summary-src');
-      el.textContent = extractArticleSummary(await res.text()) || empty;
-    } catch {
-      el.textContent = empty;
-    } finally {
-      el.classList.remove('is-loading');
-    }
+    const {summary, retry} = await fetchReadmeSummary(src);
+    if (!retry) el.removeAttribute('data-summary-src');
+    el.textContent = summary || empty;
+    el.classList.remove('is-loading');
   }
 
   function announce(article: string | null) {
@@ -234,12 +246,37 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
     announce(null);
   }
 
+  // (Un)picks the article of `row` for the comparison; picking one outside compare mode
+  // enters it.
+  function pick(row: HTMLTableRowElement, checked: boolean) {
+    const article = selectionOf(row);
+    if (!article || isTombstone(row)) {
+      syncRows();
+      return;
+    }
+    if (checked && !compare.on) {
+      if (!compareAvailable) {
+        compare.unavailableShown = true;
+        syncRows();
+        announce(null);
+        return;
+      }
+      compare.on = true;
+      compare.unavailableShown = false;
+      syncButton();
+    }
+    const before = compare.picks.length;
+    compare.picks = nextComparePicks(compare.picks, article, checked);
+    syncRows();
+    if (compare.picks.length !== before) announce(`${article.owner}/${article.repo}`);
+  }
+
   function goToComparison() {
     if (compare.picks.length !== 2) return;
     const [first, second] = compare.picks;
     const subject = first.subject || second.subject || opts.subject;
     if (!subject) return;
-    window.location.href = tableCompareUrl(appSubUrl, subject, first, second);
+    window.location.href = subjectCompareUrl(appSubUrl, subject, first.owner, second.owner);
   }
 
   // The Compare banner, under the navbar like the Bubble view's (its root is shown only
@@ -265,7 +302,11 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
   }
 
   // The Bubble view reports its own compare state whenever it changes, even while hidden:
-  // that is the button's state when the Table view is not on screen.
+  // that is the button's state when the Table view is not on screen. While the table is,
+  // its own state is sent again right after. The button (copycontent.ts) shows the last
+  // state it is sent: its listener is registered before this one (initCompareModeToggle
+  // runs before initRepoHistory), so it gets the Bubble view's state first, then the
+  // table's, sent from inside this listener.
   window.addEventListener(COMPARE_MODE_STATE_EVENT, (event) => {
     if (dispatching) return;
     bubbleState = (event as CustomEvent<CompareModeState>).detail;
@@ -297,41 +338,34 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
     }
     if (target.closest('.history-table-check')) return;
     const row = target.closest<HTMLTableRowElement>('tr.article-row');
-    if (row) openArticle(row);
+    if (!row) return;
+    // in compare mode a row picks its article, as a bubble does in the Bubble view,
+    // instead of leaving the table and its picks
+    if (compare.on) {
+      const checkbox = checkboxOf(row);
+      if (checkbox && !checkbox.disabled) pick(row, !checkbox.checked);
+      return;
+    }
+    openArticle(row);
   });
 
   table.addEventListener('change', (event) => {
     const checkbox = event.target as HTMLInputElement;
     if (!checkbox.classList?.contains('row-check')) return;
     const row = checkbox.closest<HTMLTableRowElement>('tr.article-row');
-    const article = row ? selectionOf(row) : null;
-    if (!row || !article || isTombstone(row)) {
-      checkbox.checked = false;
-      return;
-    }
-    if (checkbox.checked && !compare.on) {
-      if (!compareAvailable) {
-        checkbox.checked = false;
-        compare.unavailableShown = true;
-        announce(null);
-        return;
-      }
-      compare.on = true;
-      compare.unavailableShown = false;
-      syncButton();
-    }
-    const before = compare.picks.length;
-    compare.picks = nextComparePicks(compare.picks, article, checkbox.checked);
-    syncRows();
-    if (compare.picks.length !== before) announce(`${article.owner}/${article.repo}`);
+    if (row) pick(row, checkbox.checked);
   });
 
-  prevBtn?.addEventListener('click', () => showPage(page - 1));
-  nextBtn?.addEventListener('click', () => showPage(page + 1));
+  for (const [btn, step] of [[prevBtn, -1], [nextBtn, 1]] as const) {
+    btn?.addEventListener('click', () => {
+      if (btn.getAttribute('aria-disabled') === 'true') return;
+      showPage(page + step, true);
+    });
+  }
 
   // the page holding the selected article, else the first
   const selectedIdx = rowOf(getSelection());
-  showPage(selectedIdx >= 0 ? tablePageOfRow(selectedIdx, pageSize) : 1);
+  showPage(selectedIdx >= 0 ? tablePageOfRow(selectedIdx, TABLE_PAGE_SIZE) : 1);
   syncRows();
 
   return {
@@ -344,7 +378,7 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
       if (active) {
         // a selection made in another view: show its page
         const idx = rowOf(getSelection());
-        if (idx >= 0) showPage(tablePageOfRow(idx, pageSize));
+        if (idx >= 0) showPage(tablePageOfRow(idx, TABLE_PAGE_SIZE));
         syncButton();
       } else {
         dispatchState(bubbleState ?? {on: false, available: compareAvailable});

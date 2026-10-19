@@ -1,29 +1,32 @@
 // #436 / #437: the subject's Table view after figma "Table view / Articles" (641:61176) and
 // "Table view / Comparing articles" (641:61039).
-import {test, expect} from '@playwright/test';
-import {load_logged_in_context, login_user} from './utils_e2e.ts';
+import {test, expect, type Browser, type WorkerInfo} from '@playwright/test';
+import {create_repo_with_subject, load_logged_in_context, login_user} from './utils_e2e.ts';
 
-// a subject of its own, with an article by each of two users: compare mode needs two
+// Subjects of their own: one with an article by each of two users (compare mode needs
+// two), and one with more articles than a page of the table holds (8, as in figma).
 const subject = `table-view-${Date.now()}`;
+const pagedSubject = `table-paged-${Date.now()}`;
+const pagedUsers = ['user2', 'user4', 'user8', 'user10', 'user11', 'user12', 'user13', 'user14', 'user15'];
+
+// Light-theme values of the tokens figma names (they differ in the dark theme):
+// Row 20 641:61208, #e9e7ff at 40% (--color-hover); the owner 641:61216, #4e40fa
+// (--color-primary); Frame 169 641:61219, white.
+const selectedRowBg = 'rgba(233, 231, 255, 0.4)';
+const brand = 'rgb(78, 64, 250)';
+const white = 'rgb(255, 255, 255)';
+
+async function addArticle(browser: Browser, workerInfo: WorkerInfo, user: string, subjectName: string) {
+  await login_user(browser, workerInfo, user);
+  const context = await load_logged_in_context(browser, workerInfo, user);
+  const page = await context.newPage();
+  await create_repo_with_subject(page, workerInfo, subjectName, undefined, {autoInit: true, description: `An article by ${user}`});
+  await context.close();
+}
 
 test.beforeAll(async ({browser}, workerInfo) => {
-  for (const user of ['user12', 'user13']) {
-    await login_user(browser, workerInfo, user);
-    const context = await load_logged_in_context(browser, workerInfo, user);
-    const page = await context.newPage();
-    // an article with a README (an empty repository is no article of the fork graph):
-    // the create form's hidden "initialize" fields are set as their defaults would
-    const response = await page.goto(`/repo/create?subject=${encodeURIComponent(subject)}`);
-    expect(response?.status()).toBe(200);
-    await page.evaluate((description) => {
-      document.querySelector<HTMLTextAreaElement>('textarea[name=description]').value = description;
-      document.querySelector<HTMLInputElement>('input[name=auto_init]').checked = true;
-      document.querySelector<HTMLInputElement>('input[name=readme]').value = 'Default';
-    }, `An article by ${user}`);
-    await page.click('button.ui.primary.button');
-    await page.waitForURL(/\/subject\//, {timeout: 30000});
-    await context.close();
-  }
+  test.setTimeout(120000);
+  for (const user of ['user12', 'user13']) await addArticle(browser, workerInfo, user, subject);
 });
 
 test('the Table view matches figma 641:61176', async ({page}) => {
@@ -42,8 +45,8 @@ test('the Table view matches figma 641:61176', async ({page}) => {
 
   // 2. the footer: "2 of 2", Previous / Next (both lead nowhere on a single page)
   await expect(page.locator('[data-role="table-counter"]')).toHaveText('2 of 2');
-  await expect(page.locator('[data-role="table-prev"]')).toBeDisabled();
-  await expect(page.locator('[data-role="table-next"]')).toBeDisabled();
+  await expect(page.locator('[data-role="table-prev"]')).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.locator('[data-role="table-next"]')).toHaveAttribute('aria-disabled', 'true');
 
   // 4. the owner alone in its cell (no subject under it); 5. dates as "03 Feb 2025"
   const first = rows.first();
@@ -54,16 +57,18 @@ test('the Table view matches figma 641:61176', async ({page}) => {
   // its summary and "Go to article"
   await first.locator('.row-toggle').click();
   await expect(first).toHaveClass(/is-selected/);
-  await expect(first).toHaveCSS('background-color', 'rgba(233, 231, 255, 0.4)');
-  await expect(first.locator('.history-table-owner')).toHaveCSS('color', 'rgb(78, 64, 250)');
+  await expect(first).toHaveCSS('background-color', selectedRowBg);
+  await expect(first.locator('.history-table-owner')).toHaveCSS('color', brand);
   const detail = page.locator('tr.article-detail-row:not(.tw-hidden)');
   await expect(detail).toHaveCount(1);
   await expect(detail.locator('[data-role="summary"]')).not.toBeEmpty();
   await expect(detail.locator('.go-to-article')).toHaveText('Go to article');
 
-  // 7. the open row is not highlighted on hover
+  // 7. the open row is not highlighted on hover, and a hovered row does not look selected
   await detail.hover();
-  await expect(detail.locator('td')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(detail.locator('td')).toHaveCSS('background-color', white);
+  await rows.nth(1).hover();
+  await expect(rows.nth(1)).not.toHaveCSS('background-color', selectedRowBg);
 });
 
 test('Compare on the Table view stays on the table (#437)', async ({page}) => {
@@ -79,12 +84,15 @@ test('Compare on the Table view stays on the table (#437)', async ({page}) => {
   await expect(banner).toContainText('Select 2 articles to compare');
   await expect(page.locator('#compare-mode-button')).toHaveClass(/primary/);
 
-  // the rows' checkboxes pick the articles
+  // the rows' checkboxes pick the articles, and so does a click on a row
+  const rows = page.locator('#articles-table tr.article-row');
   const checks = page.locator('#articles-table .row-check');
   await checks.nth(0).check();
   await expect(banner).toContainText('1/2 article selected. Select another to compare.');
-  await expect(page.locator('#articles-table tr.article-row').first()).toHaveClass(/is-selected/);
-  await checks.nth(1).check();
+  await expect(rows.first()).toHaveClass(/is-selected/);
+  await rows.nth(1).locator('td').nth(2).click();
+  await expect(page).toHaveURL(/view=table/);
+  await expect(checks.nth(1)).toBeChecked();
   await expect(banner).toContainText('2/2 selected');
   await expect(banner.locator('.compare-announcement-primary')).toBeVisible();
 
@@ -93,4 +101,43 @@ test('Compare on the Table view stays on the table (#437)', async ({page}) => {
   await expect(banner).toHaveCount(0);
   await expect(checks.nth(0)).not.toBeChecked();
   await expect(page.locator('#compare-mode-button')).not.toHaveClass(/primary/);
+
+  // ticking a box outside compare mode enters it with that article picked
+  await checks.nth(1).check();
+  await expect(banner).toContainText('1/2 article selected.');
+  await expect(page.locator('#compare-mode-button')).toHaveClass(/primary/);
+});
+
+test('the Table view is paged 8 rows at a time (641:61303)', async ({browser, page}, workerInfo) => {
+  test.setTimeout(180000);
+  for (const user of pagedUsers) await addArticle(browser, workerInfo, user, pagedSubject);
+
+  await page.goto(`/subject/${encodeURIComponent(pagedSubject)}?view=table`);
+  const visibleRows = page.locator('#articles-table tr.article-row:not([hidden])');
+  const counter = page.locator('[data-role="table-counter"]');
+  const prev = page.locator('[data-role="table-prev"]');
+  const next = page.locator('[data-role="table-next"]');
+  await expect(visibleRows).toHaveCount(8);
+  await expect(counter).toHaveText('8 of 9');
+  await expect(prev).toHaveAttribute('aria-disabled', 'true');
+
+  // Next onto the last page keeps the keyboard focus and is announced
+  await next.focus();
+  await page.keyboard.press('Enter');
+  await expect(visibleRows).toHaveCount(1);
+  await expect(counter).toHaveText('9 of 9');
+  await expect(next).toHaveAttribute('aria-disabled', 'true');
+  await expect(next).toBeFocused();
+  await expect(page.locator('[data-role="table-status"]')).toHaveText('Articles 9 to 9 of 9');
+
+  // the page of the selected article opens first
+  const last = visibleRows.first();
+  const owner = await last.getAttribute('data-owner');
+  const repo = await last.getAttribute('data-repo');
+  await page.goto(`/subject/${encodeURIComponent(pagedSubject)}?view=table&selected=${encodeURIComponent(`${owner}/${repo}`)}`);
+  await expect(counter).toHaveText('9 of 9');
+  await expect(visibleRows.first()).toHaveClass(/is-selected/);
+
+  await prev.click();
+  await expect(counter).toHaveText('8 of 9');
 });

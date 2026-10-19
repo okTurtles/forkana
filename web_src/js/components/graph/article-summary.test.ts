@@ -1,4 +1,10 @@
-import {extractArticleSummary} from './article-summary.ts';
+import {articleReadmeUrl, extractArticleSummary} from './article-summary.ts';
+
+describe('articleReadmeUrl', () => {
+  test('escapes each segment, keeping the slashes of a branch', () => {
+    expect(articleReadmeUrl('/sub', 'jane z', 'moon', 'feature/x y')).toBe('/sub/jane%20z/moon/raw/branch/feature/x%20y/README.md');
+  });
+});
 
 describe('extractArticleSummary', () => {
   test('strips front matter, skips heading and fence, unwraps links and emphasis', () => {

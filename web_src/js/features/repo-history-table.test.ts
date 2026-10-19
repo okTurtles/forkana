@@ -1,5 +1,5 @@
 import {
-  nextComparePicks, tableCompareState, tableCompareUrl, tableCounterText, tablePageCount, tablePageOfRow, tablePageRange,
+  fillMessage, formatTableDate, nextComparePicks, tableCompareState, tableCounterText, tablePageCount, tablePageOfRow, tablePageRange,
 } from './repo-history-table.ts';
 
 const article = (owner: string) => ({owner, repo: 'moon-landing', subject: 'Moon Landing'});
@@ -18,9 +18,11 @@ test('pages of the table', () => {
 });
 
 test('the footer counter reads as figma\'s "8 of 12"', () => {
-  expect(tableCounterText(1, 8, 12)).toEqual('8 of 12');
-  expect(tableCounterText(2, 8, 12)).toEqual('12 of 12');
-  expect(tableCounterText(1, 8, 3)).toEqual('3 of 3');
+  const msg = '{shown} of {total}';
+  expect(tableCounterText(msg, 1, 8, 12)).toEqual('8 of 12');
+  expect(tableCounterText(msg, 2, 8, 12)).toEqual('12 of 12');
+  expect(tableCounterText(msg, 1, 8, 3)).toEqual('3 of 3');
+  expect(fillMessage('{a} {unknown}', {a: 1})).toEqual('1 {unknown}');
 });
 
 test('compare picks: two at most, in order, a third refused', () => {
@@ -42,6 +44,8 @@ test('the banner follows the picks', () => {
   expect(tableCompareState(true, 2, false)).toEqual('ready');
 });
 
-test('the compare page of two articles', () => {
-  expect(tableCompareUrl('/sub', 'Moon Landing', article('jane z'), article('peter'))).toEqual('/sub/subject/Moon%20Landing/compare/jane%20z...peter');
+test(`dates read as figma's "03 Feb 2025", in the given time zone`, () => {
+  const date = new Date(Date.UTC(2025, 1, 3, 23, 30));
+  expect(formatTableDate(date, 'en-US', 'UTC')).toEqual('03 Feb 2025');
+  expect(formatTableDate(date, 'en-GB', 'Asia/Tokyo')).toEqual('04 Feb 2025');
 });
