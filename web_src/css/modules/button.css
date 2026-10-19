@@ -477,6 +477,30 @@ It needs some tricks to tweak the left/right borders with active state */
   box-shadow: inset 0 1px 0 #1f23280a;
 }
 
+/* Primary: brand fill, white label, a 15% #1f2328 border drawn inside the box (the "Create
+   subject" button of the Forkana file, 662:99367 / 766:51954) */
+.forkana-btn.forkana-btn-primary {
+  color: var(--color-primary-contrast);
+  background: var(--color-primary);
+  border-color: var(--color-button-primary-border);
+  box-shadow: 0 1px 0 #1f23280a;
+}
+
+.forkana-btn.forkana-btn-primary:hover {
+  color: var(--color-primary-contrast);
+  background: var(--color-primary-hover);
+  text-decoration: none;
+}
+
+.forkana-btn.forkana-btn-primary:active {
+  background: var(--color-primary-active);
+}
+
+.forkana-btn.forkana-btn-primary:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}
+
 /* Tertiary or invisible (30258:5961 rest, 30258:5982 hover): no background, no underline at
    rest, an underline under the label on hover and while pressed. The label is #25292e unless
    the button carries its own colour (the sign-in page's "Forgot password?" is brand purple). */

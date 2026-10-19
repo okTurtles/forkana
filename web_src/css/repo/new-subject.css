@@ -1,0 +1,156 @@
+/* The "New subject" screen (custom/templates/repo/create.tmpl, /repo/create), after the Figma
+   frames "New Subject" 662:99326 (desktop, 1440 wide) and "Mobile" 766:51914 (375 wide).
+   Figma draws 1px borders inside the box, so CSS paddings next to a border are the Figma
+   padding minus 1px. Below 768px the mobile frame's values apply. */
+
+/* the box (DataTable 662:99333 / 766:51919): 800px wide, 64px under the navbar; on mobile
+   16px from both edges of the screen and 24px under the navbar */
+.page-content.new-subject-page > .new-subject-box {
+  width: 800px;
+  max-width: calc(100% - 32px);
+  margin: 64px auto;
+  background: var(--color-box-body);
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+}
+
+/* the header row (ColumnHeaderCell 662:99342 / 766:51928): 36px tall, Inter 600 16px/24px
+   (14px on mobile) in #59636e on #f6f8fa, 12px side padding */
+.new-subject-page .new-subject-header {
+  margin: 0;
+  height: 35px; /* with its bottom border; + the box's top border = 36px */
+  padding: 5px 12px 6px;
+  font-size: 16px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 24px;
+  color: var(--color-text-light-3);
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border-light);
+  border-radius: 5px 5px 0 0;
+}
+
+/* the row (662:99343): 32px above and below, 160px on the sides, so the form is 480px wide */
+.new-subject-page .new-subject-body {
+  padding: 32px 159px;
+}
+
+.new-subject-page .new-subject-content {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* the text above the form (662:99350): Inter 14px/20px, 24px above the fields */
+.new-subject-page .new-subject-content > p {
+  margin: 0 0 24px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text);
+}
+
+/* the fields (Frame 907 662:99352): 32px apart, a 4px gap under the Inter 600 14px/20px label */
+.new-subject-page .ui.form .new-subject-field {
+  margin: 0 0 32px;
+}
+
+.new-subject-page .ui.form .new-subject-field > label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+/* the owner (662:99355): 40px tall, 8px side padding, a 28px avatar with 6px corners, 8px
+   before the Inter 600 name */
+.new-subject-page .ui.form #repo_owner_dropdown {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 7px;
+  border-color: var(--color-border-light);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 #1f23280a;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.new-subject-page #repo_owner_dropdown > .text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+}
+
+.new-subject-page #repo_owner_dropdown > .text .ui.avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  max-height: none;
+  margin: 0;
+  border-radius: 6px;
+}
+
+/* the subject name (TextInput 662:99362): 32px tall, 8px side padding, Inter 14px/20px */
+.new-subject-page .ui.form input#subject {
+  height: 32px;
+  padding: 0 7px;
+  border-color: var(--color-border-light);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 #1f23280a;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.new-subject-page .ui.form .new-subject-field.new-subject-name-field {
+  margin-bottom: 0;
+}
+
+/* the buttons (Frame 962 662:99365): right-aligned, 12px apart, 32px under the subject name */
+.new-subject-page .new-subject-actions {
+  display: flex;
+  margin-top: 32px;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (max-width: 767.98px) {
+  .page-content.new-subject-page > .new-subject-box {
+    margin: 24px auto;
+  }
+
+  .new-subject-page .new-subject-header {
+    font-size: 14px;
+  }
+
+  /* the row (766:51929): 12px above, 16px on the sides, 24px below */
+  .new-subject-page .new-subject-body {
+    padding: 12px 15px 24px;
+  }
+
+  /* labels (766:51941), the owner's name (766:51946) and the subject name (766:51949) are
+     Inter 12px/20px on mobile */
+  .new-subject-page .ui.form .new-subject-field > label,
+  .new-subject-page .ui.form #repo_owner_dropdown,
+  .new-subject-page .ui.form input#subject {
+    font-size: 12px;
+  }
+
+  /* the buttons (Frame 1036 766:51951) sit 22px under the subject name: the 12px gap of
+     Frame 1037 plus their row's 10px top padding */
+  .new-subject-page .new-subject-actions {
+    margin-top: 22px;
+  }
+
+  /* small buttons on mobile (766:51953, 766:51954): 26px tall, Inter 600 12px/18px */
+  .new-subject-page .new-subject-actions .forkana-btn {
+    gap: 4px;
+    height: 26px;
+    padding: 0 7px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+}
