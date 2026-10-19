@@ -34,6 +34,14 @@ test('a point of contention is selected on its own, and Back returns to it (#431
   await expect(back).toHaveCSS('font-size', '12px');
   await expect(back).toHaveCSS('font-weight', '600');
 
+  // the fork is unchanged, so the two articles are identical: the message stands 24px
+  // under the header (figma Frame 517, 641:62397), with the localized text
+  const message = page.locator('.subject-compare-message');
+  await expect(message).toHaveText('The articles are identical.');
+  const gap = await message.evaluate((el) => el.getBoundingClientRect().top - el.previousElementSibling.getBoundingClientRect().bottom);
+  expect(gap).toBeCloseTo(24, 0);
+  await expect(back).toHaveText('Back');
+
   // item 1: the page's Back goes back in the history, to the very entry that was left
   const historyLength = await page.evaluate(() => window.history.length);
   await back.click();

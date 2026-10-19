@@ -142,3 +142,13 @@
 	color: var(--color-button-text);
 	background: var(--color-hover);
 }
+
+/* The message that stands in for the diff on the compare page (an article pair with no
+   content, or identical ones), #431: 24px under the Point of contention header, the gap
+   of figma "Bubble view / Point of contention" Frame 517 (641:62397) between the header
+   (641:62398) and the content. More specific than message.custom.css's
+   `.ui.message { margin-top: -1px !important }`, which loads after this file and made
+   the box touch the description. */
+.ui.message.subject-compare-message {
+	margin-top: 24px !important;
+}

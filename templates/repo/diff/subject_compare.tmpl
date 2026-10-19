@@ -5,7 +5,7 @@
 		{{/* data-subject-back: goes back in the history when the page before is the graph that
 		opened this point of contention (web_src/js/features/subject-compare-back.ts, #431) */}}
 		<a href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .Subject.Name)) "selected" .SubjectSelected}}" class="subject-compare-back tw-mt-4" data-subject-back data-subject-path="{{AppSubUrl}}/subject/{{PathEscape .Subject.Name}}">
-			{{svg "octicon-arrow-left" 16}} Back
+			{{svg "octicon-arrow-left" 16}} {{ctx.Locale.Tr "repo.point_of_contention.back"}}
 		</a>
 	</div>
 
@@ -35,13 +35,15 @@
 			</div>
 		</div>
 
+		{{/* subject-compare-message: 24px under the header, the gap of figma "Bubble view / Point of contention"
+		Frame 517 (641:62397) between the header (641:62398) and the content (#431) */}}
 		{{if and (not .Readme1Name) (not .Readme2Name)}}
-			<div class="ui warning message">
-				<p>{{svg "octicon-alert" 16}} The subjects are empty.</p>
+			<div class="ui warning message subject-compare-message">
+				<p>{{svg "octicon-alert" 16}} {{ctx.Locale.Tr "repo.point_of_contention.both_empty"}}</p>
 			</div>
 		{{else if and (eq .Readme1Content .Readme2Content) .Readme1Name .Readme2Name}}
-			<div class="ui info message">
-				<p>{{svg "octicon-check" 16}} The articles are identical.</p>
+			<div class="ui info message subject-compare-message">
+				<p>{{svg "octicon-check" 16}} {{ctx.Locale.Tr "repo.point_of_contention.identical"}}</p>
 			</div>
 		{{else}}
 			<div id="diff-container" class="tw-mt-8">
