@@ -413,8 +413,9 @@ func setIssueNotificationStatusReadIfUnread(ctx context.Context, userID, issueID
 	return err
 }
 
-// SetRepoReadBy sets repo to be visited by given user.
-func SetRepoReadBy(ctx context.Context, userID, repoID int64) error {
+// SetRepoReadBy marks the given user's unread repository-source notifications for repo as read.
+// Its arguments follow SetIssueReadBy's (target ID first, then user ID).
+func SetRepoReadBy(ctx context.Context, repoID, userID int64) error {
 	_, err := db.GetEngine(ctx).Where(builder.Eq{
 		"user_id": userID,
 		"status":  NotificationStatusUnread,
