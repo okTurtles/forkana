@@ -363,7 +363,7 @@ func TestSubjectPageCountsFromTheBranchNotAStaleHead(t *testing.T) {
 	resp := MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape(subjectName)+"?view=table"), http.StatusOK)
 	row := NewHTMLParser(t, resp.Body).Find(`#articles-table tr.article-row[data-owner="user4"]`)
 	require.Equal(t, 1, row.Length())
-	assert.Equal(t, strconv.FormatInt(want, 10), strings.TrimSpace(row.Find("td.tw-font-semibold").First().Text()))
+	assert.Equal(t, strconv.FormatInt(want, 10), strings.TrimSpace(row.Find("td.history-table-count").First().Text()))
 }
 
 // A deleted article has no content to compare: the compare page is a 404 when either side
