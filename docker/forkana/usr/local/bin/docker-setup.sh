@@ -39,6 +39,33 @@ if [ ! -f ${GITEA_APP_INI} ]; then
     envsubst < /etc/templates/app.ini > ${GITEA_APP_INI}
 fi
 
+# Outgoing mail goes through msmtp (sendmail protocol) and is enabled only when an
+# operator has placed a relay config in the config volume. The file holds the relay
+# password, so msmtp requires it to be owned by us and not readable by others.
+# Values already set via GITEA__mailer__* in the environment take precedence, and
+# ENABLED is always written so removing the file turns mail off on the next boot.
+MSMTP_CONFIG=$(dirname ${GITEA_APP_INI})/msmtprc
+if [ -f "${MSMTP_CONFIG}" ] && [ ! -O "${MSMTP_CONFIG}" ]; then
+    echo "${MSMTP_CONFIG} is not owned by $(id -un); outgoing mail stays disabled" >&2
+    export GITEA__mailer__ENABLED=${GITEA__mailer__ENABLED:-false}
+elif [ -f "${MSMTP_CONFIG}" ]; then
+    chmod 0600 "${MSMTP_CONFIG}"
+    export GITEA__mailer__ENABLED=${GITEA__mailer__ENABLED:-true}
+    export GITEA__mailer__PROTOCOL=${GITEA__mailer__PROTOCOL:-sendmail}
+    export GITEA__mailer__SENDMAIL_PATH=${GITEA__mailer__SENDMAIL_PATH:-/usr/bin/msmtp}
+    export GITEA__mailer__SENDMAIL_ARGS=${GITEA__mailer__SENDMAIL_ARGS:-"--file=${MSMTP_CONFIG}"}
+    if [ -z "${GITEA__mailer__FROM}" ]; then
+        # Default to the relay account's sender so the envelope matches what the relay allows.
+        # msmtp keywords are case-sensitive, but msmtp strips double quotes around values.
+        MSMTP_FROM=$(awk '$1 == "from" { gsub(/"/, "", $2); print $2; exit }' "${MSMTP_CONFIG}")
+        if [ -n "${MSMTP_FROM}" ]; then
+            export GITEA__mailer__FROM="${APP_NAME:-Forkana} <${MSMTP_FROM}>"
+        fi
+    fi
+else
+    export GITEA__mailer__ENABLED=${GITEA__mailer__ENABLED:-false}
+fi
+
 # Replace app.ini settings with env variables in the form GITEA__SECTION_NAME__KEY_NAME
 environment-to-ini --config ${GITEA_APP_INI}
 

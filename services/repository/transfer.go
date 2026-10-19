@@ -207,6 +207,16 @@ func transferOwnership(ctx context.Context, doer *user_model.User, newOwnerName 
 		collaboration.UserID = 0
 	}
 
+	// The new owner has full control over the article, so they stop being one of its
+	// collaborators (their collaboration row was just removed above).
+	if err := repo_model.DeleteArticleCollaborator(ctx, repo.ID, newOwner.ID); err != nil {
+		return fmt.Errorf("remove article collaborator '%d': %w", newOwner.ID, err)
+	}
+	// a pending invitation goes with the row, its notification must stop offering it
+	if err := activities_model.MarkArticleCollaboratorInviteNotificationsRead(ctx, repo.ID, newOwner.ID); err != nil {
+		return fmt.Errorf("mark article collaborator invitation read '%d': %w", newOwner.ID, err)
+	}
+
 	if oldOwner.IsOrganization() {
 		// Remove old team-repository relations.
 		if err := organization.RemoveOrgRepo(ctx, oldOwner.ID, repo.ID); err != nil {

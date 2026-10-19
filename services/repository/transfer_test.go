@@ -272,3 +272,29 @@ func TestRepositoryTransferRejectionFailureIsSilent(t *testing.T) {
 	assert.Equal(t, 0, recorder.calls)
 	unittest.AssertExistsAndLoadBean(t, &repo_model.RepoTransfer{RepoID: pending.ID})
 }
+
+// TestTransferArticleToInvitee checks that transferring an article to a user it invited
+// withdraws the invitation together with its notification, which would otherwise keep
+// offering an invitation that no longer exists.
+func TestTransferArticleToInvitee(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+
+	// repo1 is an article owned by user2
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	invitee := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+	require.NoError(t, repo.LoadOwner(t.Context()))
+	require.NoError(t, InviteArticleCollaborator(t.Context(), owner, repo, invitee, repo_model.ArticleCollaboratorRoleMaintainer))
+	require.NoError(t, activities_model.CreateArticleCollaboratorInviteNotification(t.Context(), owner, invitee, repo))
+
+	require.NoError(t, StartRepositoryTransfer(t.Context(), owner, invitee, repo, nil))
+	require.NoError(t, AcceptTransferOwnership(t.Context(), repo, invitee))
+
+	unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: invitee.ID})
+	unittest.AssertNotExistsBean(t, &activities_model.Notification{
+		RepoID: repo.ID,
+		UserID: invitee.ID,
+		Source: activities_model.NotificationSourceArticleCollaboratorInvite,
+		Status: activities_model.NotificationStatusUnread,
+	})
+}

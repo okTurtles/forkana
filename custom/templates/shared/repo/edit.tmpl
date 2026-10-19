@@ -38,7 +38,7 @@
         </div>
         {{/* Editor form */}}
         <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoOperationsLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}"
-              data-can-edit-directly="{{if .IsRepoOwner}}true{{else}}false{{end}}"
+              data-can-edit-directly="{{if .CanEditDirectly}}true{{else}}false{{end}}"
               data-has-existing-fork="{{if .HasExistingFork}}true{{else}}false{{end}}"
               data-needs-fork="{{if .NeedsFork}}true{{else}}false{{end}}">
             {{.CsrfTokenHtml}}

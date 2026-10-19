@@ -1258,6 +1258,18 @@ func registerWebRoutes(m *web.Router) {
 	)
 	// end "/{username}/{reponame}/settings"
 
+	// Article collaborators. They are managed by the owner and by the delegates, who are not
+	// repository admins, and answered by the invitee, so the group cannot sit under
+	// "/settings": every handler checks what the doer may do itself.
+	m.Group("/{username}/{reponame}/article_collaborators", func() {
+		m.Post("/invite", repo_setting.ArticleCollaboratorInvite)
+		m.Post("/role", repo_setting.ArticleCollaboratorChangeRole)
+		m.Post("/remove", repo_setting.ArticleCollaboratorsRemove)
+		m.Post("/accept", repo_setting.ArticleCollaboratorAccept)
+		m.Post("/decline", repo_setting.ArticleCollaboratorDecline)
+	}, reqSignIn, context.RepoAssignment)
+	// end "/{username}/{reponame}/article_collaborators"
+
 	// Retired "/article/..." urls, permanently redirected to the routes that replaced them.
 	// Only GET is redirected: forms are always rendered with the current urls.
 	m.Get("/article/repo/{username}/{reponame}", repo.RedirectLegacyArticleRepo)
@@ -1275,6 +1287,8 @@ func registerWebRoutes(m *web.Router) {
 
 	// Article settings helpers, the article settings UI lives on the article view itself
 	addArticleRoute(m, "/settings/transfer_candidates", reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqRepoAdmin, repo_setting.ArticleTransferCandidates)
+	// the delegates managing the collaborators are not repository admins, the handler checks the doer
+	addArticleRoute(m, "/settings/collaborator_candidates", reqSignIn, context.RepoAssignmentByOwnerAndSubject, repo_setting.ArticleCollaboratorCandidates)
 
 	// Article-based pull request routes - mirror the repository-based routes but use subject name
 	addArticleGroup(m, "", func() {

@@ -827,10 +827,14 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	// is only a line of the page, so a failed lookup is logged and the line left out.
 	loadArticleBaseRepo(ctx)
 
-	// The Settings tab is only rendered for the article owner, so ownership must be
-	// known in every mode (edit mode refines this via prepareArticleForkOnEditData).
+	// The Settings tab is only rendered for the article owner and the delegates managing
+	// its collaborators, so both must be known in every mode (edit mode refines ownership
+	// via prepareArticleForkOnEditData).
 	isRepoOwner := ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
 	ctx.Data["IsRepoOwner"] = isRepoOwner
+	if !prepareArticleCollaboratorsData(ctx, isRepoOwner, mode) {
+		return
+	}
 
 	// The settings tab swaps the Transfer section for a "Cancel transfer" one while a
 	// transfer awaits the recipient's confirmation. The repo assignment middleware already
@@ -1027,9 +1031,10 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 
 // commitsFromOtherArticles tells, by commit id, which changes of the History tab came
 // from another article (#435 item 12): a commit is the article's own when its author may
-// write to it (its owner, an organization's member, a collaborator) and, for a fork,
-// when it was made after the fork was created; anything older came with the fork. A
-// commit whose author has no account here is left as the article's own.
+// write to it (its owner, an organization's member, a collaborator, one of its
+// maintainers) and, for a fork, when it was made after the fork was created; anything
+// older came with the fork. A commit whose author has no account here is left as the
+// article's own.
 func commitsFromOtherArticles(ctx *context.Context, commits []*user_model.UserCommit) map[string]bool {
 	repo := ctx.Repo.Repository
 	canWrite := map[int64]bool{}
@@ -1050,6 +1055,14 @@ func commitsFromOtherArticles(ctx *context.Context, commits []*user_model.UserCo
 					writes = perm.CanWrite(unit.TypeCode)
 				} else {
 					log.Warn("GetUserRepoPermission of %d on %s: %v", c.User.ID, repo.FullName(), err)
+				}
+			}
+			if !writes {
+				// the article's maintainers (#445) edit it directly too
+				if maintainer, err := repo_model.IsAcceptedArticleMaintainer(ctx, repo.ID, c.User.ID); err == nil {
+					writes = maintainer
+				} else {
+					log.Warn("IsAcceptedArticleMaintainer of %d on %s: %v", c.User.ID, repo.FullName(), err)
 				}
 			}
 			canWrite[c.User.ID] = writes
@@ -1198,6 +1211,56 @@ func processGitCommits(ctx *context.Context, commits []*git.Commit) ([]*user_mod
 	return userCommits, nil
 }
 
+// prepareArticleCollaboratorsData sets up what the doer may do with the article
+// collaborators, the Accept/Decline banner of a pending invitation and, in the settings
+// mode, the collaborator list. It returns false when the response was written.
+func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mode string) bool {
+	repo := ctx.Repo.Repository
+
+	// one lookup serves both the permission and the pending invitation banner
+	var doerCollaborator *repo_model.ArticleCollaborator
+	if ctx.Doer != nil && !isRepoOwner {
+		var err error
+		doerCollaborator, err = repo_model.GetArticleCollaborator(ctx, repo.ID, ctx.Doer.ID)
+		if err != nil {
+			ctx.ServerError("GetArticleCollaborator", err)
+			return false
+		}
+	}
+
+	collaboratorPerm := repo_service.NewArticleCollaboratorPermission(isRepoOwner, doerCollaborator)
+	ctx.Data["ArticleCollaboratorPerm"] = collaboratorPerm
+	ctx.Data["CanManageArticleCollaborators"] = collaboratorPerm.CanManage
+
+	if doerCollaborator != nil && doerCollaborator.IsPending() && !repo.IsArchived {
+		if err := doerCollaborator.LoadInviter(ctx); err != nil {
+			ctx.ServerError("LoadInviter", err)
+			return false
+		}
+		ctx.Data["PendingArticleCollaboratorInvite"] = doerCollaborator
+	}
+
+	if mode != "settings" || !collaboratorPerm.CanManage {
+		return true
+	}
+
+	collaborators, err := repo_model.ListArticleCollaborators(ctx, repo.ID)
+	if err != nil {
+		ctx.ServerError("ListArticleCollaborators", err)
+		return false
+	}
+	ctx.Data["ArticleCollaborators"] = collaborators
+
+	// a delegate only has the collaborators section, the owner lands on it when coming
+	// back from a collaborator action
+	section := "general"
+	if !isRepoOwner || ctx.FormString("section") == "collaborators" {
+		section = "collaborators"
+	}
+	ctx.Data["ArticleSettingsSection"] = section
+	return true
+}
+
 // prepareArticleForkOnEditData sets up context data for fork-on-edit workflow
 // This determines whether the user can edit directly, needs to fork, or already has a fork
 func prepareArticleForkOnEditData(ctx *context.Context) {
@@ -1207,6 +1270,8 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["ExistingFork"] = nil
 	ctx.Data["ExistingForkArchived"] = false
 	ctx.Data["IsRepoOwner"] = false
+	ctx.Data["CanEditDirectly"] = false
+	ctx.Data["IsArticleMaintainer"] = false
 	ctx.Data["BlockedByOwnArticle"] = false
 	ctx.Data["OwnRepoForSubject"] = nil
 	ctx.Data["CanSubmitChangeRequest"] = false
@@ -1219,6 +1284,8 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 
 	// Map permissions to context data
 	ctx.Data["IsRepoOwner"] = perms.IsRepoOwner
+	ctx.Data["CanEditDirectly"] = perms.CanEditDirectly
+	ctx.Data["IsArticleMaintainer"] = perms.IsArticleMaintainer
 	ctx.Data["BlockedByOwnArticle"] = perms.BlockedBySubject
 	ctx.Data["OwnRepoForSubject"] = perms.OwnRepoForSubject
 	ctx.Data["HasExistingFork"] = perms.HasExistingFork

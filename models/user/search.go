@@ -58,6 +58,9 @@ type SearchUserOptions struct {
 	// ExcludeOwnersOfSubjectID filters out the users who already own an active
 	// (non-archived) repository for the given subject. Zero means no filtering.
 	ExcludeOwnersOfSubjectID int64
+	// ExcludeBlockedWithUserIDs filters out the users who blocked, or were blocked by, any
+	// of the given users. Empty means no filtering.
+	ExcludeBlockedWithUserIDs []int64
 }
 
 // RepoRole classifies a user by the repositories they own
@@ -183,6 +186,15 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 		cond = cond.And(builder.NotIn("`user`.id",
 			builder.Select("owner_id").From("repository").
 				Where(builder.Eq{"subject_id": opts.ExcludeOwnersOfSubjectID, "is_archived": false})))
+	}
+
+	if len(opts.ExcludeBlockedWithUserIDs) > 0 {
+		cond = cond.And(
+			builder.NotIn("`user`.id", builder.Select("blockee_id").From("user_blocking").
+				Where(builder.In("blocker_id", opts.ExcludeBlockedWithUserIDs))),
+			builder.NotIn("`user`.id", builder.Select("blocker_id").From("user_blocking").
+				Where(builder.In("blockee_id", opts.ExcludeBlockedWithUserIDs))),
+		)
 	}
 
 	e := db.GetEngine(ctx)
