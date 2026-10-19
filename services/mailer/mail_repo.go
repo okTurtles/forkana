@@ -21,6 +21,8 @@ import (
 const (
 	mailNotifyCollaborator templates.TplName = "repo/collaborator"
 	mailRepoTransferNotify templates.TplName = "repo/transfer"
+
+	mailArticleCollaboratorInvite templates.TplName = "repo/article_collaborator_invite"
 )
 
 // SendRepoTransferNotifyMail triggers a notification e-mail when a pending repository transfer was created
@@ -124,4 +126,33 @@ func SendCollaboratorMail(u, doer *user_model.User, repo *repo_model.Repository)
 	msg.Info = fmt.Sprintf("UID: %d, add collaborator", u.ID)
 
 	SendAsync(msg)
+}
+
+// SendArticleCollaboratorInviteMail sends the e-mail inviting a user to maintain an article.
+func SendArticleCollaboratorInviteMail(ctx context.Context, doer, invitee *user_model.User, repo *repo_model.Repository, role repo_model.ArticleCollaboratorRole) error {
+	if setting.MailService == nil || !invitee.IsActive {
+		return nil
+	}
+
+	locale := translation.NewLocale(invitee.Language)
+	articleName := repo.OwnerName + "/" + repo.GetSubject(ctx)
+	subject := locale.TrString("mail.repo.article_collaborator.invite.subject", doer.DisplayName(), articleName)
+	data := map[string]any{
+		"locale":   locale,
+		"Subject":  subject,
+		"Article":  articleName,
+		"Role":     locale.TrString(role.LocaleKey()),
+		"Link":     repo.HTMLURL(ctx),
+		"Language": locale.Language(),
+	}
+
+	var content bytes.Buffer
+	if err := LoadedTemplates().BodyTemplates.ExecuteTemplate(&content, string(mailArticleCollaboratorInvite), data); err != nil {
+		return err
+	}
+
+	msg := sender_service.NewMessageFrom(invitee.EmailTo(), fromDisplayName(doer), setting.MailService.FromEmail, subject, content.String())
+	msg.Info = fmt.Sprintf("UID: %d, article collaborator invitation", invitee.ID)
+	SendAsync(msg)
+	return nil
 }

@@ -58,12 +58,14 @@ func TestArticleViewMarksRepoNotificationsRead(t *testing.T) {
 		t.Helper()
 		pending := insert(t, owner.ID, activities_model.NotificationSourceRepository)
 		rejected := insert(t, owner.ID, activities_model.NotificationSourceRepoTransferRejected)
+		invite := insert(t, owner.ID, activities_model.NotificationSourceArticleCollaboratorInvite)
 		othersPending := insert(t, other.ID, activities_model.NotificationSourceRepository)
 
 		session.MakeRequest(t, NewRequest(t, "GET", link), http.StatusOK)
 
 		assert.Equal(t, activities_model.NotificationStatusRead, status(t, pending))
 		assert.Equal(t, activities_model.NotificationStatusRead, status(t, rejected))
+		assert.Equal(t, activities_model.NotificationStatusRead, status(t, invite))
 		assert.Equal(t, activities_model.NotificationStatusUnread, status(t, othersPending))
 		assert.Equal(t, activities_model.NotificationStatusUnread, status(t, issue))
 	}
