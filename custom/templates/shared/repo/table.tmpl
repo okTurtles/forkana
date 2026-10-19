@@ -7,15 +7,15 @@
 <div class="history-view-section history-view-section--table" data-view="table" {{if not .IsTableView}}hidden{{end}}>
     <div class="history-table">
         <div class="history-table-heading">
-            <h2 class="history-table-title">Articles</h2>
+            <h2 class="history-table-title">{{ctx.Locale.Tr "repo.history_table_articles"}}</h2>
             <div class="ui floating dropdown history-table-sort-button">
                 <span class="history-table-sort-icon">{{svg "octicon-arrow-switch" 16}}</span>
-                <span class="text">Sort</span>
+                <span class="text">{{ctx.Locale.Tr "repo.history_table_sort"}}</span>
                 {{svg "octicon-triangle-down" 16 "history-table-sort-caret"}}
                 <div class="menu history-table-sort-menu">
-                    {{template "shared/repo/table_sort_item" (dict "Sort" "most_contrib" "Label" "Most contributors" "Current" .HistoryTableSort "SubjectPath" $subjectPath "Selected" .SubjectSelected)}}
-                    {{template "shared/repo/table_sort_item" (dict "Sort" "least_contrib" "Label" "Least contributors" "Current" .HistoryTableSort "SubjectPath" $subjectPath "Selected" .SubjectSelected)}}
-                    {{template "shared/repo/table_sort_item" (dict "Sort" "latest" "Label" "Latest edited" "Current" .HistoryTableSort "SubjectPath" $subjectPath "Selected" .SubjectSelected)}}
+                    {{template "shared/repo/table_sort_item" (dict "Sort" "most_contrib" "Label" (ctx.Locale.Tr "repo.history_table_sort_most_contrib") "Current" .HistoryTableSort "SubjectPath" $subjectPath "Selected" .SubjectSelected)}}
+                    {{template "shared/repo/table_sort_item" (dict "Sort" "least_contrib" "Label" (ctx.Locale.Tr "repo.history_table_sort_least_contrib") "Current" .HistoryTableSort "SubjectPath" $subjectPath "Selected" .SubjectSelected)}}
+                    {{template "shared/repo/table_sort_item" (dict "Sort" "latest" "Label" (ctx.Locale.Tr "repo.history_table_sort_latest") "Current" .HistoryTableSort "SubjectPath" $subjectPath "Selected" .SubjectSelected)}}
                 </div>
             </div>
         </div>
@@ -32,9 +32,9 @@
                 <thead>
                     <tr>
                         <th><span class="tw-sr-only">{{ctx.Locale.Tr "repo.history_table_compare_column"}}</span></th>
-                        <th>Contributors</th>
-                        <th>Last edited</th>
-                        <th>Owner</th>
+                        <th>{{ctx.Locale.Tr "repo.history_table_contributors"}}</th>
+                        <th>{{ctx.Locale.Tr "repo.history_table_last_edited"}}</th>
+                        <th>{{ctx.Locale.Tr "repo.history_table_owner"}}</th>
                         <th><span class="tw-sr-only">{{ctx.Locale.Tr "repo.history_table_summary_column"}}</span></th>
                     </tr>
                 </thead>
@@ -90,7 +90,7 @@
                     </tr>
                     {{else}}
                     <tr>
-                        <td colspan="5" class="tw-text-center tw-text-sm tw-text-gray-500">No forks available.</td>
+                        <td colspan="5" class="tw-text-center tw-text-sm tw-text-gray-500">{{ctx.Locale.Tr "repo.history_table_no_articles"}}</td>
                     </tr>
                     {{end}}
                 </tbody>

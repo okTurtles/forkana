@@ -2,6 +2,7 @@ import {createApp, h, reactive} from 'vue';
 import CompareAnnouncement from '../components/graph/CompareAnnouncement.vue';
 import {fetchReadmeSummary} from '../components/graph/article-summary.ts';
 import {matchesSelection, type RepoSelection} from '../modules/repo-selection.ts';
+import {getCurrentLocale} from '../utils.ts';
 import {
   COMPARE_MODE_STATE_EVENT, compareAnnouncementFor, readCompareMessages, subjectCompareUrl,
   type CompareAnnouncementState, type CompareModeState,
@@ -41,15 +42,17 @@ export function tablePageRange(page: number, size: number, total: number): [numb
   return [start, Math.min(total, start + size)];
 }
 
-/** Fills a localized message's {name} placeholders. */
-export function fillMessage(template: string, values: Record<string, number | string>): string {
-  return template.replace(/\{(\w+)\}/g, (all, name: string) => (name in values ? String(values[name]) : all));
+/** Fills a localized message's positional placeholders, written as in the rest of the
+   locale file (%[1]d, %[2]s; Go's fmt), for a message the server sends unformatted: the
+   page renders it without arguments, which leaves it as it is. */
+export function fillMessage(template: string, ...values: Array<number | string>): string {
+  return template.replace(/%\[(\d+)\][ds]/g, (all, n: string) => (Number(n) <= values.length ? String(values[Number(n) - 1]) : all));
 }
 
 /** The footer's counter, figma's "8 of 12": how far into the articles this page reaches,
-   in the localized `template` ("{shown} of {total}"). */
+   in the localized `template` ("%[1]d of %[2]d"). */
 export function tableCounterText(template: string, page: number, size: number, total: number): string {
-  return fillMessage(template, {shown: tablePageRange(page, size, total)[1], total});
+  return fillMessage(template, tablePageRange(page, size, total)[1], total);
 }
 
 /** Figma's date, "03 Feb 2025" (641:61205): day, short month and year in that order
@@ -114,11 +117,11 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
 
   let page = 1;
   const counterEl = section.querySelector<HTMLElement>('[data-role="table-counter"]');
-  const counterMsg = counterEl?.getAttribute('data-msg-counter') || '{shown} of {total}';
+  const counterMsg = counterEl?.getAttribute('data-msg-counter') || '%[1]d of %[2]d';
   const prevBtn = section.querySelector<HTMLButtonElement>('[data-role="table-prev"]');
   const nextBtn = section.querySelector<HTMLButtonElement>('[data-role="table-next"]');
   const statusEl = section.querySelector<HTMLElement>('[data-role="table-status"]');
-  const pageMsg = statusEl?.getAttribute('data-msg-page') || 'Articles {first} to {last} of {total}';
+  const pageMsg = statusEl?.getAttribute('data-msg-page') || 'Articles %[1]d to %[2]d of %[3]d';
   const messages = readCompareMessages(document.querySelector('#compare-announcement-root'), {
     one: document.querySelector('#table-compare-announcement-root')?.getAttribute('data-msg-one') || undefined,
   });
@@ -131,7 +134,7 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
   let dispatching = false;
 
   // The dates in the reader's time zone and month names, in figma's order.
-  const lang = document.documentElement.getAttribute('lang') || undefined;
+  const lang = getCurrentLocale() || undefined;
   for (const time of table.querySelectorAll<HTMLTimeElement>('time[data-unix]')) {
     const unix = Number(time.getAttribute('data-unix'));
     if (unix > 0) time.textContent = formatTableDate(new Date(unix * 1000), lang);
@@ -158,7 +161,7 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
     if (counterEl) counterEl.textContent = tableCounterText(counterMsg, page, TABLE_PAGE_SIZE, rows.length);
     setDirection(prevBtn, page > 1);
     setDirection(nextBtn, page < lastPage());
-    if (announce && statusEl) statusEl.textContent = fillMessage(pageMsg, {first: start + 1, last: end, total: rows.length});
+    if (announce && statusEl) statusEl.textContent = fillMessage(pageMsg, start + 1, end, rows.length);
   }
 
   function rowOf(selection: RepoSelection | null): number {
@@ -169,6 +172,8 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
   function syncRows() {
     const selection = getSelection();
     const full = compare.on && compare.picks.length >= 2;
+    // in compare mode a click on a row picks it (see the click handler)
+    table.classList.toggle('is-comparing', compare.on);
     for (const row of rows) {
       const article = selectionOf(row);
       const picked = compare.picks.some((p) => matchesSelection(p, article));

@@ -86,8 +86,9 @@
   border: 0;
   border-radius: 12px;
   background: var(--color-body);
-  box-shadow: 0 6px 18px 0 color-mix(in srgb, var(--color-button-text) 12%, transparent),
-    0 6px 12px -3px color-mix(in srgb, var(--color-button-text) 4%, transparent),
+  /* figma's #25292e at 12% and 4%: --color-shadow, which stays dark in the dark theme */
+  box-shadow: 0 6px 18px 0 var(--color-shadow),
+    0 6px 12px -3px color-mix(in srgb, var(--color-shadow) 30%, transparent),
     0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
 }
 
@@ -166,10 +167,13 @@
   padding-left: 0;
 }
 
-/* Rows (DataTable/TextCell): 32px, 4px 8px, Inter 400 12/20, the count in 600 */
+/* Rows (DataTable/TextCell): 32px, 4px 8px, Inter 400 12/20, the count in 600. Each row
+   draws the line ABOVE it: the first one merges with the header's (border-collapse),
+   and the footer draws its own, so hidden rows (other pages, closed summaries) can
+   never leave a doubled line. */
 .history-table-grid > tbody > tr > td {
   padding: 4px 8px;
-  border-bottom: 1px solid var(--color-border-light);
+  border-top: 1px solid var(--color-border-light);
   vertical-align: middle;
 }
 
@@ -180,16 +184,19 @@
   text-overflow: ellipsis;
 }
 
-.history-table-grid > tbody > tr:last-child > td {
-  border-bottom: 0;
-}
-
 .history-table-grid > tbody > tr.article-row {
   cursor: pointer;
 }
 
 .history-table-grid > tbody > tr.article-row:hover {
   background: color-mix(in srgb, var(--color-grey) 6%, transparent);
+}
+
+/* In compare mode a click picks the row: one that cannot be picked (two others are,
+   or it is a deleted article) does not look clickable */
+.history-table-grid.is-comparing > tbody > tr.article-row:has(.row-check:disabled) {
+  cursor: default;
+  background: transparent;
 }
 
 .history-table-count {

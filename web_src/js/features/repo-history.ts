@@ -176,7 +176,6 @@ export function initRepoHistory() {
   // whether the bubble view has been mounted (nothing watches it)
   let bubbleMounted = false;
 
-  let tableBound = false;
   let loaderEl: HTMLElement | null = null;
   let errorEl: HTMLElement | null = null;
   let errorTextEl: HTMLElement | null = null;
@@ -312,10 +311,6 @@ export function initRepoHistory() {
   // checkboxes are compare mode's picks (figma 641:61176 / 641:61039).
   let historyTable: HistoryTable | null = null;
 
-  function syncTableSelection() {
-    historyTable?.syncSelection();
-  }
-
   function updateArticleStatus() {
     if (loaderEl) toggleHidden(loaderEl, !isLoading.value);
     if (errorEl) {
@@ -372,8 +367,7 @@ export function initRepoHistory() {
   }
 
   function bindTableInteractions() {
-    if (tableBound || !tableSection) return;
-    tableBound = true;
+    if (historyTable || !tableSection) return;
     historyTable = initHistoryTable({
       section: tableSection,
       appSubUrl,
@@ -468,8 +462,6 @@ export function initRepoHistory() {
     }
 
     if (view === 'table') {
-      bindTableInteractions();
-      syncTableSelection();
       if (options.pushState) writeHistory('table', articleMode.value, selectedRepo.value, 'push');
       return;
     }
@@ -584,7 +576,7 @@ export function initRepoHistory() {
   }, {immediate: true});
 
   watch(selectedRepo, () => {
-    syncTableSelection();
+    historyTable?.syncSelection();
     updateArchivedNoticeVisibility();
     syncNavLinks();
   }, {immediate: true});
@@ -643,7 +635,8 @@ export function initRepoHistory() {
     switchView('bubble', {pushState: true});
   }, {capture: true});
   // a Compare press carried by the url (?compare=1, see takeCompareRequestFromUrl) on a
-  // page opened on the Table view is the table's
+  // page opened on the Table view is the table's. The app itself only builds that url for
+  // the Bubble view (the button's data-bubble-url); a hand-typed or shared one lands here.
   if (activeView.value === 'table' && historyTable && takeCompareModeRequest()) historyTable.toggleCompare();
   if (navEl) navEl.addEventListener('click', handleNavClick as EventListener);
   articleSection?.addEventListener('click', handleArticleSectionClick);

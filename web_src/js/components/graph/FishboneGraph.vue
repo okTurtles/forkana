@@ -34,10 +34,11 @@ import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
 import { COMPARE_POPOVER_HEIGHT, COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
-import CompareAnnouncement, { type CompareAnnouncementMessages, type CompareAnnouncementState } from "./CompareAnnouncement.vue";
+import CompareAnnouncement from "./CompareAnnouncement.vue";
 import {
   COMPARE_MODE_STATE_EVENT, COMPARE_MODE_TOGGLE_EVENT, canPickForCompare, compareAnnouncementFor, compareAvailableFor,
-  readCompareMessages, replayCompareModeRequest, subjectCompareUrl, type CompareModeState,
+  readCompareMessages, replayCompareModeRequest, subjectCompareUrl, type CompareAnnouncementMessages,
+  type CompareAnnouncementState, type CompareModeState,
 } from "../../modules/compare-mode-request.ts";
 import type { ForkGraphNode, ForkGraphResponse } from "./fork-graph-api.ts";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";

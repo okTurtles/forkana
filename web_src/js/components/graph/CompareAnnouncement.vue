@@ -25,8 +25,6 @@ import {computed} from 'vue';
 // the banner's states and messages live with the rest of compare mode
 import type {CompareAnnouncementMessages, CompareAnnouncementState} from '../../modules/compare-mode-request.ts';
 
-export type {CompareAnnouncementMessages, CompareAnnouncementState};
-
 const props = withDefaults(defineProps<{
   state: CompareAnnouncementState;
   messages: CompareAnnouncementMessages;

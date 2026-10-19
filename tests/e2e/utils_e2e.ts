@@ -164,15 +164,20 @@ export async function disableGeneratedHooks(owner: string, repoName: string): Pr
  * differs on a phone.
  */
 export async function create_article_via_api(user: string, subjectName: string, repoName: string, description = ''): Promise<void> {
+  // with exactly one trailing slash, so the relative path below stays under a sub-path
+  const baseURL = `${(env.GITEA_URL || 'http://localhost:3000').replace(/\/+$/, '')}/`;
   const api = await request.newContext({
-    baseURL: env.GITEA_URL || 'http://localhost:3000/',
+    baseURL,
     extraHTTPHeaders: {Authorization: `Basic ${Buffer.from(`${user}:${LOGIN_PASSWORD}`).toString('base64')}`},
   });
-  const response = await api.post('api/v1/user/repos', {
-    data: {name: repoName, subject: subjectName, description, auto_init: true, readme: 'Default'},
-  });
-  expect(response.status(), await response.text()).toBe(201);
-  await api.dispose();
+  try {
+    const response = await api.post('api/v1/user/repos', {
+      data: {name: repoName, subject: subjectName, description, auto_init: true, readme: 'Default'},
+    });
+    expect(response.status(), await response.text()).toBe(201);
+  } finally {
+    await api.dispose();
+  }
 }
 
 /**

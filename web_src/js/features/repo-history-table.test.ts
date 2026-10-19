@@ -18,11 +18,11 @@ test('pages of the table', () => {
 });
 
 test('the footer counter reads as figma\'s "8 of 12"', () => {
-  const msg = '{shown} of {total}';
+  const msg = '%[1]d of %[2]d';
   expect(tableCounterText(msg, 1, 8, 12)).toEqual('8 of 12');
   expect(tableCounterText(msg, 2, 8, 12)).toEqual('12 of 12');
   expect(tableCounterText(msg, 1, 8, 3)).toEqual('3 of 3');
-  expect(fillMessage('{a} {unknown}', {a: 1})).toEqual('1 {unknown}');
+  expect(fillMessage('%[2]s, %[1]d, %[3]d', 1, 'two')).toEqual('two, 1, %[3]d');
 });
 
 test('compare picks: two at most, in order, a third refused', () => {
