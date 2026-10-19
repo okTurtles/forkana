@@ -421,34 +421,41 @@ It needs some tricks to tweak the left/right borders with active state */
    the border; a tertiary button keeps a transparent border for the same reason.
    Selectors are doubled (.forkana-btn.forkana-btn-…) so they win over the global "a:hover" rule
    (web_src/css/base.css) when the button is a link. */
+/* The size is set through the --btn-* properties, so a page can switch a button to another size
+   at a breakpoint by setting the same properties (web_src/css/repo/new-subject.css). */
 .forkana-btn {
+  --btn-height: 32px;
+  --btn-pad-x: 11px;
+  --btn-font: 14px;
+  --btn-line: 20px;
+  --btn-gap: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 11px;
+  gap: var(--btn-gap);
+  height: var(--btn-height);
+  padding: 0 var(--btn-pad-x);
   border: 1px solid transparent;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: var(--btn-font);
   font-weight: var(--font-weight-semibold);
-  line-height: 20px;
+  line-height: var(--btn-line);
   white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
 }
 
 .forkana-btn.forkana-btn-sm {
-  gap: 4px;
-  height: 26px;
-  padding: 0 7px;
-  font-size: 12px;
-  line-height: 18px;
+  --btn-height: 26px;
+  --btn-pad-x: 7px;
+  --btn-font: 12px;
+  --btn-line: 18px;
+  --btn-gap: 4px;
 }
 
 .forkana-btn.forkana-btn-lg {
-  height: 40px;
-  padding: 0 15px;
+  --btn-height: 40px;
+  --btn-pad-x: 15px;
 }
 
 /* the 2px #b3a9ff ring of every variant's "focus" state */

@@ -145,14 +145,13 @@
     margin-top: 22px;
   }
 
-  /* small buttons on mobile (766:51953, 766:51954): the .forkana-btn-sm values of
-     modules/button.css (26px tall, Inter 600 12px/18px), applied by breakpoint here because
-     the same buttons are medium on desktop */
+  /* small buttons on mobile (766:51953, 766:51954): the size properties of .forkana-btn-sm
+     (modules/button.css), set by breakpoint here because the same buttons are medium on desktop */
   .new-subject-page .new-subject-actions .forkana-btn {
-    gap: 4px;
-    height: 26px;
-    padding: 0 7px;
-    font-size: 12px;
-    line-height: 18px;
+    --btn-height: 26px;
+    --btn-pad-x: 7px;
+    --btn-font: 12px;
+    --btn-line: 18px;
+    --btn-gap: 4px;
   }
 }
