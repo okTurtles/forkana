@@ -34,11 +34,11 @@ func readableArticleCond(doer *user_model.User) builder.Cond {
 		hiddenUsers := builder.Select("id").From("`user`").Where(builder.Eq{
 			"type": user_model.UserTypeIndividual,
 		}.And(builder.In("visibility", hiddenVisibilities)))
-		hidden := builder.NotIn("`repository`.owner_id", hiddenUsers)
+		ownerVisible := builder.NotIn("`repository`.owner_id", hiddenUsers)
 		if doer != nil {
-			hidden = hidden.Or(builder.Eq{"`repository`.owner_id": doer.ID})
+			ownerVisible = ownerVisible.Or(builder.Eq{"`repository`.owner_id": doer.ID})
 		}
-		cond = cond.And(hidden)
+		cond = cond.And(ownerVisible)
 	}
 	return cond
 }
@@ -69,31 +69,29 @@ func CountReadableArticlesBySubjectIDs(ctx context.Context, subjectIDs []int64, 
 }
 
 // maxArticleOwners bounds the authors listed for a subject.
-const maxArticleOwners = 50
+var maxArticleOwners = 50
 
 // FindReadableArticleOwners returns the owners of the articles the doer can open in the
-// subject (see readableArticleCond), the most recently updated first, each once.
+// subject (see readableArticleCond), the most recently updated first, each once. The
+// grouping is done by the database, so the limit counts owners, not articles: an owner with
+// many articles on the subject cannot push the others out.
 func FindReadableArticleOwners(ctx context.Context, subjectID int64, doer *user_model.User) ([]string, error) {
 	var rows []struct {
+		OwnerID   int64
 		OwnerName string
 	}
 	err := db.GetEngine(ctx).Table("repository").
-		Select("`repository`.owner_name").
+		Select("`repository`.owner_id, `repository`.owner_name").
 		Where(builder.Eq{"`repository`.subject_id": subjectID}.And(readableArticleCond(doer))).
-		OrderBy(articleOrderBy).
-		Limit(4 * maxArticleOwners).
+		GroupBy("`repository`.owner_id, `repository`.owner_name").
+		OrderBy("MAX(`repository`.updated_unix) DESC, `repository`.owner_id DESC").
+		Limit(maxArticleOwners).
 		Find(&rows)
 	if err != nil {
 		return nil, err
 	}
 	owners := make([]string, 0, len(rows))
-	seen := make(map[string]bool, len(rows))
 	for _, r := range rows {
-		key := strings.ToLower(r.OwnerName)
-		if seen[key] || len(owners) == maxArticleOwners {
-			continue
-		}
-		seen[key] = true
 		owners = append(owners, r.OwnerName)
 	}
 	return owners, nil

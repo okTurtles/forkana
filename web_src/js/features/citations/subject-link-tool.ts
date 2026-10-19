@@ -223,7 +223,7 @@ async function showAuthors(s: Session, subject: string): Promise<void> {
   try {
     const resp = await GET(`${window.config.appSubUrl}/explore/subjects/articles?subject=${encodeURIComponent(subject)}`);
     const data = await resp.json();
-    rows = (data.articles ?? []).map((a: {owner: string}) => ({kind: 'author', subject: data.subject ?? subject, owner: a.owner}));
+    rows = (data.articles ?? []).map((a: {owner: string}) => ({kind: 'author', subject: data.subject || subject, owner: a.owner}));
   } catch {
     rows = [];
   }

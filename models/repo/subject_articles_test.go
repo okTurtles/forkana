@@ -9,6 +9,8 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/test"
+	"code.gitea.io/gitea/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,6 +71,23 @@ func TestReadableArticlesBySubject(t *testing.T) {
 	owners, err = repo_model.FindReadableArticleOwners(ctx, subject.ID, user2)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"user2", "user5", "limited_org", "user33"}, owners)
+
+	// the cap counts owners, the most recently updated first (review M2): user2's two
+	// articles count once
+	setUpdated := func(repoID, unix int64) {
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repoID})
+		repo.UpdatedUnix = timeutil.TimeStamp(unix)
+		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo, "updated_unix"))
+	}
+	setUpdated(1, 300) // user2
+	setUpdated(2, 400) // user2
+	setUpdated(4, 350) // user5
+	setUpdated(38, 100)
+	setUpdated(17, 100)
+	defer test.MockVariableValue(repo_model.MaxArticleOwners, 2)()
+	owners, err = repo_model.FindReadableArticleOwners(ctx, subject.ID, user2)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"user2", "user5"}, owners)
 
 	for _, c := range []struct {
 		owner string

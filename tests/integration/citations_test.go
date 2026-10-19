@@ -54,10 +54,10 @@ func TestCitationEditorEndpoints(t *testing.T) {
 		}
 
 		resp = MakeRequest(t, NewRequest(t, "GET", "/explore/subjects/articles?subject=no-such-subject"), http.StatusOK)
-		assert.JSONEq(t, `{"articles":[]}`, resp.Body.String())
+		assert.JSONEq(t, `{"subject":"","articles":[]}`, resp.Body.String())
 		// an empty name is no subject (not the first subject of the table)
 		resp = MakeRequest(t, NewRequest(t, "GET", "/explore/subjects/articles?subject="), http.StatusOK)
-		assert.JSONEq(t, `{"articles":[]}`, resp.Body.String())
+		assert.JSONEq(t, `{"subject":"","articles":[]}`, resp.Body.String())
 	})
 
 	t.Run("PrivateOwnersAreHidden", func(t *testing.T) {
