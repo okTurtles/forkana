@@ -1,0 +1,657 @@
+/* The Article view of a subject page: its Read, Edit and History tabs (#433, #434, #435).
+   Values are the figma frames' ("Forkana - Wireframes"), converted from Figma px:
+   - Read: "Article view / Logged out - Read only" 641:65454
+   - Edit: "Article view / Logged out - Edit" 641:65657
+   - History: "Article view / History" 641:64052
+   The editor's own styling (its toolbar and frame) is in
+   custom/public/assets/css/toast-editor.css, beside the rest of the editor's. */
+
+/* ── Width ───────────────────────────────────────────────────────────────────
+   The Read tab is an 800px column (Frame 759 641:65466); Edit and History are 1080px
+   (Frame 965 641:65666, 641:64059). The subject header's view tabs above take the
+   same width in the Article view (UnderNav_Views 641:65474, 641:65665, 641:64057), and
+   the Compare button and the Follow star are not there: Compare is the Bubble view's,
+   and the Article view's Watch button (#433 item 3) stands for the Follow star. The
+   view is switched without reloading (repo-history.ts), hence :has(). */
+#article-view-root {
+  max-width: 1080px;
+  margin-inline: auto;
+}
+
+#article-view-root[data-article-mode="read"] {
+  max-width: 800px;
+}
+
+.page-content:has(.history-view-section--article:not([hidden]) #article-view-root) .secondary-nav overflow-menu {
+  max-width: 1080px;
+  margin-inline: auto;
+}
+
+.page-content:has(.history-view-section--article:not([hidden]) #article-view-root[data-article-mode="read"]) .secondary-nav overflow-menu {
+  max-width: 800px;
+}
+
+.page-content:has(.history-view-section--article:not([hidden])) #compare-mode-button,
+.page-content:has(.history-view-section--article:not([hidden])) .repo-header-follow {
+  display: none;
+}
+
+/* The title block is 48px above and 32px below the title (Frame 168 641:65472,
+   padding 48/48/32/48) once the Follow star is gone. Two classes deep and important
+   to outweigh the tw-pt-14 and .repo-header-with-follow it carries elsewhere. */
+.page-content:has(.history-view-section--article:not([hidden])) .secondary-nav .repo-header {
+  padding-top: 48px !important;
+  padding-bottom: 32px !important;
+}
+
+/* ── Vertical rhythm ─────────────────────────────────────────────────────────
+   24px from the view tabs to the tokens, from the tokens to the tabs, from the tabs to
+   the article's path, and from the path to the summary (Frame 764 641:65469 and its
+   children, all auto-layout gap 24). */
+.history-view-section.history-view-section--article {
+  padding-top: 24px;
+}
+
+#article-view-root [data-role="article-content"] {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.article-mode-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+/* ── Tokens (Frame 549 641:65477) ────────────────────────────────────────────
+   Token 641:58376: 18px tall, 0 8px, a 1px #d1d9e0 70% border, 100px radius; a 16px
+   #59636e icon 8px from an Inter 600 12/18 #59636e label. 14px between the two. */
+.article-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.article-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--color-border-light) 70%, transparent);
+  border-radius: 100px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-light-3);
+  white-space: nowrap;
+}
+
+/* ── Read / Edit / History tabs (TabNav 641:65480 and its links) ─────────────
+   40px tall, 0 16px, 8px from the icon to an Inter 14/20 label: #59636e and regular,
+   or #1f2328 and semibold on the open tab, which is white with a 1px #d1d9e0 border
+   (none at the bottom) and 6px top corners. A 1px #d1d9e0 rule under the row. */
+#article-tabs .ui.tabular.menu {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  margin: 0 !important;
+  gap: 4px;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+#article-tabs .ui.tabular.menu > a.item {
+  height: 40px;
+  padding: 0 16px;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-light-3);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+
+#article-tabs .ui.tabular.menu > a.item.active {
+  margin-bottom: -1px;
+  height: 41px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border-color: var(--color-border-light);
+}
+
+#article-tabs .ui.tabular.menu > a.item .svg {
+  margin: 0;
+}
+
+.article-tabs-trailing {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-left: auto;
+  align-self: center;
+}
+
+/* A borderless button (Action 6507:58668): an Inter 600 14/20 #25292e label 8px from
+   its 16px icon, 6px radius; CopyRef has no side padding (Button 641:65500). */
+.article-action-button.forkana-btn {
+  color: var(--color-button-text);
+}
+
+.article-action-button .svg {
+  color: var(--color-text-primary);
+}
+
+.article-copy-ref.forkana-btn {
+  padding: 0;
+}
+
+/* The Edit tab's buttons for a signed-out reader (View Tab 641:65671): Fork, with its
+   fork count, in the unavailable secondary colours (#f6f8fa, a #818b98 10% border and
+   label) and Submit changes in the unavailable primary ones (#dad5ff, a white 80%
+   label). Both lead to sign in, so they keep a pointer. */
+.forkana-btn.article-btn-unavailable {
+  color: var(--color-button-text-disabled);
+  background: var(--color-surface-muted);
+  border-color: var(--color-button-border-disabled);
+}
+
+.forkana-btn.article-btn-primary-unavailable {
+  color: rgb(255 255 255 / 80%);
+  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+}
+
+.forkana-btn.article-btn-unavailable:hover,
+.forkana-btn.article-btn-primary-unavailable:hover {
+  text-decoration: none;
+  filter: brightness(0.97);
+}
+
+/* CounterLabel 6484:44075: a #818b98 12% pill, 0 6px. */
+.article-counter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-button-text-disabled) 12%, transparent);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+/* ── The article's path (Frame 566 641:65486) ───────────────────────────────── */
+.article-path {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.article-path-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.article-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.article-breadcrumb a,
+.article-fork-of a {
+  color: var(--color-primary);
+}
+
+.article-breadcrumb-divider {
+  padding: 0 4px;
+  color: var(--color-text-light-3);
+}
+
+.article-fork-of {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.article-fork-of .svg {
+  flex-shrink: 0;
+  color: var(--color-text-primary);
+}
+
+/* ── Read ───────────────────────────────────────────────────────────────────
+   The summary (Text 641:65505): Inter 400 16/24 #59636e, 24px under the path, 32px
+   above the article. The article's headings (641:65511 and the others): Inter 700
+   20/32 over an 8px gap and a 1px #d1d9e0 70% rule, 24px above their text and 32px
+   under the section before them. */
+.article-summary {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-text-light-3);
+}
+
+.article-mode-body > .file-view.article-content {
+  margin-top: 8px;
+  padding: 0;
+}
+
+.file-view.article-content.markup h1,
+.file-view.article-content.markup h2 {
+  margin: 32px 0 24px;
+  padding-bottom: 8px;
+  font-size: 20px;
+  line-height: 32px;
+  font-weight: var(--font-weight-bold);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border-light) 70%, transparent);
+}
+
+.file-view.article-content.markup > :first-child {
+  margin-top: 0;
+}
+
+/* ── Edit ───────────────────────────────────────────────────────────────────
+   The Summary block (Textarea 641:65697), and the editor 74px under it (Frame 307
+   641:65700 at y 675 after the summary's end at 601). */
+.article-summary-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.article-summary-label {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.article-summary-box {
+  min-height: 64px;
+  padding: 7px 15px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-text-light-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 rgb(31 35 40 / 4%);
+  overflow-wrap: anywhere;
+}
+
+#article-edit-form {
+  margin-top: 50px;
+}
+
+/* ── The sign-in banner (Announcement 641:65699) ─────────────────────────────
+   Shown while the Article view shows the Edit tab to a signed-out reader. Its
+   dismiss button adds tw-hidden, which wins over the display below. */
+.article-signin-banner {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 7px 48px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+  background: var(--color-warning-bg);
+  border-top: 1px solid var(--color-warning-border);
+  border-bottom: 1px solid var(--color-warning-border);
+}
+
+.page-content:has(.history-view-section--article:not([hidden]) #article-view-root[data-article-mode="edit"]) .article-signin-banner {
+  display: flex;
+}
+
+.article-signin-banner-icon {
+  flex-shrink: 0;
+  color: var(--color-warning-text);
+}
+
+.article-signin-banner-text {
+  flex: 1;
+  padding: 6px 8px 6px 0;
+}
+
+.article-signin-banner-text a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.article-signin-banner-dismiss {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 8px;
+  color: var(--color-warning-text);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.article-signin-banner-dismiss:hover {
+  background: color-mix(in srgb, var(--color-warning-text) 10%, transparent);
+}
+
+/* ── History: the Sort menu (Button 641:64306, ActionMenu 641:64307) ─────────── */
+.ui.dropdown.article-sort-dropdown {
+  align-self: flex-end;
+  margin-bottom: -14px;
+}
+
+.article-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-button-text);
+  border-radius: 6px;
+}
+
+.article-sort-button:hover {
+  background: var(--color-button-hover);
+}
+
+.article-sort-caret {
+  color: var(--color-text-light-3);
+}
+
+.ui.dropdown.article-sort-dropdown > .menu {
+  left: auto;
+  right: 0;
+  min-width: 138px;
+  padding: 8px;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgb(37 41 46 / 12%), 0 6px 12px -3px rgb(37 41 46 / 4%), 0 0 0 1px var(--color-border-light);
+}
+
+.ui.dropdown.article-sort-dropdown > .menu > .item {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px !important;
+  border: none !important;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: var(--font-weight-normal) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* no highlight on the chosen item, only its check (currentSelection is hidden in the
+   figma); the hover is the menu's usual one */
+.ui.dropdown.article-sort-dropdown > .menu > .item.active,
+.ui.dropdown.article-sort-dropdown > .menu > .item.selected {
+  background: transparent !important;
+}
+
+.ui.dropdown.article-sort-dropdown > .menu > .item:hover {
+  background: var(--color-hover) !important;
+}
+
+.article-sort-check {
+  visibility: hidden;
+}
+
+.ui.dropdown.article-sort-dropdown > .menu > .item.active .article-sort-check {
+  visibility: visible;
+}
+
+/* ── History: the table (DataTable 641:64085) ─────────────────────────────────
+   A 1px #d1d9e0 frame with 6px corners. Header (ColumnHeaderCell 484:190754): 32px,
+   #f6f8fa, 6px 12px, Inter 600 12/20 #59636e; columns 220, 190, 498, 100 and 68 of
+   1076px. Rows (Frame 609 641:64100): 36px, 6px 12px, Inter 12/20 under a 1px #d1d9e0
+   rule; the user's 24px avatar has 6px corners (Avatar 641:64104) and their name is
+   semibold; the date #59636e. */
+.article-history-table {
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.article-history-table table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.article-history-table th {
+  height: 32px;
+  padding: 6px 12px;
+  text-align: left;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-light-3);
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.article-history-table td {
+  height: 36px;
+  padding: 6px 12px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.article-history-table .col-user { width: 220px; }
+.article-history-table .col-code { width: 190px; }
+.article-history-table .col-date { width: 100px; }
+.article-history-table .col-icon { width: 68px; text-align: center; }
+
+.article-history-table td.col-date {
+  color: var(--color-text-light-3);
+  white-space: nowrap;
+}
+
+.article-history-table td a {
+  color: inherit;
+}
+
+.article-history-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.article-history-user .author-wrapper {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+img.article-history-avatar {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px !important;
+  box-shadow: inset 0 0 0 1px rgb(31 35 40 / 15%);
+}
+
+.article-history-table td.col-icon a,
+.article-history-table td.col-icon > span {
+  display: inline-flex;
+  vertical-align: middle;
+  color: var(--color-text-primary);
+}
+
+/* The message and its expand chevron (chevron-up-24 641:64110, 16px #1f2328, at the
+   cell's right): a <details>, open on a click anywhere on the line. */
+.article-history-details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.article-history-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.article-history-details .commit-summary,
+.article-history-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.article-history-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-primary);
+  transition: transform 0.1s ease;
+}
+
+.article-history-details[open] .article-history-chevron {
+  transform: rotate(180deg);
+}
+
+.article-history-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+}
+
+.article-history-body .commit-body {
+  margin: 0;
+  font-family: var(--fonts-regular);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.article-history-sha {
+  font-size: 11px;
+  color: var(--color-text-light-3);
+  overflow-wrap: anywhere;
+}
+
+/* The footer (DataTable/Footer 641:64224): 48px, 8px 16px, "N of M" in Inter 12/20
+   #59636e, and the pager (Pagination 641:64228). */
+.article-history-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+  padding: 8px 16px;
+}
+
+.article-history-count {
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-text-light-3);
+}
+
+.article-history-pager {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.article-history-page-direction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  color: var(--color-primary);
+}
+
+.article-history-page-direction.disabled {
+  color: var(--color-text-light-3);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.article-history-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  margin: 0 2px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--color-text-primary);
+}
+
+.article-history-page.active {
+  color: var(--color-primary-contrast);
+  background: var(--color-primary);
+}
+
+a.article-history-page:hover,
+a.article-history-page-direction:hover {
+  text-decoration: none;
+  background: var(--color-button-hover);
+}
+
+/* ── Phones ──────────────────────────────────────────────────────────────── */
+@media (max-width: 767.98px) {
+  .article-signin-banner {
+    padding: 7px 16px;
+  }
+
+  /* the Edit tab's buttons go under the tabs rather than past the screen's edge */
+  #article-tabs .ui.tabular.menu {
+    flex-wrap: wrap;
+  }
+
+  .article-tabs-trailing {
+    order: 1;
+    width: 100%;
+    justify-content: flex-end;
+    padding-bottom: 8px;
+  }
+
+  #article-tabs .ui.tabular.menu > a.item {
+    order: 2;
+  }
+
+  /* the table keeps its columns and scrolls sideways inside its frame */
+  .article-history-table {
+    overflow-x: auto;
+  }
+
+  .article-history-table table {
+    min-width: 800px;
+  }
+
+  .article-history-footer {
+    flex-wrap: wrap;
+  }
+}

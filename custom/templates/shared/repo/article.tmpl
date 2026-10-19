@@ -11,12 +11,8 @@
             <p data-role="article-error-text"></p>
         </div>
         <div data-role="article-content" {{if not .ReadmeRequested}}hidden{{end}}>
-        <a class="tw-text-primary tw-inline-flex tw-items-center tw-gap-1"
-            style="margin-top: -8px; margin-bottom: 28px" data-role="back-to-bubble"
-            href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "bubble" "selected" .SubjectSelected}}">
-            {{svg "octicon-chevron-left" 16}}
-            <span>{{ctx.Locale.Tr "repo.back_to_bubble_view"}}</span>
-        </a>
+        {{/* #433 item 9, #434 item 7, #435 item 5: no "Back to bubble view" link here; the
+             Bubble view tab is right above. */}}
         {{if .IsTombstonedRepo}}
             {{template "shared/repo/tombstone_notice" dict "Repository" .Repository}}
         {{else if .ReadmeError}}
@@ -24,15 +20,18 @@
                 {{.ReadmeError}}
             </div>
         {{else}}
-            <div class="tw-flex tw-items-center tw-gap-2">
-                <span class="pill">
-                    {{svg "octicon-person" 16 "tw-mr-1"}}
-                    {{template "shared/repo/contributor_count" (dict "Count" .ReadmeContributorCount "Label" "lower")}}
+            {{/* #433 item 2: the two tokens of figma Frame 549 (641:65477): "335 Contributors"
+                 with person-24 and "335 Last updated: Yesterday" with sync-24, 14px apart.
+                 The second token's number is the article's number of changes. */}}
+            <div class="article-tokens" data-role="article-tokens">
+                <span class="article-token">
+                    {{svg "octicon-person" 16}}
+                    <span>{{template "shared/repo/contributor_count" (dict "Count" .ReadmeContributorCount "Label" "title")}}</span>
                 </span>
                 {{if and .ReadmeLastCommit .ReadmeLastCommit.Committer}}
-                    <span class="pill">
-                        {{svg "octicon-sync" 16 "tw-mr-1"}}
-                        Updated {{DateUtils.TimeSince .ReadmeLastCommit.Committer.When}}
+                    <span class="article-token" data-role="article-last-updated">
+                        {{svg "octicon-sync" 16}}
+                        <span><span data-tooltip-content="{{ctx.Locale.TrN .ReadmeCommitCount "repo.article_changes_1" "repo.article_changes_n" .ReadmeCommitCount}}">{{.ReadmeCommitCount}}</span> {{ctx.Locale.Tr "repo.article_last_updated"}} {{DateUtils.TimeSince .ReadmeLastCommit.Committer.When}}</span>
                     </span>
                 {{end}}
             </div>
@@ -69,13 +68,19 @@
                             {{svg "octicon-gear" 16}} {{ctx.Locale.Tr "repo.settings"}}
                         </a>
                     {{end}}
-                    <div class="tw-flex tw-items-center tw-gap-2 tw-ml-auto">
+                    <div class="article-tabs-trailing">
                         {{/* #408: no "..." menu in the Read and History modes. It held a
                              "Something" placeholder; the only items the figma gives it (Watch and
-                             Report, node 662:98305) are the Follow star in the subject header and
-                             a report flow that does not exist yet. */}}
+                             Report, node 662:98305) are the Watch button below and a report flow
+                             that does not exist yet. */}}
+                        {{/* #433 item 3: Watch at the end of the Read tab's row (figma View Tab
+                             641:65480). The subject header's Follow star, which toggles the same
+                             watch, is hidden in the Article view (subject-views.css). */}}
+                        {{if and .IsArticleModeRead .RepoOperationsLink}}
+                            {{template "repo/watch_button" .}}
+                        {{end}}
                         {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}
-                            <div class="tw-flex tw-items-center tw-justify-between tw-mb-4">
+                            <div class="tw-flex tw-items-center">
                                 <div class="tw-flex tw-items-center tw-gap-2">
                                     {{if .IsSigned}}
                                         {{if .IsRepoOwner}}
@@ -143,13 +148,21 @@
                                             </span>
                                         {{end}}
                                     {{else}}
-                                        {{/* User not signed in - show disabled button with sign-in tooltip */}}
-                                        <span data-tooltip-content="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit_tooltip"}}">
-                                            <button type="button" class="ui primary button disabled" aria-label="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit"}}">
-                                                {{svg "octicon-check" 16 "tw-mr-1"}}
-                                                {{ctx.Locale.Tr "repo.editor.sign_in_to_edit"}}
-                                            </button>
-                                        </span>
+                                        {{/* #434 items 8 and 9: a signed-out reader sees the Fork and
+                                             Submit changes buttons of figma View Tab 641:65671 (Button
+                                             I641:65671;8356:68206, with the fork count, and Button
+                                             I641:65671;8356:68208), in their unavailable colours. Both
+                                             need an account, so both lead to sign in. */}}
+                                        {{$signIn := print AppSubUrl "/user/login?redirect_to=" (QueryEscape .Link)}}
+                                        <a class="forkana-btn article-btn-unavailable" id="signed-out-fork-button" href="{{$signIn}}"
+                                            data-tooltip-content="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit_tooltip"}}">
+                                            {{ctx.Locale.Tr "repo.fork_article"}}
+                                            <span class="article-counter">{{.Repository.NumForks}}</span>
+                                        </a>
+                                        <a class="forkana-btn article-btn-primary-unavailable" id="signed-out-submit-button" href="{{$signIn}}"
+                                            data-tooltip-content="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit_tooltip"}}">
+                                            {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                        </a>
                                     {{end}}
                                 </div>
                             </div>

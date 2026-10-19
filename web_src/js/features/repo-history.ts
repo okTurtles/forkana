@@ -579,14 +579,6 @@ export function initRepoHistory() {
     switchView(view, {mode: view === 'article' ? 'read' : undefined, pushState: true});
   }
 
-  // "Back to bubble view" inside the (possibly reloaded) article section
-  function handleArticleSectionClick(event: MouseEvent) {
-    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[data-role="back-to-bubble"]');
-    if (!anchor || !isPlainClick(event)) return;
-    event.preventDefault();
-    switchView('bubble', {pushState: true});
-  }
-
   // An entry without a state of ours (one created by an in-page anchor, say) is read
   // from its url, which carries everything the state would.
   function stateFromLocation(): HistoryState {
@@ -683,6 +675,5 @@ export function initRepoHistory() {
     switchView('bubble', {pushState: true});
   });
   if (navEl) navEl.addEventListener('click', handleNavClick as EventListener);
-  articleSection?.addEventListener('click', handleArticleSectionClick);
   window.addEventListener('popstate', handlePopState);
 }

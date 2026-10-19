@@ -827,6 +827,18 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		ctx.Data["ReadmeLastCommit"] = lastCommit
 	}
 
+	// The number of changes to the article, shown with its last update in every mode
+	// ("335 Last updated: Yesterday", figma 641:65479) and used by the History tab.
+	commitsCount, err := gitRepo.FileCommitsCount(defaultBranch, readmeTreePath)
+	if err != nil {
+		if mode == "history" {
+			ctx.ServerError("FileCommitsCount", err)
+			return
+		}
+		log.Warn("Failed to count the commits of %s: %v", readmeTreePath, err)
+	}
+	ctx.Data["ReadmeCommitCount"] = commitsCount
+
 	// Handle different modes
 	switch mode {
 	case "read":
@@ -910,12 +922,15 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		// Set up fork-on-edit context data
 		prepareArticleForkOnEditData(ctx)
 	case "history":
-		// For history mode, get file commit history
-		commitsCount, err := gitRepo.FileCommitsCount(defaultBranch, readmeTreePath)
-		if err != nil {
-			ctx.ServerError("FileCommitsCount", err)
+		// The Sort menu (#435, figma 641:64306/641:64307) switches the table between the
+		// article's changes (its commit history, the default) and its forks. Its parameter
+		// is not "sort", which the Table view's own Sort menu uses on the same page.
+		if ctx.FormString("history") == "forks" {
+			ctx.Data["HistorySort"] = "forks"
+			ctx.Data["ArticleForks"] = listArticleForks(ctx)
 			return
 		}
+		ctx.Data["HistorySort"] = "changes"
 
 		page := ctx.FormInt("page")
 		if page <= 0 {
@@ -948,6 +963,40 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		pager.AddParamFromRequest(ctx.Req)
 		ctx.Data["Page"] = pager
 	}
+}
+
+// articleForkRow is a row of the History tab's Forks listing (#435).
+type articleForkRow struct {
+	Repo *repo_model.Repository
+	// HeadCommitID is the head of the fork's default branch, empty when unknown.
+	HeadCommitID string
+}
+
+// listArticleForks lists the forks of the article shown (the direct ones, newest first,
+// at most 100) that the doer may see, for the History tab's Forks listing.
+func listArticleForks(ctx *context.Context) []*articleForkRow {
+	forks, _, err := repo_service.FindForks(ctx, ctx.Repo.Repository, ctx.Doer, db.ListOptions{Page: 1, PageSize: 100})
+	if err != nil {
+		log.Warn("FindForks for %s: %v", ctx.Repo.Repository.FullName(), err)
+		return nil
+	}
+	if err := repo_model.RepositoryList(forks).LoadAttributes(ctx); err != nil {
+		log.Warn("LoadAttributes for the forks of %s: %v", ctx.Repo.Repository.FullName(), err)
+	}
+	rows := make([]*articleForkRow, 0, len(forks))
+	for _, fork := range forks {
+		row := &articleForkRow{Repo: fork}
+		if !fork.IsEmpty && !fork.IsTombstone() {
+			if forkGitRepo, err := gitrepo.OpenRepository(ctx, fork); err == nil {
+				if id, err := forkGitRepo.GetBranchCommitID(fork.DefaultBranch); err == nil {
+					row.HeadCommitID = id
+				}
+				forkGitRepo.Close()
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 // findReadmeInEntries finds a README file in the given entries

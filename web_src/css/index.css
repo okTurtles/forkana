@@ -44,6 +44,7 @@
 @import "./features/console.css";
 @import "./features/bubble-graph.css";
 @import "./features/subject-views.css";
+@import "./features/article-view.css";
 
 @import "./markup/content.css";
 @import "./markup/codecopy.css";

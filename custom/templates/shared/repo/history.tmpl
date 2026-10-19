@@ -1,104 +1,162 @@
 {{define "shared/repo/history"}}
 {{if .IsArticleModeHistory}}
-<div class="ui bottom attached">
-    <div class="tw-mb-4 tw-flex tw-items-center tw-justify-between">
-        <div>
-            <h2 class="tw-text-xl tw-font-semibold tw-m-0">
-                {{/* owner / repo */}}
-                {{if .Repository.Owner}}
-                    <a class="tw-text-primary" href="{{.Repository.Owner.HomeLink}}">{{.Repository.Owner.Name}}</a>
-                    <span class="tw-text-gray-400">/</span>
-                {{end}}
-                <a class="muted" href="{{.RepoLink}}">{{.Repository.Name}}</a>
-            </h2>
-            <div class="tw-mt-1 tw-text-sm tw-text-gray-600">
-                {{if .Repository.IsFork}}
-                    <span class="tw-inline-flex tw-items-center">
-                        {{svg "octicon-repo-forked" 14 "tw-mr-1"}}
-                        Forked of:
-                        {{if .Repository.BaseRepo}}
-                            {{/* Go html/template automatically HTML-escapes these strings to prevent XSS */}}
-                            <a class="tw-ml-1" href="{{.Repository.BaseRepo.Link}}">{{.Repository.BaseRepo.OwnerName}} / {{.Repository.BaseRepo.Name}}</a>
-                        {{else}}
-                            {{/* Go html/template automatically HTML-escapes these strings to prevent XSS */}}
-                            <span class="tw-ml-1">{{.Repository.Owner.Name}} / {{.Repository.Name}}</span>
-                        {{end}}
-                    </span>
-                {{end}}
-            </div>
-        </div>
-        <div class="tw-flex tw-items-center tw-gap-3">
-            <a class="tw-font-bold tw-inline-flex tw-items-center muted" href="#" data-global-click="onCopyContentButtonClick" data-clipboard-text="{{.Repository.Owner.Name}}/{{.Repository.Name}}@{{.BranchName}}">
-                {{svg "octicon-link" 14 "tw-mr-1"}} CopyRef
-            </a>
-        </div>
-    </div>
-    {{if .Commits}}
-        <div class="ui attached table segment commit-table tw-mt-10">
-            <table class="ui very basic striped table unstackable" id="commits-table">
+{{/* #435: the History tab's table follows figma DataTable 641:64085 ("Article view /
+     History" 641:64052): a 1px #d1d9e0 frame with 6px corners, a 32px #f6f8fa header of
+     Inter 600 12/20 #59636e labels, 36px rows with a 24px avatar with 6px corners (not a
+     circle), the message's expand chevron at the right of its cell, and a footer with
+     "N of M" and the pager (DataTable/Footer 641:64224). The last column says where each
+     change came from: a commit icon for one made in this article, the fork icon for one
+     contributed through a fork. The Sort menu switches it to the article's forks. */}}
+<div class="ui bottom attached article-mode-body">
+    {{template "shared/repo/article_path" .}}
+    {{if eq .HistorySort "forks"}}
+        {{$forks := .ArticleForks}}
+        {{if $forks}}
+        <div class="article-history-table" data-role="article-history" data-sort="forks">
+            <table id="forks-table">
                 <thead>
                     <tr>
-                        <th class="three wide">{{ctx.Locale.Tr "repo.commits.user"}}</th>
-                        <th class="two wide sha">{{ctx.Locale.Tr "repo.commits.code"}}</th>
-                        <th class="eight wide message">{{ctx.Locale.Tr "repo.commits.message"}}</th>
-                        <th class="two wide tw-text-right">{{ctx.Locale.Tr "repo.commits.date"}}</th>
-                        <th class="one wide"></th>
+                        <th class="col-user">{{ctx.Locale.Tr "repo.commits.user"}}</th>
+                        <th class="col-code">{{ctx.Locale.Tr "repo.commits.code"}}</th>
+                        <th class="col-message">{{ctx.Locale.Tr "repo.commits.message"}}</th>
+                        <th class="col-date">{{ctx.Locale.Tr "repo.commits.date"}}</th>
+                        <th class="col-icon"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range $forks}}
+                    <tr>
+                        <td class="col-user">
+                            <div class="article-history-user">
+                                {{if .Repo.Owner}}
+                                    {{ctx.AvatarUtils.Avatar .Repo.Owner 24 "article-history-avatar"}}
+                                    <a class="author-wrapper" href="{{.Repo.Owner.HomeLink}}">{{.Repo.Owner.Name}}</a>
+                                {{else}}
+                                    <span class="author-wrapper">{{.Repo.OwnerName}}</span>
+                                {{end}}
+                            </div>
+                        </td>
+                        <td class="col-code sha">
+                            {{if .HeadCommitID}}<a href="{{.Repo.Link}}" rel="nofollow">{{ShortSha .HeadCommitID}}</a>{{end}}
+                        </td>
+                        <td class="col-message">
+                            <a class="article-history-message" href="{{.Repo.Link}}">{{or .Repo.Description (print .Repo.OwnerName " / " $.SubjectName)}}</a>
+                        </td>
+                        <td class="col-date">{{DateUtils.TimeSince .Repo.UpdatedUnix}}</td>
+                        <td class="col-icon">
+                            <span data-tooltip-content="{{ctx.Locale.Tr "repo.article_history_fork"}}">{{svg "octicon-repo-forked" 16}}</span>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            <div class="article-history-footer">
+                <span class="article-history-count">{{ctx.Locale.Tr "repo.article_history_count" (len $forks) (len $forks)}}</span>
+            </div>
+        </div>
+        {{else}}
+            <div class="ui message" data-role="article-history-no-forks">{{ctx.Locale.Tr "repo.article_history_no_forks"}}</div>
+        {{end}}
+    {{else if .Commits}}
+        <div class="article-history-table" data-role="article-history" data-sort="changes">
+            <table id="commits-table">
+                <thead>
+                    <tr>
+                        <th class="col-user">{{ctx.Locale.Tr "repo.commits.user"}}</th>
+                        <th class="col-code sha">{{ctx.Locale.Tr "repo.commits.code"}}</th>
+                        <th class="col-message message">{{ctx.Locale.Tr "repo.commits.message"}}</th>
+                        <th class="col-date">{{ctx.Locale.Tr "repo.commits.date"}}</th>
+                        <th class="col-icon"></th>
                     </tr>
                 </thead>
                 <tbody class="commit-list">
                     {{range .Commits}}
+                    {{$fromFork := and .User (ne .User.ID $.Repository.OwnerID)}}
                     <tr>
-                        <td class="author">
-                            <div class="tw-flex tw-font-bold">
+                        <td class="col-user author">
+                            <div class="article-history-user">
                                 {{$userName := .Author.Name}}
                                 {{if .User}}
                                     {{if and .User.FullName DefaultShowFullName}}
                                         {{$userName = .User.FullName}}
                                     {{end}}
-                                    {{ctx.AvatarUtils.Avatar .User 28 "tw-mr-2 tw-border tw-rounded-full"}}<a class="muted author-wrapper" href="{{.User.HomeLink}}">{{$userName}}</a>
+                                    {{ctx.AvatarUtils.Avatar .User 24 "article-history-avatar"}}
+                                    <a class="author-wrapper" href="{{.User.HomeLink}}">{{$userName}}</a>
                                 {{else}}
-                                    {{ctx.AvatarUtils.AvatarByEmail .Author.Email .Author.Name 28 "tw-mr-2"}}
+                                    {{ctx.AvatarUtils.AvatarByEmail .Author.Email .Author.Name 24 "article-history-avatar"}}
                                     <span class="author-wrapper">{{$userName}}</span>
                                 {{end}}
                             </div>
                         </td>
-                        <td class="sha">
-                            <a href="{{QueryBuild (or $.ArticleLink $.RepoLink) "version" .ID.String}}" rel="nofollow" class="muted">
+                        <td class="col-code sha">
+                            <a href="{{QueryBuild (or $.ArticleLink $.RepoLink) "version" .ID.String}}" rel="nofollow">
                                 {{ShortSha .ID.String}}
                             </a>
                         </td>
-                        <td class="message">
-                            <span class="message-wrapper">
-                                <span class="commit-summary" title="{{.Summary}}">{{.Summary | ctx.RenderUtils.RenderEmoji}}</span>
-                            </span>
+                        <td class="col-message message">
+                            {{/* #435 item 12: the row expands, from the chevron at the right of
+                                 the message (figma chevron-up-24 641:64110), to the full commit
+                                 message and id. A <details> needs no script, which matters here:
+                                 this section is also fetched and swapped in by repo-history.ts. */}}
+                            <details class="article-history-details">
+                                <summary aria-label="{{ctx.Locale.Tr "repo.article_history_expand"}}">
+                                    <span class="commit-summary" title="{{.Summary}}">{{.Summary | ctx.RenderUtils.RenderEmoji}}</span>
+                                    {{svg "octicon-chevron-down" 16 "article-history-chevron"}}
+                                </summary>
+                                <div class="article-history-body">
+                                    {{$body := ctx.RenderUtils.RenderCommitBody .Message $.Repository}}
+                                    {{if $body}}<pre class="commit-body">{{$body}}</pre>{{end}}
+                                    <code class="article-history-sha">{{.ID.String}}</code>
+                                </div>
+                            </details>
                         </td>
-                        {{if .Committer}}
-                            <td class="tw-text-right">{{DateUtils.TimeSince .Committer.When}}</td>
-                        {{else}}
-                            <td class="tw-text-right">{{DateUtils.TimeSince .Author.When}}</td>
-                        {{end}}
-                        <td class="tw-text-right tw-py-0">
-                            <a class="btn interact-bg tw-p-2" data-tooltip-content="{{ctx.Locale.Tr "repo.commits.view_path"}}" href="{{QueryBuild (or $.ArticleLink $.RepoLink) "version" .ID.String}}">
-                                {{if $.Repository.IsFork}}
-                                    {{svg "octicon-repo-forked" 16}}
-                                {{else}}
-                                    {{svg "octicon-git-commit" 16}}
-                                {{end}}
+                        <td class="col-date">{{DateUtils.TimeSince (Iif .Committer .Committer.When .Author.When)}}</td>
+                        <td class="col-icon">
+                            <a href="{{QueryBuild (or $.ArticleLink $.RepoLink) "version" .ID.String}}" data-tooltip-content="{{if $fromFork}}{{ctx.Locale.Tr "repo.article_history_from_fork"}}{{else}}{{ctx.Locale.Tr "repo.article_history_commit"}}{{end}}" aria-label="{{ctx.Locale.Tr "repo.commits.view_path"}}">
+                                {{if $fromFork}}{{svg "octicon-repo-forked" 16}}{{else}}{{svg "octicon-git-commit" 16}}{{end}}
                             </a>
                         </td>
                     </tr>
                     {{end}}
                 </tbody>
             </table>
+            <div class="article-history-footer">
+                <span class="article-history-count">{{ctx.Locale.Tr "repo.article_history_count" (len .Commits) .CommitCount}}</span>
+                {{if .Page}}{{template "shared/repo/article_history_pager" .}}{{end}}
+            </div>
         </div>
-        {{if .Page}}
-            {{template "base/paginate" .}}
-        {{end}}
     {{else}}
         <div class="ui message">
             {{ctx.Locale.Tr "repo.commits.no_commits"}}
         </div>
     {{end}}
 </div>
+{{end}}
+{{end}}
+
+{{/* The footer's pager (figma Pagination 641:64228): Previous and Next as Inter 400
+     14/20 #4e40fa links with their chevrons, the pages as 32×32 boxes with 6px corners,
+     the current one filled #4e40fa. The links keep the page's other parameters. */}}
+{{define "shared/repo/article_history_pager"}}
+{{$params := .Page.GetParams}}
+{{$link := .Link}}
+{{with .Page.Paginater}}
+<nav class="article-history-pager" aria-label="{{ctx.Locale.Tr "repo.commits.commits"}}">
+    <a class="article-history-page-direction{{if not .HasPrevious}} disabled{{end}}" {{if .HasPrevious}}href="{{$link}}?page={{.Previous}}{{if $params}}&{{$params}}{{end}}"{{else}}aria-disabled="true"{{end}}>
+        {{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "repo.issues.previous"}}</span>
+    </a>
+    {{range .Pages}}
+        {{if eq .Num -1}}
+            <span class="article-history-page">…</span>
+        {{else if .IsCurrent}}
+            <span class="article-history-page active" aria-current="page">{{.Num}}</span>
+        {{else}}
+            <a class="article-history-page" href="{{$link}}?page={{.Num}}{{if $params}}&{{$params}}{{end}}">{{.Num}}</a>
+        {{end}}
+    {{end}}
+    <a class="article-history-page-direction{{if not .HasNext}} disabled{{end}}" {{if .HasNext}}href="{{$link}}?page={{.Next}}{{if $params}}&{{$params}}{{end}}"{{else}}aria-disabled="true"{{end}}>
+        <span>{{ctx.Locale.Tr "repo.issues.next"}}</span>{{svg "octicon-chevron-right" 16}}
+    </a>
+</nav>
 {{end}}
 {{end}}

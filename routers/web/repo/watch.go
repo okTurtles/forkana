@@ -11,7 +11,13 @@ import (
 	"code.gitea.io/gitea/services/context"
 )
 
-const tplWatchUnwatch templates.TplName = "repo/watch_unwatch"
+const (
+	tplWatchUnwatch templates.TplName = "repo/watch_unwatch"
+	// tplWatchButton is the Article view's Watch button (#433, figma 641:65480), which
+	// posts with style=button so that it is replaced by itself rather than by the
+	// subject header's Follow star.
+	tplWatchButton templates.TplName = "repo/watch_button"
+)
 
 func ActionWatch(ctx *context.Context) {
 	err := repo_model.WatchRepo(ctx, ctx.Doer, ctx.Repo.Repository, ctx.PathParam("action") == "watch")
@@ -27,5 +33,9 @@ func ActionWatch(ctx *context.Context) {
 		return
 	}
 	ctx.RespHeader().Add("hx-trigger", "refreshUserCards") // see the `hx-trigger="refreshUserCards ..."` comments in tmpl
+	if ctx.FormString("style") == "button" {
+		ctx.HTML(http.StatusOK, tplWatchButton)
+		return
+	}
 	ctx.HTML(http.StatusOK, tplWatchUnwatch)
 }
