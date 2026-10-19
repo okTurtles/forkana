@@ -41,6 +41,9 @@ test('a point of contention is selected on its own, and Back returns to it (#431
   const gap = await message.evaluate((el) => el.getBoundingClientRect().top - el.previousElementSibling.getBoundingClientRect().bottom);
   expect(gap).toBeCloseTo(24, 0);
   await expect(back).toHaveText('Back');
+  // a button: no link underline on hover
+  await back.hover();
+  await expect(back).toHaveCSS('text-decoration-line', 'none');
 
   // item 1: the page's Back goes back in the history, to the very entry that was left
   const historyLength = await page.evaluate(() => window.history.length);

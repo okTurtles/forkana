@@ -132,14 +132,17 @@
 	line-height: 20px;
 	font-weight: 600;
 	color: var(--color-button-text);
+	text-decoration-line: none;
 }
 
 .subject-compare-back .svg {
 	color: var(--color-text-primary);
 }
 
+/* a button, not a link: the global `a:hover` underline does not apply */
 .subject-compare-back:hover {
 	color: var(--color-button-text);
+	text-decoration-line: none;
 	background: var(--color-hover);
 }
 

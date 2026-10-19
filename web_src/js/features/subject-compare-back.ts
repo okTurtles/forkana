@@ -7,6 +7,7 @@
 // the same scroll position, or the page itself when the browser kept it in its
 // back/forward cache.
 import {readCompareReturn} from '../modules/graph-history.ts';
+import {isPlainClick} from '../utils/dom.ts';
 
 function decodedPath(path: string): string {
   try {
@@ -68,7 +69,7 @@ export function initSubjectCompareBack() {
   const link = document.querySelector<HTMLAnchorElement>('a[data-subject-back]');
   if (!link) return;
   link.addEventListener('click', (event: MouseEvent) => {
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (!isPlainClick(event)) return;
     const goBack = shouldGoBackInHistory({
       currentUrl: window.location.pathname + window.location.search,
       subjectPath: link.getAttribute('data-subject-path') ?? '',

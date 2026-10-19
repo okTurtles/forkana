@@ -2570,8 +2570,8 @@ function onJointClick(joint: { id: string; sourceOwner: string; targetOwner: str
     /* repo-history.ts records it (selection-less) in this entry */
     window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: null }));
   }
-  selectedJointId.value = joint.id;
-  replaceGraphState({poc: joint.id, scrollY: Math.round(window.scrollY)});
+  setSelectedJoint(joint.id);
+  replaceGraphState({scrollY: Math.round(window.scrollY)});
   const href = compareUrl.pathname + compareUrl.search;
   rememberCompareReturn(href, window.location.pathname);
   window.location.href = href;

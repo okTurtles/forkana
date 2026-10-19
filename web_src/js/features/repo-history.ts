@@ -3,6 +3,7 @@ import {initRepoBubbleView} from './repo-bubble-view.ts';
 import {initArticleEditor} from './article-editor.ts';
 import {initArticleSettings} from './article-settings.ts';
 import {GET} from '../modules/fetch.ts';
+import {isPlainClick} from '../utils/dom.ts';
 import {BUBBLE_HIDDEN_EVENT, BUBBLE_VISIBLE_EVENT} from '../components/graph/graph-viewport.ts';
 import {
   BUBBLE_OPEN_ARTICLE_EVENT, BUBBLE_SELECTED_EVENT, SELECTION_PARAM, SELECTION_UPDATED_EVENT,
@@ -566,10 +567,6 @@ export function initRepoHistory() {
     if (!detail) return;
     setSelection(detail, 'replace');
     switchView('article', {mode: 'read', pushState: true});
-  }
-
-  function isPlainClick(event: MouseEvent) {
-    return !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0);
   }
 
   function handleNavClick(event: MouseEvent) {
