@@ -113,3 +113,31 @@
 	background-color: var(--color-grey);
 	border: none !important;
 }
+/* The compare page's (Point of contention) "Back", #431 item 2. figma "Bubble view /
+   Point of contention" 641:62387, Button 641:62395: 65×28, transparent, 6px radius,
+   4px 8px padding, 4px gap; arrow-left 16px in #1f2328 (= --color-text-primary),
+   "Back" Inter 600 12px/20px in #25292e (= --color-button-text). It was a link in
+   the brand colour. */
+.subject-compare-back {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 28px;
+	padding: 4px 8px;
+	margin-left: -8px; /* the arrow, not the button's edge, lines up with the content (x 48 in the figma) */
+	border-radius: 6px;
+	background: transparent;
+	font-size: 12px;
+	line-height: 20px;
+	font-weight: 600;
+	color: var(--color-button-text);
+}
+
+.subject-compare-back .svg {
+	color: var(--color-text-primary);
+}
+
+.subject-compare-back:hover {
+	color: var(--color-button-text);
+	background: var(--color-hover);
+}

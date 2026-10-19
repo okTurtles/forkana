@@ -8,15 +8,51 @@ import {initCompSearchRepoBox} from './comp/SearchRepoBox.ts';
 
 const {appUrl} = window.config;
 
+// The viewer the most recently shown page was rendered for (its "forkana-viewer" meta: a
+// user id, or empty when signed out).
+const LAST_VIEWER_KEY = 'forkana:last-viewer';
+
+/** Must a page restored from the back/forward cache be reloaded? When the viewer it was
+   rendered for is not the one the latest page was rendered for (the user signed in or out
+   since), or when that cannot be told (no meta, no storage). */
+export function bfcacheRestoreNeedsReload(renderedFor: string | null, lastViewer: string | null): boolean {
+  if (renderedFor === null || lastViewer === null) return true;
+  return renderedFor !== lastViewer;
+}
+
+function readLastViewer(): string | null {
+  try {
+    return window.localStorage.getItem(LAST_VIEWER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeLastViewer(viewer: string | null) {
+  if (viewer === null) return;
+  try {
+    window.localStorage.setItem(LAST_VIEWER_KEY, viewer);
+  } catch {
+    // storage unavailable: every restored page is reloaded, as before
+  }
+}
+
 export function initPageShowBfcacheReload() {
   // When navigating with the browser back/forward buttons, the page may be restored
   // from the back/forward cache (bfcache) instead of being re-requested from the server.
   // The server's "no-cache" Cache-Control headers do not apply to the bfcache, so a user
   // who signed out (or signed in) could still see a stale page rendered for the previous
-  // auth state. Force a reload when a page is restored from the bfcache so the page
-  // always reflects the current session state.
+  // auth state: such a page is reloaded. Any other one is shown exactly as it was left,
+  // without loading it again (#431 item 1: Back returns to the same place on the page).
+  const renderedFor = document.querySelector<HTMLMetaElement>('meta[name="forkana-viewer"]')?.content ?? null;
+  writeLastViewer(renderedFor);
   window.addEventListener('pageshow', (e: PageTransitionEvent) => {
-    if (e.persisted) window.location.reload();
+    if (!e.persisted) return;
+    if (bfcacheRestoreNeedsReload(renderedFor, readLastViewer())) {
+      window.location.reload();
+    } else {
+      writeLastViewer(renderedFor);
+    }
   });
 }
 

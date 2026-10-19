@@ -72,6 +72,7 @@ import {callInitFunctions} from './modules/init.ts';
 import {initRepoViewFileTree} from './features/repo-view-file-tree.ts';
 import {initRepoBubbleView} from './features/repo-bubble-view.ts';
 import {initRepoHistory} from './features/repo-history.ts';
+import {initSubjectCompareBack} from './features/subject-compare-back.ts';
 import {initUserFeedsFilter} from './features/user-feeds.ts';
 import {initHomeSearchValidation} from './features/home-search-validation.ts';
 
@@ -156,6 +157,7 @@ const initPerformanceTracer = callInitFunctions([
   initRepoTopicBar,
   initRepoBubbleView,
   initRepoHistory,
+  initSubjectCompareBack,
   initUserFeedsFilter,
   initRepoViewFileTree,
   initRepoWikiForm,

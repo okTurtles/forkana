@@ -2,7 +2,9 @@
 <div role="main" aria-label="{{.Title}}" class="page-content explore subjects">
 	<!-- Back button -->
 	<div class="ui container">
-		<a href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .Subject.Name)) "selected" .SubjectSelected}}" class="tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-mt-4 back-button">
+		{{/* data-subject-back: goes back in the history when the page before is the graph that
+		opened this point of contention (web_src/js/features/subject-compare-back.ts, #431) */}}
+		<a href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .Subject.Name)) "selected" .SubjectSelected}}" class="subject-compare-back tw-mt-4" data-subject-back data-subject-path="{{AppSubUrl}}/subject/{{PathEscape .Subject.Name}}">
 			{{svg "octicon-arrow-left" 16}} Back
 		</a>
 	</div>

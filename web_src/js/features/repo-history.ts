@@ -296,7 +296,9 @@ export function initRepoHistory() {
     const state = historyStateFor(view, mode, selection);
     const url = urlFor(view, mode, selection);
     if (how === 'replace') {
-      window.history.replaceState(state, '', url);
+      // the same entry: what the Bubble view recorded in it stays (modules/graph-history.ts)
+      const graph = (window.history.state as HistoryState | null)?.graph;
+      window.history.replaceState(graph ? {...state, graph} : state, '', url);
     } else {
       window.history.pushState(state, '', url);
     }
@@ -670,6 +672,8 @@ export function initRepoHistory() {
   window.history.replaceState({
     ...historyStateFor(activeView.value, articleMode.value, selectedRepo.value),
     version: new URL(window.location.href).searchParams.get('version'),
+    // what the Bubble view recorded in this entry, back after a reload (#431)
+    ...(initialState?.graph ? {graph: initialState.graph} : {}),
   } satisfies HistoryState, '', entryUrl + window.location.hash);
 
   window.addEventListener(BUBBLE_SELECTED_EVENT, handleBubbleSelection as EventListener);
