@@ -21,8 +21,8 @@
                 <thead>
                     <tr>
                         <th class="col-user">{{ctx.Locale.Tr "repo.commits.user"}}</th>
-                        <th class="col-code">{{ctx.Locale.Tr "repo.commits.code"}}</th>
-                        <th class="col-message">{{ctx.Locale.Tr "repo.commits.message"}}</th>
+                        <th class="col-code">{{ctx.Locale.Tr "repo.article_history_fork_head"}}</th>
+                        <th class="col-message">{{ctx.Locale.Tr "repo.article_summary"}}</th>
                         <th class="col-date">{{ctx.Locale.Tr "repo.commits.date"}}</th>
                         <th class="col-icon"></th>
                     </tr>
@@ -99,9 +99,9 @@
                                  message and id. A <details> needs no script, which matters here:
                                  this section is also fetched and swapped in by repo-history.ts. */}}
                             <details class="article-history-details">
-                                <summary aria-label="{{ctx.Locale.Tr "repo.article_history_expand"}}">
+                                <summary>
                                     <span class="commit-summary" title="{{.Summary}}">{{.Summary | ctx.RenderUtils.RenderEmoji}}</span>
-                                    {{svg "octicon-chevron-down" 16 "article-history-chevron"}}
+                                    {{svg "octicon-chevron-down" 16 "article-history-chevron"}}<span class="tw-sr-only">{{ctx.Locale.Tr "repo.article_history_expand"}}</span>
                                 </summary>
                                 <div class="article-history-body">
                                     {{$body := ctx.RenderUtils.RenderCommitBody .Message $.Repository}}
@@ -150,14 +150,16 @@
 {{$params := .Page.GetParams}}
 {{$link := .Link}}
 {{with .Page.Paginater}}
-<nav class="article-history-pager" aria-label="{{ctx.Locale.Tr "repo.commits.commits"}}">
+<nav class="article-history-pager" aria-label="{{ctx.Locale.Tr "repo.article_history_pages"}}">
     <a class="article-history-page-direction{{if not .HasPrevious}} disabled{{end}}" {{if .HasPrevious}}href="{{$link}}?page={{.Previous}}{{if $params}}&{{$params}}{{end}}"{{else}}aria-disabled="true"{{end}}>
         {{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "repo.issues.previous"}}</span>
     </a>
     {{range .Pages}}
         {{if eq .Num -1}}
             <span class="article-history-page">…</span>
-        {{else if .IsCurrent}}
+        {{else if and .IsCurrent $.HistoryFirst}}
+            {{/* (on a page past the last, the pager marks the last page as the current one:
+                 every page is then a link back) */}}
             <span class="article-history-page active" aria-current="page">{{.Num}}</span>
         {{else}}
             <a class="article-history-page" href="{{$link}}?page={{.Num}}{{if $params}}&{{$params}}{{end}}">{{.Num}}</a>

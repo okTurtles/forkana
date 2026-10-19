@@ -143,10 +143,6 @@
   align-self: center;
 }
 
-.article-tabs-trailing:empty {
-  display: none;
-}
-
 /* A borderless button (Action 6507:58668, the design system's tertiary button): an
    Inter 600 14/20 #25292e label 8px from its 16px icon, 6px radius; CopyRef has no side
    padding (Button 641:65500). Watch's eye turns brand purple while the article is

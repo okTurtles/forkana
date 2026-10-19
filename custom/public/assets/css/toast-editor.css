@@ -624,7 +624,7 @@
      6px corners (Form/Textarea 641:65705), its text 10px from that frame's left;
    - the contribution tip at its foot (Tip 641:65771), outside that inner frame. */
 .article-editor-box {
-  container-type: inline-size;
+  container: article-editor / inline-size;
   border: 1px solid var(--color-border-light);
   border-radius: 6px;
   background: var(--color-surface);
@@ -727,7 +727,7 @@
    need about 370px. A container query, as the editor's width, not the window's, is
    what matters. (The ID-qualified rule near the top of this file outweighed the
    generic phone rule there.) */
-@container (max-width: 760px) {
+@container article-editor (max-width: 760px) {
   [data-theme] .article-editor-box #toast-editor-container .toastui-editor-mode-switch {
     position: static;
     order: -1;

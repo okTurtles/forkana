@@ -88,10 +88,11 @@ func TestArticleViewLayout(t *testing.T) {
 	})
 
 	t.Run("ReadShowsSummary", func(t *testing.T) {
+		original := repo.Description
 		repo.Description = "The summary of this article"
 		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "description"))
 		defer func() {
-			repo.Description = ""
+			repo.Description = original
 			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "description")
 		}()
 
@@ -168,7 +169,9 @@ func TestArticleViewLayout(t *testing.T) {
 		require.Equal(t, 1, table.Length(), "a page past the last keeps the table and its pager")
 		assert.Equal(t, 0, table.Find("#commits-table tbody tr").Length())
 		assert.Equal(t, "Nothing on this page", strings.TrimSpace(table.Find(".article-history-count").Text()))
-		assert.Equal(t, 1, table.Find(".article-history-pager").Length())
+		// the pager leads back: every page is a link, the last (current) one included
+		assert.Contains(t, table.Find(`.article-history-pager a.article-history-page`).First().AttrOr("href", ""), "page=1")
+		assert.Equal(t, 0, table.Find(`.article-history-pager [aria-current="page"]`).Length())
 	})
 
 	t.Run("HistoryNoForks", func(t *testing.T) {
@@ -196,6 +199,15 @@ func TestArticleViewLayout(t *testing.T) {
 		defer func() { _ = repo_service.DeleteRepositoryDirectly(t.Context(), privateFork.ID) }()
 		privateFork.IsPrivate = true
 		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), privateFork, "is_private"))
+		// a deleted fork that had forks of its own stays as a tombstone, which no listing shows
+		user8 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 8})
+		tombstone, err := repo_service.ForkRepository(t.Context(), user8, user8, repo_service.ForkRepoOptions{
+			BaseRepo: repo, Name: repo.Name, SingleBranch: repo.DefaultBranch,
+		})
+		require.NoError(t, err)
+		defer func() { _ = repo_service.DeleteRepositoryDirectly(t.Context(), tombstone.ID) }()
+		tombstone.IsTombstoned = true
+		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), tombstone, "is_tombstoned"))
 
 		t.Run("ListingHidesThePrivateFork", func(t *testing.T) {
 			doc := get(t, nil, "mode=history&history=forks")
@@ -260,7 +272,7 @@ func TestArticleViewLayout(t *testing.T) {
 			"sync_follow_repo": strconv.FormatInt(repo.ID, 10),
 		})
 		answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
-		oob := answer.Find(`#repo-header-follow-form[hx-swap-oob]`)
+		oob := answer.Find(`#repo-header-follow-slot[hx-swap-oob]`)
 		require.Equal(t, 1, oob.Length())
 		assert.Equal(t, 1, oob.Find(".follow-article-button").Length())
 
@@ -279,6 +291,20 @@ func TestArticleViewLayout(t *testing.T) {
 		})
 		answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
 		assert.Equal(t, 1, answer.Find(".follow-article-button").Length())
-		assert.Equal(t, 1, answer.Find(`#article-watch-form[hx-swap-oob] form.article-watch-form`).Length())
+		assert.Equal(t, 1, answer.Find(`#article-watch-slot[hx-swap-oob] form.article-watch-form`).Length())
+
+		// a crafted request with both ids is answered with one control and one out-of-band
+		// fragment, whatever its style: the two templates must not include each other on
+		for _, action := range []string{starAction, starAction + "?style=button"} {
+			action = strings.Replace(action, "/action/watch", "/action/unwatch", 1)
+			req = NewRequestWithValues(t, "POST", action, map[string]string{
+				"_csrf":            GetUserCSRFToken(t, session),
+				"sync_follow_repo": strconv.FormatInt(repo.ID, 10),
+				"sync_button_repo": strconv.FormatInt(repo.ID, 10),
+			})
+			answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
+			assert.Equal(t, 1, answer.Find(`[hx-swap-oob]`).Length(), action)
+			assert.Equal(t, 2, answer.Find("form").Length(), action)
+		}
 	})
 }

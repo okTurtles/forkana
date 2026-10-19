@@ -763,9 +763,42 @@ func handleRepoHistoryFeed(ctx *context.Context) bool {
 // setArticleSignInLinks sets the sign in and sign up links of a signed-out reader's
 // article page, which return to the page requested.
 func setArticleSignInLinks(ctx *context.Context) {
-	back := url.QueryEscape(setting.AppSubURL + ctx.Req.URL.RequestURI())
+	currentURL, _ := ctx.Data["CurrentURL"].(string) // AppSubURL + the request's URI
+	back := url.QueryEscape(currentURL)
 	ctx.Data["ArticleSignInLink"] = setting.AppSubURL + "/user/login?redirect_to=" + back
 	ctx.Data["ArticleSignUpLink"] = setting.AppSubURL + "/user/sign_up?redirect_to=" + back
+}
+
+// loadArticleBaseRepo loads the repository a fork was made from, for the "Fork of:"
+// line, when the reader may see it: a public fork of an article made private since
+// would otherwise name that article. A failed lookup leaves the line out.
+func loadArticleBaseRepo(ctx *context.Context) {
+	repo := ctx.Repo.Repository
+	if !repo.IsFork || repo.BaseRepo != nil {
+		return
+	}
+	base, err := repo_model.GetRepositoryByID(ctx, repo.ForkID)
+	if err != nil {
+		if !repo_model.IsErrRepoNotExist(err) {
+			log.Error("the base repository of %s: %v", repo.FullName(), err)
+		}
+		return
+	}
+	if base.IsPrivate {
+		perm, err := access_model.GetUserRepoPermission(ctx, base, ctx.Doer)
+		if err != nil {
+			log.Error("GetUserRepoPermission on %s: %v", base.FullName(), err)
+			return
+		}
+		if !perm.HasAnyUnitAccessOrPublicAccess() {
+			return
+		}
+	}
+	if err := base.LoadOwner(ctx); err != nil {
+		log.Error("the owner of %s: %v", base.FullName(), err)
+		return
+	}
+	repo.BaseRepo = base
 }
 
 // prepareArticleView prepares data for the article view (README display with read/edit/history/settings modes)
@@ -790,13 +823,9 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	}
 
 	// The path block names the article a fork was made from ("Fork of: …"). Only some
-	// routes load the base repository (not the subject page's article selection).
-	if repo := ctx.Repo.Repository; repo.IsFork && repo.BaseRepo == nil {
-		context.RetrieveBaseRepo(ctx, repo)
-		if ctx.Written() {
-			return
-		}
-	}
+	// routes load the base repository (not the subject page's article selection), and it
+	// is only a line of the page, so a failed lookup is logged and the line left out.
+	loadArticleBaseRepo(ctx)
 
 	// The Settings tab is only rendered for the article owner, so ownership must be
 	// known in every mode (edit mode refines this via prepareArticleForkOnEditData).
@@ -1032,24 +1061,32 @@ func commitsFromOtherArticles(ctx *context.Context, commits []*user_model.UserCo
 	return result
 }
 
-// articleCommitCount counts the commits of the article's default branch, cached under
-// the branch head.
+// articleCommitCount counts the commits of the article's default branch. The count is
+// cached under the branch head alone, without the repository: a commit has the same
+// ancestors in every repository that holds it, so a fork reuses its parent's entry for
+// as long as they share a head, and a push, which moves the head, needs no invalidation.
+// The page's own commit is the branch head unless a version of the article is shown.
 func articleCommitCount(ctx *context.Context, gitRepo *git.Repository, branch string) (int64, error) {
-	head, err := gitRepo.GetBranchCommit(branch)
-	if err != nil {
-		return 0, err
+	head := ctx.Repo.Commit
+	if head == nil || ctx.Repo.BranchName != branch {
+		var err error
+		if head, err = gitRepo.GetBranchCommit(branch); err != nil {
+			return 0, err
+		}
 	}
-	return cache.GetInt64(fmt.Sprintf("article-commit-count:%d:%s", ctx.Repo.Repository.ID, head.ID.String()), head.CommitsCount)
+	return cache.GetInt64("article-branch-commits:"+head.ID.String(), head.CommitsCount)
 }
 
-// readmeCommitsCount counts the commits that changed the article's file, cached under
-// the last of them (nil: not cached).
+// readmeCommitsCount counts the commits of the default branch that changed the article's
+// file, cached under the last of them (nil: not cached). That last commit is looked up
+// from HEAD (GetCommitByPath) while the count runs on the default branch: the two agree
+// because Gitea keeps HEAD on the default branch (SetDefaultBranch moves both).
 func readmeCommitsCount(ctx *context.Context, gitRepo *git.Repository, branch, treePath string, lastCommit *git.Commit) (int64, error) {
 	count := func() (int64, error) { return gitRepo.FileCommitsCount(branch, treePath) }
 	if lastCommit == nil {
 		return count()
 	}
-	return cache.GetInt64(fmt.Sprintf("article-commits-count:%d:%s:%s", ctx.Repo.Repository.ID, treePath, lastCommit.ID.String()), count)
+	return cache.GetInt64(fmt.Sprintf("article-readme-commits:%d:%s:%s", ctx.Repo.Repository.ID, treePath, lastCommit.ID.String()), count)
 }
 
 // setHistoryPage sets the History tab's pager and the range its footer shows ("51-100
@@ -1081,32 +1118,26 @@ func listArticleForks(ctx *context.Context, page int) {
 	forks, total, err := repo_service.FindForksByLatestUpdate(ctx, ctx.Repo.Repository, ctx.Doer,
 		db.ListOptions{Page: page, PageSize: setting.Git.CommitsRangeSize})
 	if err != nil {
-		log.Error("FindForks for %s: %v", ctx.Repo.Repository.FullName(), err)
+		log.Error("FindForksByLatestUpdate for %s: %v", ctx.Repo.Repository.FullName(), err)
 		ctx.Data["ArticleForksError"] = true
 		return
 	}
-	if err := repo_model.RepositoryList(forks).LoadAttributes(ctx); err != nil {
-		log.Warn("LoadAttributes for the forks of %s: %v", ctx.Repo.Repository.FullName(), err)
+	forkList := repo_model.RepositoryList(forks)
+	if err := forkList.LoadOwners(ctx); err != nil {
+		log.Warn("LoadOwners for the forks of %s: %v", ctx.Repo.Repository.FullName(), err)
+	}
+	if err := forkList.LoadSubjects(ctx); err != nil {
+		log.Warn("LoadSubjects for the forks of %s: %v", ctx.Repo.Repository.FullName(), err)
 	}
 
-	heads := make(map[int64]string, len(forks))
-	if len(forks) > 0 {
-		ids := make([]int64, 0, len(forks))
+	var heads map[int64]string
+	if len(forks) > 0 { // (with no forks, the lookup's condition would be empty)
+		repoBranches := make(map[int64]string, len(forks))
 		for _, fork := range forks {
-			ids = append(ids, fork.ID)
+			repoBranches[fork.ID] = fork.DefaultBranch
 		}
-		var branches []*git_model.Branch
-		if err := db.GetEngine(ctx).In("repo_id", ids).And("is_deleted = ?", false).Find(&branches); err != nil {
-			log.Warn("branches of the forks of %s: %v", ctx.Repo.Repository.FullName(), err)
-		}
-		defaultBranches := make(map[int64]string, len(forks))
-		for _, fork := range forks {
-			defaultBranches[fork.ID] = fork.DefaultBranch
-		}
-		for _, b := range branches {
-			if b.Name == defaultBranches[b.RepoID] {
-				heads[b.RepoID] = b.CommitID
-			}
+		if heads, err = git_model.FindBranchesByRepoAndBranchName(ctx, repoBranches); err != nil {
+			log.Warn("branch heads of the forks of %s: %v", ctx.Repo.Repository.FullName(), err)
 		}
 	}
 

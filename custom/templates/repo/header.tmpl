@@ -15,7 +15,7 @@
 				{{/* the article the star is for, which the Article view's Watch button sends
 				     so that its answer can update the star too (routers/web/repo/watch.go) */}}
 				{{if $.IsSigned}}<input type="hidden" id="repo-header-follow-sync" name="sync_follow_repo" value="{{.ID}}">{{end}}
-				<div id="repo-header-follow-form">{{template "repo/watch_unwatch" $}}</div>
+				<div id="repo-header-follow-slot">{{template "repo/watch_unwatch" $}}</div>
 			</div>
 			{{end}}
 		</div>

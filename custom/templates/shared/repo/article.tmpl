@@ -87,9 +87,9 @@
                          (features/article-view.css). The hidden input is the article's id,
                          which the star sends so that its answer can update this button. */}}
                     {{if .RepoOperationsLink}}
-                        <div class="article-watch" data-role="article-watch-slot">
+                        <div class="article-watch">
                             {{if .IsSigned}}<input type="hidden" id="article-watch-sync" name="sync_button_repo" value="{{.Repository.ID}}">{{end}}
-                            <div id="article-watch-form">{{template "repo/watch_button" .}}</div>
+                            <div id="article-watch-slot">{{template "repo/watch_button" .}}</div>
                         </div>
                     {{end}}
                     {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}

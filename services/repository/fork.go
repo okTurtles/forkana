@@ -537,36 +537,52 @@ type findForksOptions struct {
 	db.ListOptions
 	RepoID int64
 	Doer   *user_model.User
-	// OrderBy orders the forks; empty keeps the database's order (by id).
+	// OrderBy orders the forks; empty orders them by id, so that pages neither repeat
+	// nor skip rows (no database guarantees an order without ORDER BY).
 	OrderBy string
+	// ExcludeTombstones leaves out the tombstones of deleted forks, which the fork graph
+	// keeps for the ancestry of their own forks but a listing never shows.
+	ExcludeTombstones bool
 }
 
 func (opts findForksOptions) ToOrders() string {
+	if opts.OrderBy == "" {
+		return "id ASC"
+	}
 	return opts.OrderBy
 }
 
 func (opts findForksOptions) ToConds() builder.Cond {
 	cond := builder.Eq{"fork_id": opts.RepoID}
+	if opts.ExcludeTombstones {
+		cond["is_tombstoned"] = false
+	}
 	if opts.Doer != nil && opts.Doer.IsAdmin {
 		return cond
 	}
 	return cond.And(repo_model.AccessibleRepositoryCondition(opts.Doer, unit.TypeInvalid))
 }
 
+func findForks(ctx context.Context, opts findForksOptions) ([]*repo_model.Repository, int64, error) {
+	return db.FindAndCount[repo_model.Repository](ctx, opts)
+}
+
 // FindForksByLatestUpdate returns the forks of the repository the doer may see, the most
-// recently updated first, and how many there are.
+// recently updated first, and how many there are, without the tombstones of deleted ones.
 func FindForksByLatestUpdate(ctx context.Context, repo *repo_model.Repository, doer *user_model.User, listOptions db.ListOptions) ([]*repo_model.Repository, int64, error) {
-	return db.FindAndCount[repo_model.Repository](ctx, findForksOptions{
-		ListOptions: listOptions,
-		RepoID:      repo.ID,
-		Doer:        doer,
-		OrderBy:     "updated_unix DESC, id DESC",
+	return findForks(ctx, findForksOptions{
+		ListOptions:       listOptions,
+		RepoID:            repo.ID,
+		Doer:              doer,
+		OrderBy:           "updated_unix DESC, id DESC",
+		ExcludeTombstones: true,
 	})
 }
 
-// FindForks returns all the forks of the repository
+// FindForks returns all the forks of the repository, tombstones included (the fork graph
+// keeps them for the ancestry of their own forks), by id
 func FindForks(ctx context.Context, repo *repo_model.Repository, doer *user_model.User, listOptions db.ListOptions) ([]*repo_model.Repository, int64, error) {
-	return db.FindAndCount[repo_model.Repository](ctx, findForksOptions{
+	return findForks(ctx, findForksOptions{
 		ListOptions: listOptions,
 		RepoID:      repo.ID,
 		Doer:        doer,

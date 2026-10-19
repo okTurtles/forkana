@@ -38,12 +38,14 @@ func ActionWatch(ctx *context.Context) {
 	// sync_button_repo, through hx-include); when that is this article, the answer also
 	// re-renders the other one, out of band, so that they never disagree. The two can be
 	// for different articles: the section's article can be switched without a reload.
+	// Only the flag of the reply's own style is set: the two templates include each other
+	// under these flags, so with both set a crafted request would make them recurse.
 	repoID := ctx.Repo.Repository.ID
-	ctx.Data["WatchSyncFollow"] = ctx.FormInt64("sync_follow_repo") == repoID
-	ctx.Data["WatchSyncButton"] = ctx.FormInt64("sync_button_repo") == repoID
 	if ctx.FormString("style") == "button" {
+		ctx.Data["WatchSyncFollow"] = ctx.FormInt64("sync_follow_repo") == repoID
 		ctx.HTML(http.StatusOK, tplWatchButton)
 		return
 	}
+	ctx.Data["WatchSyncButton"] = ctx.FormInt64("sync_button_repo") == repoID
 	ctx.HTML(http.StatusOK, tplWatchUnwatch)
 }

@@ -2,7 +2,8 @@
    ./bubble-graph.css and keeps its own spacing).
 
    Both views start 3rem below the view submenu (Bubble view / Table view /
-   Article view). The gap lives on the section itself, ONE rule for both,
+   Article view), except an Article view with an article chosen (24px, the rule
+   after this one). The gap lives on the section itself, ONE rule for both,
    instead of a top margin on whatever happens to be its first child: those
    used to differ (tw-mt-20 on the table's grid, tw-mt-10 on the article root)
    and Fomantic's `:first-child` margin rules cancelled one of them, so the
@@ -13,10 +14,11 @@
   padding-top: 3rem;
 }
 
-/* The Article view showing an article starts 24px below the submenu, where its tokens
-   sit in the figma (641:65454: the view tabs end at 248, the tokens start at 272). With
-   no article shown, the "Please select an article" box keeps the full 3rem. */
-.history-view-section--article:has([data-role="article-content"]:not([hidden])) {
+/* Except once an article is chosen: the Article view then starts 24px below the
+   submenu, where its tokens sit in the figma (641:65454: the view tabs end at 248, the
+   tokens start at 272), also while that article loads or fails to (the loader and the
+   error stay where it will be). Only the "Please select an article" box keeps 3rem. */
+.history-view-section--article:not(:has([data-role="article-empty"]:not([hidden]))) {
   padding-top: 24px;
 }
 

@@ -11,4 +11,4 @@
 	</button>
 </form>
 {{/* answering the star: the Article view's Watch button for the same article, out of band */}}
-{{if $.WatchSyncButton}}<div id="article-watch-form" hx-swap-oob="innerHTML">{{template "repo/watch_button" $}}</div>{{end}}
+{{if $.WatchSyncButton}}<div id="article-watch-slot" hx-swap-oob="innerHTML">{{template "repo/watch_button" $}}</div>{{end}}

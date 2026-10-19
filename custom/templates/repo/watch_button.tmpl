@@ -15,7 +15,7 @@
 	</button>
 </form>
 {{/* answering the button: the subject header's star for the same article, out of band */}}
-{{if $.WatchSyncFollow}}<div id="repo-header-follow-form" hx-swap-oob="innerHTML">{{template "repo/watch_unwatch" $}}</div>{{end}}
+{{if $.WatchSyncFollow}}<div id="repo-header-follow-slot" hx-swap-oob="innerHTML">{{template "repo/watch_unwatch" $}}</div>{{end}}
 {{else}}
 <a class="forkana-btn forkana-btn-tertiary article-action-button" data-role="article-watch" href="{{$.ArticleSignInLink}}" data-tooltip-content="{{ctx.Locale.Tr "repo.article_watch_guest_user"}}">
 	{{svg "octicon-eye" 16}}

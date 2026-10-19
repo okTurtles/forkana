@@ -193,13 +193,12 @@
     </div>
     {{end}}
 
-    {{/* Login banner for signed-out readers of the Edit tab (#434 item 13, figma
-         Announcement 641:65699): #fff8c5 with a #d4a72c 40% rule above and below, 8px 48px
-         padding, the alert icon and the dismiss cross #9a6700, the message Inter 400 14/20.
-         It is in every article page and shown by features/article-view.css whenever the Article
-         view shows the Edit tab, since repo-history.ts swaps tabs in without reloading. */}}
-    {{/* never in a signed-in reader's page: rendered for signed-out readers only, since
-         CSS alone decides when it shows (and the tabs switch without a reload) */}}
+    {{/* The sign-in banner of the Edit tab (#434 item 13, figma Announcement 641:65699):
+         #fff8c5 with a #d4a72c 40% rule above and below, 8px 48px padding, the alert icon and
+         the dismiss cross #9a6700, the message Inter 400 14/20. It is only rendered in a
+         signed-out reader's page, never in a signed-in one's; there, features/article-view.css
+         shows it whenever the Article view shows the Edit tab, since repo-history.ts swaps
+         tabs in without reloading. */}}
     {{if not .IsSigned}}
     <div class="article-signin-banner" id="article-signin-banner" role="status">
         {{svg "octicon-alert" 16 "article-signin-banner-icon"}}
