@@ -58,9 +58,10 @@ const (
 // title on Forkana: "subject/Mercury (planet)" names the subject "Mercury (planet)".
 var linkTitleRe = regexp.MustCompile(`\s+("[^"]*"|'[^']*')$`)
 
-// parseInternalLinkShorthand returns the label and destination of an internal link with
-// spaces at the start of line, and the number of bytes it spans; ok is false when line does
-// not start with one (the standard link parser then handles it).
+// parseInternalLinkShorthand returns the label and the destination (its backslash escapes
+// resolved, in a new slice) of an internal link with spaces at the start of line, and the
+// number of bytes it spans; ok is false when line does not start with one (the standard link
+// parser then handles it).
 func parseInternalLinkShorthand(line []byte, article bool) (label, dest []byte, n int, ok bool) {
 	if len(line) == 0 || line[0] != '[' {
 		return nil, nil, 0, false
@@ -114,7 +115,8 @@ func parseInternalLinkShorthand(line []byte, article bool) (label, dest []byte, 
 	if !bytes.ContainsRune(dest, ' ') || linkTitleRe.Match(dest) {
 		return nil, nil, 0, false
 	}
-	if _, isInternal := markup.ParseForkanaInternalLink(string(util.UnescapePunctuations(append([]byte(nil), dest...))), article); !isInternal {
+	dest = util.UnescapePunctuations(append([]byte(nil), dest...))
+	if _, isInternal := markup.ParseForkanaInternalLink(string(dest), article); !isInternal {
 		return nil, nil, 0, false
 	}
 	return line[1:closeLabel], dest, end + 1, true
@@ -131,7 +133,7 @@ func (p *internalLinkParser) Parse(parent ast.Node, block text.Reader, pc parser
 		return nil
 	}
 	link := ast.NewLink()
-	link.Destination = util.UnescapePunctuations(append([]byte(nil), dest...))
+	link.Destination = dest
 	link.AppendChild(link, ast.NewString(util.UnescapePunctuations(append([]byte(nil), label...))))
 	block.Advance(n)
 	return link

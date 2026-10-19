@@ -6,6 +6,7 @@ package markup
 import (
 	"net/url"
 	"strings"
+	"sync/atomic"
 
 	"code.gitea.io/gitea/modules/container"
 	"code.gitea.io/gitea/modules/setting"
@@ -60,6 +61,27 @@ type ForkanaInternalLink struct {
 	Owner   string
 }
 
+type parsedAppURL struct {
+	raw string
+	u   *url.URL
+}
+
+var appURLCache atomic.Pointer[parsedAppURL]
+
+// appURL returns setting.AppURL parsed, parsing it again only when the setting changed (the
+// tests change it).
+func appURL() *url.URL {
+	if c := appURLCache.Load(); c != nil && c.raw == setting.AppURL {
+		return c.u
+	}
+	u, err := url.Parse(setting.AppURL)
+	if err != nil {
+		u = nil
+	}
+	appURLCache.Store(&parsedAppURL{raw: setting.AppURL, u: u})
+	return u
+}
+
 // instanceRelativePath returns the part of href after this instance's root when href is the
 // full URL of a page on this instance (the scheme and the host's case may differ from
 // AppURL's), the instance root included, or a path starting with AppSubURL + "/".
@@ -71,11 +93,12 @@ func instanceRelativePath(href string) (rest string, ok bool) {
 		return "", false
 	}
 	u, err := url.Parse(href)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+	// with user info, the host is not right after "://" (and such a link is not the app's)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
 		return "", false
 	}
-	app, err := url.Parse(setting.AppURL)
-	if err != nil || !strings.EqualFold(u.Host, app.Host) {
+	app := appURL()
+	if app == nil || !strings.EqualFold(u.Host, app.Host) {
 		return "", false
 	}
 	// keep the path as written (escaped), with its query and fragment
@@ -99,6 +122,12 @@ func instanceRelativePath(href string) (rest string, ok bool) {
 // relative "about" or "security/README.md" is a link to a file of the repository.
 func ParseForkanaInternalLink(href string, specialPages bool) (link ForkanaInternalLink, ok bool) {
 	rest, urlForm := instanceRelativePath(href)
+	return parseForkanaInternalLink(href, specialPages, rest, urlForm)
+}
+
+// parseForkanaInternalLink is ParseForkanaInternalLink with instanceRelativePath(href)
+// already known.
+func parseForkanaInternalLink(href string, specialPages bool, rest string, urlForm bool) (link ForkanaInternalLink, ok bool) {
 	if !urlForm {
 		if IsFullURLString(href) || strings.HasPrefix(href, "/") || strings.HasPrefix(href, "#") || strings.HasPrefix(href, "?") {
 			return link, false
@@ -113,7 +142,7 @@ func ParseForkanaInternalLink(href string, specialPages bool) (link ForkanaInter
 		rest, link.Suffix = rest[:i], rest[i:]+link.Suffix
 	}
 	segments := strings.Split(strings.TrimSuffix(rest, "/"), "/")
-	if len(segments) == 0 || !ForkanaInternalLinkRoots.Contains(segments[0]) {
+	if !ForkanaInternalLinkRoots.Contains(segments[0]) {
 		return link, false
 	}
 	if segments[0] != "subject" && !specialPages {
@@ -162,39 +191,53 @@ func splitFragment(s string) (rest, fragment string) {
 
 // isExternalLink reports whether href leaves this Forkana instance.
 func isExternalLink(href string) bool {
-	if !IsFullURLString(href) {
-		return false
-	}
-	if _, onInstance := instanceRelativePath(href); onInstance {
+	_, onInstance := instanceRelativePath(href)
+	return isExternalLinkOf(href, onInstance)
+}
+
+// isExternalLinkOf is isExternalLink with instanceRelativePath(href) already known.
+func isExternalLinkOf(href string, onInstance bool) bool {
+	if onInstance || !IsFullURLString(href) {
 		return false
 	}
 	lower := strings.ToLower(href)
 	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
 }
 
-// maxSubjectLinkLookups bounds the existence checks of a render (each costs database
-// queries): the links after that many distinct ones are taken as existing.
+// maxSubjectLinkLookups bounds the existence checks of a render (each costs two or three
+// database queries): the links after that many distinct ones are taken as existing.
 const maxSubjectLinkLookups = 100
 
-// isForkanaSubjectLinkExisting reports whether the subject (or the owner's article on it) a
-// link points to exists, asking the render helper and caching the answer for the render.
-func (ctx *RenderContext) isForkanaSubjectLinkExisting(subject, owner string) bool {
+// checkForkanaSubjectLink reports whether the subject a link points to has an article the
+// viewer can open, and whether the owner has one (ownerExists is subjectExists when owner is
+// empty). It asks the render helper once per subject and owner, and caches the answers for
+// the render: a subject without articles answers for all its owners.
+func (ctx *RenderContext) checkForkanaSubjectLink(subject, owner string) (subjectExists, ownerExists bool) {
 	if DefaultRenderHelperFuncs == nil || DefaultRenderHelperFuncs.IsSubjectLinkExisting == nil {
-		return true
+		return true, true
 	}
-	key := subject + "\x00" + owner
-	if exists, ok := ctx.subjectLinkExists[key]; ok {
-		return exists
+	subjectKey := subject + "\x00"
+	subjectCached, hasSubject := ctx.subjectLinkExists[subjectKey]
+	if hasSubject && (!subjectCached || owner == "") {
+		return subjectCached, subjectCached
 	}
-	if len(ctx.subjectLinkExists) >= maxSubjectLinkLookups {
-		return true
+	ownerKey := subjectKey + owner
+	if ownerCached, ok := ctx.subjectLinkExists[ownerKey]; ok && hasSubject {
+		return subjectCached, ownerCached
 	}
-	exists := DefaultRenderHelperFuncs.IsSubjectLinkExisting(ctx, subject, owner)
+	if ctx.subjectLinkLookups >= maxSubjectLinkLookups {
+		return true, true
+	}
+	ctx.subjectLinkLookups++
+	subjectExists, ownerExists = DefaultRenderHelperFuncs.IsSubjectLinkExisting(ctx, subject, owner)
 	if ctx.subjectLinkExists == nil {
 		ctx.subjectLinkExists = map[string]bool{}
 	}
-	ctx.subjectLinkExists[key] = exists
-	return exists
+	ctx.subjectLinkExists[subjectKey] = subjectExists
+	if owner != "" {
+		ctx.subjectLinkExists[ownerKey] = ownerExists
+	}
+	return subjectExists, ownerExists
 }
 
 // anchorContainsImage reports whether the <a> node wraps an image (a linked image is not
@@ -223,12 +266,17 @@ func addClass(ctx *RenderContext, node *html.Node, class string) {
 // processForkanaLink resolves a Forkana internal link to the instance root and marks it, or
 // marks an external link. It returns false when href is neither (the caller resolves it).
 func processForkanaLink(ctx *RenderContext, node *html.Node, idx int, href string) bool {
-	if link, ok := ParseForkanaInternalLink(href, ctx.RenderOptions.ForkanaArticle); ok {
+	rest, onInstance := instanceRelativePath(href)
+	if link, ok := parseForkanaInternalLink(href, ctx.RenderOptions.ForkanaArticle, rest, onInstance); ok {
 		class := internalLinkClass
+		subjectExists, ownerExists := true, true
+		if link.Subject != "" {
+			subjectExists, ownerExists = ctx.checkForkanaSubjectLink(link.Subject, link.Owner)
+		}
 		switch {
-		case link.Subject != "" && !ctx.isForkanaSubjectLinkExisting(link.Subject, link.Owner):
+		case !ownerExists:
 			class = internalLinkMissingClass
-			if link.Owner != "" && ctx.isForkanaSubjectLinkExisting(link.Subject, "") {
+			if link.Owner != "" && subjectExists {
 				// the author has no article on the subject: show the subject's articles
 				node.Attr[idx].Val = ctx.ResolveLinkRoot("subject/" + url.PathEscape(link.Subject))
 			} else {
@@ -243,7 +291,7 @@ func processForkanaLink(ctx *RenderContext, node *html.Node, idx int, href strin
 		addClass(ctx, node, class)
 		return true
 	}
-	if ctx.RenderOptions.ForkanaArticle && isExternalLink(href) && !anchorContainsImage(node) {
+	if ctx.RenderOptions.ForkanaArticle && isExternalLinkOf(href, onInstance) && !anchorContainsImage(node) {
 		addClass(ctx, node, externalLinkClass)
 	}
 	return false

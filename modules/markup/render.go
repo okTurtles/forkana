@@ -74,8 +74,9 @@ type RenderContext struct {
 	RenderInternal internal.RenderInternal
 
 	// subjectLinkExists caches, for the render, whether the subjects (and articles) that
-	// Forkana internal links point to exist; see isForkanaSubjectLinkExisting.
-	subjectLinkExists map[string]bool
+	// Forkana internal links point to exist; see checkForkanaSubjectLink.
+	subjectLinkExists  map[string]bool
+	subjectLinkLookups int
 }
 
 func (ctx *RenderContext) Deadline() (deadline time.Time, ok bool) {

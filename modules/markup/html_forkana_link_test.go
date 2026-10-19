@@ -82,6 +82,10 @@ func TestIsExternalLink(t *testing.T) {
 		assert.False(t, isExternalLink(href), href)
 	}
 	assert.True(t, isExternalLink("https://forkana.example.evil"))
+	// with user info, the host is not right after "://" (review L1)
+	assert.True(t, isExternalLink("https://user@forkana.example/subject/Moon"))
+	_, ok := ParseForkanaInternalLink("https://user@forkana.example/subject/Moon", true)
+	assert.False(t, ok)
 
 	defer test.MockVariableValue(&setting.AppURL, "https://example.org/forkana/")()
 	assert.False(t, isExternalLink("https://example.org/forkana"))

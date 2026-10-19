@@ -31,11 +31,11 @@ func withSubjects(t *testing.T, existing ...string) {
 	if old != nil {
 		funcs = *old
 	}
-	funcs.IsSubjectLinkExisting = func(_ context.Context, subject, owner string) bool {
+	funcs.IsSubjectLinkExisting = func(_ context.Context, subject, owner string) (bool, bool) {
 		if owner != "" {
-			return set[subject+"\x00"+owner]
+			return set[subject], set[subject+"\x00"+owner]
 		}
-		return set[subject]
+		return set[subject], set[subject]
 	}
 	markup.DefaultRenderHelperFuncs = &funcs
 	t.Cleanup(func() { markup.DefaultRenderHelperFuncs = old })
@@ -155,6 +155,28 @@ func TestRender_ForkanaInternalLinks(t *testing.T) {
 			assert.Equal(t, c.expected, renderArticle(t, c.input))
 		})
 	}
+}
+
+func TestRender_SubjectLinkChecksPerRender(t *testing.T) {
+	defer test.MockVariableValue(&setting.AppURL, "https://forkana.example/")()
+	defer test.MockVariableValue(&setting.AppSubURL, "")()
+	withSubjects(t, "Moon", "Moon\x00pierre")
+	// count the helper's calls (review M1): each makes database queries
+	calls := map[string]int{}
+	inner := markup.DefaultRenderHelperFuncs.IsSubjectLinkExisting
+	markup.DefaultRenderHelperFuncs.IsSubjectLinkExisting = func(ctx context.Context, subject, owner string) (bool, bool) {
+		calls[subject+"/"+owner]++
+		return inner(ctx, subject, owner)
+	}
+	res := renderArticle(t, "[a](subject/Moon/tom) [b](subject/Moon) [c](subject/Moon/pierre) [d](subject/Moon/tom) "+
+		"[e](subject/Nobody/x) [f](subject/Nobody/y) [g](subject/Nobody)")
+	// a missing article falls back to the subject in the same call, and a subject without
+	// articles answers for all its owners
+	assert.Equal(t, map[string]int{"Moon/tom": 1, "Moon/pierre": 1, "Nobody/x": 1}, calls)
+	assert.Contains(t, res, `<a href="/subject/Moon" class="internal-link internal-link-missing" rel="nofollow">a</a>`)
+	assert.Contains(t, res, `<a href="/subject/Moon" class="internal-link" rel="nofollow">b</a>`)
+	assert.Contains(t, res, `<a href="/subject/Moon/pierre" class="internal-link" rel="nofollow">c</a>`)
+	assert.Contains(t, res, `<a href="/repo/create?subject=Nobody" class="internal-link internal-link-missing" rel="nofollow">f</a>`)
 }
 
 func TestRender_ForkanaSpecialPagesOnlyInArticles(t *testing.T) {

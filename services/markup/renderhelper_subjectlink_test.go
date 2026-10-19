@@ -43,15 +43,27 @@ func TestRenderHelperSubjectLink(t *testing.T) {
 	empty.IsEmpty = true
 	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, empty, "subject_id", "is_empty"))
 
-	exists := FormalRenderHelperFuncs().IsSubjectLinkExisting
-	assert.False(t, exists(ctx, "Hidden subject", ""), "its only article belongs to a private organization")
-	assert.False(t, exists(ctx, "Hidden subject", "privated_org"))
-	assert.False(t, exists(ctx, "Empty subject", ""), "its only article has no content")
-	assert.True(t, exists(ctx, "Solar system", ""))
-	assert.True(t, exists(ctx, "solar  system", ""), "names are normalized like the subject routes do")
-	assert.True(t, exists(ctx, "Solar system", "user5"))
-	assert.True(t, exists(ctx, "Solar system", "USER5"), "user names are case-insensitive")
-	assert.False(t, exists(ctx, "Solar system", "user2"), "user2 has no article on the subject")
-	assert.False(t, exists(ctx, "Chang'e 4", ""), "no such subject")
-	assert.False(t, exists(ctx, "Deleted subject", ""), "every article of the subject was deleted")
+	check := FormalRenderHelperFuncs().IsSubjectLinkExisting
+	exists := func(subject, owner string) bool {
+		_, ownerExists := check(ctx, subject, owner)
+		return ownerExists
+	}
+	assert.False(t, exists("Hidden subject", ""), "its only article belongs to a private organization")
+	assert.False(t, exists("Hidden subject", "privated_org"))
+	assert.False(t, exists("Empty subject", ""), "its only article has no content")
+	assert.True(t, exists("Solar system", ""))
+	assert.True(t, exists("solar  system", ""), "names are normalized like the subject routes do")
+	assert.True(t, exists("Solar system", "user5"))
+	assert.True(t, exists("Solar system", "USER5"), "user names are case-insensitive")
+	assert.False(t, exists("Solar system", "user2"), "user2 has no article on the subject")
+	assert.False(t, exists("Chang'e 4", ""), "no such subject")
+	assert.False(t, exists("Deleted subject", ""), "every article of the subject was deleted")
+
+	// one call answers both questions, for a link to a missing article (review M1)
+	subjectExists, ownerExists := check(ctx, "Solar system", "user2")
+	assert.True(t, subjectExists)
+	assert.False(t, ownerExists)
+	subjectExists, ownerExists = check(ctx, "Chang'e 4", "user2")
+	assert.False(t, subjectExists)
+	assert.False(t, ownerExists)
 }

@@ -15,7 +15,6 @@ import (
 
 	"code.gitea.io/gitea/modules/htmlutil"
 	"code.gitea.io/gitea/modules/markup/internal"
-	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/translation"
 
 	"github.com/yuin/goldmark"
@@ -490,16 +489,7 @@ func documentLocale(node ast.Node) translation.Locale {
 		}
 		break
 	}
-	return translation.NewLocale(defaultLang())
-}
-
-// defaultLang lets translation.NewLocale pick the default language: "" does, once the
-// locales are loaded; before that (unit tests), "" is not a valid language tag.
-func defaultLang() string {
-	if len(setting.Langs) == 0 {
-		return "en-US"
-	}
-	return ""
+	return translation.NewLocale("") // the default language, as for the table of contents
 }
 
 func (r *FootnoteHTMLRenderer) renderFootnoteLink(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
