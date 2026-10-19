@@ -856,19 +856,14 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		ctx.Data["ReadmeLastCommit"] = lastCommit
 	}
 
-	// The number of changes to the article, shown with its last update in every mode
-	// ("335 Last updated: Yesterday", figma 641:65479) and used by the History tab.
-	// Counting walks the whole history, so the count is cached under the article's
-	// last change, which fixes it. When it cannot be counted, no number is shown.
-	commitsCount, err := articleCommitsCount(ctx, gitRepo, defaultBranch, readmeTreePath, lastCommit)
-	if err != nil {
-		if mode == "history" {
-			ctx.ServerError("FileCommitsCount", err)
-			return
-		}
-		log.Warn("Failed to count the commits of %s: %v", readmeTreePath, err)
+	// The article's number of commits (those of its default branch), shown with its last
+	// update in every mode ("335 Last updated: Yesterday", figma 641:65479). Counting
+	// walks the whole history, so the count is cached under the branch head, which fixes
+	// it. When it cannot be counted, no number is shown.
+	if count, err := articleCommitCount(ctx, gitRepo, defaultBranch); err != nil {
+		log.Warn("Failed to count the commits of %s: %v", ctx.Repo.Repository.FullName(), err)
 	} else {
-		ctx.Data["ReadmeCommitCount"] = commitsCount
+		ctx.Data["ArticleCommitCount"] = count
 	}
 
 	// Handle different modes
@@ -968,6 +963,13 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		}
 		ctx.Data["HistorySort"] = "changes"
 
+		// the History tab lists the changes to the article's file, so its pager counts those
+		commitsCount, err := readmeCommitsCount(ctx, gitRepo, defaultBranch, readmeTreePath, lastCommit)
+		if err != nil {
+			ctx.ServerError("FileCommitsCount", err)
+			return
+		}
+
 		commits, err := gitRepo.CommitsByFileAndRange(
 			git.CommitsByFileAndRangeOptions{
 				Revision: defaultBranch,
@@ -1030,9 +1032,19 @@ func commitsFromOtherArticles(ctx *context.Context, commits []*user_model.UserCo
 	return result
 }
 
-// articleCommitsCount counts the commits that changed the article's file, cached under
+// articleCommitCount counts the commits of the article's default branch, cached under
+// the branch head.
+func articleCommitCount(ctx *context.Context, gitRepo *git.Repository, branch string) (int64, error) {
+	head, err := gitRepo.GetBranchCommit(branch)
+	if err != nil {
+		return 0, err
+	}
+	return cache.GetInt64(fmt.Sprintf("article-commit-count:%d:%s", ctx.Repo.Repository.ID, head.ID.String()), head.CommitsCount)
+}
+
+// readmeCommitsCount counts the commits that changed the article's file, cached under
 // the last of them (nil: not cached).
-func articleCommitsCount(ctx *context.Context, gitRepo *git.Repository, branch, treePath string, lastCommit *git.Commit) (int64, error) {
+func readmeCommitsCount(ctx *context.Context, gitRepo *git.Repository, branch, treePath string, lastCommit *git.Commit) (int64, error) {
 	count := func() (int64, error) { return gitRepo.FileCommitsCount(branch, treePath) }
 	if lastCommit == nil {
 		return count()

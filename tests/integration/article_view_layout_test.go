@@ -15,6 +15,7 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/gitrepo"
 	repo_service "code.gitea.io/gitea/services/repository"
 	"code.gitea.io/gitea/tests"
 
@@ -54,8 +55,22 @@ func TestArticleViewLayout(t *testing.T) {
 		// item 2: "N Contributors" and "N Last updated: …"
 		tokens := strings.Join(strings.Fields(section.Find(`[data-role="article-tokens"]`).Text()), " ")
 		assert.Regexp(t, `\d+ Contributors?`, tokens)
-		assert.Regexp(t, `\d+ Last updated:`, tokens)
 		assert.NotContains(t, tokens, "Updated ")
+		// its number is the article's number of commits: those of its default branch
+		gitRepo, err := gitrepo.OpenRepository(t.Context(), repo)
+		require.NoError(t, err)
+		defer gitRepo.Close()
+		head, err := gitRepo.GetBranchCommit(repo.DefaultBranch)
+		require.NoError(t, err)
+		commits, err := head.CommitsCount()
+		require.NoError(t, err)
+		assert.Contains(t, tokens, fmt.Sprintf("%d Last updated:", commits))
+		wantTooltip := fmt.Sprintf("%d commits", commits)
+		if commits == 1 {
+			wantTooltip = "1 commit"
+		}
+		assert.Equal(t, wantTooltip,
+			section.Find(`[data-role="article-last-updated"] [data-tooltip-content]`).AttrOr("data-tooltip-content", ""))
 
 		// item 3: Watch, which a signed-out reader is sent to sign in for
 		watch := section.Find(`#article-tabs [data-role="article-watch"]`)
@@ -97,6 +112,12 @@ func TestArticleViewLayout(t *testing.T) {
 		assert.Contains(t, doc.Find("#signed-out-fork-button").AttrOr("href", ""), want)
 		assert.Contains(t, doc.Find(`#article-tabs [data-role="article-watch"]`).AttrOr("href", ""), want)
 		assert.Contains(t, doc.Find(`#article-signin-banner a[href*="/user/login"]`).AttrOr("href", ""), want)
+	})
+
+	t.Run("NoBannerForASignedInReader", func(t *testing.T) {
+		doc := get(t, loginUser(t, "user4"), "mode=edit")
+		require.Equal(t, 1, doc.Find(`#article-view-root[data-article-mode="edit"]`).Length())
+		assert.Equal(t, 0, doc.Find("#article-signin-banner").Length())
 	})
 
 	t.Run("EditSignedOut", func(t *testing.T) {

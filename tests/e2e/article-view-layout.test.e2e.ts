@@ -19,6 +19,7 @@ test.describe('Article view layout (signed out)', () => {
     const tokens = page.locator('[data-role="article-tokens"]');
     await expect(tokens).toContainText(/\d+ Contributors?/);
     await expect(page.locator('[data-role="article-last-updated"]')).toContainText(/\d+ Last updated:/);
+    await expect(page.locator('[data-role="article-last-updated"] [data-tooltip-content]').first()).toHaveAttribute('data-tooltip-content', /^\d+ commits?$/);
 
     // item 3: Watch at the end of the tabs, leading a signed-out reader to sign in
     const watch = page.locator('#article-tabs [data-role="article-watch"]');
@@ -121,6 +122,9 @@ test.describe('Article view Watch button (signed in)', () => {
     const context = await load_logged_in_context(browser, workerInfo, 'user4');
     const page = await context.newPage();
     await page.goto(`${article}?mode=edit`);
+    // the sign-in banner is never in a signed-in reader's page
+    await expect(page.locator('#article-view-root[data-article-mode="edit"]')).toBeVisible();
+    await expect(page.locator('#article-signin-banner')).toHaveCount(0);
     await page.locator('#article-tabs a[data-article-tab="read"]').click();
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
 
@@ -134,6 +138,13 @@ test.describe('Article view Watch button (signed in)', () => {
     await expect(watch).toHaveAttribute('aria-pressed', watching ? 'false' : 'true');
     await expect(star).toHaveAttribute('aria-label', watching ? 'Follow' : 'Following');
     expect(page.url()).toBe(url);
+
+    // nor after switching back to the Edit tab without a reload
+    await page.locator('#article-tabs a[data-article-tab="edit"]').click();
+    await expect(page.locator('#article-view-root[data-article-mode="edit"]')).toBeVisible();
+    await expect(page.locator('#article-signin-banner')).toHaveCount(0);
+    await page.locator('#article-tabs a[data-article-tab="read"]').click();
+    await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
 
     // and back, so that the fixture keeps its state
     await watch.click();
