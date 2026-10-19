@@ -455,7 +455,7 @@ const selectedJointId = ref<string | null>(null);
 
 function setSelectedJoint(id: string | null) {
   selectedJointId.value = id;
-  if (currentGraphState().poc !== id) replaceGraphState({poc: id});
+  if ((currentGraphState().poc ?? null) !== id) replaceGraphState({poc: id});
 }
 
 function normalize(value?: string | null) {
@@ -2207,6 +2207,10 @@ function closeDetail() {
 
 function finishDetailClose() {
   const closedId = detailNode.value?.id ?? null;
+  /* Closed without going through the history (a re-layout that dropped the opened
+     node): the entry still says an article is open, so record that it is not. After
+     a Back/Forward the current entry is already one without it, and this does nothing. */
+  if (currentGraphState().detail) replaceGraphState({detail: false});
   detailNode.value = null;
   detailClosing.value = false;
   detailOrigin.value = null;

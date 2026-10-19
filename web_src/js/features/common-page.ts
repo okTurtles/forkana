@@ -44,6 +44,10 @@ export function initPageShowBfcacheReload() {
   // who signed out (or signed in) could still see a stale page rendered for the previous
   // auth state: such a page is reloaded. Any other one is shown exactly as it was left,
   // without loading it again (#431 item 1: Back returns to the same place on the page).
+  // This relies on a rendered page following every change of viewer (the sign-in and
+  // sign-out redirects do). A session that ends without one (expired on the server, a
+  // sign-out answered with JSON) leaves the last viewer stale, so a page restored after
+  // it is shown as it was rendered until the next page load records the new viewer.
   const renderedFor = document.querySelector<HTMLMetaElement>('meta[name="forkana-viewer"]')?.content ?? null;
   writeLastViewer(renderedFor);
   window.addEventListener('pageshow', (e: PageTransitionEvent) => {
