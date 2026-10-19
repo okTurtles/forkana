@@ -4,7 +4,7 @@
 <div role="main" aria-label="{{.Title}}" class="page-content repository new-repo new-subject-page">
 	<div class="new-subject-box">
 		<h1 class="new-subject-header">
-			{{ctx.Locale.Tr "new_repo"}}
+			{{ctx.Locale.Tr "repo.new_subject_screen_title"}}
 		</h1>
 		<div class="new-subject-body">
 			<div class="new-subject-content">
@@ -34,9 +34,9 @@
 										{{.ShortName 40}}
 									</div>
 								{{end}}
+								</div>
 							</div>
 						</div>
-					</div>
 
 					<div class="tw-hidden field {{if .Err_RepoName}}error{{end}}">
 					<label for="repo_name">{{ctx.Locale.Tr "repo.repo_name"}}</label>
