@@ -135,3 +135,19 @@ func TestSearchRepositoryExcludesTombstones(t *testing.T) {
 	assert.False(t, search(false))
 	assert.True(t, search(true))
 }
+
+// TestTombstoneRepositoryWithdrawsArticleInvites checks that tombstoning an article
+// withdraws its pending collaborator invitations, which could no longer be answered.
+func TestTombstoneRepositoryWithdrawsArticleInvites(t *testing.T) {
+	unittest.PrepareTestEnv(t)
+
+	// repo1 is an article owned by user2
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	invitee := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+	require.NoError(t, repo_service.InviteArticleCollaborator(t.Context(), owner, repo, invitee, repo_model.ArticleCollaboratorRoleMaintainer))
+
+	require.NoError(t, repo_service.TombstoneRepository(t.Context(), repo))
+	unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: invitee.ID})
+	assert.ErrorIs(t, repo_service.AcceptArticleCollaboratorInvite(t.Context(), invitee, repo), repo_service.ErrArticleCollaboratorNoInvite)
+}

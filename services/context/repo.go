@@ -19,6 +19,7 @@ import (
 	"code.gitea.io/gitea/models/db"
 	git_model "code.gitea.io/gitea/models/git"
 	issues_model "code.gitea.io/gitea/models/issues"
+	perm_model "code.gitea.io/gitea/models/perm"
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
 	unit_model "code.gitea.io/gitea/models/unit"
@@ -406,7 +407,7 @@ func repoAssignment(ctx *Context, repo *repo_model.Repository) {
 		}
 	}
 
-	if !ctx.Repo.Permission.HasAnyUnitAccessOrPublicAccess() && !canWriteAsMaintainer(ctx) {
+	if !ctx.Repo.Permission.HasAnyUnitAccessOrPublicAccess() && !canWriteAsMaintainer(ctx) && !grantArticleInviteeAccess(ctx, repo) {
 		if ctx.FormString("go-get") == "1" {
 			EarlyResponseForGoGetMeta(ctx)
 			return
@@ -435,6 +436,26 @@ func repoAssignment(ctx *Context, repo *repo_model.Repository) {
 	// Resolved here so the templates never have to call GetSubject with a context
 	// argument, which the template engine cannot always supply.
 	ctx.Data["SubjectName"] = ctx.Repo.Repository.GetSubject(ctx)
+}
+
+// grantArticleInviteeAccess gives a user invited to collaborate on a private article read
+// access to it: the write access only comes with accepting, but the invitation is answered
+// from the article itself, which would otherwise answer 404. It reports whether access was
+// granted.
+func grantArticleInviteeAccess(ctx *Context, repo *repo_model.Repository) bool {
+	if repo.SubjectID == 0 || ctx.Doer == nil {
+		return false
+	}
+	c, err := repo_model.GetArticleCollaborator(ctx, repo.ID, ctx.Doer.ID)
+	if err != nil {
+		log.Error("GetArticleCollaborator: %v", err)
+		return false
+	}
+	if c == nil || !c.IsPending() {
+		return false
+	}
+	ctx.Repo.Permission.SetUnitsWithDefaultAccessMode(repo.Units, perm_model.AccessModeRead)
+	return true
 }
 
 // RepoAssignment returns a middleware to handle repository assignment

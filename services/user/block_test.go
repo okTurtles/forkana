@@ -6,10 +6,13 @@ package user
 import (
 	"testing"
 
+	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	repo_service "code.gitea.io/gitea/services/repository"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCanBlockUser(t *testing.T) {
@@ -62,4 +65,31 @@ func TestCanUnblockUser(t *testing.T) {
 	assert.True(t, CanUnblockUser(t.Context(), user1, user2, user29))
 	assert.True(t, CanUnblockUser(t.Context(), user2, user2, user29))
 	assert.True(t, CanUnblockUser(t.Context(), user1, org17, user28))
+}
+
+// TestBlockUserRemovesArticleCollaborators checks that blocking removes the blockee from the
+// collaborators of the blocker's articles, accepted or invited: the row alone keeps the
+// delegate and maintainer rights.
+func TestBlockUserRemovesArticleCollaborators(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+
+	// repo1 is an article owned by user2
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	delegate := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+	invitee := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+
+	require.NoError(t, repo_service.InviteArticleCollaborator(t.Context(), owner, repo, delegate, repo_model.ArticleCollaboratorRoleMaintainerDelegate))
+	require.NoError(t, repo_service.AcceptArticleCollaboratorInvite(t.Context(), delegate, repo))
+	require.NoError(t, repo_service.InviteArticleCollaborator(t.Context(), owner, repo, invitee, repo_model.ArticleCollaboratorRoleMaintainer))
+
+	require.NoError(t, BlockUser(t.Context(), owner, owner, delegate, ""))
+	unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: delegate.ID})
+	p, err := repo_service.GetArticleCollaboratorPermission(t.Context(), delegate, repo)
+	require.NoError(t, err)
+	assert.False(t, p.CanManage)
+
+	// blocking the owner works the other way round too
+	require.NoError(t, BlockUser(t.Context(), invitee, invitee, owner, ""))
+	unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: invitee.ID})
 }
