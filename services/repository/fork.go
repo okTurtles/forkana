@@ -537,6 +537,12 @@ type findForksOptions struct {
 	db.ListOptions
 	RepoID int64
 	Doer   *user_model.User
+	// OrderBy orders the forks; empty keeps the database's order (by id).
+	OrderBy string
+}
+
+func (opts findForksOptions) ToOrders() string {
+	return opts.OrderBy
 }
 
 func (opts findForksOptions) ToConds() builder.Cond {
@@ -545,6 +551,17 @@ func (opts findForksOptions) ToConds() builder.Cond {
 		return cond
 	}
 	return cond.And(repo_model.AccessibleRepositoryCondition(opts.Doer, unit.TypeInvalid))
+}
+
+// FindForksByLatestUpdate returns the forks of the repository the doer may see, the most
+// recently updated first, and how many there are.
+func FindForksByLatestUpdate(ctx context.Context, repo *repo_model.Repository, doer *user_model.User, listOptions db.ListOptions) ([]*repo_model.Repository, int64, error) {
+	return db.FindAndCount[repo_model.Repository](ctx, findForksOptions{
+		ListOptions: listOptions,
+		RepoID:      repo.ID,
+		Doer:        doer,
+		OrderBy:     "updated_unix DESC, id DESC",
+	})
 }
 
 // FindForks returns all the forks of the repository

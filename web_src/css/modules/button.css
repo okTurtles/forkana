@@ -505,3 +505,26 @@ It needs some tricks to tweak the left/right borders with active state */
 .forkana-link:hover {
   color: var(--color-primary-hover);
 }
+
+/* Unavailable (the Article view's Edit tab for a signed-out reader, figma View Tab
+   641:65671): Fork in the unavailable secondary colours (#f6f8fa, a #818b98 10% border
+   and label) and Submit changes in the unavailable primary ones (#dad5ff, a white 80%
+   label). They still lead somewhere (to sign in), so they keep a pointer.
+   The primary one's contrast (about 1.3:1) is the figma's; it is with design. */
+.forkana-btn.forkana-btn-unavailable {
+  color: var(--color-button-text-disabled);
+  background: var(--color-surface-muted);
+  border-color: var(--color-button-border-disabled);
+}
+
+.forkana-btn.forkana-btn-primary-unavailable {
+  color: rgb(255 255 255 / 80%);
+  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+}
+
+.forkana-btn.forkana-btn-unavailable:hover,
+.forkana-btn.forkana-btn-primary-unavailable:hover {
+  text-decoration: none;
+  filter: brightness(0.97);
+}

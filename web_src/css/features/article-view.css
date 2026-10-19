@@ -22,17 +22,17 @@
   max-width: 800px;
 }
 
-.page-content:has(.history-view-section--article:not([hidden]) #article-view-root) .secondary-nav overflow-menu {
+/* (:has() on the page while the Article view is shown, hence `.page-content:has(…)`) */
+.page-content:has(.history-view-section--article:not([hidden])) .secondary-nav overflow-menu {
   max-width: 1080px;
   margin-inline: auto;
 }
 
-.page-content:has(.history-view-section--article:not([hidden]) #article-view-root[data-article-mode="read"]) .secondary-nav overflow-menu {
+.page-content:has(.history-view-section--article:not([hidden]) [data-article-mode="read"]) .secondary-nav overflow-menu {
   max-width: 800px;
 }
 
-.page-content:has(.history-view-section--article:not([hidden])) #compare-mode-button,
-.page-content:has(.history-view-section--article:not([hidden])) .repo-header-follow {
+.page-content:has(.history-view-section--article:not([hidden])) :is(#compare-mode-button, .repo-header-follow) {
   display: none;
 }
 
@@ -45,12 +45,10 @@
 }
 
 /* ── Vertical rhythm ─────────────────────────────────────────────────────────
-   24px from the view tabs to the tokens, from the tokens to the tabs, from the tabs to
-   the article's path, and from the path to the summary (Frame 764 641:65469 and its
-   children, all auto-layout gap 24). */
-.history-view-section.history-view-section--article {
-  padding-top: 24px;
-}
+   24px from the view tabs to the tokens (the section's padding, in
+   subject-views.css), from the tokens to the tabs, from the tabs to the article's
+   path, and from the path to the summary (Frame 764 641:65469 and its children, all
+   auto-layout gap 24). */
 
 #article-view-root [data-role="article-content"] {
   display: flex;
@@ -94,14 +92,21 @@
    40px tall, 0 16px, 8px from the icon to an Inter 14/20 label: #59636e and regular,
    or #1f2328 and semibold on the open tab, which is white with a 1px #d1d9e0 border
    (none at the bottom) and 6px top corners. A 1px #d1d9e0 rule under the row. */
+#article-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
 #article-tabs .ui.tabular.menu {
   flex: 1;
   min-width: 0;
   min-height: 40px;
-  margin: 0 !important;
+  margin: 0;
   gap: 4px;
   align-items: flex-end;
-  border-bottom: 1px solid var(--color-border-light);
+  border-bottom: none;
 }
 
 #article-tabs .ui.tabular.menu > a.item {
@@ -138,41 +143,28 @@
   align-self: center;
 }
 
-/* A borderless button (Action 6507:58668): an Inter 600 14/20 #25292e label 8px from
-   its 16px icon, 6px radius; CopyRef has no side padding (Button 641:65500). */
-.article-action-button.forkana-btn {
-  color: var(--color-button-text);
+.article-tabs-trailing:empty {
+  display: none;
 }
 
+/* A borderless button (Action 6507:58668, the design system's tertiary button): an
+   Inter 600 14/20 #25292e label 8px from its 16px icon, 6px radius; CopyRef has no side
+   padding (Button 641:65500). Watch's eye turns brand purple while the article is
+   watched (the button stays labelled "Watch" and is marked pressed). */
 .article-action-button .svg {
   color: var(--color-text-primary);
+}
+
+.article-action-button[aria-pressed="true"] .svg {
+  color: var(--color-primary);
 }
 
 .article-copy-ref.forkana-btn {
   padding: 0;
 }
 
-/* The Edit tab's buttons for a signed-out reader (View Tab 641:65671): Fork, with its
-   fork count, in the unavailable secondary colours (#f6f8fa, a #818b98 10% border and
-   label) and Submit changes in the unavailable primary ones (#dad5ff, a white 80%
-   label). Both lead to sign in, so they keep a pointer. */
-.forkana-btn.article-btn-unavailable {
-  color: var(--color-button-text-disabled);
-  background: var(--color-surface-muted);
-  border-color: var(--color-button-border-disabled);
-}
-
-.forkana-btn.article-btn-primary-unavailable {
-  color: rgb(255 255 255 / 80%);
-  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
-}
-
-.forkana-btn.article-btn-unavailable:hover,
-.forkana-btn.article-btn-primary-unavailable:hover {
-  text-decoration: none;
-  filter: brightness(0.97);
-}
+/* The Edit tab's Fork and Submit changes for a signed-out reader (View Tab 641:65671)
+   are .forkana-btn-unavailable and .forkana-btn-primary-unavailable (modules/button.css). */
 
 /* CounterLabel 6484:44075: a #818b98 12% pill, 0 6px. */
 .article-counter {
@@ -251,18 +243,30 @@
   padding: 0;
 }
 
-.file-view.article-content.markup h1,
-.file-view.article-content.markup h2 {
+.file-view.article-content.markup :is(h1, h2) {
   margin: 32px 0 24px;
   padding-bottom: 8px;
-  font-size: 20px;
-  line-height: 32px;
   font-weight: var(--font-weight-bold);
   border-bottom: 1px solid color-mix(in srgb, var(--color-border-light) 70%, transparent);
 }
 
-.file-view.article-content.markup > :first-child {
-  margin-top: 0;
+/* Imported articles have h2 sections with h3 subsections, so the levels stay apart: a
+   title above the figma's sections, the sections themselves, and subsections below
+   them, without a rule. */
+.file-view.article-content.markup h1 {
+  font-size: 24px;
+  line-height: 32px;
+}
+
+.file-view.article-content.markup h2 {
+  font-size: 20px;
+  line-height: 32px;
+}
+
+.file-view.article-content.markup h3 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: var(--font-weight-semibold);
 }
 
 /* ── Edit ───────────────────────────────────────────────────────────────────
@@ -626,20 +630,30 @@ a.article-history-page-direction:hover {
     padding: 7px 16px;
   }
 
-  /* the Edit tab's buttons go under the tabs rather than past the screen's edge */
-  #article-tabs .ui.tabular.menu {
-    flex-wrap: wrap;
+  /* The buttons at the end of the row (Watch, the Edit tab's Fork and Submit changes)
+     get a row of their own ABOVE the tabs, rather than running past the screen's edge.
+     The tabs stay on one line (an owner has four) and scroll sideways if they must, so
+     the open tab keeps standing on the rule under them. */
+  #article-tabs {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
   }
 
   .article-tabs-trailing {
-    order: 1;
-    width: 100%;
+    order: -1;
     justify-content: flex-end;
-    padding-bottom: 8px;
+  }
+
+  #article-tabs .ui.tabular.menu {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
   #article-tabs .ui.tabular.menu > a.item {
-    order: 2;
+    flex-shrink: 0;
+    padding: 0 12px;
   }
 
   /* the table keeps its columns and scrolls sideways inside its frame */

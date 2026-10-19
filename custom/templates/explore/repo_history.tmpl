@@ -196,12 +196,14 @@
     {{/* Login banner for signed-out readers of the Edit tab (#434 item 13, figma
          Announcement 641:65699): #fff8c5 with a #d4a72c 40% rule above and below, 8px 48px
          padding, the alert icon and the dismiss cross #9a6700, the message Inter 400 14/20.
-         It is in every article page and shown by subject-views.css whenever the Article
+         It is in every article page and shown by features/article-view.css whenever the Article
          view shows the Edit tab, since repo-history.ts swaps tabs in without reloading. */}}
     {{if not .IsSigned}}
     <div class="article-signin-banner" id="article-signin-banner" role="status">
         {{svg "octicon-alert" 16 "article-signin-banner-icon"}}
-        <span class="article-signin-banner-text">{{ctx.Locale.Tr "repo.article_signin_banner" (print AppSubUrl "/user/login?redirect_to=" (QueryEscape .Link)) (print AppSubUrl "/user/sign_up?redirect_to=" (QueryEscape .Link))}}</span>
+        {{/* its links return to the page the reader is on when they press them: repo-history.ts
+             rewrites them as tabs and articles are switched without a reload */}}
+        <span class="article-signin-banner-text">{{ctx.Locale.Tr "repo.article_signin_banner" .ArticleSignInLink .ArticleSignUpLink}}</span>
         <button type="button" class="article-signin-banner-dismiss hide-panel" data-panel="#article-signin-banner" aria-label="{{ctx.Locale.Tr "repo.article_signin_banner_dismiss"}}">
             {{svg "octicon-x" 16}}
         </button>

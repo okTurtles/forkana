@@ -22,7 +22,8 @@
         {{else}}
             {{/* #433 item 2: the two tokens of figma Frame 549 (641:65477): "335 Contributors"
                  with person-24 and "335 Last updated: Yesterday" with sync-24, 14px apart.
-                 The second token's number is the article's number of changes. */}}
+                 The second token's number is the article's number of changes, left out
+                 when it could not be counted. */}}
             <div class="article-tokens" data-role="article-tokens">
                 <span class="article-token">
                     {{svg "octicon-person" 16}}
@@ -31,7 +32,13 @@
                 {{if and .ReadmeLastCommit .ReadmeLastCommit.Committer}}
                     <span class="article-token" data-role="article-last-updated">
                         {{svg "octicon-sync" 16}}
-                        <span><span data-tooltip-content="{{ctx.Locale.TrN .ReadmeCommitCount "repo.article_changes_1" "repo.article_changes_n" .ReadmeCommitCount}}">{{.ReadmeCommitCount}}</span> {{ctx.Locale.Tr "repo.article_last_updated"}} {{DateUtils.TimeSince .ReadmeLastCommit.Committer.When}}</span>
+                        {{$when := DateUtils.TimeSince .ReadmeLastCommit.Committer.When}}
+                        {{if .ReadmeCommitCount}}
+                            {{$count := HTMLFormat `<span data-tooltip-content="%s">%d</span>` (ctx.Locale.TrN .ReadmeCommitCount "repo.article_changes_1" "repo.article_changes_n" .ReadmeCommitCount) .ReadmeCommitCount}}
+                            <span>{{ctx.Locale.Tr "repo.article_last_updated_count" $count $when}}</span>
+                        {{else}}
+                            <span>{{ctx.Locale.Tr "repo.article_last_updated" $when}}</span>
+                        {{end}}
                     </span>
                 {{end}}
             </div>
@@ -42,8 +49,8 @@
                  could only hard-code the vanity URL, which resolves to a different article
                  for an archived repository. */}}
             {{$articleLink := .ArticleLink}}
-            <div class="tw-flex tw-items-center tw-gap-4" id="article-tabs">
-                <div class="ui top attached tabular menu tw-my-10 tw-gap-1">
+            <div id="article-tabs">
+                <div class="ui top attached tabular menu">
                     <a class="{{if .IsArticleModeRead}}active {{end}}item"
                         href="{{QueryBuild $articleLink "view" "article" "mode" "read"}}"
                         data-article-tab="read">
@@ -68,106 +75,111 @@
                             {{svg "octicon-gear" 16}} {{ctx.Locale.Tr "repo.settings"}}
                         </a>
                     {{end}}
-                    <div class="article-tabs-trailing">
-                        {{/* #408: no "..." menu in the Read and History modes. It held a
-                             "Something" placeholder; the only items the figma gives it (Watch and
-                             Report, node 662:98305) are the Watch button below and a report flow
-                             that does not exist yet. */}}
-                        {{/* #433 item 3: Watch at the end of the Read tab's row (figma View Tab
-                             641:65480). The subject header's Follow star, which toggles the same
-                             watch, is hidden in the Article view (subject-views.css). */}}
-                        {{if and .IsArticleModeRead .RepoOperationsLink}}
-                            {{template "repo/watch_button" .}}
-                        {{end}}
-                        {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}
-                            <div class="tw-flex tw-items-center">
-                                <div class="tw-flex tw-items-center tw-gap-2">
-                                    {{if .IsSigned}}
-                                        {{if .IsRepoOwner}}
-                                            {{/* User can edit directly - show simple submit button */}}
-                                            <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
+                </div>
+                <div class="article-tabs-trailing">
+                    {{/* #408: no "..." menu in the Read and History modes. It held a
+                         "Something" placeholder; the only items the figma gives it (Watch and
+                         Report, node 662:98305) are the Watch button below and a report flow
+                         that does not exist yet. */}}
+                    {{/* #433 item 3: Watch at the end of the tabs' row (figma View Tab
+                         641:65480), in every tab: the subject header's Follow star, which
+                         toggles the same watch, is hidden in the Article view
+                         (features/article-view.css). The hidden input is the article's id,
+                         which the star sends so that its answer can update this button. */}}
+                    {{if .RepoOperationsLink}}
+                        <div class="article-watch" data-role="article-watch-slot">
+                            {{if .IsSigned}}<input type="hidden" id="article-watch-sync" name="sync_button_repo" value="{{.Repository.ID}}">{{end}}
+                            <div id="article-watch-form">{{template "repo/watch_button" .}}</div>
+                        </div>
+                    {{end}}
+                    {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}
+                        <div class="tw-flex tw-items-center">
+                            <div class="tw-flex tw-items-center tw-gap-2">
+                                {{if .IsSigned}}
+                                    {{if .IsRepoOwner}}
+                                        {{/* User can edit directly - show simple submit button */}}
+                                        <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
+                                            {{svg "octicon-check" 16 "tw-mr-1"}}
+                                            {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                        </button>
+                                    {{else if .BlockedByOwnArticle}}
+                                        {{/* User owns an independent article for this subject (not a fork of this repo) */}}
+                                        {{/* They cannot submit change requests here - redirect to their own article */}}
+                                        <a href="{{.OwnRepoForSubject.Link}}?view=article&mode=edit" class="ui primary button">
+                                            {{svg "octicon-pencil" 16 "tw-mr-1"}}
+                                            {{ctx.Locale.Tr "repo.editor.edit_your_article"}}
+                                        </a>
+                                    {{else if .HasExistingFork}}
+                                        {{/* User has an existing fork of this repo - show both options */}}
+                                        {{if .ExistingForkArchived}}
+                                            {{/* An archived fork is read-only, so editing it is refused: only a change request is possible */}}
+                                            <span class="ui secondary button disabled" data-tooltip-content="{{ctx.Locale.Tr "repo.editor.existing_fork_archived"}}">
+                                                {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
+                                            </span>
+                                        {{else}}
+                                            <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="ui secondary button">
+                                                {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
+                                            </a>
+                                        {{end}}
+                                        {{if .CanSubmitChangeRequest}}
+                                        <button type="button" id="pre-submit-changes-button" class="ui primary button"
+                                            data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
+                                            {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                        </button>
+                                        {{end}}
+                                    {{else if .NeedsFork}}
+                                        {{/* User needs to create a fork - show fork-and-submit button */}}
+                                        <button type="button" id="fork-article-button" class="ui secondary button"
+                                            data-fork-and-edit="true"
+                                            data-tooltip-content="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
+                                            data-fork-confirm-title="{{ctx.Locale.Tr "repo.fork_article_confirm_title"}}"
+                                            data-fork-confirm-body="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
+                                            data-fork-confirm-body2="{{ctx.Locale.Tr "repo.fork_article_confirm_body2"}}"
+                                            data-fork-confirm-yes="{{ctx.Locale.Tr "repo.fork_article_confirm_yes"}}"
+                                            data-fork-confirm-cancel="{{ctx.Locale.Tr "repo.fork_article_confirm_cancel"}}">
+                                            {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
+                                            {{ctx.Locale.Tr "repo.fork_article"}}
+                                        </button>
+                                        {{/* Submit Change Request - opens modal for title/description, then creates branch + commit + PR */}}
+                                        {{if .CanSubmitChangeRequest}}
+                                        <button type="button" id="pre-submit-changes-button" class="ui primary button"
+                                            data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
+                                            {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
+                                            {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                        </button>
+                                        {{end}}
+                                    {{else}}
+                                        {{/* Fallback - show disabled button with generic tooltip.
+                                             This block is a safety net that should rarely be reached.
+                                             It handles unexpected permission states where the user is signed in
+                                             but none of the specific conditions (owner, blocked, has fork, needs fork) apply. */}}
+                                        <span data-tooltip-content="{{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
+                                            <button type="button" class="ui primary button disabled" aria-label="{{ctx.Locale.Tr "repo.editor.submit_changes"}} - {{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
                                                 {{svg "octicon-check" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
-                                        {{else if .BlockedByOwnArticle}}
-                                            {{/* User owns an independent article for this subject (not a fork of this repo) */}}
-                                            {{/* They cannot submit change requests here - redirect to their own article */}}
-                                            <a href="{{.OwnRepoForSubject.Link}}?view=article&mode=edit" class="ui primary button">
-                                                {{svg "octicon-pencil" 16 "tw-mr-1"}}
-                                                {{ctx.Locale.Tr "repo.editor.edit_your_article"}}
-                                            </a>
-                                        {{else if .HasExistingFork}}
-                                            {{/* User has an existing fork of this repo - show both options */}}
-                                            {{if .ExistingForkArchived}}
-                                                {{/* An archived fork is read-only, so editing it is refused: only a change request is possible */}}
-                                                <span class="ui secondary button disabled" data-tooltip-content="{{ctx.Locale.Tr "repo.editor.existing_fork_archived"}}">
-                                                    {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
-                                                </span>
-                                            {{else}}
-                                                <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="ui secondary button">
-                                                    {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
-                                                </a>
-                                            {{end}}
-                                            {{if .CanSubmitChangeRequest}}
-                                            <button type="button" id="pre-submit-changes-button" class="ui primary button"
-                                                data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
-                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
-                                            </button>
-                                            {{end}}
-                                        {{else if .NeedsFork}}
-                                            {{/* User needs to create a fork - show fork-and-submit button */}}
-                                            <button type="button" id="fork-article-button" class="ui secondary button"
-                                                data-fork-and-edit="true"
-                                                data-tooltip-content="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
-                                                data-fork-confirm-title="{{ctx.Locale.Tr "repo.fork_article_confirm_title"}}"
-                                                data-fork-confirm-body="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
-                                                data-fork-confirm-body2="{{ctx.Locale.Tr "repo.fork_article_confirm_body2"}}"
-                                                data-fork-confirm-yes="{{ctx.Locale.Tr "repo.fork_article_confirm_yes"}}"
-                                                data-fork-confirm-cancel="{{ctx.Locale.Tr "repo.fork_article_confirm_cancel"}}">
-                                                {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                                {{ctx.Locale.Tr "repo.fork_article"}}
-                                            </button>
-                                            {{/* Submit Change Request - opens modal for title/description, then creates branch + commit + PR */}}
-                                            {{if .CanSubmitChangeRequest}}
-                                            <button type="button" id="pre-submit-changes-button" class="ui primary button"
-                                                data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
-                                                {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
-                                                {{ctx.Locale.Tr "repo.editor.submit_changes"}}
-                                            </button>
-                                            {{end}}
-                                        {{else}}
-                                            {{/* Fallback - show disabled button with generic tooltip.
-                                                 This block is a safety net that should rarely be reached.
-                                                 It handles unexpected permission states where the user is signed in
-                                                 but none of the specific conditions (owner, blocked, has fork, needs fork) apply. */}}
-                                            <span data-tooltip-content="{{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
-                                                <button type="button" class="ui primary button disabled" aria-label="{{ctx.Locale.Tr "repo.editor.submit_changes"}} - {{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
-                                                    {{svg "octicon-check" 16 "tw-mr-1"}}
-                                                    {{ctx.Locale.Tr "repo.editor.submit_changes"}}
-                                                </button>
-                                            </span>
-                                        {{end}}
-                                    {{else}}
-                                        {{/* #434 items 8 and 9: a signed-out reader sees the Fork and
-                                             Submit changes buttons of figma View Tab 641:65671 (Button
-                                             I641:65671;8356:68206, with the fork count, and Button
-                                             I641:65671;8356:68208), in their unavailable colours. Both
-                                             need an account, so both lead to sign in. */}}
-                                        {{$signIn := print AppSubUrl "/user/login?redirect_to=" (QueryEscape .Link)}}
-                                        <a class="forkana-btn article-btn-unavailable" id="signed-out-fork-button" href="{{$signIn}}"
-                                            data-tooltip-content="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit_tooltip"}}">
-                                            {{ctx.Locale.Tr "repo.fork_article"}}
-                                            <span class="article-counter">{{.Repository.NumForks}}</span>
-                                        </a>
-                                        <a class="forkana-btn article-btn-primary-unavailable" id="signed-out-submit-button" href="{{$signIn}}"
-                                            data-tooltip-content="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit_tooltip"}}">
-                                            {{ctx.Locale.Tr "repo.editor.submit_changes"}}
-                                        </a>
+                                        </span>
                                     {{end}}
-                                </div>
+                                {{else}}
+                                    {{/* #434 items 8 and 9: a signed-out reader sees the Fork and
+                                         Submit changes buttons of figma View Tab 641:65671 (Button
+                                         I641:65671;8356:68206, with the fork count, and Button
+                                         I641:65671;8356:68208), in their unavailable colours. Both
+                                         need an account, so both lead to sign in. */}}
+                                    {{$signIn := .ArticleSignInLink}}
+                                    <a class="forkana-btn forkana-btn-unavailable" id="signed-out-fork-button" href="{{$signIn}}"
+                                        data-tooltip-content="{{ctx.Locale.Tr "repo.article_fork_guest_user"}}">
+                                        {{ctx.Locale.Tr "repo.fork_article"}}
+                                        <span class="article-counter">{{.Repository.NumForks}}</span>
+                                    </a>
+                                    <a class="forkana-btn forkana-btn-primary-unavailable" id="signed-out-submit-button" href="{{$signIn}}"
+                                        data-tooltip-content="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit_tooltip"}}">
+                                        {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                    </a>
+                                {{end}}
                             </div>
-                        {{end}}
-                    </div>
+                        </div>
+                    {{end}}
                 </div>
             </div>
             {{template "shared/repo/read" .}}

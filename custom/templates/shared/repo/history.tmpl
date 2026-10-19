@@ -11,7 +11,11 @@
     {{template "shared/repo/article_path" .}}
     {{if eq .HistorySort "forks"}}
         {{$forks := .ArticleForks}}
-        {{if $forks}}
+        {{if .ArticleForksError}}
+            <div class="ui error message" data-role="article-history-forks-error">{{ctx.Locale.Tr "repo.article_history_forks_error"}}</div>
+        {{else if not .HistoryTotal}}
+            <div class="ui message" data-role="article-history-no-forks">{{ctx.Locale.Tr "repo.article_history_no_forks"}}</div>
+        {{else}}
         <div class="article-history-table" data-role="article-history" data-sort="forks">
             <table id="forks-table">
                 <thead>
@@ -37,10 +41,10 @@
                             </div>
                         </td>
                         <td class="col-code sha">
-                            {{if .HeadCommitID}}<a href="{{.Repo.Link}}" rel="nofollow">{{ShortSha .HeadCommitID}}</a>{{end}}
+                            {{if .HeadCommitID}}<a href="{{.Repo.LinkCtx ctx}}" rel="nofollow">{{ShortSha .HeadCommitID}}</a>{{end}}
                         </td>
                         <td class="col-message">
-                            <a class="article-history-message" href="{{.Repo.Link}}">{{or .Repo.Description (print .Repo.OwnerName " / " $.SubjectName)}}</a>
+                            <a class="article-history-message" href="{{.Repo.LinkCtx ctx}}">{{or .Repo.Description (print .Repo.OwnerName " / " (.Repo.GetSubject ctx))}}</a>
                         </td>
                         <td class="col-date">{{DateUtils.TimeSince .Repo.UpdatedUnix}}</td>
                         <td class="col-icon">
@@ -50,14 +54,10 @@
                     {{end}}
                 </tbody>
             </table>
-            <div class="article-history-footer">
-                <span class="article-history-count">{{ctx.Locale.Tr "repo.article_history_count" (len $forks) (len $forks)}}</span>
-            </div>
+            {{template "shared/repo/article_history_footer" .}}
         </div>
-        {{else}}
-            <div class="ui message" data-role="article-history-no-forks">{{ctx.Locale.Tr "repo.article_history_no_forks"}}</div>
         {{end}}
-    {{else if .Commits}}
+    {{else if .CommitCount}}
         <div class="article-history-table" data-role="article-history" data-sort="changes">
             <table id="commits-table">
                 <thead>
@@ -71,7 +71,7 @@
                 </thead>
                 <tbody class="commit-list">
                     {{range .Commits}}
-                    {{$fromFork := and .User (ne .User.ID $.Repository.OwnerID)}}
+                    {{$fromFork := index $.CommitsFromOtherArticles .ID.String}}
                     <tr>
                         <td class="col-user author">
                             <div class="article-history-user">
@@ -89,7 +89,7 @@
                             </div>
                         </td>
                         <td class="col-code sha">
-                            <a href="{{QueryBuild (or $.ArticleLink $.RepoLink) "version" .ID.String}}" rel="nofollow">
+                            <a href="{{QueryBuild $.ArticleLink "version" .ID.String}}" rel="nofollow">
                                 {{ShortSha .ID.String}}
                             </a>
                         </td>
@@ -110,9 +110,9 @@
                                 </div>
                             </details>
                         </td>
-                        <td class="col-date">{{DateUtils.TimeSince (Iif .Committer .Committer.When .Author.When)}}</td>
+                        <td class="col-date">{{DateUtils.TimeSince (or .Committer .Author).When}}</td>
                         <td class="col-icon">
-                            <a href="{{QueryBuild (or $.ArticleLink $.RepoLink) "version" .ID.String}}" data-tooltip-content="{{if $fromFork}}{{ctx.Locale.Tr "repo.article_history_from_fork"}}{{else}}{{ctx.Locale.Tr "repo.article_history_commit"}}{{end}}" aria-label="{{ctx.Locale.Tr "repo.commits.view_path"}}">
+                            <a href="{{QueryBuild $.ArticleLink "version" .ID.String}}" data-tooltip-content="{{if $fromFork}}{{ctx.Locale.Tr "repo.article_history_from_fork"}}{{else}}{{ctx.Locale.Tr "repo.article_history_commit"}}{{end}}" aria-label="{{ctx.Locale.Tr "repo.commits.view_path"}}">
                                 {{if $fromFork}}{{svg "octicon-repo-forked" 16}}{{else}}{{svg "octicon-git-commit" 16}}{{end}}
                             </a>
                         </td>
@@ -120,18 +120,27 @@
                     {{end}}
                 </tbody>
             </table>
-            <div class="article-history-footer">
-                <span class="article-history-count">{{ctx.Locale.Tr "repo.article_history_count" (len .Commits) .CommitCount}}</span>
-                {{if .Page}}{{template "shared/repo/article_history_pager" .}}{{end}}
-            </div>
+            {{template "shared/repo/article_history_footer" .}}
         </div>
     {{else}}
         <div class="ui message">
-            {{ctx.Locale.Tr "repo.commits.no_commits"}}
+            {{ctx.Locale.Tr "repo.article_history_no_changes"}}
         </div>
     {{end}}
 </div>
 {{end}}
+{{end}}
+
+{{/* The table's footer (DataTable/Footer 641:64224): the rows shown, as Primer's DataTable
+     counts them ("51-100 of 335"), or that a page past the last one is empty, and the
+     pager, so that such a page has a way back. */}}
+{{define "shared/repo/article_history_footer"}}
+<div class="article-history-footer">
+    <span class="article-history-count">
+        {{- if .HistoryFirst}}{{ctx.Locale.Tr "repo.article_history_range" .HistoryFirst .HistoryLast .HistoryTotal}}{{else}}{{ctx.Locale.Tr "repo.article_history_page_empty"}}{{end -}}
+    </span>
+    {{if .Page}}{{template "shared/repo/article_history_pager" .}}{{end}}
+</div>
 {{end}}
 
 {{/* The footer's pager (figma Pagination 641:64228): Previous and Next as Inter 400

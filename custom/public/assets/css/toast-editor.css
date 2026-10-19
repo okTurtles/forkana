@@ -603,7 +603,6 @@
 .toastui-editor-toolbar-icons.heading { --toolbar-icon: url("../img/svg/octicon-heading.svg"); }
 .toastui-editor-toolbar-icons.bold { --toolbar-icon: url("../img/svg/octicon-bold.svg"); }
 .toastui-editor-toolbar-icons.italic { --toolbar-icon: url("../img/svg/octicon-italic.svg"); }
-.toastui-editor-toolbar-icons.strike { --toolbar-icon: url("../img/svg/octicon-strikethrough.svg"); }
 .toastui-editor-toolbar-icons.quote { --toolbar-icon: url("../img/svg/octicon-quote.svg"); }
 .toastui-editor-toolbar-icons.code { --toolbar-icon: url("../img/svg/octicon-code.svg"); }
 .toastui-editor-toolbar-icons.link { --toolbar-icon: url("../img/svg/octicon-link.svg"); }
@@ -613,9 +612,6 @@
 .toastui-editor-toolbar-icons.codeblock { --toolbar-icon: url("../img/svg/octicon-file-code.svg"); }
 .toastui-editor-toolbar-icons.image { --toolbar-icon: url("../img/svg/octicon-image.svg"); }
 .toastui-editor-toolbar-icons.table { --toolbar-icon: url("../img/svg/octicon-table.svg"); }
-.toastui-editor-toolbar-icons.hrline { --toolbar-icon: url("../img/svg/octicon-horizontal-rule.svg"); }
-.toastui-editor-toolbar-icons.indent { --toolbar-icon: url("../img/svg/octicon-move-to-end.svg"); }
-.toastui-editor-toolbar-icons.outdent { --toolbar-icon: url("../img/svg/octicon-move-to-start.svg"); }
 .toastui-editor-toolbar-icons.more { --toolbar-icon: url("../img/svg/octicon-kebab-horizontal.svg"); }
 
 /* ─── The article editor's frame (#434 items 10 and 12) ──────────────────────
@@ -628,6 +624,7 @@
      6px corners (Form/Textarea 641:65705), its text 10px from that frame's left;
    - the contribution tip at its foot (Tip 641:65771), outside that inner frame. */
 .article-editor-box {
+  container-type: inline-size;
   border: 1px solid var(--color-border-light);
   border-radius: 6px;
   background: var(--color-surface);
@@ -723,9 +720,14 @@
   color: var(--color-primary);
 }
 
-/* On a phone the tabs take their own row above the buttons (as the generic rule near the
-   top of this file intends; the ID-qualified rule there outweighed it). */
-@media (max-width: 640px) {
+/* Below 760px of editor the Visual/Source tabs take their own row above the buttons,
+   and the buttons start at the left and wrap. Above it, the 260px the tabs take on the
+   toolbar's row and the 16px between the button groups (which Toast UI does not count
+   when it decides what to fold into "more") still leave room for every button: they
+   need about 370px. A container query, as the editor's width, not the window's, is
+   what matters. (The ID-qualified rule near the top of this file outweighed the
+   generic phone rule there.) */
+@container (max-width: 760px) {
   [data-theme] .article-editor-box #toast-editor-container .toastui-editor-mode-switch {
     position: static;
     order: -1;
@@ -740,15 +742,15 @@
   [data-theme] .article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar {
     flex-direction: column;
     align-items: stretch;
+    border-radius: 0;
   }
 
   [data-theme] .article-editor-box .toastui-editor-defaultUI-toolbar {
-    padding: 0 8px;
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 40px;
+    padding: 8px;
     justify-content: flex-start;
     border-top: 1px solid var(--color-border-light);
-  }
-
-  [data-theme] .article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar {
-    border-radius: 0;
   }
 }

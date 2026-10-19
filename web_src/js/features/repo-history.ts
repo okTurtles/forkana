@@ -478,6 +478,9 @@ export function initRepoHistory() {
       syncTransferNotice(doc);
       if (articleSection) {
         articleSection.innerHTML = newSection.innerHTML;
+        // htmx only acts on content it has processed: without this, the Watch button
+        // (hx-boost, with the CSRF header from <body hx-headers>) would post as a plain form
+        window.htmx.process(articleSection);
         collectArticleRefs();
         showArticleContent();
         const newMode = articleSection.querySelector<HTMLElement>('#article-view-root')?.getAttribute('data-article-mode');
@@ -675,5 +678,18 @@ export function initRepoHistory() {
     switchView('bubble', {pushState: true});
   });
   if (navEl) navEl.addEventListener('click', handleNavClick as EventListener);
+  // The Edit tab's sign-in banner is rendered with the page, and tabs and articles are
+  // then switched without a reload: its links are pointed back at the page shown now
+  // just before they are followed.
+  const signInBanner = document.querySelector('#article-signin-banner');
+  if (signInBanner) {
+    const pointBack = () => {
+      const back = `redirect_to=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      for (const link of signInBanner.querySelectorAll<HTMLAnchorElement>('a[href*="redirect_to="]')) {
+        link.href = link.href.replace(/redirect_to=[^&#]*/, back);
+      }
+    };
+    for (const type of ['pointerdown', 'focusin', 'keydown']) signInBanner.addEventListener(type, pointBack);
+  }
   window.addEventListener('popstate', handlePopState);
 }

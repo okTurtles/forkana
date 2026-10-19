@@ -1,4 +1,5 @@
 import {test, expect} from '@playwright/test';
+import {login_user, load_logged_in_context} from './utils_e2e.ts';
 
 // The Article view's Read, Edit and History tabs as a signed-out reader sees them
 // (#433, #434, #435). user2 owns repo1, the article of "example-subject".
@@ -89,12 +90,12 @@ test.describe('Article view layout (signed out)', () => {
     await expect(details.locator('.article-history-sha')).toHaveText(/^[0-9a-f]{40}$/);
 
     // item 13: the footer
-    await expect(table.locator('.article-history-count')).toHaveText(/^\d+ of \d+$/);
+    await expect(table.locator('.article-history-count')).toHaveText(/^\d+-\d+ of \d+$/);
     await expect(table.locator('.article-history-pager')).toBeVisible();
 
     // Sort > Forks lists the article's forks (or says there are none)
     await page.locator('[data-role="article-history-sort"]').click();
-    await page.locator('[data-role="article-history-sort"] .menu a.item').nth(1).click();
+    await page.locator('[data-role="article-history-sort"] .menu a.item[href*="history=forks"]').click();
     await expect(page).toHaveURL(/history=forks/);
     await expect(page.locator('[data-role="article-history"][data-sort="forks"], [data-role="article-history-no-forks"]').first()).toBeVisible();
   });
@@ -105,5 +106,39 @@ test.describe('Article view layout (signed out)', () => {
     await page.locator('#article-tabs a[data-article-tab="edit"]').click();
     await expect(page.locator('#article-view-root[data-article-mode="edit"]')).toBeVisible();
     await expect(page.locator('#article-signin-banner')).toBeVisible();
+  });
+});
+
+test.describe('Article view Watch button (signed in)', () => {
+  test.beforeAll(async ({browser}, workerInfo) => {
+    await login_user(browser, workerInfo, 'user4');
+  });
+
+  // #433 item 3: the Watch button of a tab swapped in without a reload still posts through
+  // htmx (with its CSRF header) and is answered with itself, and the subject header's
+  // (hidden) Follow star follows it
+  test('Watch works after switching tabs, and keeps the Follow star in step', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user4');
+    const page = await context.newPage();
+    await page.goto(`${article}?mode=edit`);
+    await page.locator('#article-tabs a[data-article-tab="read"]').click();
+    await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
+
+    const watch = page.locator('#article-tabs button[data-role="article-watch"]');
+    const star = page.locator('#repo-header-follow-form .follow-article-button');
+    const watching = await watch.getAttribute('aria-pressed') === 'true';
+    await expect(star).toHaveAttribute('aria-label', watching ? 'Following' : 'Follow');
+    const url = page.url();
+
+    await watch.click();
+    await expect(watch).toHaveAttribute('aria-pressed', watching ? 'false' : 'true');
+    await expect(star).toHaveAttribute('aria-label', watching ? 'Follow' : 'Following');
+    expect(page.url()).toBe(url);
+
+    // and back, so that the fixture keeps its state
+    await watch.click();
+    await expect(watch).toHaveAttribute('aria-pressed', watching ? 'true' : 'false');
+    await expect(star).toHaveAttribute('aria-label', watching ? 'Following' : 'Follow');
+    await context.close();
   });
 });

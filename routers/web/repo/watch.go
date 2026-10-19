@@ -33,6 +33,14 @@ func ActionWatch(ctx *context.Context) {
 		return
 	}
 	ctx.RespHeader().Add("hx-trigger", "refreshUserCards") // see the `hx-trigger="refreshUserCards ..."` comments in tmpl
+	// The Article view's Watch button and the subject header's Follow star toggle the same
+	// watch. Each sends the id of the article the other one is for (sync_follow_repo /
+	// sync_button_repo, through hx-include); when that is this article, the answer also
+	// re-renders the other one, out of band, so that they never disagree. The two can be
+	// for different articles: the section's article can be switched without a reload.
+	repoID := ctx.Repo.Repository.ID
+	ctx.Data["WatchSyncFollow"] = ctx.FormInt64("sync_follow_repo") == repoID
+	ctx.Data["WatchSyncButton"] = ctx.FormInt64("sync_button_repo") == repoID
 	if ctx.FormString("style") == "button" {
 		ctx.HTML(http.StatusOK, tplWatchButton)
 		return

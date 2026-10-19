@@ -12,26 +12,25 @@
        Sort menu in the History tab (figma Button 641:64306 and its menu 641:64307),
        which has no CopyRef. */}}
 {{define "shared/repo/article_path"}}
-{{$subjectName := or .SubjectName (Iif .Repository.SubjectRelation .Repository.SubjectRelation.Name .Repository.Name)}}
+{{$subjectName := .SubjectName}}
 <div class="article-path">
     <div class="article-path-main">
         <div class="article-breadcrumb" data-role="article-breadcrumb">
-            {{if .Repository.Owner}}
-                <a href="{{.Repository.Owner.HomeLink}}">{{.Repository.Owner.Name}}</a>
-                <span class="article-breadcrumb-divider" aria-hidden="true">/</span>
-            {{end}}
-            <a href="{{QueryBuild (or .ArticleLink .RepoLink) "view" "article" "mode" "read"}}">{{$subjectName}}</a>
+            <a href="{{.Repository.Owner.HomeLink}}">{{.Repository.Owner.Name}}</a>
+            <span class="article-breadcrumb-divider" aria-hidden="true">/</span>
+            <a href="{{QueryBuild .ArticleLink "view" "article" "mode" "read"}}">{{$subjectName}}</a>
         </div>
         {{if and .Repository.IsFork .Repository.BaseRepo}}
             <div class="article-fork-of" data-role="article-fork-of">
                 {{svg "octicon-repo-forked" 16}}
-                {{/* Go html/template escapes these strings */}}
-                <a href="{{.Repository.BaseRepo.Link}}">{{ctx.Locale.Tr "repo.article_fork_of"}} {{.Repository.BaseRepo.OwnerName}} / {{$subjectName}}</a>
+                {{/* the article forked: its owner and its own subject's name (Go html/template
+                     escapes them) */}}
+                <a href="{{.Repository.BaseRepo.LinkCtx ctx}}">{{ctx.Locale.Tr "repo.article_fork_of"}} {{.Repository.BaseRepo.OwnerName}} / {{.Repository.BaseRepo.GetSubject ctx}}</a>
             </div>
         {{end}}
     </div>
     {{if .IsArticleModeHistory}}
-        {{$historyLink := QueryBuild (or .ArticleLink .RepoLink) "view" "article" "mode" "history"}}
+        {{$historyLink := QueryBuild .ArticleLink "view" "article" "mode" "history"}}
         <div class="ui dropdown article-sort-dropdown" data-role="article-history-sort">
             <span class="article-sort-button">
                 {{svg "octicon-arrow-switch" 16}}
@@ -50,7 +49,7 @@
     {{else}}
         <a class="forkana-btn forkana-btn-tertiary article-action-button article-copy-ref" href="#" data-global-click="onCopyContentButtonClick" data-clipboard-text="{{.Repository.Owner.Name}}/{{.Repository.Name}}@{{.BranchName}}">
             {{svg "octicon-link" 16}}
-            <span>CopyRef</span>
+            <span>{{ctx.Locale.Tr "repo.editor.copy_ref"}}</span>
         </a>
     {{end}}
 </div>

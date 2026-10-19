@@ -231,7 +231,7 @@ test.describe('Submit Change Request Workflow', () => {
 });
 
 test.describe('Submit Change Request - Unauthenticated User', () => {
-  test('unauthenticated user sees sign-in prompt instead of Submit Change Request', async ({page}) => {
+  test('unauthenticated user is sent to sign in by Fork and Submit changes', async ({page}) => {
     await page.goto('/subject/example-subject/user2?mode=edit');
     await page.waitForLoadState('domcontentloaded');
 

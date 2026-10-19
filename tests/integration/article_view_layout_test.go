@@ -7,10 +7,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unittest"
+	user_model "code.gitea.io/gitea/models/user"
+	repo_service "code.gitea.io/gitea/services/repository"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -79,6 +84,21 @@ func TestArticleViewLayout(t *testing.T) {
 		assert.Equal(t, "The summary of this article", strings.TrimSpace(doc.Find(`p[data-role="article-summary"]`).Text()))
 	})
 
+	t.Run("WatchInEveryTab", func(t *testing.T) {
+		for _, mode := range []string{"read", "edit", "history"} {
+			doc := get(t, nil, "mode="+mode)
+			assert.Equal(t, 1, doc.Find(`#article-tabs [data-role="article-watch"]`).Length(), mode)
+		}
+	})
+
+	t.Run("SignInLinksKeepThePage", func(t *testing.T) {
+		doc := get(t, nil, "mode=edit")
+		want := "redirect_to=" + url.QueryEscape(articleURL+"?mode=edit")
+		assert.Contains(t, doc.Find("#signed-out-fork-button").AttrOr("href", ""), want)
+		assert.Contains(t, doc.Find(`#article-tabs [data-role="article-watch"]`).AttrOr("href", ""), want)
+		assert.Contains(t, doc.Find(`#article-signin-banner a[href*="/user/login"]`).AttrOr("href", ""), want)
+	})
+
 	t.Run("EditSignedOut", func(t *testing.T) {
 		doc := get(t, nil, "mode=edit")
 
@@ -113,19 +133,81 @@ func TestArticleViewLayout(t *testing.T) {
 		require.Positive(t, rows.Length())
 		// item 12: every message expands to its full commit id
 		assert.Equal(t, rows.Length(), table.Find("details.article-history-details .article-history-sha").Length())
-		// item 13: the footer counts the rows
-		assert.Equal(t, fmt.Sprintf("%d of %d", rows.Length(), rows.Length()),
+		// item 13: the footer gives the range of the rows shown
+		assert.Equal(t, fmt.Sprintf("1-%d of %d", rows.Length(), rows.Length()),
 			strings.TrimSpace(table.Find(".article-history-count").Text()))
+		assert.Equal(t, 1, table.Find(".article-history-pager").Length())
+		// every row of user2's own article is a change made in it
+		assert.Equal(t, rows.Length(), table.Find(".col-icon .octicon-git-commit").Length())
+	})
+
+	t.Run("HistoryPastTheLastPage", func(t *testing.T) {
+		doc := get(t, nil, "mode=history&page=99")
+		table := doc.Find(`[data-role="article-history"][data-sort="changes"]`)
+		require.Equal(t, 1, table.Length(), "a page past the last keeps the table and its pager")
+		assert.Equal(t, 0, table.Find("#commits-table tbody tr").Length())
+		assert.Equal(t, "Nothing on this page", strings.TrimSpace(table.Find(".article-history-count").Text()))
 		assert.Equal(t, 1, table.Find(".article-history-pager").Length())
 	})
 
-	t.Run("HistoryForks", func(t *testing.T) {
+	t.Run("HistoryNoForks", func(t *testing.T) {
 		doc := get(t, nil, "mode=history&history=forks")
 		// the menu marks Forks as chosen
 		active := doc.Find(`[data-role="article-history-sort"] .menu a.item.active`)
 		require.Equal(t, 1, active.Length())
 		assert.Contains(t, active.AttrOr("href", ""), "history=forks")
 		assert.Equal(t, 0, doc.Find("#commits-table").Length())
+		assert.Equal(t, 1, doc.Find(`[data-role="article-history-no-forks"]`).Length())
+	})
+
+	t.Run("Forks", func(t *testing.T) {
+		user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		user5 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+		publicFork, err := repo_service.ForkRepository(t.Context(), user4, user4, repo_service.ForkRepoOptions{
+			BaseRepo: repo, Name: repo.Name, SingleBranch: repo.DefaultBranch,
+		})
+		require.NoError(t, err)
+		defer func() { _ = repo_service.DeleteRepositoryDirectly(t.Context(), publicFork.ID) }()
+		privateFork, err := repo_service.ForkRepository(t.Context(), user5, user5, repo_service.ForkRepoOptions{
+			BaseRepo: repo, Name: repo.Name, SingleBranch: repo.DefaultBranch,
+		})
+		require.NoError(t, err)
+		defer func() { _ = repo_service.DeleteRepositoryDirectly(t.Context(), privateFork.ID) }()
+		privateFork.IsPrivate = true
+		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), privateFork, "is_private"))
+
+		t.Run("ListingHidesThePrivateFork", func(t *testing.T) {
+			doc := get(t, nil, "mode=history&history=forks")
+			table := doc.Find(`[data-role="article-history"][data-sort="forks"]`)
+			require.Equal(t, 1, table.Length())
+			rows := table.Find("#forks-table tbody tr")
+			require.Equal(t, 1, rows.Length(), "a signed-out reader only sees the public fork")
+			assert.Equal(t, "user4", strings.TrimSpace(rows.Find(".author-wrapper").Text()))
+			// the head of its default branch, as the branch table records it
+			assert.Regexp(t, `^[0-9a-f]{10}$`, strings.TrimSpace(rows.Find(".col-code a").Text()))
+			// no description: the fork is named by its owner and subject
+			assert.Equal(t, "user4 / "+subjectName, strings.TrimSpace(rows.Find(".article-history-message").Text()))
+			assert.Contains(t, rows.Find(".article-history-message").AttrOr("href", ""), "/subject/"+subjectName+"/user4")
+			assert.Equal(t, "1-1 of 1", strings.TrimSpace(table.Find(".article-history-count").Text()))
+		})
+
+		t.Run("ListingShowsThePrivateForkToItsOwner", func(t *testing.T) {
+			doc := get(t, loginUser(t, user5.Name), "mode=history&history=forks")
+			assert.Equal(t, 2, doc.Find("#forks-table tbody tr").Length())
+		})
+
+		// #433 item 6 on both routes to a fork: its own url, and the subject page with
+		// the fork selected (which used to leave the base repository unloaded)
+		for _, u := range []string{
+			fmt.Sprintf("/subject/%s/%s?mode=read", subjectName, user4.Name),
+			fmt.Sprintf("/subject/%s?view=article&selected=%s/%s", subjectName, user4.Name, publicFork.Name),
+		} {
+			resp := MakeRequest(t, NewRequest(t, "GET", u), http.StatusOK)
+			forkOf := NewHTMLParser(t, resp.Body).Find(`.history-view-section--article [data-role="article-fork-of"]`)
+			require.Equal(t, 1, forkOf.Length(), u)
+			assert.Equal(t, "Fork of: user2 / "+subjectName, strings.Join(strings.Fields(forkOf.Text()), " "), u)
+			assert.Contains(t, forkOf.Find("a").AttrOr("href", ""), "/subject/"+subjectName+"/user2", u)
+		}
 	})
 
 	t.Run("WatchButtonTogglesItself", func(t *testing.T) {
@@ -148,5 +230,34 @@ func TestArticleViewLayout(t *testing.T) {
 		require.Equal(t, 1, answer.Find("form.article-watch-form").Length())
 		assert.Contains(t, answer.Find("form.article-watch-form").AttrOr("action", ""), next)
 		assert.Equal(t, 0, answer.Find(".follow-article-button").Length())
+
+		// with the star's article id (what hx-include sends), the answer also re-renders
+		// the star, out of band; with another article's id, it does not
+		back := answer.Find("form.article-watch-form").AttrOr("action", "")
+		req = NewRequestWithValues(t, "POST", back, map[string]string{
+			"_csrf":            GetUserCSRFToken(t, session),
+			"sync_follow_repo": strconv.FormatInt(repo.ID, 10),
+		})
+		answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
+		oob := answer.Find(`#repo-header-follow-form[hx-swap-oob]`)
+		require.Equal(t, 1, oob.Length())
+		assert.Equal(t, 1, oob.Find(".follow-article-button").Length())
+
+		req = NewRequestWithValues(t, "POST", answer.Find("form.article-watch-form").AttrOr("action", ""), map[string]string{
+			"_csrf":            GetUserCSRFToken(t, session),
+			"sync_follow_repo": "999999",
+		})
+		answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
+		assert.Equal(t, 0, answer.Find(`[hx-swap-oob]`).Length())
+
+		// the star's answer re-renders the Watch button of the same article
+		starAction := strings.Replace(answer.Find("form.article-watch-form").AttrOr("action", ""), "?style=button", "", 1)
+		req = NewRequestWithValues(t, "POST", starAction, map[string]string{
+			"_csrf":            GetUserCSRFToken(t, session),
+			"sync_button_repo": strconv.FormatInt(repo.ID, 10),
+		})
+		answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
+		assert.Equal(t, 1, answer.Find(".follow-article-button").Length())
+		assert.Equal(t, 1, answer.Find(`#article-watch-form[hx-swap-oob] form.article-watch-form`).Length())
 	})
 }

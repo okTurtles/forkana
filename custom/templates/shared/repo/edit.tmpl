@@ -34,7 +34,7 @@
              it is not part of what the editor submits (the article file), so it is read-only. */}}
         <div class="article-summary-field" data-role="article-summary">
             <div class="article-summary-label">{{ctx.Locale.Tr "repo.article_summary"}}</div>
-            <div class="article-summary-box{{if not .Repository.Description}} is-empty{{end}}">{{or .Repository.Description (ctx.Locale.Tr "repo.article_summary_empty")}}</div>
+            <div class="article-summary-box">{{or .Repository.Description (ctx.Locale.Tr "repo.article_summary_empty")}}</div>
         </div>
         {{/* Editor form */}}
         <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoOperationsLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}"

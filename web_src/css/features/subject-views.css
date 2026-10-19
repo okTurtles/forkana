@@ -13,6 +13,13 @@
   padding-top: 3rem;
 }
 
+/* The Article view showing an article starts 24px below the submenu, where its tokens
+   sit in the figma (641:65454: the view tabs end at 248, the tokens start at 272). With
+   no article shown, the "Please select an article" box keeps the full 3rem. */
+.history-view-section--article:has([data-role="article-content"]:not([hidden])) {
+  padding-top: 24px;
+}
+
 /* The table view's grid pulls itself up by its gutter (Fomantic's negative
    grid margin), which its column padding gives back, so its first row lands
    exactly on the padding above. Kept explicit so a utility class cannot
