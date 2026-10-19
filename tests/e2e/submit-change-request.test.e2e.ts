@@ -238,16 +238,19 @@ test.describe('Submit Change Request - Unauthenticated User', () => {
     // Wait for the article view to be present
     await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
 
-    // Unauthenticated user should see a disabled button with sign-in message
-    const signInButton = page.locator('button.ui.primary.button.disabled');
-    await expect(signInButton).toBeVisible({timeout: 10000});
+    // Unauthenticated user sees the layout's Fork and Submit changes buttons (#434 items
+    // 8 and 9), which both lead to sign in rather than to the fork or change request flows
+    const forkLink = page.locator('#signed-out-fork-button');
+    const submitLink = page.locator('#signed-out-submit-button');
+    await expect(forkLink).toBeVisible({timeout: 10000});
+    await expect(submitLink).toBeVisible();
+    await expect(submitLink).toContainText(/Submit/i);
+    await expect(forkLink).toHaveAttribute('href', /\/user\/login\?redirect_to=/);
+    await expect(submitLink).toHaveAttribute('href', /\/user\/login\?redirect_to=/);
 
-    // Should contain "Sign in to Edit" text (from locale: repo.editor.sign_in_to_edit)
-    await expect(signInButton).toContainText(/Sign in to Edit/i);
-
-    // The button should have the submit-changes-button ID but be disabled
-    // (unauthenticated users don't see fork or submit-change-request buttons)
-    await expect(signInButton).toHaveAttribute('type', 'button');
+    // neither the fork-and-edit nor the change request button is there
+    await expect(page.locator('#fork-article-button')).toHaveCount(0);
+    await expect(page.locator('#pre-submit-changes-button')).toHaveCount(0);
 
     await page.close();
   });
