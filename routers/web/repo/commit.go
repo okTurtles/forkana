@@ -13,7 +13,6 @@ import (
 	"path"
 	"strings"
 
-	activities_model "code.gitea.io/gitea/models/activities"
 	asymkey_model "code.gitea.io/gitea/models/asymkey"
 	"code.gitea.io/gitea/models/db"
 	git_model "code.gitea.io/gitea/models/git"
@@ -487,13 +486,9 @@ func ArticleView(ctx *context.Context) {
 	}
 	ctx.Data["ArticleLink"] = articleLink
 
-	// Opening the article clears the viewer's repository notifications for it (pending and
-	// rejected transfers), as the repository home does: this is the url they link to.
-	if ctx.IsSigned {
-		if err := activities_model.SetRepoReadBy(ctx, ctx.Repo.Repository.ID, ctx.Doer.ID); err != nil {
-			ctx.ServerError("SetRepoReadBy", err)
-			return
-		}
+	// this is the url repository notifications link to
+	if !markRepoNotificationsRead(ctx) {
+		return
 	}
 
 	renderArticleView(ctx)
