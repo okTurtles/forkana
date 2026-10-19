@@ -28,6 +28,8 @@ for (const frame of frames) {
     try {
       await page.setViewportSize(frame.viewport);
       await page.goto('/repo/create?subject=Climate%20Ethics');
+      // measure after the web font is in, or the buttons' widths can change between two reads
+      await page.evaluate(() => document.fonts.ready);
 
       // nothing sticks out of the screen (the form used to be 32rem wide on every screen)
       const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
