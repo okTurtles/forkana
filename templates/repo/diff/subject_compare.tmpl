@@ -1,17 +1,21 @@
 {{template "base/head" .}}
-<div role="main" aria-label="{{.Title}}" class="page-content explore subjects">
-	<!-- Back button -->
-	<div class="ui container">
-		<a href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .Subject.Name)) "selected" .SubjectSelected}}" class="tw-inline-flex tw-items-center tw-gap-1 tw-text-14 tw-mt-4 back-button">
-			{{svg "octicon-arrow-left" 16}} Back
+<div role="main" aria-label="{{.Title}}" class="page-content explore subjects subject-compare">
+	{{/* Back: laid over the top of the subject header (a zero-height anchor), as in figma
+	641:62395, so the header, the tabs and the content start at the same y as on the
+	subject page (#431). data-subject-back: goes back in the history when the page before
+	is the graph that opened this point of contention (subject-compare-back.ts). */}}
+	<div class="ui container subject-compare-back-anchor">
+		<a href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .Subject.Name)) "selected" .SubjectSelected}}" class="subject-compare-back" aria-label="{{ctx.Locale.Tr "repo.point_of_contention.back"}}" data-subject-back data-subject-path="{{AppSubUrl}}/subject/{{PathEscape .Subject.Name}}">
+			{{svg "octicon-arrow-left" 16}} <span class="subject-compare-back-label">{{ctx.Locale.Tr "repo.point_of_contention.back"}}</span>
 		</a>
 	</div>
 
 	<!-- Subject header with view tabs (same as subject page) -->
 	{{template "repo/header" .}}
 
-	<div class="ui container tw-mt-16">
-		<div class="tw-flex tw-items-start tw-justify-between tw-mt-4">
+	{{/* 48px under the tabs: "Frame 517" (641:62397) at y 296, the tabs (641:62394) end at 248 */}}
+	<div class="ui container subject-compare-body tw-mt-[48px]">
+		<div class="tw-flex tw-items-start tw-justify-between">
 			<h2 class="ui header tw-m-0 tw-text-16">
 				{{svg "octicon-issue-opened" 16 "tw-mr-1"}}
 				Point of contention <span class="tw-font-normal muted">{{.Owner1}}...{{.Owner2}}</span>
@@ -33,28 +37,24 @@
 			</div>
 		</div>
 
+		{{/* subject-compare-message: 24px under the header, the gap of figma "Bubble view / Point of contention"
+		Frame 517 (641:62397) between the header (641:62398) and the content (#431) */}}
 		{{if and (not .Readme1Name) (not .Readme2Name)}}
-			<div class="ui warning message">
-				<p>{{svg "octicon-alert" 16}} The subjects are empty.</p>
+			<div class="ui warning message subject-compare-message">
+				<p>{{svg "octicon-alert" 16}} {{ctx.Locale.Tr "repo.point_of_contention.both_empty"}}</p>
 			</div>
 		{{else if and (eq .Readme1Content .Readme2Content) .Readme1Name .Readme2Name}}
-			<div class="ui info message">
-				<p>{{svg "octicon-check" 16}} The articles are identical.</p>
+			<div class="ui info message subject-compare-message">
+				<p>{{svg "octicon-check" 16}} {{ctx.Locale.Tr "repo.point_of_contention.identical"}}</p>
 			</div>
 		{{else}}
-			<div id="diff-container" class="tw-mt-8">
+			{{/* figma Table 641:62410, 24px under the header (Frame 517's gap); --poc-digits sizes
+			the line-number column for the longest number */}}
+			<div id="diff-container" class="poc-table-box">
 				{{if .SplitViewLines}}
-					<div id="diff-file-boxes" class="sixteen wide column">
-						<div class="diff-file-box file-content tw-mt-0">
-							<div class="diff-file-body ui attached unstackable table segment">
-								<div class="file-body file-code unicode-escaped code-diff code-diff-split">
-									<table class="chroma">
-										{{template "repo/diff/subject_compare_section" dict "root" .}}
-									</table>
-								</div>
-							</div>
-						</div>
-					</div>
+					<table class="poc-table" style="--poc-digits: {{len (print (len .SplitViewLines))}}">
+						{{template "repo/diff/subject_compare_section" dict "root" .}}
+					</table>
 				{{end}}
 			</div>
 		{{end}}

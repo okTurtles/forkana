@@ -1,0 +1,181 @@
+/* The Point of contention table (templates/repo/diff/subject_compare_section.tmpl), #431.
+   Every value is from figma "Bubble view / Point of contention" 641:62387, Table
+   641:62410, and on phones from the Mobile frame 641:64701 (Frame 736, 641:64723):
+
+   - the table: white (--color-body), a 1px #d1d9e0 border (--color-border-light),
+     radius 6, 24px under the Point of contention header (Frame 517, gap 24);
+   - column headers (641:62414 / 641:62415): 32px, #f6f8fa (--color-box-header), padding
+     4px 8px, "N Contributors" in Inter 600 14px/20px #59636e (--color-text-light-3), a
+     #d1d9e0 line under them and between the two halves;
+   - the article row (Frame 442, 641:62425): padding 8px 0 8px 8px, a 70% #d1d9e0 line
+     under it; a 16px fork icon, 4px gap, "owner / subject" in Inter 600 14px/20px
+     #4e40fa (--color-primary); 4px under it, 20px in, "Last updated: …" in Inter 400
+     12px/20px #59636e;
+   - a line (Frame 547): the number cell (DataTable/TextCell 641:62453 / 641:62462), 31px
+     wide, padding 8px, Inter 400 12px/20px #59636e, on #ffe7d1
+     (--color-diff-removed-linenum-bg) for the first article's changed line and #e5e9ff
+     (--color-diff-added-linenum-bg) for the second's; the text cell (Frame 506 / 507),
+     padding 8px 12px, Inter 400 12px/20px #1f2328 (--color-text-primary) on white, the
+     changed text itself highlighted in #ffe7d1 / #e5e9ff (Rectangles 35-37, the
+     --color-diff-*-row-bg tokens); a #d1d9e0 line under each line;
+   - phones: one column, the number cell 24px wide with padding 8px 8px 4px, and each side
+     of a change under its own column header and article row.
+
+   Scoped to .poc-table: the generic diff tables (change requests, conflicts) are untouched. */
+
+.subject-compare .poc-table-box {
+  margin-top: 24px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-body);
+  overflow: hidden;
+}
+
+.poc-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+/* wide enough for the longest line number: 31px (two digits) or more */
+.poc-table .poc-col-num {
+  width: max(31px, calc(16px + var(--poc-digits, 2) * 7.5px));
+}
+
+.poc-cols-mobile,
+.poc-table .poc-mobile {
+  display: none;
+}
+
+.poc-table th,
+.poc-table td {
+  padding: 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.poc-table .poc-side2 {
+  border-left: 1px solid var(--color-border-light);
+}
+
+.poc-table .poc-colhead {
+  height: 32px;
+  padding: 4px 8px;
+  vertical-align: middle;
+  background: var(--color-box-header);
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  color: var(--color-text-light-3);
+}
+
+.poc-table .poc-article {
+  padding: 8px 0 7px 8px; /* 58px with the line under it, drawn inside in the figma */
+  border-bottom-color: rgb(from var(--color-border-light) r g b / 70%);
+}
+
+.poc-article-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  color: var(--color-primary);
+}
+
+.poc-article-name .svg {
+  flex-shrink: 0;
+  color: var(--color-text-primary);
+}
+
+.poc-article-name a,
+.poc-article-name a:hover {
+  color: var(--color-primary);
+}
+
+.poc-article-updated {
+  margin-top: 4px;
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-text-light-3);
+}
+
+.poc-table .poc-num {
+  padding: 8px 8px 7px; /* the line under it is inside the figma's 8px padding */
+  color: var(--color-text-light-3);
+  white-space: nowrap;
+}
+
+.poc-table .poc-num.poc-removed {
+  background: var(--color-diff-removed-linenum-bg);
+}
+
+.poc-table .poc-num.poc-added {
+  background: var(--color-diff-added-linenum-bg);
+}
+
+.poc-table .poc-code {
+  padding: 8px 12px 7px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* the changed text, highlighted line by line like the figma's rectangles behind it */
+.poc-table .poc-code.poc-removed .poc-text,
+.poc-table .poc-code.poc-added .poc-text {
+  padding: 0 3px;
+  margin: 0 -3px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* an empty line has no text to highlight */
+.poc-table .poc-code .poc-text:empty {
+  display: none;
+}
+
+.poc-table .poc-code.poc-removed .poc-text {
+  background: var(--color-diff-removed-row-bg);
+}
+
+.poc-table .poc-code.poc-added .poc-text {
+  background: var(--color-diff-added-row-bg);
+}
+
+.poc-table tr:last-child > td {
+  border-bottom: 0;
+}
+
+@media (max-width: 767.98px) {
+  /* the mobile frame's 16px gutter (Frame 736 padding 0 16px); the container gives 8px */
+  .subject-compare .subject-compare-body {
+    padding: 0 8px;
+  }
+
+  .poc-cols-desktop,
+  .poc-table .poc-desktop {
+    display: none;
+  }
+
+  .poc-cols-mobile {
+    display: table-column-group;
+  }
+
+  .poc-table tr.poc-mobile {
+    display: table-row;
+  }
+
+  .poc-table .poc-col-num {
+    width: max(24px, calc(9px + var(--poc-digits, 2) * 7.5px));
+  }
+
+  .poc-table .poc-num {
+    padding: 8px 8px 3px;
+  }
+}

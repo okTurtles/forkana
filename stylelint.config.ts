@@ -5,6 +5,8 @@ const cssVarFiles = [
   fileURLToPath(new URL('web_src/css/base.css', import.meta.url)),
   fileURLToPath(new URL('web_src/css/themes/theme-gitea-light.css', import.meta.url)),
   fileURLToPath(new URL('web_src/css/themes/theme-gitea-dark.css', import.meta.url)),
+  // Forkana's own design tokens (--color-text-primary, …), defined for every theme there
+  fileURLToPath(new URL('custom/public/assets/css/colors.custom.css', import.meta.url)),
 ];
 
 export default {
