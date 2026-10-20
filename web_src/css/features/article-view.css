@@ -159,22 +159,9 @@
   padding: 0;
 }
 
-/* The Edit tab's Fork and Submit changes for a signed-out reader (View Tab 641:65671)
-   are .forkana-btn-unavailable and .forkana-btn-primary-unavailable (modules/button.css). */
-
-/* CounterLabel 6484:44075: a #818b98 12% pill, 0 6px. */
-.article-counter {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--color-button-text-disabled) 12%, transparent);
-  font-size: 14px;
-  line-height: 18px;
-}
+/* The Edit tab's Fork and Submit changes for a signed-out reader are .forkana-btn-group
+   (ButtonGroup I6961:75221) and .forkana-btn-primary-unavailable (View Tab 641:65671),
+   in modules/button.css. */
 
 /* ── The article's path (Frame 566 641:65486) ───────────────────────────────── */
 .article-path {
@@ -292,6 +279,12 @@
   border-radius: 6px;
   box-shadow: inset 0 1px 0 rgb(31 35 40 / 4%);
   overflow-wrap: anywhere;
+}
+
+.article-summary-caption {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-text-light-3);
 }
 
 #article-edit-form {

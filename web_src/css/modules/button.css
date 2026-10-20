@@ -530,3 +530,76 @@ It needs some tricks to tweak the left/right borders with active state */
   text-decoration: none;
   filter: brightness(0.97);
 }
+
+/* A button with a count split off by a rule (ButtonGroup 5925:57348, as the Article view's
+   Fork in figma I6961:75221): one 32px control, #f6f8fa, a 1px #d1d9e0 border with 6px
+   outer corners, and the shadow of the secondary button. The label (First Button
+   36329:8527) is Inter 600 14/20 #25292e with 8px each side and no right border; the
+   count (Last Button 36329:8532) is Inter 600 12/20 #25292e with 8px each side, its left
+   border being the rule. (Figma draws borders inside the box: CSS padding is 8px minus
+   the border.) It is one link, so the whole control hovers, focuses and is pressed as
+   one. */
+.forkana-btn-group {
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  border-radius: 6px;
+  color: var(--color-button-text);
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 1px 0 #1f23280a;
+  cursor: pointer;
+}
+
+.forkana-btn-group-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border-light);
+}
+
+.forkana-btn-group-item:first-child {
+  padding-right: 8px;
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+}
+
+.forkana-btn-group-item:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.forkana-btn-group-item.forkana-btn-group-count {
+  font-size: 12px;
+}
+
+.forkana-btn-group:hover {
+  color: var(--color-button-text);
+  text-decoration: none;
+}
+
+.forkana-btn-group:hover .forkana-btn-group-item {
+  background: var(--color-button-secondary-hover-bg);
+}
+
+.forkana-btn-group:active .forkana-btn-group-item {
+  background: var(--color-button-secondary-active-bg);
+}
+
+.forkana-btn-group:focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: -2px;
+}
+
+/* unavailable: the label and the count in #818b98, the border and the rule #818b98 10% */
+.forkana-btn-group[aria-disabled="true"] {
+  color: var(--color-button-text-disabled);
+  pointer-events: none;
+}
+
+.forkana-btn-group[aria-disabled="true"] .forkana-btn-group-item {
+  border-color: var(--color-button-border-disabled);
+}

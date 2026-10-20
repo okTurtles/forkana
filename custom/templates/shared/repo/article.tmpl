@@ -161,16 +161,19 @@
                                         </span>
                                     {{end}}
                                 {{else}}
-                                    {{/* #434 items 8 and 9: a signed-out reader sees the Fork and
-                                         Submit changes buttons of figma View Tab 641:65671 (Button
-                                         I641:65671;8356:68206, with the fork count, and Button
-                                         I641:65671;8356:68208), in their unavailable colours. Both
-                                         need an account, so both lead to sign in. */}}
+                                    {{/* #434 items 8 and 9: a signed-out reader sees Fork, with the
+                                         article's fork count, and Submit changes. Fork is the figma's
+                                         ButtonGroup I6961:75221 (its "First Button" 36329:8527 and
+                                         "Last Button" 36329:8532): one control, the count split off by
+                                         a rule. Submit changes keeps its unavailable colours (Button
+                                         I641:65671;8356:68208). Both need an account, so both lead
+                                         to sign in. */}}
                                     {{$signIn := .ArticleSignInLink}}
-                                    <a class="forkana-btn forkana-btn-unavailable" id="signed-out-fork-button" href="{{$signIn}}"
+                                    <a class="forkana-btn-group" id="signed-out-fork-button" href="{{$signIn}}"
                                         data-tooltip-content="{{ctx.Locale.Tr "repo.article_fork_guest_user"}}">
-                                        {{ctx.Locale.Tr "repo.fork_article"}}
-                                        <span class="article-counter">{{.Repository.NumForks}}</span>
+                                        <span class="forkana-btn-group-item">{{ctx.Locale.Tr "repo.fork_article"}}</span>
+                                        <span class="forkana-btn-group-item forkana-btn-group-count" data-role="article-fork-count"
+                                            aria-label="{{ctx.Locale.TrN .Repository.NumForks "repo.article_forks_1" "repo.article_forks_n" .Repository.NumForks}}">{{.Repository.NumForks}}</span>
                                     </a>
                                     <a class="forkana-btn forkana-btn-primary-unavailable" id="signed-out-submit-button" href="{{$signIn}}"
                                         data-tooltip-content="{{ctx.Locale.Tr "repo.editor.sign_in_to_edit_tooltip"}}">

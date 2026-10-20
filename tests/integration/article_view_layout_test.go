@@ -139,6 +139,12 @@ func TestArticleViewLayout(t *testing.T) {
 
 		// items 5 and 12: the summary block and the contribution tip
 		assert.Equal(t, 1, doc.Find(`.article-summary-field[data-role="article-summary"]`).Length())
+		assert.Equal(t, "Up to 200 characters.", strings.TrimSpace(doc.Find(".article-summary-field .article-summary-caption").Text()))
+		// Fork and its count are one control, the count split off (ButtonGroup I6961:75221)
+		fork := tabs.Find("a#signed-out-fork-button.forkana-btn-group")
+		require.Equal(t, 1, fork.Length())
+		assert.Equal(t, 2, fork.Find(".forkana-btn-group-item").Length())
+		assert.Equal(t, strconv.Itoa(repo.NumForks), strings.TrimSpace(fork.Find(`[data-role="article-fork-count"]`).Text()))
 		tip := strings.Join(strings.Fields(doc.Find(`[data-role="article-contribution-tip"]`).Text()), " ")
 		assert.Equal(t, "Remember, contributions to this article should follow its contributing guidelines and code of conduct.", tip)
 	})

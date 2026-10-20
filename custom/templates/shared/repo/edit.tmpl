@@ -28,13 +28,15 @@
             </p>
         </div>
     {{else}}
-        {{/* #434 item 5: the Summary block (figma Textarea 641:65697): an Inter 600 14/20
+        {{/* #434 item 5: the Summary block (figma Textarea 641:65697, I6961:75226): an Inter 600 14/20
              label, 4px above a white box with a 1px #d1d9e0 border, 6px radius and 8px 16px
              padding around Inter 400 16/24 #59636e text. It shows the article's description;
              it is not part of what the editor submits (the article file), so it is read-only. */}}
         <div class="article-summary-field" data-role="article-summary">
             <div class="article-summary-label">{{ctx.Locale.Tr "repo.article_summary"}}</div>
             <div class="article-summary-box">{{or .Repository.Description (ctx.Locale.Tr "repo.article_summary_empty")}}</div>
+            {{/* FormControl.Caption I6961:75226;30948:151243: Inter 400 12/18 #59636e, 4px under the box */}}
+            <div class="article-summary-caption">{{ctx.Locale.Tr "repo.article_summary_caption" 200}}</div>
         </div>
         {{/* Editor form */}}
         <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoOperationsLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}"
