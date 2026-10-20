@@ -1,60 +1,61 @@
 {{template "base/head" .}}
-<div role="main" aria-label="{{.Title}}" class="page-content repository new-repo">
-	<div class="ui container medium-width tw-mb-8">
-		<h3 class="ui top attached header">
-			{{ctx.Locale.Tr "new_repo"}}
-		</h3>
-		<div class="ui attached segment">
-			<div class="tw-w-[32rem] tw-mx-auto tw-py-8">
+{{/* The "New subject" screen, after the Figma frames New Subject 662:99326 (desktop) and
+	Mobile 766:51914 (375px); sizes in web_src/css/repo/new-subject.css. */}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository new-repo new-subject-page">
+	<div class="new-subject-box">
+		<h1 class="new-subject-header">
+			{{ctx.Locale.Tr "repo.new_subject_screen_title"}}
+		</h1>
+		<div class="new-subject-body">
+			<div class="new-subject-content">
 				{{template "base/alert" .}}
 				{{template "repo/create_helper" .}}
 				<form class="ui form new-repo-form" action="{{.Link}}" method="post">
-						{{.CsrfTokenHtml}}
-						<div id="create-repo-error-message" class="ui negative message tw-text-center tw-hidden"></div>
-						<div class="required field {{if .Err_Owner}}error{{end}}">
-							<label>{{ctx.Locale.Tr "repo.owner"}}</label>
-							<div class="ui selection dropdown ellipsis-text-items" id="repo_owner_dropdown">
-								<input type="hidden" name="uid" value="{{.ContextUser.ID}}">
-								<span class="text"></span>
-								{{svg "octicon-triangle-down" 14 "dropdown icon"}}
-								<div class="menu">
-									<div class="item" data-value="{{.SignedUser.ID}}" title="{{.SignedUser.Name}}"
-										{{if not .CanCreateRepoInDoer}}
-											data-create-repo-disallowed-prompt="{{ctx.Locale.TrN .MaxCreationLimit "repo.form.reach_limit_of_creation_1" "repo.form.reach_limit_of_creation_n" .MaxCreationLimitOfDoer}}"
-										{{end}}
-									>
-									{{ctx.AvatarUtils.Avatar .SignedUser 28 "mini"}}
-									{{.SignedUser.ShortName 40}}
+					{{.CsrfTokenHtml}}
+					<div id="create-repo-error-message" class="ui negative message tw-text-center tw-hidden"></div>
+					<div class="field new-subject-field {{if .Err_Owner}}error{{end}}">
+						<label>{{ctx.Locale.Tr "repo.owner"}}</label>
+						<div class="ui selection dropdown ellipsis-text-items" id="repo_owner_dropdown">
+							<input type="hidden" name="uid" value="{{.ContextUser.ID}}">
+							<span class="text"></span>
+							{{svg "octicon-triangle-down" 14 "dropdown icon"}}
+							<div class="menu">
+								<div class="item" data-value="{{.SignedUser.ID}}" title="{{.SignedUser.Name}}"
+									{{if not .CanCreateRepoInDoer}}
+										data-create-repo-disallowed-prompt="{{ctx.Locale.TrN .MaxCreationLimit "repo.form.reach_limit_of_creation_1" "repo.form.reach_limit_of_creation_n" .MaxCreationLimitOfDoer}}"
+									{{end}}
+								>
+								{{ctx.AvatarUtils.Avatar .SignedUser 28 "mini"}}
+								{{.SignedUser.ShortName 40}}
+							</div>
+							{{range .Orgs}}
+								<div class="item" data-value="{{.ID}}" title="{{.Name}}">
+									{{ctx.AvatarUtils.Avatar . 28 "mini"}}
+									{{.ShortName 40}}
 								</div>
-								{{range .Orgs}}
-									<div class="item" data-value="{{.ID}}" title="{{.Name}}">
-										{{ctx.AvatarUtils.Avatar . 28 "mini"}}
-										{{.ShortName 40}}
-									</div>
-								{{end}}
+							{{end}}
 							</div>
 						</div>
-						<!--<span class="help">{{ctx.Locale.Tr "repo.owner_helper"}}</span> -->
 					</div>
 
 					<div class="tw-hidden field {{if .Err_RepoName}}error{{end}}">
-					<label for="repo_name">{{ctx.Locale.Tr "repo.repo_name"}}</label>
-					<input id="repo_name" name="repo_name" value="{{.repo_name}}" maxlength="100" placeholder="{{ctx.Locale.Tr "repo.repo_name_auto_generated"}}">
+						<label for="repo_name">{{ctx.Locale.Tr "repo.repo_name"}}</label>
+						<input id="repo_name" name="repo_name" value="{{.repo_name}}" maxlength="100" placeholder="{{ctx.Locale.Tr "repo.repo_name_auto_generated"}}">
 						<span class="help" data-help-for-repo-name>{{ctx.Locale.Tr "repo.repo_name_helper"}}</span>
 						<span class="help tw-hidden" data-help-for-repo-name=".profile">{{ctx.Locale.Tr "repo.repo_name_profile_public_hint"}}</span>
 						<span class="help tw-hidden" data-help-for-repo-name=".profile-private">{{ctx.Locale.Tr "repo.repo_name_profile_private_hint"}}</span>
 					</div>
 
-				<div class="required field {{if .Err_Subject}}error{{end}}">
-					<label for="subject">
-						{{ctx.Locale.Tr "repo.repo_subject"}}
-						<span data-tooltip-content="{{ctx.Locale.Tr "repo.repo_subject_helper"}}" data-tooltip-position="top center">
-							{{svg "octicon-info" 14 "info icon"}}
-						</span>
-					</label>
-					<input id="subject" name="subject" value="{{.subject}}" autofocus required maxlength="255" placeholder="{{ctx.Locale.Tr "repo.repo_subject_placeholder"}}">
-					{{template "repo/subject_title_hint" .}}
-                </div>
+					<div class="field new-subject-field new-subject-name-field {{if .Err_Subject}}error{{end}}">
+						<label for="subject">
+							{{ctx.Locale.Tr "repo.repo_subject"}}
+							<span data-tooltip-content="{{ctx.Locale.Tr "repo.repo_subject_helper"}}" data-tooltip-position="top center">
+								{{svg "octicon-info" 14 "info icon"}}
+							</span>
+						</label>
+						<input id="subject" name="subject" value="{{.subject}}" autofocus required maxlength="255" placeholder="{{ctx.Locale.Tr "repo.repo_subject_placeholder"}}">
+						{{template "repo/subject_title_hint" .}}
+					</div>
 
 					<div class="tw-hidden field">
 						<label>{{ctx.Locale.Tr "repo.visibility"}}</label>
@@ -216,12 +217,11 @@
 						</div>
 					</div>
 
-					<div class="field tw-mt-8 tw-flex tw-justify-end tw-gap-2">
-						<label></label>
-						<button type="button" class="ui button" onclick="history.back(); return false;">
+					<div class="new-subject-actions">
+						<button type="button" class="forkana-btn forkana-btn-secondary" onclick="history.back(); return false;">
 							{{ctx.Locale.Tr "cancel"}}
 						</button>
-						<button id="create-repo-submit-button" class="ui primary button">
+						<button id="create-repo-submit-button" class="forkana-btn forkana-btn-primary">
 							{{ctx.Locale.Tr "repo.create_repo"}}
 						</button>
 					</div>

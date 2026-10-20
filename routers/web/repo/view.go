@@ -167,6 +167,20 @@ func markupRender(ctx *context.Context, renderCtx *markup.RenderContext, input i
 	return escaped, output, err
 }
 
+// markRepoNotificationsRead marks the signed-in viewer's repository notifications for the
+// current repository (pending and rejected transfers) read, as every page that shows the
+// article or repository does. It reports false after rendering an error.
+func markRepoNotificationsRead(ctx *context.Context) bool {
+	if !ctx.IsSigned {
+		return true
+	}
+	if err := activities_model.SetRepoReadBy(ctx, ctx.Repo.Repository, ctx.Doer); err != nil {
+		ctx.ServerError("SetRepoReadBy", err)
+		return false
+	}
+	return true
+}
+
 func checkHomeCodeViewable(ctx *context.Context) {
 	if ctx.Repo.HasUnits() {
 		if ctx.Repo.Repository.IsBeingCreated() {
@@ -196,12 +210,8 @@ func checkHomeCodeViewable(ctx *context.Context) {
 			return
 		}
 
-		if ctx.IsSigned {
-			// Set repo notification-status read if unread
-			if err := activities_model.SetRepoReadBy(ctx, ctx.Repo.Repository.ID, ctx.Doer.ID); err != nil {
-				ctx.ServerError("ReadBy", err)
-				return
-			}
+		if !markRepoNotificationsRead(ctx) {
+			return
 		}
 
 		var firstUnit *unit_model.Unit
