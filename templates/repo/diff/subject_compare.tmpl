@@ -1,19 +1,21 @@
 {{template "base/head" .}}
-<div role="main" aria-label="{{.Title}}" class="page-content explore subjects">
-	<!-- Back button -->
-	<div class="ui container">
-		{{/* data-subject-back: goes back in the history when the page before is the graph that
-		opened this point of contention (web_src/js/features/subject-compare-back.ts, #431) */}}
-		<a href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .Subject.Name)) "selected" .SubjectSelected}}" class="subject-compare-back tw-mt-4" data-subject-back data-subject-path="{{AppSubUrl}}/subject/{{PathEscape .Subject.Name}}">
-			{{svg "octicon-arrow-left" 16}} {{ctx.Locale.Tr "repo.point_of_contention.back"}}
+<div role="main" aria-label="{{.Title}}" class="page-content explore subjects subject-compare">
+	{{/* Back: laid over the top of the subject header (a zero-height anchor), as in figma
+	641:62395, so the header, the tabs and the content start at the same y as on the
+	subject page (#431). data-subject-back: goes back in the history when the page before
+	is the graph that opened this point of contention (subject-compare-back.ts). */}}
+	<div class="ui container subject-compare-back-anchor">
+		<a href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .Subject.Name)) "selected" .SubjectSelected}}" class="subject-compare-back" aria-label="{{ctx.Locale.Tr "repo.point_of_contention.back"}}" data-subject-back data-subject-path="{{AppSubUrl}}/subject/{{PathEscape .Subject.Name}}">
+			{{svg "octicon-arrow-left" 16}} <span class="subject-compare-back-label">{{ctx.Locale.Tr "repo.point_of_contention.back"}}</span>
 		</a>
 	</div>
 
 	<!-- Subject header with view tabs (same as subject page) -->
 	{{template "repo/header" .}}
 
-	<div class="ui container tw-mt-16">
-		<div class="tw-flex tw-items-start tw-justify-between tw-mt-4">
+	{{/* 48px under the tabs: "Frame 517" (641:62397) at y 296, the tabs (641:62394) end at 248 */}}
+	<div class="ui container tw-mt-[48px]">
+		<div class="tw-flex tw-items-start tw-justify-between">
 			<h2 class="ui header tw-m-0 tw-text-16">
 				{{svg "octicon-issue-opened" 16 "tw-mr-1"}}
 				Point of contention <span class="tw-font-normal muted">{{.Owner1}}...{{.Owner2}}</span>

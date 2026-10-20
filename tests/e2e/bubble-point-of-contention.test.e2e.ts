@@ -45,11 +45,18 @@ test('a point of contention is selected on its own, and Back returns to it (#431
   await back.hover();
   await expect(back).toHaveCSS('text-decoration-line', 'none');
 
+  // item 1: Back takes no room (figma 641:62395 lies over the header's top padding), so the
+  // subject header and the tabs are at the same page y on both pages: nothing shifts
+  const headerY = () => page.evaluate(() => ['.repo-header h1', '#subject-view-tabs']
+    .map((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().top + window.scrollY)));
+  const compareHeaderY = await headerY();
+
   // item 1: the page's Back goes back in the history, to the very entry that was left
   const historyLength = await page.evaluate(() => window.history.length);
   await back.click();
   await expect(page).toHaveURL(new RegExp(`${subjectPath}(\\?|$)`));
   expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
+  expect(await headerY()).toEqual(compareHeaderY);
 
   // items 3 and 5: the point of contention is selected (21×21, opaque white, 1px brand ring),
   // and the article it leads to is not
