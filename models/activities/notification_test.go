@@ -188,7 +188,7 @@ func TestCreateRepoTransferRejectedNotification(t *testing.T) {
 	assert.Equal(t, rejecter.ID, notification.UpdatedBy)
 
 	// visiting the repository clears it, like the pending-transfer notification
-	assert.NoError(t, activities_model.SetRepoReadBy(t.Context(), initiator.ID, repo.ID))
+	assert.NoError(t, activities_model.SetRepoReadBy(t.Context(), repo, initiator))
 	assert.Equal(t, activities_model.NotificationStatusRead,
 		unittest.AssertExistsAndLoadBean(t, &activities_model.Notification{ID: notification.ID}).Status)
 }

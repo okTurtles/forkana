@@ -384,6 +384,10 @@ func Home(ctx *context.Context) {
 		// An article renders the deletion notice in the article frame, like the vanity
 		// url did before the deletion; a repository without a subject has no such frame
 		// and falls back to the repository one, which redacts it the same way.
+		// checkHomeCodeViewable is not reached here, so clear the notifications too.
+		if !markRepoNotificationsRead(ctx) {
+			return
+		}
 		if handleRepoHomeArticle(ctx) {
 			return
 		}
