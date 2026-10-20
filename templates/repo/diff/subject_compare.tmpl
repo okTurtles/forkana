@@ -14,7 +14,7 @@
 	{{template "repo/header" .}}
 
 	{{/* 48px under the tabs: "Frame 517" (641:62397) at y 296, the tabs (641:62394) end at 248 */}}
-	<div class="ui container tw-mt-[48px]">
+	<div class="ui container subject-compare-body tw-mt-[48px]">
 		<div class="tw-flex tw-items-start tw-justify-between">
 			<h2 class="ui header tw-m-0 tw-text-16">
 				{{svg "octicon-issue-opened" 16 "tw-mr-1"}}
@@ -48,19 +48,13 @@
 				<p>{{svg "octicon-check" 16}} {{ctx.Locale.Tr "repo.point_of_contention.identical"}}</p>
 			</div>
 		{{else}}
-			<div id="diff-container" class="tw-mt-8">
+			{{/* figma Table 641:62410, 24px under the header (Frame 517's gap); --poc-digits sizes
+			the line-number column for the longest number */}}
+			<div id="diff-container" class="poc-table-box">
 				{{if .SplitViewLines}}
-					<div id="diff-file-boxes" class="sixteen wide column">
-						<div class="diff-file-box file-content tw-mt-0">
-							<div class="diff-file-body ui attached unstackable table segment">
-								<div class="file-body file-code unicode-escaped code-diff code-diff-split">
-									<table class="chroma">
-										{{template "repo/diff/subject_compare_section" dict "root" .}}
-									</table>
-								</div>
-							</div>
-						</div>
-					</div>
+					<table class="poc-table" style="--poc-digits: {{len (print (len .SplitViewLines))}}">
+						{{template "repo/diff/subject_compare_section" dict "root" .}}
+					</table>
 				{{end}}
 			</div>
 		{{end}}
