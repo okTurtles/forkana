@@ -3,6 +3,7 @@ import {initRepoBubbleView} from './repo-bubble-view.ts';
 import {initArticleEditor} from './article-editor.ts';
 import {initArticleSettings} from './article-settings.ts';
 import {GET} from '../modules/fetch.ts';
+import {isPlainClick} from '../utils/dom.ts';
 import {BUBBLE_HIDDEN_EVENT, BUBBLE_VISIBLE_EVENT} from '../components/graph/graph-viewport.ts';
 import {
   BUBBLE_OPEN_ARTICLE_EVENT, BUBBLE_SELECTED_EVENT, SELECTION_PARAM, SELECTION_UPDATED_EVENT,
@@ -294,7 +295,9 @@ export function initRepoHistory() {
     const state = historyStateFor(view, mode, selection);
     const url = urlFor(view, mode, selection);
     if (how === 'replace') {
-      window.history.replaceState(state, '', url);
+      // the same entry: what the Bubble view recorded in it stays (modules/graph-history.ts)
+      const graph = (window.history.state as HistoryState | null)?.graph;
+      window.history.replaceState(graph ? {...state, graph} : state, '', url);
     } else {
       window.history.pushState(state, '', url);
     }
@@ -507,10 +510,6 @@ export function initRepoHistory() {
     switchView('article', {mode: 'read', pushState: true});
   }
 
-  function isPlainClick(event: MouseEvent) {
-    return !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0);
-  }
-
   function handleNavClick(event: MouseEvent) {
     const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[data-view]');
     if (!anchor || !isPlainClick(event)) return;
@@ -613,6 +612,8 @@ export function initRepoHistory() {
   window.history.replaceState({
     ...historyStateFor(activeView.value, articleMode.value, selectedRepo.value),
     version: new URL(window.location.href).searchParams.get('version'),
+    // what the Bubble view recorded in this entry, back after a reload (#431)
+    ...(initialState?.graph ? {graph: initialState.graph} : {}),
   } satisfies HistoryState, '', entryUrl + window.location.hash);
 
   window.addEventListener(BUBBLE_SELECTED_EVENT, handleBubbleSelection as EventListener);

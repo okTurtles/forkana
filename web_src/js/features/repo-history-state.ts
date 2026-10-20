@@ -2,6 +2,7 @@
 // selected when the page is opened, and how a history entry describes it. Kept apart from
 // the DOM wiring so the rules can be tested on their own.
 import {normalizeSelection, resolveSelection, type RepoSelection} from '../modules/repo-selection.ts';
+import type {GraphHistoryState} from '../modules/graph-history.ts';
 
 export type ViewKey = 'bubble' | 'table' | 'article';
 
@@ -16,6 +17,8 @@ export type HistoryState = {
   link?: string | null;
   /** The version (commit) of the article an entry shows, for "?version=" pages. */
   version?: string | null;
+  /** The Bubble view's own part of the entry (modules/graph-history.ts). */
+  graph?: GraphHistoryState;
 };
 
 /** The selection a history entry recorded: null when it recorded none, undefined when

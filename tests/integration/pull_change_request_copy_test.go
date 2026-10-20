@@ -197,8 +197,8 @@ func TestPullViewChangeRequestTitleDescOtherLocale(t *testing.T) {
 }
 
 // TestPullViewMergePermissionHint checks that the upstream "only those with write access ... can
-// merge change requests" hint is gone: merging is owner-only in Forkana, so that copy contradicted
-// the owner-scoped message shown right below it to every non-owner viewer.
+// merge change requests" hint is gone: merging is limited to the article owner and its maintainers
+// in Forkana, so that copy contradicted the message shown right below it to every other viewer.
 func TestPullViewMergePermissionHint(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -212,8 +212,8 @@ func TestPullViewMergePermissionHint(t *testing.T) {
 		// contains is the accurate, Forkana-specific message the viewer should get instead.
 		contains string
 	}{
-		{user: "user2", absent: []string{writeAccessHint, "Only the article owner can accept change requests."}},
-		{user: "user40", absent: []string{writeAccessHint}, contains: "Only the article owner can accept change requests."},
+		{user: "user2", absent: []string{writeAccessHint, "Only the article owner and its maintainers can accept change requests."}},
+		{user: "user40", absent: []string{writeAccessHint}, contains: "Only the article owner and its maintainers can accept change requests."},
 		{user: "user4", absent: []string{writeAccessHint}, contains: "You are not authorized to merge this change request."},
 	}
 

@@ -62,6 +62,9 @@ import {
   BUBBLE_OPEN_ARTICLE_EVENT, BUBBLE_SELECTED_EVENT, SELECTION_PARAM, SELECTION_UPDATED_EVENT, getCurrentSelection, selectionToParam,
   type RepoSelection as RepoSelectionDetail,
 } from "../../modules/repo-selection.ts";
+import {
+  currentGraphState, graphStateOf, pushGraphState, rememberCompareReturn, replaceGraphState,
+} from "../../modules/graph-history.ts";
 
 // Inline types replacing former seeds module
 type Side = -1 | 1;
@@ -297,6 +300,12 @@ type EdgeGeom = {
 const nodesList = ref<FrameNode[]>([]);
 const edgesList = ref<EdgeGeom[]>([]);
 const trunksList = ref<{ x: number; y1: number; y2: number; id: string }[]>([]);
+/* Joint radii. Resting, figma 641:61415 (Ellipse 15-23): 12×12 with a 1px ring
+   drawn inside, so r = 6 - 0.5 with a 1px stroke. Selected, figma "Bubble view /
+   Point of contention" 641:61591 (Ellipse 23, 641:61662): 21×21, fill #ffffff,
+   a 1px #4e40fa ring inside, so r = 10.5 - 0.5 (#431 item 3). */
+const JOINT_R = 5.5;
+const JOINT_SELECTED_R = 10;
 const jointDots = ref<{ x: number; y: number; id: string; sourceId: NodeId; targetId: NodeId; sourceOwner: string; targetOwner: string; subject: string; inert: boolean }[]>([]);
 
 /* SVG/zoom plumbing */
@@ -437,6 +446,18 @@ let pendingInitialGraph: ForkGraphResponse | null = props.initialGraph ?? null;
 const selectedNodeId = ref<NodeId | null>(null);
 let pendingExternalSelection: RepoSelectionDetail | null = null;
 
+/* #431 item 5: the selected POINT OF CONTENTION (a joint id, "{sourceId}-{targetId}"),
+   apart from the selected article. Selecting one clears the other, and compare mode
+   clears it (#432): only one thing is ever highlighted. It is kept in the history
+   entry (modules/graph-history.ts), so coming Back from the compare page it opened
+   shows it again. */
+const selectedJointId = ref<string | null>(null);
+
+function setSelectedJoint(id: string | null) {
+  selectedJointId.value = id;
+  if ((currentGraphState().poc ?? null) !== id) replaceGraphState({poc: id});
+}
+
 function normalize(value?: string | null) {
   return (value ?? '').toLowerCase();
 }
@@ -502,6 +523,11 @@ function findNodeBySelection(detail: RepoSelectionDetail): Node | null {
 
 function applySelection(node: Node | null, _detail: RepoSelectionDetail | null) {
   selectedNodeId.value = node ? node.id : null;
+  /* An article and a point of contention are never selected together (#431 item 5).
+     Only the highlight goes here: the clicks below rewrite the history entry, and an
+     entry's `poc` is ignored beside a selected article anyway (restoreGraphHistory,
+     onGraphPopState), whoever recorded that selection. */
+  if (node) selectedJointId.value = null;
 }
 
 function setSelectionFromDetail(detail: RepoSelectionDetail | null) {
@@ -632,6 +658,40 @@ async function fetchForkGraphAndSet() {
   }
 }
 
+/* What the history entry recorded for the graph (modules/graph-history.ts), applied
+   once, when the page's first graph is drawn: coming Back from the compare page (or
+   reloading), the point of contention it opened is selected again, the page is
+   scrolled back to where it was (#431 item 1), and an article that was open is
+   opened again (#431 item 4). */
+let graphHistoryRestored = false;
+function restoreGraphHistory() {
+  const graph = currentGraphState();
+  /* a point of contention only counts beside no selected article (#431 item 5) */
+  if (graph.poc && selectedNodeId.value === null && jointDots.value.some((j) => j.id === graph.poc)) {
+    selectedJointId.value = graph.poc;
+  } else if (graph.poc) {
+    replaceGraphState({poc: null});
+  }
+  if (graph.detail && selectedNodeId.value !== null && !detailNode.value) {
+    const n = nodeById(selectedNodeId.value);
+    if (n && !n.isHidden) openDetail(n);
+  }
+  if (typeof graph.scrollY === 'number') {
+    const y = graph.scrollY;
+    /* Used once: a later reload of this entry starts from wherever the reader is then. */
+    replaceGraphState({scrollY: null});
+    /* The canvas has just been given its height (syncCanvasHeight): scroll once the
+       browser has laid it out, so the target is not clamped to the loading page. */
+    requestAnimationFrame(() => window.scrollTo({top: y, behavior: 'instant'}));
+  }
+}
+
+/* Back from the compare page through the back/forward cache: the page is exactly as
+   it was left, scroll included, so the scroll recorded for a reload is not needed. */
+function onGraphPageShow(ev: PageTransitionEvent) {
+  if (ev.persisted && typeof currentGraphState().scrollY === 'number') replaceGraphState({scrollY: null});
+}
+
 /* Draws a fork-graph response (the API's shape), wherever it came from. */
 async function applyGraphResponse(json: ForkGraphResponse | null) {
   const graph = buildGraphFromApi(json?.root);
@@ -668,6 +728,10 @@ async function applyGraphResponse(json: ForkGraphResponse | null) {
     await nextTick();
     resetView();
     restoreSelectionAfterGraphLoad();
+    if (!graphHistoryRestored) {
+      graphHistoryRestored = true;
+      restoreGraphHistory();
+    }
     announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
   } else {
     /* No article yet: the "Create the first article" bubble is centred in the
@@ -1608,6 +1672,7 @@ onMounted(async () => {
          and the scheme visibly shifting under an idle click read as a bug. */
       collapseAll();
       applySelection(null, null);
+      setSelectedJoint(null);
       pendingExternalSelection = null;
       /* repo-history.ts records the change and broadcasts it back. */
       window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: null }));
@@ -1671,6 +1736,8 @@ onMounted(async () => {
      still loading is remembered (pendingExternalSelection) and applied with the
      nodes, rather than lost because nobody was listening yet. */
   window.addEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
+  window.addEventListener('popstate', onGraphPopState);
+  window.addEventListener('pageshow', onGraphPageShow);
   /* Before the fetch too: the header's Compare button can be clicked while
      the graph is loading. */
   window.addEventListener(COMPARE_MODE_TOGGLE_EVENT, handleCompareModeToggle as EventListener);
@@ -1706,6 +1773,8 @@ onBeforeUnmount(() => {
   cancelStatsRetry();
   if (hoverTimer !== null) window.clearTimeout(hoverTimer);
   window.removeEventListener(SELECTION_UPDATED_EVENT, handleExternalSelection as EventListener);
+  window.removeEventListener('popstate', onGraphPopState);
+  window.removeEventListener('pageshow', onGraphPageShow);
   window.removeEventListener(COMPARE_MODE_TOGGLE_EVENT, handleCompareModeToggle as EventListener);
   window.removeEventListener('keydown', onGraphKeydown);
   window.removeEventListener(BUBBLE_HIDDEN_EVENT, onBubbleViewHidden);
@@ -1985,14 +2054,46 @@ function onBubbleClick(n: Node) {
      circle out of whatever size the bubble is on screen right now, so a tap
      starts from the resting ladder size and a click from the 202px hover, with
      no special case. */
+  const wasOpen = detailNode.value !== null && !detailClosing.value;
   openDetail(n);
 
   const detail = getSelectionDetailFromNode(n);
-  if (!detail) return;
-  const payload = { ...detail };
-  applySelection(n, payload);
-  announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
-  window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: payload }));
+  if (detail) {
+    const payload = { ...detail };
+    applySelection(n, payload);
+    announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
+    window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: payload }));
+  }
+  setSelectedJoint(null);
+  /* #431 item 4: the opened article is a step of its own in the history, so the
+     browser's Back closes it and lands on the graph, exactly like its own Back
+     button does, instead of leaving the page for the one before. */
+  if (!wasOpen && detailNode.value?.id === n.id && !currentGraphState().detail) pushGraphState({detail: true});
+}
+
+/** The opened article's Back (and Escape): when opening it pushed a history entry,
+   going back through the history closes it (onGraphPopState), so the browser's
+   Back and Forward stay in step with what is on screen. */
+function requestCloseDetail() {
+  if (currentGraphState().detail) window.history.back();
+  else closeDetail();
+}
+
+/* Back/Forward between the graph and an article opened in it (#431 item 4), and to
+   an entry with a point of contention selected. repo-history.ts has already applied
+   the entry's selection (its popstate listener was registered first). */
+function onGraphPopState(ev: PopStateEvent) {
+  const graph = graphStateOf(ev.state);
+  selectedJointId.value = selectedNodeId.value === null ? graph.poc ?? null : null;
+  if (!graph.detail) {
+    if (detailNode.value && !detailClosing.value) closeDetail();
+    return;
+  }
+  /* Forward onto an opened article: open it again. */
+  if (!detailNode.value && selectedNodeId.value !== null && !isCompareMode.value) {
+    const n = nodeById(selectedNodeId.value);
+    if (n && !n.isHidden) openDetail(n);
+  }
 }
 
 /* ── THE OPENED ARTICLE (425px, centred) ──────────────────────────────────
@@ -2095,6 +2196,10 @@ function closeDetail() {
 
 function finishDetailClose() {
   const closedId = detailNode.value?.id ?? null;
+  /* Closed without going through the history (a re-layout that dropped the opened
+     node): the entry still says an article is open, so record that it is not. After
+     a Back/Forward the current entry is already one without it, and this does nothing. */
+  if (currentGraphState().detail) replaceGraphState({detail: false});
   detailNode.value = null;
   detailClosing.value = false;
   detailOrigin.value = null;
@@ -2410,7 +2515,7 @@ function onGraphKeydown(ev: KeyboardEvent) {
   if (ev.key !== 'Escape') return;
   if (compareBoxOpen.value) closeComparePopup();   // the Compare box is not modal, but Escape still closes it
   else if (historyOpen.value) historyOpen.value = false;
-  else if (detailNode.value) { closedByKeyboard = true; closeDetail(); }
+  else if (detailNode.value) { closedByKeyboard = true; requestCloseDetail(); }
   else if (expandedId.value !== null) collapseAll();
 }
 
@@ -2419,21 +2524,25 @@ function onBubbleView(n: Node) {
   if (!detail) return;
   const payload = { ...detail };
   applySelection(n, payload);
+  setSelectedJoint(null);
   window.dispatchEvent(new CustomEvent(BUBBLE_OPEN_ARTICLE_EVENT, { detail: payload }));
 }
 
 /* Click handler for joint-parent (a "mini circle", the point of contention
    between a fork and its parent): navigate to the fork comparison page.
 
-   #406: the click is ALSO a selection, exactly like clicking a bubble — it
-   selects the fork the joint leads to (its target; the parent is shared by
-   every joint on its trunk, the fork is not). The selection is recorded in
-   the current history entry before leaving, so Back lands on the graph with
-   that joint and its bubble highlighted, and it is passed to the compare page
-   as "?selected=", whose view tabs carry it on: the Article view then shows
-   that article and the Table view checks its row, in whatever order the views
-   are visited. */
-function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject: string; targetId: NodeId; inert: boolean }) {
+   #431 item 5: the click selects the POINT OF CONTENTION, and only it. The
+   article it leads to used to be selected along with it (#406), which drew
+   both highlighted at once; selecting one now clears the other. The joint,
+   and where the page was scrolled to, are recorded in the current history
+   entry before leaving (modules/graph-history.ts), so Back — the browser's or
+   the compare page's own, which goes back in the history — lands on the graph
+   as it was left, with that point of contention highlighted (#431 item 1).
+
+   The fork is still passed to the compare page as "?selected=" (#406), whose
+   view tabs carry it on: the Article view then shows that article and the
+   Table view checks its row. */
+function onJointClick(joint: { id: string; sourceOwner: string; targetOwner: string; subject: string; targetId: NodeId; inert: boolean }) {
   if (joint.inert || !joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
   const suburl = window.config?.suburl || '';
   const compareUrl = new URL(
@@ -2442,12 +2551,19 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
   );
   const target = state.graph[joint.targetId];
   const detail = target ? getSelectionDetailFromNode(target) : null;
-  if (target && detail) {
-    applySelection(target, detail);
-    window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: { ...detail } }));
-    compareUrl.searchParams.set(SELECTION_PARAM, selectionToParam(detail));
+  if (detail) compareUrl.searchParams.set(SELECTION_PARAM, selectionToParam(detail));
+  if (isCompareMode.value) toggleCompareMode();
+  if (selectedNodeId.value !== null) {
+    applySelection(null, null);
+    pendingExternalSelection = null;
+    /* repo-history.ts records it (selection-less) in this entry */
+    window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: null }));
   }
-  window.location.href = compareUrl.pathname + compareUrl.search;
+  setSelectedJoint(joint.id);
+  replaceGraphState({scrollY: Math.round(window.scrollY)});
+  const href = compareUrl.pathname + compareUrl.search;
+  rememberCompareReturn(href, window.location.pathname);
+  window.location.href = href;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -2458,6 +2574,9 @@ function onJointClick(joint: { sourceOwner: string; targetOwner: string; subject
 function toggleCompareMode() {
   isCompareMode.value = !isCompareMode.value;
   compareUnavailableShown.value = false;
+  /* #432: compare mode and a selected point of contention are two different
+     functions; entering one drops the other's highlight. */
+  if (isCompareMode.value) setSelectedJoint(null);
   if (!isCompareMode.value) {
     // Exiting compare mode: clear selections and close popup
     compareSelection.value = [];
@@ -2697,9 +2816,9 @@ function goToComparison() {
                    drawn inside, so r = 6 - 0.5 with a 1px stroke. -->
               <circle
                 v-for="j in jointDots" :key="`joint-${j.id}`" :data-edge="j.id" class="joint-parent"
-                :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId, 'is-selected': selectedNodeId === j.targetId}"
-                :aria-current="selectedNodeId === j.targetId ? 'true' : undefined"
-                :cx="j.x" :cy="j.y" r="5.5"
+                :class="{'is-related': expandedId === j.sourceId || expandedId === j.targetId, 'is-selected': selectedJointId === j.id}"
+                :aria-current="selectedJointId === j.id ? 'true' : undefined"
+                :cx="j.x" :cy="j.y" :r="selectedJointId === j.id ? JOINT_SELECTED_R : JOINT_R"
                 fill="var(--bubble-joint-fill)" stroke="var(--bubble-joint-stroke)" stroke-width="1"
                 style="cursor: pointer;"
                 :role="j.inert ? undefined : 'button'" :tabindex="j.inert ? -1 : 0"
@@ -2794,7 +2913,7 @@ function goToComparison() {
           :updated-at="openArticle.updatedAt" :size="detailSize"
           :origin="soloPinned ? null : detailOrigin" :show-back="!soloPinned"
           :closing="detailClosing" :zoom="detailZoom" :shift="detailShift"
-          @back="closeDetail" @read="onDetailRead" @history="onHistoryOpen"
+          @back="requestCloseDetail" @read="onDetailRead" @history="onHistoryOpen"
           @closed="finishDetailClose"
         />
 
@@ -3105,31 +3224,39 @@ function goToComparison() {
   transition: fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease;
 }
 
+/* #431 item 3: every state keeps the ring's OPAQUE fill (--bubble-joint-fill,
+   white in the light theme). A translucent primary fill let the connector the
+   dot sits on show through, which read as a line inside the circle. */
 .joint-parent:hover {
-  stroke: var(--color-primary, #2563eb) !important;
+  stroke: var(--color-primary, #4e40fa) !important;
   stroke-width: 3 !important;
-  fill: var(--color-primary-alpha-10) !important;
 }
 
-/* #406: the point of contention leading to the selected article. Clicking it
-   selects that article, and the selection is the page's, not the click's: it
-   stays highlighted when the view comes back to the graph, whichever views
-   were visited in between and in whatever order. */
-.joint-parent.is-selected {
-  stroke: var(--color-primary, #2563eb);
-  stroke-width: 3;
-  fill: var(--color-primary-alpha-20);
+/* #431 items 3 and 5: the selected point of contention, figma "Bubble view /
+   Point of contention" 641:61591, Ellipse 23 (641:61662): 21×21 (r is bound in
+   the template), fill #ffffff, a 1px #4e40fa (= --color-primary) ring. It is
+   selected on its own: the article it leads to is not highlighted with it. */
+.joint-parent.is-selected,
+.joint-parent.is-selected:hover {
+  stroke: var(--color-primary, #4e40fa) !important;
+  stroke-width: 1 !important;
+  fill: var(--bubble-joint-fill);
 }
 
 .graph-dimmed :deep(.joint-parent.is-selected) {
   opacity: 1;
 }
 
+/* Keyboard focus only: a click leaves the focus on the dot, and that must not
+   look like a second kind of selection when the page comes back from the
+   back/forward cache. */
 .joint-parent:focus {
   outline: none;
-  stroke: var(--color-primary, #2563eb) !important;
+}
+
+.joint-parent:focus-visible {
+  stroke: var(--color-primary, #4e40fa) !important;
   stroke-width: 3 !important;
-  fill: var(--color-primary-alpha-20) !important;
 }
 
 .bubble-grad-start {
