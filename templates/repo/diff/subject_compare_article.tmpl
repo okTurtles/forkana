@@ -1,6 +1,6 @@
 {{/* One article in the Point of contention table: figma 641:62425 (Frame 442), a fork
-     icon and "owner / subject" in the link colour, its last update under it.
-     Takes a dict with Repo, Subject and Count. */}}
+	icon and "owner / subject" in the link colour, its last update under it.
+	Takes a dict with Repo, Subject and Count. */}}
 <div class="poc-article-name">
 	{{svg "octicon-repo-forked" 16}}
 	<span><a href="{{AppSubUrl}}/{{PathEscape .Repo.Owner.Name}}">{{.Repo.Owner.Name}}</a> / <a href="{{.Repo.LinkCtx ctx}}">{{.Subject.Name}}</a></span>
