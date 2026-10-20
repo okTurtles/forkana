@@ -69,13 +69,18 @@ func CountReadableArticlesBySubjectIDs(ctx context.Context, subjectIDs []int64, 
 }
 
 // maxArticleOwners bounds the authors listed for a subject.
-var maxArticleOwners = 50
+const maxArticleOwners = 50
 
 // FindReadableArticleOwners returns the owners of the articles the doer can open in the
-// subject (see readableArticleCond), the most recently updated first, each once. The
-// grouping is done by the database, so the limit counts owners, not articles: an owner with
-// many articles on the subject cannot push the others out.
+// subject (see readableArticleCond), the most recently updated first, each once. Owners whose
+// articles there are all archived come last. The grouping is done by the database, so the
+// limit counts owners, not articles: an owner with many articles on the subject cannot push
+// the others out.
 func FindReadableArticleOwners(ctx context.Context, subjectID int64, doer *user_model.User) ([]string, error) {
+	return findReadableArticleOwners(ctx, subjectID, doer, maxArticleOwners)
+}
+
+func findReadableArticleOwners(ctx context.Context, subjectID int64, doer *user_model.User, limit int) ([]string, error) {
 	var rows []struct {
 		OwnerID   int64
 		OwnerName string
@@ -84,8 +89,10 @@ func FindReadableArticleOwners(ctx context.Context, subjectID int64, doer *user_
 		Select("`repository`.owner_id, `repository`.owner_name").
 		Where(builder.Eq{"`repository`.subject_id": subjectID}.And(readableArticleCond(doer))).
 		GroupBy("`repository`.owner_id, `repository`.owner_name").
-		OrderBy("MAX(`repository`.updated_unix) DESC, `repository`.owner_id DESC").
-		Limit(maxArticleOwners).
+		// MIN over a CASE rather than over is_archived: PostgreSQL has no MIN(boolean)
+		OrderBy("MIN(CASE WHEN `repository`.is_archived = ? THEN 1 ELSE 0 END) ASC, "+
+			"MAX(`repository`.updated_unix) DESC, `repository`.owner_id DESC", true).
+		Limit(limit).
 		Find(&rows)
 	if err != nil {
 		return nil, err

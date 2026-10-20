@@ -3,5 +3,5 @@
 
 package repo
 
-// MaxArticleOwners lets the tests lower the cap of FindReadableArticleOwners.
-var MaxArticleOwners = &maxArticleOwners
+// FindReadableArticleOwnersWithLimit lets the tests lower the cap of FindReadableArticleOwners.
+var FindReadableArticleOwnersWithLimit = findReadableArticleOwners

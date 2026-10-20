@@ -9,7 +9,6 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
-	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
@@ -84,10 +83,20 @@ func TestReadableArticlesBySubject(t *testing.T) {
 	setUpdated(4, 350) // user5
 	setUpdated(38, 100)
 	setUpdated(17, 100)
-	defer test.MockVariableValue(repo_model.MaxArticleOwners, 2)()
-	owners, err = repo_model.FindReadableArticleOwners(ctx, subject.ID, user2)
+	owners, err = repo_model.FindReadableArticleOwnersWithLimit(ctx, subject.ID, user2, 2)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"user2", "user5"}, owners)
+
+	// an owner whose articles on the subject are all archived comes last, however recent
+	repo4 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 4})
+	repo4.IsArchived = true
+	repo4.UpdatedUnix = 500
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo4, "is_archived", "updated_unix"))
+	owners, err = repo_model.FindReadableArticleOwners(ctx, subject.ID, user2)
+	require.NoError(t, err)
+	require.Len(t, owners, 4)
+	assert.Equal(t, "user2", owners[0])
+	assert.Equal(t, "user5", owners[3])
 
 	for _, c := range []struct {
 		owner string
