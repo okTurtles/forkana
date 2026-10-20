@@ -622,6 +622,20 @@ a.article-history-page-direction:hover {
 
 /* ── Phones ──────────────────────────────────────────────────────────────── */
 @media (max-width: 767.98px) {
+  /* The path on a phone (figma Mobile, Frame 959 641:65588, 641:65794 and 1844:36886,
+     Breadcrumbs 6507:65285): the breadcrumb in Inter 400 12/16 (14/20 on the desktop),
+     the "Fork of:" line in Inter 400 10/18 (12/18), its 16px icon unchanged. The "/"
+     keeps the component's #59636e, as on the desktop and in 641:65588. */
+  .article-breadcrumb {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .article-fork-of {
+    font-size: 10px;
+    line-height: 18px;
+  }
+
   .article-signin-banner {
     padding: 7px 16px;
   }
