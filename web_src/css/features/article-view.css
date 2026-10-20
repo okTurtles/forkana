@@ -386,10 +386,18 @@
   box-shadow: 0 6px 18px rgb(37 41 46 / 12%), 0 6px 12px -3px rgb(37 41 46 / 4%), 0 0 0 1px var(--color-border-light);
 }
 
+/* ActionList.Item/SingleSelect (I641:64307;26998:14906 and ;14907): 32px tall, 6px 8px,
+   the check in a 16×20 box (selectionVariant 319:5558, its tick 12×8.75 #1f2328), 8px
+   from an Inter 400 12/20 #1f2328 label; the unchecked item keeps the box, so both
+   labels start 32px into the item. Fomantic's own icon margin and item height are
+   cancelled, as they widened the gap to 19px and the item to 36px. */
 .ui.dropdown.article-sort-dropdown > .menu > .item {
   display: flex !important;
   align-items: center;
   gap: 8px;
+  box-sizing: border-box;
+  height: 32px;
+  min-height: 0;
   padding: 6px 8px !important;
   border: none !important;
   border-radius: 6px;
@@ -410,7 +418,14 @@
   background: var(--color-hover) !important;
 }
 
-.article-sort-check {
+.ui.dropdown.article-sort-dropdown > .menu > .item > .article-sort-check {
+  flex-shrink: 0;
+  width: 16px;
+  height: 20px;
+  margin: 0;
+  padding: 2px 0;
+  box-sizing: border-box;
+  color: var(--color-text-primary);
   visibility: hidden;
 }
 
