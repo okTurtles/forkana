@@ -88,6 +88,10 @@ test('Compare on the Table view stays on the table (#437)', async ({page}) => {
   await checks.nth(0).check();
   await expect(banner).toContainText('1/2 article selected. Select another to compare.');
   await expect(rows.first()).toHaveClass(/is-selected/);
+  // a checked box (641:61075): the brand fill with a white check, not the global
+  // checkbox's brand-coloured tick, which would vanish on that fill
+  await expect(checks.nth(0)).toHaveCSS('background-color', brand);
+  expect(await checks.nth(0).evaluate((el) => getComputedStyle(el, '::after').backgroundColor)).toBe(white);
   await rows.nth(1).locator('td').nth(2).click();
   await expect(page).toHaveURL(/view=table/);
   await expect(checks.nth(1)).toBeChecked();

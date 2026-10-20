@@ -234,7 +234,20 @@
 
 .history-table-grid .row-check:checked {
   border-color: var(--color-primary);
-  background: var(--color-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='white' d='M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z'/%3E%3C/svg%3E") center / 12px no-repeat;
+  background: var(--color-primary);
+}
+
+/* The check (641:61075): white on the brand fill. The global checkbox
+   (web_src/css/modules/checkbox.css) draws its tick as a ::after masked by
+   --checkbox-mask-checked and filled with --color-primary, which is invisible on
+   this brand fill: here the tick is white, and as big as figma's (12px wide in the
+   16px box, the octicon at 16px rather than the global mask's 18px viewBox), over
+   the whole box including its 1px border. */
+.history-table-grid .row-check:checked::after {
+  inset: -1px;
+  background: var(--color-primary-contrast);
+  mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>');
+  -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>');
 }
 
 .history-table-grid .row-check:disabled {
