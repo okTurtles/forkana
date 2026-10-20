@@ -4,6 +4,7 @@ import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 import {installLosslessMarkdownTracker} from './comp/losslessMarkdown.ts';
 import {defaultToolbarItems} from './comp/toastEditorToolbar.ts';
+import {articleEditorMarkdownOptions} from './comp/toastEditorOptions.ts';
 import {showErrorToast} from '../modules/toast.ts';
 import {ensureFilesWithinLimit, getMaxAttachmentSize, showFileTooLargeError} from './comp/editorFileLimit.ts';
 import {POST} from '../modules/fetch.ts';
@@ -84,6 +85,7 @@ export async function createToastEditor(
     usageStatistics,
     hideModeSwitch,
     toolbarItems,
+    ...articleEditorMarkdownOptions,
     // NOTE: no `events.change` here, the lossless tracker installed below owns the
     // editor→textarea sync so the WYSIWYG serializer can't rewrite untouched source.
     hooks: {

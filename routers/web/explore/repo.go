@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -928,6 +929,15 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			}).
 				WithMarkupType(markupType).
 				WithRelativePath(readmeTreePath)
+			// The article's front matter (the imports' title, source, license, attribution,
+			// fetched_at) is not shown: the figma's Read tab (641:65454) goes from the
+			// summary straight to the article. (A copy: the metas may be shared.)
+			metas := maps.Clone(rctx.RenderOptions.Metas)
+			if metas == nil {
+				metas = map[string]string{}
+			}
+			metas["markdownRenderMetaAs"] = string(markup.RenderMetaAsNone)
+			rctx = rctx.WithMetas(metas)
 
 			rd := charset.ToUTF8WithFallbackReader(io.MultiReader(bytes.NewReader(buf), dataRc), charset.ConvertOpts{})
 			var escapeStatus *charset.EscapeStatus

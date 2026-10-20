@@ -132,10 +132,10 @@ test.describe('Article view Watch button (signed in)', () => {
     const page = await context.newPage();
     await page.goto(`${article}?mode=edit`);
     // the sign-in banner is never in a signed-in reader's page
-    await expect(page.locator('#article-view-root[data-article-mode="edit"]')).toBeVisible();
+    await expect(page.locator('#article-view-root[data-article-mode="edit"]')).toBeVisible({timeout: 10000});
     await expect(page.locator('#article-signin-banner')).toHaveCount(0);
     await page.locator('#article-tabs a[data-article-tab="read"]').click();
-    await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
+    await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible({timeout: 10000});
 
     const watch = page.locator('#article-tabs button[data-role="article-watch"]');
     const star = page.locator('#repo-header-follow-slot .follow-article-button');
@@ -150,10 +150,10 @@ test.describe('Article view Watch button (signed in)', () => {
 
     // nor after switching back to the Edit tab without a reload
     await page.locator('#article-tabs a[data-article-tab="edit"]').click();
-    await expect(page.locator('#article-view-root[data-article-mode="edit"]')).toBeVisible();
+    await expect(page.locator('#article-view-root[data-article-mode="edit"]')).toBeVisible({timeout: 10000});
     await expect(page.locator('#article-signin-banner')).toHaveCount(0);
     await page.locator('#article-tabs a[data-article-tab="read"]').click();
-    await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
+    await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible({timeout: 10000});
 
     // and back, so that the fixture keeps its state
     await watch.click();

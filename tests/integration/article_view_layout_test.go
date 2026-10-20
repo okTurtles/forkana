@@ -17,6 +17,7 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/gitrepo"
 	repo_service "code.gitea.io/gitea/services/repository"
+	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -306,5 +307,32 @@ func TestArticleViewLayout(t *testing.T) {
 			assert.Equal(t, 1, answer.Find(`[hx-swap-oob]`).Length(), action)
 			assert.Equal(t, 2, answer.Find("form").Length(), action)
 		}
+	})
+}
+
+// TestArticleReadHidesTheFrontMatter: the Read tab does not show the article's front
+// matter, as the figma's Read tab (641:65454) has nothing between the summary and the
+// article (#433). (A commit needs the running server for its hooks, hence onGiteaRun.)
+func TestArticleReadHidesTheFrontMatter(t *testing.T) {
+	onGiteaRun(t, func(t *testing.T, _ *url.URL) {
+		owner, repo, subjectName := loadArticleRepo(t, 1)
+		_, err := files_service.ChangeRepoFiles(t.Context(), repo, owner, &files_service.ChangeRepoFilesOptions{
+			Files: []*files_service.ChangeRepoFile{{
+				Operation: "update",
+				TreePath:  "README.md",
+				ContentReader: strings.NewReader("---\ntitle: \"Prodromus\"\nsource: https://en.wikipedia.org/wiki/Prodromus\n" +
+					"license: CC BY-SA 4.0\nattribution: Wikipedia contributors\nfetched_at: 2025-11-11T13:56:22Z\n---\n\nThe article itself.\n"),
+			}},
+			Message:   "front matter",
+			OldBranch: repo.DefaultBranch,
+			NewBranch: repo.DefaultBranch,
+		})
+		require.NoError(t, err)
+
+		resp := MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/subject/%s/%s?mode=read", subjectName, owner.Name)), http.StatusOK)
+		content := NewHTMLParser(t, resp.Body).Find(".file-view.article-content")
+		require.Equal(t, 1, content.Length())
+		assert.Equal(t, "The article itself.", strings.TrimSpace(content.Text()))
+		assert.Equal(t, 0, content.Find(".frontmatter-content, table, hr, h1, h2").Length())
 	})
 }

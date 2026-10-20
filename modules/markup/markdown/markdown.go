@@ -181,7 +181,10 @@ func render(ctx *markup.RenderContext, input io.Reader, output io.Writer) error 
 	// Preserve original length.
 	bufWithMetadataLength := len(buf)
 
-	rc := &RenderConfig{Meta: markup.RenderMetaAsDetails}
+	// The front matter is shown as a collapsed table unless the caller asks otherwise
+	// (markdownRenderMetaAs: "none", "table" or "details"); the front matter's own
+	// gitea.meta setting still overrides either.
+	rc := &RenderConfig{Meta: renderMetaModeFromString(ctx.RenderOptions.Metas["markdownRenderMetaAs"])}
 	buf, _ = ExtractMetadataBytes(buf, rc)
 
 	metaLength := max(bufWithMetadataLength-len(buf), 0)
