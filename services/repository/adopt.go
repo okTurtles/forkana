@@ -296,6 +296,7 @@ func checkUnadoptedRepositories(ctx context.Context, userName string, repoNamesT
 
 // ListUnadoptedRepositories lists all the unadopted repositories that match the provided query
 func ListUnadoptedRepositories(ctx context.Context, query string, opts *db.ListOptions) ([]string, int, error) {
+	opts.SetDefaultValues()
 	globUser, _ := glob.Compile("*")
 	globRepo, _ := glob.Compile("*")
 
