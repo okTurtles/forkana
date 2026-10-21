@@ -15,7 +15,6 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
-	"code.gitea.io/gitea/modules/gitrepo"
 	repo_service "code.gitea.io/gitea/services/repository"
 	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
@@ -53,25 +52,12 @@ func TestArticleViewLayout(t *testing.T) {
 		assert.NotContains(t, section.Text(), "marked this article as correct")
 		assert.Equal(t, 0, section.Find(`a[href*="view=bubble"]`).Length())
 
-		// item 2: "N Contributors" and "N Last updated: …"
+		// item 2: "N Contributors" and "Last updated: …", with no number before the latter
 		tokens := strings.Join(strings.Fields(section.Find(`[data-role="article-tokens"]`).Text()), " ")
 		assert.Regexp(t, `\d+ Contributors?`, tokens)
 		assert.NotContains(t, tokens, "Updated ")
-		// its number is the article's number of commits: those of its default branch
-		gitRepo, err := gitrepo.OpenRepository(t.Context(), repo)
-		require.NoError(t, err)
-		defer gitRepo.Close()
-		head, err := gitRepo.GetBranchCommit(repo.DefaultBranch)
-		require.NoError(t, err)
-		commits, err := head.CommitsCount()
-		require.NoError(t, err)
-		assert.Contains(t, tokens, fmt.Sprintf("%d Last updated:", commits))
-		wantTooltip := fmt.Sprintf("%d commits", commits)
-		if commits == 1 {
-			wantTooltip = "1 commit"
-		}
-		assert.Equal(t, wantTooltip,
-			section.Find(`[data-role="article-last-updated"] [data-tooltip-content]`).AttrOr("data-tooltip-content", ""))
+		lastUpdated := strings.Join(strings.Fields(section.Find(`[data-role="article-last-updated"]`).Text()), " ")
+		assert.Regexp(t, `^Last updated: `, lastUpdated)
 
 		// item 3: Watch, which a signed-out reader is sent to sign in for
 		watch := section.Find(`#article-tabs [data-role="article-watch"]`)

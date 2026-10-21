@@ -15,11 +15,10 @@ test.describe('Article view layout (signed out)', () => {
     await expect(page.locator('[data-role="back-to-bubble"]')).toHaveCount(0);
     await expect(page.locator('#article-view-root')).not.toContainText('marked this article as correct');
 
-    // item 2: "N Contributors" and "N Last updated: …"
+    // item 2: "N Contributors" and "Last updated: …", with no number before the latter
     const tokens = page.locator('[data-role="article-tokens"]');
     await expect(tokens).toContainText(/\d+ Contributors?/);
-    await expect(page.locator('[data-role="article-last-updated"]')).toContainText(/\d+ Last updated:/);
-    await expect(page.locator('[data-role="article-last-updated"] [data-tooltip-content]').first()).toHaveAttribute('data-tooltip-content', /^\d+ commits?$/);
+    await expect(page.locator('[data-role="article-last-updated"]')).toHaveText(/^\s*Last updated: /);
 
     // item 3: Watch at the end of the tabs, leading a signed-out reader to sign in
     const watch = page.locator('#article-tabs [data-role="article-watch"]');

@@ -890,16 +890,6 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		ctx.Data["ReadmeLastCommit"] = lastCommit
 	}
 
-	// The article's number of commits (those of its default branch), shown with its last
-	// update in every mode ("335 Last updated: Yesterday", figma 641:65479). Counting
-	// walks the whole history, so the count is cached under the branch head, which fixes
-	// it. When it cannot be counted, no number is shown.
-	if count, err := articleCommitCount(ctx, gitRepo, defaultBranch); err != nil {
-		log.Warn("Failed to count the commits of %s: %v", ctx.Repo.Repository.FullName(), err)
-	} else {
-		ctx.Data["ArticleCommitCount"] = count
-	}
-
 	// Handle different modes
 	switch mode {
 	case "read":
@@ -1082,22 +1072,6 @@ func commitsFromOtherArticles(ctx *context.Context, commits []*user_model.UserCo
 		}
 	}
 	return result
-}
-
-// articleCommitCount counts the commits of the article's default branch. The count is
-// cached under the branch head alone, without the repository: a commit has the same
-// ancestors in every repository that holds it, so a fork reuses its parent's entry for
-// as long as they share a head, and a push, which moves the head, needs no invalidation.
-// The page's own commit is the branch head unless a version of the article is shown.
-func articleCommitCount(ctx *context.Context, gitRepo *git.Repository, branch string) (int64, error) {
-	head := ctx.Repo.Commit
-	if head == nil || ctx.Repo.BranchName != branch {
-		var err error
-		if head, err = gitRepo.GetBranchCommit(branch); err != nil {
-			return 0, err
-		}
-	}
-	return cache.GetInt64("article-branch-commits:"+head.ID.String(), head.CommitsCount)
 }
 
 // readmeCommitsCount counts the commits of the default branch that changed the article's

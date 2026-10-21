@@ -21,9 +21,9 @@
             </div>
         {{else}}
             {{/* #433 item 2: the two tokens of figma Frame 549 (641:65477): "335 Contributors"
-                 with person-24 and "335 Last updated: Yesterday" with sync-24, 14px apart.
-                 The second token's number is the article's number of commits (its default
-                 branch's), left out when it could not be counted. */}}
+                 with person-24 and "Last updated: Yesterday" with sync-24, 14px apart. The
+                 number 641:65477 draws before "Last updated" is left out, at Pierre's request
+                 (the later frames, 6961:73971, have none either). */}}
             <div class="article-tokens" data-role="article-tokens">
                 <span class="article-token">
                     {{svg "octicon-person" 16}}
@@ -32,13 +32,7 @@
                 {{if and .ReadmeLastCommit .ReadmeLastCommit.Committer}}
                     <span class="article-token" data-role="article-last-updated">
                         {{svg "octicon-sync" 16}}
-                        {{$when := DateUtils.TimeSince .ReadmeLastCommit.Committer.When}}
-                        {{if .ArticleCommitCount}}
-                            {{$count := HTMLFormat `<span data-tooltip-content="%s">%d</span>` (ctx.Locale.TrN .ArticleCommitCount "repo.article_commits_1" "repo.article_commits_n" .ArticleCommitCount) .ArticleCommitCount}}
-                            <span>{{ctx.Locale.Tr "repo.article_last_updated_count" $count $when}}</span>
-                        {{else}}
-                            <span>{{ctx.Locale.Tr "repo.article_last_updated" $when}}</span>
-                        {{end}}
+                        <span>{{ctx.Locale.Tr "repo.article_last_updated" (DateUtils.TimeSince .ReadmeLastCommit.Committer.When)}}</span>
                     </span>
                 {{end}}
             </div>
