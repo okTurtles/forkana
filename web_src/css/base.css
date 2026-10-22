@@ -59,6 +59,12 @@
   --color-button-secondary-active-bg: #e6eaef;
   --color-button-focus-ring: #b3a9ff;
   --color-button-primary-border: #1f232826;
+  /* the Article view (features/article-view.css), light values of colors.custom.css */
+  --color-text-primary: #1f2328;
+  --color-surface: #fff;
+  --color-button-hover: #eff2f5;
+  --color-button-text-disabled: #818b98;
+  --color-button-border-disabled: #818b981a;
 }
 
 @media (min-width: 768px) and (max-width: 1200px) {

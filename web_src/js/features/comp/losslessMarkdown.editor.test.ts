@@ -11,6 +11,7 @@
 import Editor from '@toast-ui/editor';
 import {installLosslessMarkdownTracker} from './losslessMarkdown.ts';
 import {defaultToolbarItems} from './toastEditorToolbar.ts';
+import {articleEditorMarkdownOptions} from './toastEditorOptions.ts';
 import {installBase64WidgetPatch, createBase64WidgetRule} from './base64ImageWidget.ts';
 
 // Deliberately contains the constructs Toast UI's WYSIWYG serializer damages: a
@@ -47,7 +48,7 @@ function createEditor(initialValue: string, initialEditType: 'markdown' | 'wysiw
   textarea.value = initialValue;
   document.body.append(textarea);
   const ref = {current: null as any};
-  const options: any = {el, initialEditType, usageStatistics: false};
+  const options: any = {el, initialEditType, usageStatistics: false, ...articleEditorMarkdownOptions};
   if (withWidgetRules) options.widgetRules = [createBase64WidgetRule(() => ref.current)];
   const editor = new Editor(options);
   ref.current = editor;

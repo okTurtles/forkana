@@ -24,7 +24,7 @@ type CreateRepoForm struct {
 	RepoName      string `binding:"Required;AlphaDashDot;MaxSize(100)"`
 	Subject       string `binding:"Required;MaxSize(255)"`
 	Private       bool
-	Description   string `binding:"MaxSize(2048)"`
+	Description   string `binding:"MaxSize(200)"` // an article's summary: "Up to 200 characters" (#434, figma Textarea I6961:75226)
 	DefaultBranch string `binding:"GitRefName;MaxSize(100)"`
 	AutoInit      bool
 	Gitignores    string
@@ -102,7 +102,7 @@ type RepoSettingForm struct {
 	// need it compare it against the repository's own owner and subject before proceeding.
 	ArticleName            string `binding:"MaxSize(255)"`
 	Subject                string `binding:"MaxSize(255)"`
-	Description            string `binding:"MaxSize(2048)"`
+	Description            string `binding:"MaxSize(200)"` // an article's summary: "Up to 200 characters" (#434, figma Textarea I6961:75226)
 	Website                string `binding:"ValidUrl;MaxSize(1024)"`
 	Interval               string
 	MirrorAddress          string

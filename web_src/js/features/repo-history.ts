@@ -481,6 +481,9 @@ export function initRepoHistory() {
       syncTransferNotice(doc);
       if (articleSection) {
         articleSection.innerHTML = newSection.innerHTML;
+        // htmx only acts on content it has processed: without this, the Watch button
+        // (hx-boost, with the CSRF header from <body hx-headers>) would post as a plain form
+        window.htmx.process(articleSection);
         collectArticleRefs();
         showArticleContent();
         const newMode = articleSection.querySelector<HTMLElement>('#article-view-root')?.getAttribute('data-article-mode');
@@ -576,14 +579,6 @@ export function initRepoHistory() {
     if (!view) return;
     event.preventDefault();
     switchView(view, {mode: view === 'article' ? 'read' : undefined, pushState: true});
-  }
-
-  // "Back to bubble view" inside the (possibly reloaded) article section
-  function handleArticleSectionClick(event: MouseEvent) {
-    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[data-role="back-to-bubble"]');
-    if (!anchor || !isPlainClick(event)) return;
-    event.preventDefault();
-    switchView('bubble', {pushState: true});
   }
 
   // An entry without a state of ours (one created by an in-page anchor, say) is read
@@ -684,6 +679,18 @@ export function initRepoHistory() {
     switchView('bubble', {pushState: true});
   });
   if (navEl) navEl.addEventListener('click', handleNavClick as EventListener);
-  articleSection?.addEventListener('click', handleArticleSectionClick);
+  // The Edit tab's sign-in banner is rendered with the page, and tabs and articles are
+  // then switched without a reload: its links are pointed back at the page shown now
+  // just before they are followed.
+  const signInBanner = document.querySelector('#article-signin-banner');
+  if (signInBanner) {
+    const pointBack = () => {
+      const back = `redirect_to=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      for (const link of signInBanner.querySelectorAll<HTMLAnchorElement>('a[href*="redirect_to="]')) {
+        link.href = link.href.replace(/redirect_to=[^&#]*/, back);
+      }
+    };
+    for (const type of ['pointerdown', 'focusin', 'keydown']) signInBanner.addEventListener(type, pointBack);
+  }
   window.addEventListener('popstate', handlePopState);
 }

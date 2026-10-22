@@ -551,3 +551,206 @@
 [data-theme] .toastui-editor-md-custom-block .toastui-editor-md-meta {
   color: var(--color-purple);
 }
+
+/* ─── Toolbar icons (#434 item 11) ──────────────────────────────────────────
+   The figma's markdown toolbar (_Markdown toolbar 641:65763 in "Article view / Logged
+   out - Edit" 641:65657) draws GitHub's octicons, 16px #59636e in 24×24 buttons with
+   4px between them and 16px between the groups, no dividers. Toast UI paints its own
+   icons from a sprite on each button's background; the octicons replace them as masks
+   (the same files the app's svg helper serves), so they take the text colour. Both
+   Toast editors share the toolbar (comp/toastEditorToolbar.ts), so this is not scoped. */
+[data-theme] .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-divider {
+  display: none;
+}
+
+[data-theme] .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-group {
+  gap: 4px;
+  align-items: center;
+}
+
+[data-theme] .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-group:not(:first-child) {
+  margin-left: 16px;
+}
+
+[data-theme] .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-light-3);
+}
+
+[data-theme] .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons:not(:disabled):hover {
+  background: var(--color-button-hover);
+  border: none;
+}
+
+[data-theme] .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons.active {
+  color: var(--color-primary);
+}
+
+[data-theme] .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background-color: currentcolor;
+  mask: var(--toolbar-icon) center / 16px 16px no-repeat;
+}
+
+.toastui-editor-toolbar-icons.heading { --toolbar-icon: url("../img/svg/octicon-heading.svg"); }
+.toastui-editor-toolbar-icons.bold { --toolbar-icon: url("../img/svg/octicon-bold.svg"); }
+.toastui-editor-toolbar-icons.italic { --toolbar-icon: url("../img/svg/octicon-italic.svg"); }
+.toastui-editor-toolbar-icons.quote { --toolbar-icon: url("../img/svg/octicon-quote.svg"); }
+.toastui-editor-toolbar-icons.code { --toolbar-icon: url("../img/svg/octicon-code.svg"); }
+.toastui-editor-toolbar-icons.link { --toolbar-icon: url("../img/svg/octicon-link.svg"); }
+.toastui-editor-toolbar-icons.bullet-list { --toolbar-icon: url("../img/svg/octicon-list-unordered.svg"); }
+.toastui-editor-toolbar-icons.ordered-list { --toolbar-icon: url("../img/svg/octicon-list-ordered.svg"); }
+.toastui-editor-toolbar-icons.task-list { --toolbar-icon: url("../img/svg/octicon-tasklist.svg"); }
+.toastui-editor-toolbar-icons.codeblock { --toolbar-icon: url("../img/svg/octicon-file-code.svg"); }
+.toastui-editor-toolbar-icons.image { --toolbar-icon: url("../img/svg/octicon-image.svg"); }
+.toastui-editor-toolbar-icons.table { --toolbar-icon: url("../img/svg/octicon-table.svg"); }
+.toastui-editor-toolbar-icons.more { --toolbar-icon: url("../img/svg/octicon-kebab-horizontal.svg"); }
+
+/* ─── The article editor's frame (#434 items 10 and 12) ──────────────────────
+   figma "Markdown comment" 641:65701: one 1px #d1d9e0 box with 6px corners holding
+   - the toolbar (Toolbar 641:65758): a #f6f8fa band whose tabs (Tabnav 641:65760) sit
+     8px from its top and left, 40px tall, 0 16px, Inter 400 14/20 #59636e, the open
+     one white and #1f2328 with a 1px #d1d9e0 border and 6px top corners, over a 1px
+     #d1d9e0 rule;
+   - the writing area, framed 8px inside the box by its own 1px #d1d9e0 border with
+     6px corners (Form/Textarea 641:65705), its text 10px from that frame's left;
+   - the contribution tip at its foot (Tip 641:65771), outside that inner frame. */
+.article-editor-box {
+  container: article-editor / inline-size;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+[data-theme] .article-editor-box .toastui-editor-defaultUI {
+  border: none;
+  border-radius: 6px 6px 0 0;
+}
+
+[data-theme] .article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar {
+  min-height: 48px;
+  background: var(--color-surface-muted);
+  border-bottom: 1px solid var(--color-border-light);
+  border-radius: 6px 6px 0 0;
+}
+
+/* The toolbar spans the band (the tabs are laid over its left end), so that Toast UI,
+   which folds into its "more" menu whatever does not fit the toolbar's own width, sees
+   the room there is: shrunk to its content, it used to fold the last three buttons. */
+[data-theme] .article-editor-box .toastui-editor-defaultUI-toolbar {
+  flex: 1;
+  justify-content: flex-end;
+  height: 47px;
+  align-items: center;
+  padding: 0 16px 0 260px;
+  background: transparent;
+  border: none;
+}
+
+[data-theme] .article-editor-box #toast-editor-container .toastui-editor-mode-switch {
+  top: 8px;
+  left: 8px;
+  gap: 4px;
+  min-height: 40px;
+  height: 40px;
+  font-size: 14px;
+  background: transparent;
+  border: none;
+}
+
+[data-theme] .article-editor-box #toast-editor-container .toastui-editor-mode-switch .tab-item {
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-light-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+
+[data-theme] .article-editor-box #toast-editor-container .toastui-editor-mode-switch .tab-item.active {
+  height: 41px;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border-color: var(--color-border-light);
+}
+
+/* (Toast UI positions the writing area absolutely in .toastui-editor-main, so the 8px
+   inset is set on it rather than as the main area's padding) */
+[data-theme] .article-editor-box .toastui-editor-main > .toastui-editor-main-container {
+  top: 8px;
+  left: 8px;
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+}
+
+[data-theme] .article-editor-box .toastui-editor-main .toastui-editor-ww-container,
+[data-theme] .article-editor-box .toastui-editor-main .toastui-editor-md-container {
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.article-editor-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-text-light-3);
+}
+
+.article-editor-tip .svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.article-editor-tip a {
+  color: var(--color-primary);
+}
+
+/* Below 760px of editor the Visual/Source tabs take their own row above the buttons,
+   and the buttons start at the left and wrap. Above it, the 260px the tabs take on the
+   toolbar's row and the 16px between the button groups (which Toast UI does not count
+   when it decides what to fold into "more") still leave room for every button: they
+   need about 370px. A container query, as the editor's width, not the window's, is
+   what matters. (The ID-qualified rule near the top of this file outweighed the
+   generic phone rule there.) */
+@container article-editor (max-width: 760px) {
+  [data-theme] .article-editor-box #toast-editor-container .toastui-editor-mode-switch {
+    position: static;
+    order: -1;
+    justify-content: flex-end; /* the start of its row-reverse */
+    margin: 0;
+    padding: 8px 8px 0;
+    height: auto;
+    background: var(--color-surface-muted);
+    border-radius: 6px 6px 0 0;
+  }
+
+  [data-theme] .article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 0;
+  }
+
+  [data-theme] .article-editor-box .toastui-editor-defaultUI-toolbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 40px;
+    padding: 8px;
+    justify-content: flex-start;
+    border-top: 1px solid var(--color-border-light);
+  }
+}

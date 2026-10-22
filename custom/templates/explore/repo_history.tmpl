@@ -218,13 +218,21 @@
     </div>
     {{end}}
 
-    {{/* Login banner for non-authenticated users */}}
-    {{if and .IsArticleModeEdit (not .IsSigned)}}
-    <div class="ui warning message tw-mt-0">
-        <div class="tw-flex tw-items-center tw-gap-2">
-            {{svg "octicon-alert" 16}}
-            <span class="tw-color-text">You are not logged in. You have to <a href="{{AppSubUrl}}/user/login?redirect_to={{QueryEscape .Link}}">Sign in</a> / <a href="{{AppSubUrl}}/user/sign_up?redirect_to={{QueryEscape .Link}}">Sign up</a> in order to do edits.</span>
-        </div>
+    {{/* The sign-in banner of the Edit tab (#434 item 13, figma Announcement 641:65699):
+         #fff8c5 with a #d4a72c 40% rule above and below, 8px 48px padding, the alert icon and
+         the dismiss cross #9a6700, the message Inter 400 14/20. It is only rendered in a
+         signed-out reader's page, never in a signed-in one's; there, features/article-view.css
+         shows it whenever the Article view shows the Edit tab, since repo-history.ts swaps
+         tabs in without reloading. */}}
+    {{if not .IsSigned}}
+    <div class="article-signin-banner" id="article-signin-banner" role="status">
+        {{svg "octicon-alert" 16 "article-signin-banner-icon"}}
+        {{/* its links return to the page the reader is on when they press them: repo-history.ts
+             rewrites them as tabs and articles are switched without a reload */}}
+        <span class="article-signin-banner-text">{{ctx.Locale.Tr "repo.article_signin_banner" .ArticleSignInLink .ArticleSignUpLink}}</span>
+        <button type="button" class="article-signin-banner-dismiss hide-panel" data-panel="#article-signin-banner" aria-label="{{ctx.Locale.Tr "repo.article_signin_banner_dismiss"}}">
+            {{svg "octicon-x" 16}}
+        </button>
     </div>
     {{end}}
     {{template "repo/header" .}}

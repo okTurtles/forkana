@@ -1,0 +1,56 @@
+{{/* The block under the Read / Edit / History tabs that says which article this is
+     (#433 items 4 and 6, #434 items 3 and 4, #435 items 3, 4, 6 and 7):
+
+     - the breadcrumb "owner / Subject name" (figma Breadcrumbs 641:65491): both parts
+       are links, Inter 400 14/20 #4e40fa, the "/" #59636e with 4px on each side. The
+       article is named by its subject's name, as the page title above it is, rather
+       than by the repository slug ("test-conflict-12"), which read as a second, black
+       title with a special character in it;
+     - for a fork, "Fork of: owner / Subject name" under it (figma Frame 51 641:65496): a
+       16px repo-forked-24 icon (#1f2328) and an Inter 400 12/18 #4e40fa link;
+     - on its right, CopyRef in the Read and Edit tabs (figma Button 641:65500) and the
+       Sort menu in the History tab (figma Button 641:64306 and its menu 641:64307),
+       which has no CopyRef. */}}
+{{define "shared/repo/article_path"}}
+{{$subjectName := .SubjectName}}
+<div class="article-path">
+    <div class="article-path-main">
+        <div class="article-breadcrumb" data-role="article-breadcrumb">
+            <a href="{{.Repository.Owner.HomeLink}}">{{.Repository.Owner.Name}}</a>
+            <span class="article-breadcrumb-divider" aria-hidden="true">/</span>
+            <a href="{{QueryBuild .ArticleLink "view" "article" "mode" "read"}}">{{$subjectName}}</a>
+        </div>
+        {{if and .Repository.IsFork .Repository.BaseRepo}}
+            <div class="article-fork-of" data-role="article-fork-of">
+                {{svg "octicon-repo-forked" 16}}
+                {{/* the article forked: its owner and its own subject's name (Go html/template
+                     escapes them) */}}
+                <a href="{{.Repository.BaseRepo.LinkCtx ctx}}">{{ctx.Locale.Tr "repo.article_fork_of"}} {{.Repository.BaseRepo.OwnerName}} / {{.Repository.BaseRepo.GetSubject ctx}}</a>
+            </div>
+        {{end}}
+    </div>
+    {{if .IsArticleModeHistory}}
+        {{$historyLink := QueryBuild .ArticleLink "view" "article" "mode" "history"}}
+        <div class="ui dropdown article-sort-dropdown" data-role="article-history-sort">
+            <span class="article-sort-button">
+                {{svg "octicon-arrow-switch" 16}}
+                <span>{{ctx.Locale.Tr "repo.article_history_sort"}}</span>
+                {{svg "octicon-triangle-down" 16 "article-sort-caret"}}
+            </span>
+            <div class="menu">
+                <a class="item{{if ne .HistorySort "forks"}} active selected{{end}}" href="{{$historyLink}}">
+                    {{svg "octicon-check" 16 "article-sort-check"}}{{ctx.Locale.Tr "repo.article_history_sort_changes"}}
+                </a>
+                <a class="item{{if eq .HistorySort "forks"}} active selected{{end}}" href="{{QueryBuild $historyLink "history" "forks"}}">
+                    {{svg "octicon-check" 16 "article-sort-check"}}{{ctx.Locale.Tr "repo.article_history_sort_forks"}}
+                </a>
+            </div>
+        </div>
+    {{else}}
+        <a class="forkana-btn forkana-btn-tertiary article-action-button article-copy-ref" href="#" data-global-click="onCopyContentButtonClick" data-clipboard-text="{{.Repository.Owner.Name}}/{{.Repository.Name}}@{{.BranchName}}">
+            {{svg "octicon-link" 16}}
+            <span>{{ctx.Locale.Tr "repo.editor.copy_ref"}}</span>
+        </a>
+    {{end}}
+</div>
+{{end}}

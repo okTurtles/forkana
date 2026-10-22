@@ -133,7 +133,7 @@ type CreateRepoOption struct {
 	// Subject of the repository to create
 	Subject string `json:"subject" binding:"MaxSize(255)"`
 	// Description of the repository to create
-	Description string `json:"description" binding:"MaxSize(2048)"`
+	Description string `json:"description" binding:"MaxSize(200)"`
 	// Whether the repository is private
 	Private bool `json:"private"`
 	// Label-Set to use
@@ -167,7 +167,7 @@ type EditRepoOption struct {
 	// subject of the repository (read-only, cannot be modified after creation)
 	Subject *string `json:"subject,omitempty" binding:"MaxSize(255)"`
 	// a short description of the repository.
-	Description *string `json:"description,omitempty" binding:"MaxSize(2048)"`
+	Description *string `json:"description,omitempty" binding:"MaxSize(200)"`
 	// a URL with more information about the repository.
 	Website *string `json:"website,omitempty" binding:"MaxSize(1024)"`
 	// either `true` to make the repository private or `false` to make it public.
@@ -249,7 +249,7 @@ type GenerateRepoOption struct {
 	// Default branch of the new repository
 	DefaultBranch string `json:"default_branch"`
 	// Description of the repository to create
-	Description string `json:"description" binding:"MaxSize(2048)"`
+	Description string `json:"description" binding:"MaxSize(200)"`
 	// Whether the repository is private
 	Private bool `json:"private"`
 	// include git content of default branch in template repo

@@ -328,16 +328,17 @@ test.describe('Fork-on-Edit Permission Tests', () => {
   });
 
   test.describe('Unauthenticated User Tests', () => {
-    test('unauthenticated user sees disabled sign-in button', async ({page}) => {
+    test('unauthenticated user is sent to sign in by Fork and Submit changes', async ({page}) => {
       await page.goto('/subject/example-subject/user2?mode=edit');
       await page.waitForLoadState('domcontentloaded');
 
-      // Unauthenticated user should see disabled button with sign-in message
-      const signInButton = page.locator('button.ui.primary.button.disabled');
-      await expect(signInButton).toBeVisible({timeout: 10000});
-
-      // Button should contain sign-in text
-      await expect(signInButton).toContainText(/Sign in/i);
+      // #434: the layout's Fork and Submit changes buttons, which lead to sign in
+      // instead of opening the fork modal
+      const forkLink = page.locator('#signed-out-fork-button');
+      await expect(forkLink).toBeVisible({timeout: 10000});
+      await expect(forkLink).toHaveAttribute('href', /\/user\/login\?redirect_to=/);
+      await expect(page.locator('#signed-out-submit-button')).toHaveAttribute('href', /\/user\/login\?redirect_to=/);
+      await expect(page.locator('#fork-article-button')).toHaveCount(0);
 
       await page.close();
     });
