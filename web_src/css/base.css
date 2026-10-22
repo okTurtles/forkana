@@ -59,6 +59,10 @@
   --color-button-secondary-active-bg: #e6eaef;
   --color-button-focus-ring: #b3a9ff;
   --color-button-primary-border: #1f232826;
+  /* text colours of the design system (the Table view, features/subject-views.css) */
+  --color-text-primary: #1f2328;
+  --color-muted-text: #59636e;
+  --color-button-text-disabled: #818b98;
 }
 
 @media (min-width: 768px) and (max-width: 1200px) {

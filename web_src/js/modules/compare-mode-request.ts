@@ -1,13 +1,14 @@
-// The header's Compare button can be pressed on the Table or Article view, before the
-// bubble view (which owns compare mode) has ever been mounted. repo-history.ts then
-// switches to the bubble view and leaves the request here; FishboneGraph takes it once
-// it listens for the button.
+// The header's Compare button can be pressed on the Article view, before the bubble view
+// (which owns compare mode there) has ever been mounted. repo-history.ts then switches to
+// the bubble view and leaves the request here; FishboneGraph takes it once it listens for
+// the button. (The Table view has a compare mode of its own: repo-history-table.ts.)
 let pending = false;
 
 /** Sent by the header's Compare button: compare mode is to be turned on or off. */
 export const COMPARE_MODE_TOGGLE_EVENT = 'repo:compare-mode-toggle';
 
-/** Sent by the bubble view whenever compare mode changes; the button follows it. */
+/** Sent by the view whose compare mode changed (the Bubble view's FishboneGraph, or the
+   Table view's repo-history-table.ts); the header's button follows it. */
 export const COMPARE_MODE_STATE_EVENT = 'repo:compare-mode-state';
 
 /** The detail of COMPARE_MODE_STATE_EVENT. */
@@ -30,6 +31,43 @@ export function canPickForCompare(node: {isTombstoned?: boolean, isHidden?: bool
    led by the article the action was about, if any. */
 export function compareAnnouncementFor(article: string | null, message: string): string {
   return article ? `${article}: ${message}` : message;
+}
+
+/** The Compare banner's states (CompareAnnouncement.vue), one per figma frame. */
+export type CompareAnnouncementState = 'select' | 'one' | 'ready' | 'unavailable';
+
+/** The Compare banner's messages (CompareAnnouncement.vue). */
+export type CompareAnnouncementMessages = {
+  select: string;
+  one: string;
+  ready: string;
+  unavailable: string;
+  compareNow: string;
+  /** The x's label while compare mode is on: it exits compare mode. */
+  dismiss: string;
+  /** The x's label on the `unavailable` notice, which it only hides. */
+  dismissNotice: string;
+};
+
+/** The banner's localized messages, from the `data-msg-*` attributes the subject page puts
+   on `root` (#compare-announcement-root), with English fallbacks. `overrides` replaces
+   some of them (the Table view's own one-picked message); empty ones are ignored. */
+export function readCompareMessages(root: Element | null, overrides: Partial<CompareAnnouncementMessages> = {}): CompareAnnouncementMessages {
+  const msg = (name: string) => root?.getAttribute(`data-msg-${name}`);
+  return {
+    select: overrides.select || msg('select') || 'Select 2 articles to compare (0/2 selected).',
+    one: overrides.one || msg('one') || '1/2 selected – select one more to compare.',
+    ready: overrides.ready || msg('ready') || '2/2 selected – ready to compare.',
+    unavailable: overrides.unavailable || msg('no-forks') || 'No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.',
+    compareNow: overrides.compareNow || msg('compare-now') || 'Compare now',
+    dismiss: overrides.dismiss || msg('dismiss') || 'Exit compare mode',
+    dismissNotice: overrides.dismissNotice || msg('dismiss-notice') || 'Dismiss',
+  };
+}
+
+/** The compare page of two owners' articles of a subject. */
+export function subjectCompareUrl(appSubUrl: string, subject: string, ownerA: string, ownerB: string): string {
+  return `${appSubUrl}/subject/${encodeURIComponent(subject)}/compare/${encodeURIComponent(ownerA)}...${encodeURIComponent(ownerB)}`;
 }
 
 /** Forgets a pending request (tests). */
