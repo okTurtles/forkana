@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	auth_model "code.gitea.io/gitea/models/auth"
 	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	system_model "code.gitea.io/gitea/models/system"
@@ -726,4 +727,54 @@ func TestEditorAttachmentLimits(t *testing.T) {
 			createEditorAttachment(t, session, csrf, "user2/repo1", "image.png", generateImg(), http.StatusTooManyRequests)
 		})
 	})
+}
+
+// TestAttachmentTokenScopes checks that issue/PR attachments require read:issue and release
+// attachments require read:repository when requested with an API token.
+func TestAttachmentTokenScopes(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	for _, uuid := range []string{
+		"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+		"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12",
+		"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19",
+		"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+	} {
+		_, err := storage.Attachments.Save(repo_model.AttachmentRelativePath(uuid), strings.NewReader("hello world"), -1)
+		require.NoError(t, err)
+	}
+
+	readIssueToken := getUserToken(t, "user2", auth_model.AccessTokenScopeReadIssue)
+	readRepoToken := getUserToken(t, "user2", auth_model.AccessTokenScopeReadRepository)
+	miscToken := getUserToken(t, "user2", auth_model.AccessTokenScopeReadMisc)
+	publicOnlyIssueToken := getUserToken(t, "user2", auth_model.AccessTokenScopeReadIssue, auth_model.AccessTokenScopePublicOnly)
+	publicOnlyRepoToken := getUserToken(t, "user2", auth_model.AccessTokenScopeReadRepository, auth_model.AccessTokenScopePublicOnly)
+
+	// "/{owner}/{repo}/releases/attachments/{uuid}" is not a token-authenticated path in Forkana
+	// (see services/auth/auth.go), so release attachments are only exercised through "/attachments/".
+	cases := []struct {
+		name                  string
+		url                   string
+		readIssueStatus       int
+		readRepoStatus        int
+		publicOnlyIssueStatus int
+		publicOnlyRepoStatus  int
+	}{
+		{"GlobalPublicIssueAttachment", "/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", http.StatusOK, http.StatusForbidden, http.StatusOK, http.StatusForbidden},
+		{"RepoPublicIssueAttachment", "/user2/repo1/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", http.StatusOK, http.StatusForbidden, http.StatusOK, http.StatusForbidden},
+		{"GlobalPrivateIssueAttachment", "/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12", http.StatusOK, http.StatusForbidden, http.StatusForbidden, http.StatusForbidden},
+		{"RepoPrivateIssueAttachment", "/user2/repo2/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12", http.StatusOK, http.StatusForbidden, http.StatusForbidden, http.StatusForbidden},
+		{"GlobalPublicReleaseAttachment", "/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19", http.StatusForbidden, http.StatusOK, http.StatusForbidden, http.StatusOK},
+		{"GlobalPrivateReleaseAttachment", "/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22", http.StatusForbidden, http.StatusOK, http.StatusForbidden, http.StatusForbidden},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			MakeRequest(t, NewRequest(t, "GET", tc.url).AddTokenAuth(miscToken), http.StatusForbidden)
+			MakeRequest(t, NewRequest(t, "GET", tc.url).AddTokenAuth(readIssueToken), tc.readIssueStatus)
+			MakeRequest(t, NewRequest(t, "GET", tc.url).AddTokenAuth(readRepoToken), tc.readRepoStatus)
+			MakeRequest(t, NewRequest(t, "GET", tc.url).AddTokenAuth(publicOnlyIssueToken), tc.publicOnlyIssueStatus)
+			MakeRequest(t, NewRequest(t, "GET", tc.url).AddTokenAuth(publicOnlyRepoToken), tc.publicOnlyRepoStatus)
+		})
+	}
 }

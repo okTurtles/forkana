@@ -7,6 +7,7 @@ package repo
 import (
 	"time"
 
+	auth_model "code.gitea.io/gitea/models/auth"
 	git_model "code.gitea.io/gitea/models/git"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/httpcache"
@@ -17,6 +18,12 @@ import (
 	"code.gitea.io/gitea/routers/common"
 	"code.gitea.io/gitea/services/context"
 )
+
+// checkDownloadTokenScope rejects API tokens that lack read:repository (or are public-only on a private repo)
+func checkDownloadTokenScope(ctx *context.Context) bool {
+	context.CheckRepoScopedToken(ctx, ctx.Repo.Repository, auth_model.Read)
+	return !ctx.Written()
+}
 
 // ServeBlobOrLFS download a git.Blob redirecting to LFS if necessary
 func ServeBlobOrLFS(ctx *context.Context, blob *git.Blob, lastModified *time.Time) error {
@@ -109,6 +116,10 @@ func getBlobForEntry(ctx *context.Context) (*git.Blob, *time.Time) {
 
 // SingleDownload download a file by repos path
 func SingleDownload(ctx *context.Context) {
+	if !checkDownloadTokenScope(ctx) {
+		return
+	}
+
 	blob, lastModified := getBlobForEntry(ctx)
 	if blob == nil {
 		return
@@ -121,6 +132,10 @@ func SingleDownload(ctx *context.Context) {
 
 // SingleDownloadOrLFS download a file by repos path redirecting to LFS if necessary
 func SingleDownloadOrLFS(ctx *context.Context) {
+	if !checkDownloadTokenScope(ctx) {
+		return
+	}
+
 	blob, lastModified := getBlobForEntry(ctx)
 	if blob == nil {
 		return
@@ -133,6 +148,10 @@ func SingleDownloadOrLFS(ctx *context.Context) {
 
 // DownloadByID download a file by sha1 ID
 func DownloadByID(ctx *context.Context) {
+	if !checkDownloadTokenScope(ctx) {
+		return
+	}
+
 	blob, err := ctx.Repo.GitRepo.GetBlob(ctx.PathParam("sha"))
 	if err != nil {
 		if git.IsErrNotExist(err) {
@@ -149,6 +168,10 @@ func DownloadByID(ctx *context.Context) {
 
 // DownloadByIDOrLFS download a file by sha1 ID taking account of LFS
 func DownloadByIDOrLFS(ctx *context.Context) {
+	if !checkDownloadTokenScope(ctx) {
+		return
+	}
+
 	blob, err := ctx.Repo.GitRepo.GetBlob(ctx.PathParam("sha"))
 	if err != nil {
 		if git.IsErrNotExist(err) {

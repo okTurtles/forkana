@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"net/http"
 
+	auth_model "code.gitea.io/gitea/models/auth"
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
 	system_model "code.gitea.io/gitea/models/system"
+	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/httpcache"
 	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/log"
@@ -148,6 +150,18 @@ func DeleteAttachment(ctx *context.Context) {
 // A scope that cannot be resolved yields nil, which degrades the request to the unscoped rule
 // rather than to a 404: the same caller reaches the very same attachment through the global
 // "/attachments/{uuid}" route.
+// attachmentReadScope returns the API token scope required to read an attachment linked to the given unit
+func attachmentReadScope(unitType unit.Type) (auth_model.AccessTokenScope, bool) {
+	switch unitType {
+	case unit.TypeIssues, unit.TypePullRequests:
+		return auth_model.AccessTokenScopeReadIssue, true
+	case unit.TypeReleases:
+		return auth_model.AccessTokenScopeReadRepository, true
+	default:
+		return "", false
+	}
+}
+
 func attachmentServingScope(ctx *context.Context) *repo_model.Repository {
 	if ctx.Repo != nil && ctx.Repo.Repository != nil {
 		return ctx.Repo.Repository
@@ -205,6 +219,13 @@ func ServeAttachment(ctx *context.Context, uuid string) {
 		if !perm.CanRead(unitType) {
 			ctx.HTTPError(http.StatusNotFound)
 			return
+		}
+
+		if requiredScope, ok := attachmentReadScope(unitType); ok {
+			context.CheckTokenScopes(ctx, repository, requiredScope)
+			if ctx.Written() {
+				return
+			}
 		}
 	}
 
