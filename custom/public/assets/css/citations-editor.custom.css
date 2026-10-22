@@ -1,0 +1,636 @@
+/* The article editor's link and cite tools (issue #399), linked by
+   custom/templates/shared/citation_editor.tmpl; the tokens are in citations.custom.css.
+   Values from the Figma page "#399 Internal Link and External Reference Link handling"
+   (canvas 6503:57320); the node of each value is given next to it. */
+
+/* ---------- article editor: toolbar (6597:45386) ---------- */
+
+.toastui-editor-toolbar-icons.forkana-toolbar-icon {
+  background-image: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-citation-muted);
+}
+
+/* Toast UI wraps a custom button in an item wrapper that already has the button margins */
+.toastui-editor-toolbar-item-wrapper > .forkana-toolbar-icon {
+  margin: 0;
+}
+
+.toastui-editor-toolbar-icons.forkana-toolbar-icon:hover {
+  color: var(--color-citation-text);
+}
+
+/* ---------- popovers anchored at the caret ---------- */
+
+.citation-popover {
+  position: absolute;
+  z-index: var(--z-index-modal);
+  box-sizing: border-box;
+  background: var(--color-citation-surface);
+  color: var(--color-citation-text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* Subject search 6597:45382: 340 wide, radius 10, padding 6/6/10/6, gap 2 */
+.citation-subject-search {
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 6px 10px;
+  border: 1px solid var(--color-citation-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-citation-card);
+}
+
+/* the author list (6597:45384) is narrower */
+.citation-subject-search.is-authors {
+  width: 220px;
+}
+
+.citation-subject-header {
+  padding: 0 4px;
+}
+
+.citation-subject-field {
+  margin: 4px 4px 6px;
+}
+
+.citation-subject-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Result: padding 7/10, gap 10, radius 6; highlighted #eef2ff */
+.citation-subject-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.citation-subject-row.is-active,
+.citation-subject-row:hover {
+  background: var(--color-citation-highlight);
+}
+
+.citation-subject-icon {
+  flex-shrink: 0;
+  color: var(--color-citation-text);
+}
+
+.citation-subject-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.citation-subject-name {
+  font-size: 13px;
+  line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citation-subject-row.is-active .citation-subject-name {
+  font-weight: var(--font-weight-medium);
+}
+
+.citation-subject-meta {
+  font-size: 11.5px;
+  line-height: 14px;
+  color: var(--color-citation-muted);
+}
+
+.citation-subject-chevron {
+  flex-shrink: 0;
+  color: var(--color-citation-muted);
+}
+
+.citation-subject-divider {
+  height: 1px;
+  margin: 1px 0;
+  background: var(--color-citation-border);
+}
+
+.citation-subject-plus {
+  width: 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-citation-muted);
+}
+
+.citation-subject-empty {
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--color-citation-muted);
+}
+
+/* Link popover – URL detected 6597:45396 (380 wide) and Cite popover 6597:45615 (420 wide):
+   radius 12, padding 8/16, gap 14 */
+.citation-link-url,
+.citation-cite-popover {
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 16px;
+  border: 1px solid var(--color-citation-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-citation-popover);
+}
+
+.citation-cite-popover {
+  width: 420px;
+}
+
+.citation-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.citation-popover-title {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.citation-popover-close {
+  display: inline-flex;
+  padding: 4px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-citation-muted);
+  cursor: pointer;
+}
+
+.citation-popover-close:hover {
+  background: var(--color-citation-surface-muted);
+}
+
+/* TextInput 6597:43306: label 14/20 semibold, box 32 high, radius 6, focused border 2px */
+.citation-text-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.citation-text-input-label {
+  font-weight: var(--font-weight-semibold);
+}
+
+.citation-text-input-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--color-citation-border);
+  border-radius: 6px;
+  color: var(--color-citation-muted);
+  background: var(--color-citation-surface);
+}
+
+.citation-text-input-box:focus-within {
+  border: 2px solid var(--color-citation-accent);
+  padding: 0 7px;
+}
+
+.citation-text-input.is-invalid .citation-text-input-box {
+  border-color: var(--color-citation-missing);
+}
+
+.citation-text-input-box input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font: inherit;
+  color: var(--color-citation-text);
+}
+
+/* Banner 6597:45396: #eeeeff, radius 6, padding 10, 12/18 */
+.citation-banner {
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--color-citation-banner);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.citation-banner strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.citation-popover-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.citation-cite-hint {
+  margin-top: -10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-citation-muted);
+}
+
+/* Reuse 6597:45615: top border, padding-top 10, gap 2 */
+.citation-cite-reuse {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-citation-border);
+}
+
+.citation-cite-reuse-title {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-citation-muted);
+}
+
+.citation-reuse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Existing source: padding 6, gap 8, radius 6 */
+.citation-reuse-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-citation-text);
+  cursor: pointer;
+}
+
+.citation-reuse-row:hover,
+.citation-reuse-row:focus-visible {
+  background: var(--color-citation-highlight);
+}
+
+.citation-reuse-number {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-citation-accent);
+}
+
+.citation-reuse-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citation-reuse-publisher {
+  color: var(--color-citation-muted);
+  white-space: pre;
+}
+
+/* Buttons: small (popovers) 26 high, padding 4/8, 12/18; large (dialog) 36 high, padding 7/12, 14/20 */
+.citation-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-citation-border);
+  border-radius: 6px;
+  background: var(--color-citation-surface);
+  color: var(--color-citation-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.citation-button-invisible {
+  border-color: transparent;
+  background: transparent;
+}
+
+.citation-button-invisible:hover {
+  background: var(--color-citation-surface-muted);
+}
+
+.citation-button-primary {
+  border-color: transparent;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.citation-button-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.citation-button-large {
+  padding: 7px 12px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* ---------- Add citation dialog (6597:44669) ---------- */
+
+.citation-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-modal);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 64px 16px;
+  overflow-y: auto;
+  background: var(--color-citation-dialog-scrim);
+}
+
+/* 540 wide, radius 10, padding 20, gap 16 */
+.citation-dialog {
+  width: 540px;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--color-citation-border);
+  border-radius: 10px;
+  background: var(--color-citation-surface);
+  color: var(--color-citation-text);
+  box-shadow: var(--shadow-citation-card);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.citation-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.citation-dialog-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.citation-dialog-section-title {
+  font-size: 12px;
+  line-height: 15px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-citation-muted);
+}
+
+.citation-dialog-reuse .citation-reuse-row {
+  gap: 10px;
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.citation-dialog-reuse .citation-reuse-number {
+  font-weight: var(--font-weight-medium);
+}
+
+/* Type picker: 38 high, radius 8, padding 3, gap 4; tab padding 5/10, radius 6, 12/18 semibold */
+.citation-type-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--color-citation-border);
+  border-radius: 8px;
+}
+
+.citation-type-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-citation-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.citation-type-tab[aria-checked="true"] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+/* Fields: gap 10/12; label 12/18 semibold; input 38 high, padding 8/10, radius 6 */
+.citation-dialog-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.citation-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.citation-field-half {
+  flex: 1 1 calc(50% - 6px);
+}
+
+.citation-field-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.citation-field-label {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.citation-field-filled {
+  font-size: 11px;
+  line-height: 13px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-citation-accent);
+}
+
+.citation-field-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-citation-border);
+  border-radius: 6px;
+  background: var(--color-citation-surface);
+  color: var(--color-citation-text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.citation-field-input:focus {
+  outline: none;
+  border: 1.5px solid var(--color-citation-accent);
+  padding: 7.5px 9.5px;
+}
+
+.citation-field-input::placeholder {
+  color: var(--color-citation-muted);
+}
+
+/* "✦ Reading the page" (6597:44313) */
+.citation-lookup-status {
+  margin-top: -6px;
+  font-size: 12px;
+  line-height: 15px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-citation-accent);
+}
+
+.citation-lookup-status.is-failed {
+  color: var(--color-citation-warning);
+}
+
+/* Preview: #f6f8fa, border, radius 6, padding 10/12, gap 3 */
+.citation-dialog-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-citation-border);
+  border-radius: 6px;
+  background: var(--color-citation-surface-muted);
+}
+
+.citation-dialog-preview-title {
+  font-size: 11px;
+  line-height: 13px;
+  color: var(--color-citation-muted);
+}
+
+.citation-dialog-preview-text {
+  min-height: 18px;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.citation-dialog-preview-text a {
+  color: var(--color-citation-accent);
+}
+
+.citation-dialog-error {
+  margin-top: -8px;
+  font-size: 12px;
+  color: var(--color-citation-missing);
+}
+
+/* Footer: "Where in the source", Cancel, Insert [n]; gap 8, bottom-aligned */
+.citation-dialog-footer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.citation-dialog-footer .citation-field {
+  flex: 1 1 auto;
+}
+
+/* ---------- phones: full-screen sheets (M3 6597:45437, M5 6597:45453) ---------- */
+
+.citation-popover.citation-popover-sheet {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow-y: auto;
+  padding: 8px 16px;
+}
+
+.citation-popover-sheet .citation-subject-row {
+  gap: 12px;
+  padding: 12px 8px;
+  border-radius: 8px;
+}
+
+.citation-popover-sheet .citation-subject-name {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.citation-popover-sheet .citation-subject-meta {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.citation-popover-sheet .citation-text-input-box {
+  height: 40px;
+  padding: 0 12px;
+}
+
+/* the 2px focus border takes 1px more on each side: keep the text in place */
+.citation-popover-sheet .citation-text-input-box:focus-within {
+  padding: 0 11px;
+}
+
+@media (max-width: 767.98px) {
+  .citation-dialog-backdrop {
+    padding: 0;
+  }
+
+  .citation-dialog {
+    min-height: 100%;
+    border: none;
+    border-radius: 0;
+  }
+
+  .citation-field-half {
+    flex-basis: 100%;
+  }
+
+  .citation-dialog-footer {
+    flex-wrap: wrap;
+  }
+
+  .citation-dialog-footer .citation-field {
+    flex-basis: 100%;
+  }
+}

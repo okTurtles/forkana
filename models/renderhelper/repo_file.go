@@ -78,5 +78,7 @@ func NewRenderContextRepoFile(ctx context.Context, repo *repo_model.Repository, 
 		})
 	}
 	rctx = rctx.WithHelper(helper)
+	// repository files are Forkana articles: show which links leave Forkana (issue #399)
+	rctx.RenderOptions.ForkanaArticle = true
 	return rctx
 }

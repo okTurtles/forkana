@@ -7,6 +7,8 @@ import {defaultToolbarItems} from './comp/toastEditorToolbar.ts';
 import {showErrorToast} from '../modules/toast.ts';
 import {ensureFilesWithinLimit, getMaxAttachmentSize, showFileTooLargeError} from './comp/editorFileLimit.ts';
 import {POST} from '../modules/fetch.ts';
+import {articleToolbarItems, installArticleTools} from './citations/article-tools.ts';
+import {installInternalLinkView} from './citations/internal-link-view.ts';
 
 export type ToastEditorOptions = {
   height?: string;
@@ -52,6 +54,13 @@ export async function createToastEditor(
     toolbarItems = defaultToolbarItems,
   } = options;
 
+  // The article editor's link button links to a Forkana subject, and a Cite button cites a
+  // source (issue #399). Only where the page has the tools' texts (shared/citation_editor):
+  // not, e.g., in the "Apply patch" editor.
+  const articleTools = toolbarItems === defaultToolbarItems && document.querySelector('#forkana-citation-editor-i18n') ?
+    articleToolbarItems(defaultToolbarItems) :
+    null;
+
   // Use the existing container from the template
   let container = document.querySelector<ToastEditorContainer>(toastEditorContainerSelector);
   if (!container) {
@@ -83,7 +92,7 @@ export async function createToastEditor(
     previewStyle,
     usageStatistics,
     hideModeSwitch,
-    toolbarItems,
+    toolbarItems: articleTools?.items ?? toolbarItems,
     // NOTE: no `events.change` here, the lossless tracker installed below owns the
     // editor→textarea sync so the WYSIWYG serializer can't rewrite untouched source.
     hooks: {
@@ -238,7 +247,11 @@ export async function createToastEditor(
   // they actually edit in the visual editor (issue #262). Overrides getMarkdown/setMarkdown
   // on top of the widget patch, so submit handlers need no changes. Must come after
   // installBase64WidgetPatch so comparisons see widget-stripped output.
+  // Internal links written with spaces ([Solar System](subject/Solar System)) become links in
+  // the Visual editor; before the tracker, see internal-link-view.ts.
+  installInternalLinkView(editor);
   installLosslessMarkdownTracker(editor, textarea);
+  if (articleTools) installArticleTools(editor, container, articleTools);
 
   // Published only after the tracker is installed, so every consumer that reaches the editor
   // through the DOM gets the lossless getMarkdown/setMarkdown.

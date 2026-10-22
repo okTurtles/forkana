@@ -12,6 +12,12 @@ import (
 	jsoniter "github.com/json-iterator/go"
 )
 
+// RawMessage and Number are encoding/json's, for the code that may not import it.
+type (
+	RawMessage = json.RawMessage
+	Number     = json.Number
+)
+
 // Encoder represents an encoder for json
 type Encoder interface {
 	Encode(v any) error
