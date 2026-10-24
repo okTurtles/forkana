@@ -108,9 +108,6 @@ func TestListUnadoptedRepositories_ListOptions(t *testing.T) {
 func TestListUnadoptedRepositories_PageSizeBound(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	defer test.MockVariableValue(&setting.API.MaxResponseItems, 1)()
-	// checkUnadoptedRepositories looks up each batch of names with a query that is also capped by
-	// MaxResponseItems, so the batch must not exceed it or adopted repos would be reported as unadopted
-	defer test.MockVariableValue(&setting.Database.IterateBufferSize, 1)()
 
 	username := "user2"
 	unadoptedList := []string{path.Join(username, "unadopted1"), path.Join(username, "unadopted2")}
