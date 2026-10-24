@@ -111,6 +111,8 @@ func canMaintainerWriteToBranch(ctx context.Context, headPerm access_model.Permi
 		if err := pr.LoadHeadRepo(ctx); err != nil {
 			return false, err
 		}
+		// Upstream calls GetIndividualUserRepoPermission here and below: that is the same function under
+		// the name it got once upstream split out Actions task users, so admins and org teams count alike.
 		posterHeadPerm, err := access_model.GetUserRepoPermission(ctx, pr.HeadRepo, pr.Issue.Poster)
 		if err != nil {
 			return false, err
