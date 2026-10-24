@@ -141,15 +141,6 @@ func DeleteAttachment(ctx *context.Context) {
 	})
 }
 
-// attachmentServingScope returns the repository named by the request URL, when the route has
-// one. "/{username}/{reponame}/attachments/{uuid}" already carries the assigned repository,
-// while "/article/{username}/{subjectname}/attachments/{uuid}" is served without
-// RepoAssignment — opening the git repository and counting branches, tags and releases for
-// every embedded image is not worth it — so the owner/subject pair is resolved directly here.
-//
-// A scope that cannot be resolved yields nil, which degrades the request to the unscoped rule
-// rather than to a 404: the same caller reaches the very same attachment through the global
-// "/attachments/{uuid}" route.
 // attachmentReadScope returns the API token scope required to read an attachment linked to the given unit
 func attachmentReadScope(unitType unit.Type) (auth_model.AccessTokenScope, bool) {
 	switch unitType {
@@ -162,6 +153,15 @@ func attachmentReadScope(unitType unit.Type) (auth_model.AccessTokenScope, bool)
 	}
 }
 
+// attachmentServingScope returns the repository named by the request URL, when the route has
+// one. "/{username}/{reponame}/attachments/{uuid}" already carries the assigned repository,
+// while "/article/{username}/{subjectname}/attachments/{uuid}" is served without
+// RepoAssignment — opening the git repository and counting branches, tags and releases for
+// every embedded image is not worth it — so the owner/subject pair is resolved directly here.
+//
+// A scope that cannot be resolved yields nil, which degrades the request to the unscoped rule
+// rather than to a 404: the same caller reaches the very same attachment through the global
+// "/attachments/{uuid}" route.
 func attachmentServingScope(ctx *context.Context) *repo_model.Repository {
 	if ctx.Repo != nil && ctx.Repo.Repository != nil {
 		return ctx.Repo.Repository
