@@ -41,12 +41,15 @@ func TestArticleCollaboratorsMaintainerEdit(t *testing.T) {
 			Issue: &issues_model.Issue{
 				RepoID:   upstream.ID,
 				PosterID: poster.ID,
+				Poster:   poster,
 				Title:    "change request",
+				IsPull:   true,
 			},
 			HeadRepoID:          fork.ID,
 			BaseRepoID:          upstream.ID,
 			HeadBranch:          headBranch,
 			BaseBranch:          upstream.DefaultBranch,
+			Type:                issues_model.PullRequestGitea,
 			AllowMaintainerEdit: true,
 		}
 		require.NoError(t, issues_model.NewPullRequest(ctx, upstream, pr.Issue, nil, nil, pr))

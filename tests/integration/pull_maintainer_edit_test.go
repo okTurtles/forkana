@@ -41,16 +41,22 @@ func testPullMaintainerEdit(t *testing.T, _ *url.URL) {
 	forkOwner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: fork.OwnerID})
 
 	createAllowEditsPR := func(t *testing.T, poster *user_model.User, baseRepo, headRepo *repo_model.Repository) {
+		// IsPull must be set: a push to the head branch notifies the PR's watchers, and the
+		// mail notifier dereferences Issue.PullRequest, which only loads for pull issues. A
+		// panic there shuts the graceful manager down and fails every later test.
 		pr := &issues_model.PullRequest{
 			Issue: &issues_model.Issue{
 				RepoID:   baseRepo.ID,
 				PosterID: poster.ID,
+				Poster:   poster,
 				Title:    "maintainer edit probe",
+				IsPull:   true,
 			},
 			HeadRepoID:          headRepo.ID,
 			BaseRepoID:          baseRepo.ID,
 			HeadBranch:          headRepo.DefaultBranch,
 			BaseBranch:          baseRepo.DefaultBranch,
+			Type:                issues_model.PullRequestGitea,
 			AllowMaintainerEdit: true,
 		}
 		require.NoError(t, issues_model.NewPullRequest(t.Context(), baseRepo, pr.Issue, nil, nil, pr))
