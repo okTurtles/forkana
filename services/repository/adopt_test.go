@@ -87,7 +87,9 @@ func TestListUnadoptedRepositories_ListOptions(t *testing.T) {
 	username := "user2"
 	unadoptedList := []string{path.Join(username, "unadopted1"), path.Join(username, "unadopted2")}
 	for _, unadopted := range unadoptedList {
-		_ = os.Mkdir(filepath.Join(setting.RepoRootPath, unadopted+".git"), 0o755)
+		dir := filepath.Join(setting.RepoRootPath, unadopted+".git")
+		_ = os.Mkdir(dir, 0o755)
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	}
 
 	opts := db.ListOptions{Page: 1, PageSize: 1}
@@ -113,7 +115,9 @@ func TestListUnadoptedRepositories_PageSizeBound(t *testing.T) {
 	username := "user2"
 	unadoptedList := []string{path.Join(username, "unadopted1"), path.Join(username, "unadopted2")}
 	for _, unadopted := range unadoptedList {
-		_ = os.Mkdir(filepath.Join(setting.RepoRootPath, unadopted+".git"), 0o755)
+		dir := filepath.Join(setting.RepoRootPath, unadopted+".git")
+		_ = os.Mkdir(dir, 0o755)
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	}
 
 	// an oversized page size must be clamped instead of being used to size the result slice
@@ -148,6 +152,7 @@ func TestAdoptRepository(t *testing.T) {
 
 	// a successful adopt
 	destDir := filepath.Join(setting.RepoRootPath, user2.Name, "test-adopt.git")
+	t.Cleanup(func() { _ = os.RemoveAll(destDir) })
 	assert.NoError(t, unittest.SyncDirs(filepath.Join(setting.RepoRootPath, user2.Name, "repo1.git"), destDir))
 
 	adoptedRepo, err := AdoptRepository(t.Context(), user2, user2, CreateRepoOptions{Name: "test-adopt"})
