@@ -729,8 +729,8 @@ func TestEditorAttachmentLimits(t *testing.T) {
 	})
 }
 
-// TestAttachmentTokenScopes checks that issue/PR attachments require read:issue and release
-// attachments require read:repository when requested with an API token.
+// TestAttachmentTokenScopes checks that issue/PR attachments require read:issue, and release and
+// article attachments require read:repository, when requested with an API token.
 func TestAttachmentTokenScopes(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
@@ -739,6 +739,7 @@ func TestAttachmentTokenScopes(t *testing.T) {
 		"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12",
 		"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19",
 		"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+		"a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a23",
 	} {
 		_, err := storage.Attachments.Save(repo_model.AttachmentRelativePath(uuid), strings.NewReader("hello world"), -1)
 		require.NoError(t, err)
@@ -766,6 +767,10 @@ func TestAttachmentTokenScopes(t *testing.T) {
 		{"RepoPrivateIssueAttachment", "/user2/repo2/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12", http.StatusOK, http.StatusForbidden, http.StatusForbidden, http.StatusForbidden},
 		{"GlobalPublicReleaseAttachment", "/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a19", http.StatusForbidden, http.StatusOK, http.StatusForbidden, http.StatusOK},
 		{"GlobalPrivateReleaseAttachment", "/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22", http.StatusForbidden, http.StatusOK, http.StatusForbidden, http.StatusForbidden},
+		// The article attachment is associated with public repo1 and private repo2. Public-only
+		// tokens reach it through repo1, but not through a URL naming private repo2.
+		{"GlobalArticleAttachment", "/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a23", http.StatusForbidden, http.StatusOK, http.StatusForbidden, http.StatusOK},
+		{"RepoPrivateArticleAttachment", "/user2/repo2/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a23", http.StatusForbidden, http.StatusOK, http.StatusNotFound, http.StatusNotFound},
 	}
 
 	for _, tc := range cases {

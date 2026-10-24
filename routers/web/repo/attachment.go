@@ -201,13 +201,26 @@ func ServeAttachment(ctx *context.Context, uuid string) {
 	if repository == nil { // If not linked to an issue or release
 		// Article attachments are shared across the repositories associated with them, so
 		// access follows those associations rather than the repository they were uploaded to.
-		canServe, err := attachment.CanServe(ctx, ctx.Doer, attachmentServingScope(ctx), attach)
+		publicOnly, err := context.IsPublicOnlyToken(ctx)
+		if err != nil {
+			ctx.ServerError("IsPublicOnlyToken", err)
+			return
+		}
+		scope := attachmentServingScope(ctx)
+		canServe, err := attachment.CanServe(ctx, ctx.Doer, scope, attach, publicOnly)
 		if err != nil {
 			ctx.ServerError("CanServe", err)
 			return
 		}
 		if !canServe {
 			ctx.HTTPError(http.StatusNotFound)
+			return
+		}
+
+		// Article attachments are repository content served from the code unit, so API
+		// tokens need read:repository, like the "/raw/" and "/archive/" routes.
+		context.CheckTokenScopes(ctx, scope, auth_model.AccessTokenScopeReadRepository)
+		if ctx.Written() {
 			return
 		}
 	} else { // If we have the repository we check access

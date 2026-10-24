@@ -102,13 +102,27 @@ func RequireUnitReader(unitTypes ...unit.Type) func(ctx *Context) {
 	}
 }
 
+// apiTokenScope returns the scope of the API token that authenticated the request, if any.
+func apiTokenScope(ctx *Context) (auth_model.AccessTokenScope, bool) {
+	if ctx.Data["IsApiToken"] != true {
+		return "", false
+	}
+	scope, ok := ctx.Data["ApiTokenScope"].(auth_model.AccessTokenScope)
+	return scope, ok
+}
+
+// IsPublicOnlyToken reports whether the request is authenticated by an API token limited to public resources.
+func IsPublicOnlyToken(ctx *Context) (bool, error) {
+	scope, ok := apiTokenScope(ctx)
+	if !ok {
+		return false, nil
+	}
+	return scope.PublicOnly()
+}
+
 // CheckTokenScopes checks whether the authenticated API token contains any of the given scopes.
 func CheckTokenScopes(ctx *Context, repo *repo_model.Repository, scopes ...auth_model.AccessTokenScope) {
-	if ctx.Data["IsApiToken"] != true {
-		return
-	}
-
-	scope, ok := ctx.Data["ApiTokenScope"].(auth_model.AccessTokenScope)
+	scope, ok := apiTokenScope(ctx)
 	if !ok {
 		return
 	}
