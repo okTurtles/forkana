@@ -27,7 +27,7 @@ func TestCanServe(t *testing.T) {
 
 	canServe := func(t *testing.T, doer *user_model.User, scope *repo_model.Repository, attach *repo_model.Attachment) bool {
 		t.Helper()
-		ok, err := CanServe(t.Context(), doer, scope, attach)
+		ok, err := CanServe(t.Context(), doer, scope, attach, false)
 		require.NoError(t, err)
 		return ok
 	}
@@ -113,5 +113,39 @@ func TestCanServe(t *testing.T) {
 		assert.False(t, canServe(t, user13, nil, attach))
 		assert.False(t, canServe(t, user13, repo1, attach))
 		assert.True(t, canServe(t, user2, nil, attach))
+	})
+
+	// A token limited to public resources only reaches an attachment through a
+	// non-private repository associated with it, even when its user can read more.
+	t.Run("PublicOnly", func(t *testing.T) {
+		canServePublicOnly := func(t *testing.T, doer *user_model.User, scope *repo_model.Repository, attach *repo_model.Attachment) bool {
+			t.Helper()
+			ok, err := CanServe(t.Context(), doer, scope, attach, true)
+			require.NoError(t, err)
+			return ok
+		}
+		admin := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+
+		private := newTestAttachment(t, repo3.ID, user2.ID)
+		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repo3.ID, []int64{private.ID}))
+		assert.False(t, canServePublicOnly(t, user2, nil, private))
+		assert.False(t, canServePublicOnly(t, user2, repo3, private))
+		assert.False(t, canServePublicOnly(t, admin, nil, private))
+
+		shared := newTestAttachment(t, repo3.ID, user2.ID)
+		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repo3.ID, []int64{shared.ID}))
+		require.NoError(t, repo_model.AddArticleAttachments(t.Context(), repo1.ID, []int64{shared.ID}))
+		assert.True(t, canServePublicOnly(t, user2, nil, shared))
+		assert.True(t, canServePublicOnly(t, user2, repo1, shared))
+		assert.False(t, canServePublicOnly(t, user2, repo3, shared))
+		assert.True(t, canServePublicOnly(t, admin, nil, shared))
+
+		pending := newTestAttachment(t, repo1.ID, user2.ID)
+		assert.False(t, canServePublicOnly(t, user2, nil, pending))
+
+		legacy := newTestAttachment(t, repo3.ID, user2.ID)
+		legacy.Purpose = repo_model.AttachmentPurposeUnspecified
+		require.NoError(t, repo_model.UpdateAttachment(t.Context(), legacy))
+		assert.False(t, canServePublicOnly(t, user2, nil, legacy))
 	})
 }

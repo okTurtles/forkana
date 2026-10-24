@@ -27,18 +27,25 @@ import (
 // repository cannot be used as a cover to serve an attachment it does not keep
 // alive. A request with no resolvable scope falls back to the global rule,
 // which the same caller can reach through "/attachments/{uuid}" anyway.
-func CanServe(ctx context.Context, doer *user_model.User, scope *repo_model.Repository, attach *repo_model.Attachment) (bool, error) {
+//
+// publicOnly is set for API tokens limited to public resources: the attachment
+// is then only served through a non-private repository associated with it.
+func CanServe(ctx context.Context, doer *user_model.User, scope *repo_model.Repository, attach *repo_model.Attachment, publicOnly bool) (bool, error) {
 	if attach == nil || attach.ID == 0 {
 		return false, nil
 	}
 
 	// The uploader always reaches their own upload, including the pending one
-	// the editor is still previewing, which no repository references yet.
-	if doer != nil && doer.ID != 0 && doer.ID == attach.UploaderID {
+	// the editor is still previewing, which no repository references yet. A
+	// pending upload is not public, so a public-only token does not get it.
+	if !publicOnly && doer != nil && doer.ID != 0 && doer.ID == attach.UploaderID {
 		return true, nil
 	}
 
 	if scope != nil && scope.ID != 0 {
+		if publicOnly && scope.IsPrivate {
+			return false, nil
+		}
 		associated, err := repo_model.HasArticleAttachment(ctx, scope.ID, attach.ID)
 		if err != nil {
 			return false, err
@@ -47,7 +54,7 @@ func CanServe(ctx context.Context, doer *user_model.User, scope *repo_model.Repo
 			return repoReadable(ctx, doer, scope)
 		}
 	} else {
-		accessible, err := repo_model.ArticleAttachmentAccessible(ctx, doer, attach.ID)
+		accessible, err := repo_model.ArticleAttachmentAccessible(ctx, doer, attach.ID, publicOnly)
 		if err != nil {
 			return false, err
 		}
@@ -56,7 +63,7 @@ func CanServe(ctx context.Context, doer *user_model.User, scope *repo_model.Repo
 		}
 	}
 
-	return legacyFallbackServable(ctx, doer, attach)
+	return legacyFallbackServable(ctx, doer, attach, publicOnly)
 }
 
 // legacyFallbackServable authorizes an attachment that has no association at
@@ -67,7 +74,7 @@ func CanServe(ctx context.Context, doer *user_model.User, scope *repo_model.Repo
 // It is confined to attachments of unspecified purpose. An article upload
 // records its purpose, so a purposeful article attachment without associations
 // is a pending upload, which only its uploader may see.
-func legacyFallbackServable(ctx context.Context, doer *user_model.User, attach *repo_model.Attachment) (bool, error) {
+func legacyFallbackServable(ctx context.Context, doer *user_model.User, attach *repo_model.Attachment, publicOnly bool) (bool, error) {
 	if attach.Purpose != repo_model.AttachmentPurposeUnspecified || attach.RepoID == 0 {
 		return false, nil
 	}
@@ -89,6 +96,9 @@ func legacyFallbackServable(ctx context.Context, doer *user_model.User, attach *
 			return false, nil
 		}
 		return false, err
+	}
+	if publicOnly && repo.IsPrivate {
+		return false, nil
 	}
 	return repoReadable(ctx, doer, repo)
 }
