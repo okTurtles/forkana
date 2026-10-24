@@ -14,6 +14,7 @@ import (
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/modules/util"
 
 	"github.com/stretchr/testify/assert"
@@ -86,7 +87,9 @@ func TestListUnadoptedRepositories_ListOptions(t *testing.T) {
 	username := "user2"
 	unadoptedList := []string{path.Join(username, "unadopted1"), path.Join(username, "unadopted2")}
 	for _, unadopted := range unadoptedList {
-		_ = os.Mkdir(filepath.Join(setting.RepoRootPath, unadopted+".git"), 0o755)
+		dir := filepath.Join(setting.RepoRootPath, unadopted+".git")
+		_ = os.Mkdir(dir, 0o755)
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	}
 
 	opts := db.ListOptions{Page: 1, PageSize: 1}
@@ -102,6 +105,43 @@ func TestListUnadoptedRepositories_ListOptions(t *testing.T) {
 	assert.Equal(t, unadoptedList[1], repoNames[0])
 }
 
+func TestListUnadoptedRepositories_PageSizeBound(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	defer test.MockVariableValue(&setting.API.MaxResponseItems, 1)()
+
+	username := "user2"
+	unadoptedList := []string{path.Join(username, "unadopted1"), path.Join(username, "unadopted2")}
+	for _, unadopted := range unadoptedList {
+		dir := filepath.Join(setting.RepoRootPath, unadopted+".git")
+		_ = os.Mkdir(dir, 0o755)
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	}
+
+	// an oversized page size must be clamped instead of being used to size the result slice
+	opts := db.ListOptions{Page: 1, PageSize: 1 << 30}
+	repoNames, count, err := ListUnadoptedRepositories(t.Context(), "", &opts)
+	require.NoError(t, err)
+	assert.Equal(t, 1, opts.PageSize)
+	assert.Equal(t, 2, count)
+	assert.Equal(t, []string{unadoptedList[0]}, repoNames)
+
+	for _, pageSize := range []int{0, -1} {
+		opts = db.ListOptions{Page: 1, PageSize: pageSize}
+		repoNames, count, err = ListUnadoptedRepositories(t.Context(), "", &opts)
+		require.NoError(t, err)
+		assert.Equal(t, 1, opts.PageSize)
+		assert.Equal(t, 2, count)
+		assert.Equal(t, []string{unadoptedList[0]}, repoNames)
+	}
+
+	opts = db.ListOptions{Page: -3, PageSize: 1}
+	repoNames, count, err = ListUnadoptedRepositories(t.Context(), "", &opts)
+	require.NoError(t, err)
+	assert.Equal(t, 1, opts.Page)
+	assert.Equal(t, 2, count)
+	assert.Equal(t, []string{unadoptedList[0]}, repoNames)
+}
+
 func TestAdoptRepository(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 
@@ -109,6 +149,7 @@ func TestAdoptRepository(t *testing.T) {
 
 	// a successful adopt
 	destDir := filepath.Join(setting.RepoRootPath, user2.Name, "test-adopt.git")
+	t.Cleanup(func() { _ = os.RemoveAll(destDir) })
 	assert.NoError(t, unittest.SyncDirs(filepath.Join(setting.RepoRootPath, user2.Name, "repo1.git"), destDir))
 
 	adoptedRepo, err := AdoptRepository(t.Context(), user2, user2, CreateRepoOptions{Name: "test-adopt"})

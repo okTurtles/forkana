@@ -296,6 +296,7 @@ func checkUnadoptedRepositories(ctx context.Context, userName string, repoNamesT
 
 // ListUnadoptedRepositories lists all the unadopted repositories that match the provided query
 func ListUnadoptedRepositories(ctx context.Context, query string, opts *db.ListOptions) ([]string, int, error) {
+	opts.SetDefaultValues()
 	globUser, _ := glob.Compile("*")
 	globRepo, _ := glob.Compile("*")
 
@@ -324,6 +325,10 @@ func ListUnadoptedRepositories(ctx context.Context, query string, opts *db.ListO
 	}
 
 	var userName string
+
+	// checkUnadoptedRepositories looks each batch up with a query capped at MaxResponseItems,
+	// so a larger batch would miss adopted repos and report them as unadopted.
+	batchSize := min(setting.Database.IterateBufferSize, setting.API.MaxResponseItems)
 
 	// We're going to iterate by pagesize.
 	root := filepath.Clean(setting.RepoRootPath)
@@ -361,7 +366,7 @@ func ListUnadoptedRepositories(ctx context.Context, query string, opts *db.ListO
 		}
 
 		repoNamesToCheck = append(repoNamesToCheck, name)
-		if len(repoNamesToCheck) >= setting.Database.IterateBufferSize {
+		if len(repoNamesToCheck) >= batchSize {
 			if err = checkUnadoptedRepositories(ctx, userName, repoNamesToCheck, unadopted); err != nil {
 				return err
 			}
