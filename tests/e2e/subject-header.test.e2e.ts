@@ -1,5 +1,5 @@
 // #469: the subject header is the same on every view (Bubble, Table, Article) and every
-// article tab (Read, Edit, History), and an info bar never moves it on a desktop. figma
+// article tab (Read, Edit, History); an info bar sits in the flow above it. figma
 // "Notes – Width system" (7368:275653): the title block is 136px (24px, the 56px title,
 // the 32px Follow, 24px), then the 48px view tabs row; below it, the Table view and the
 // Article view's tabs are a 640px column.
@@ -73,18 +73,21 @@ test.beforeAll(async () => {
   for (const user of [owner, 'user13']) await create_article_via_api(user, subject, `${subject}-${user}`, `An article by ${user}`);
 });
 
-// Per width: the views whose header is compared with the Bubble view's (a phone keeps the
-// Edit tab's sign-in banner in the flow, above the header: tested on its own below), the
-// article tabs switched in turn, and the width of the content column.
+// Per width, signed out: the views whose header is compared with the Bubble view's, the
+// article tabs switched in turn, and the width of the content column. A signed-out
+// reader's Edit tab has the sign-in banner, which pushes the header down (tested below);
+// the signed-in tests cover the Edit tab without it.
 const layouts = [
-  {width: 1440, compared: ['table', 'read', 'history', 'edit'], tabs: ['history', 'edit', 'read'], column: 640},
-  {width: 375, compared: ['table', 'read', 'history'], tabs: ['history', 'read'], column: 343},
+  {width: 1440, column: 640},
+  {width: 375, column: 343},
 ];
+const compared = ['table', 'read', 'history'];
+const tabs = ['history', 'read'];
 
 // the url of each tab (the Read tab is the default one: its url names no mode)
 const tabUrl: Record<string, RegExp> = {read: /view=article(?!.*mode=)/, edit: /mode=edit/, history: /mode=history/};
 
-for (const {width, compared, tabs, column} of layouts) {
+for (const {width, column} of layouts) {
   test.describe(`at ${width}px`, () => {
     test.beforeEach(async ({page}) => {
       await page.setViewportSize({width, height: 900});
@@ -101,7 +104,7 @@ for (const {width, compared, tabs, column} of layouts) {
       }
     });
 
-    test('the Read / Edit / History row stays still when tabs are switched', async ({page}) => {
+    test('the Read / History row stays still when tabs are switched', async ({page}) => {
       await open(page, 'read');
       const row = await boxOf(page, '#article-tabs');
       const header = await headerOf(page);
@@ -114,7 +117,33 @@ for (const {width, compared, tabs, column} of layouts) {
       }
       // the tabs were switched without a reload, and Back still returns to the one before
       await page.goBack();
-      await expect(page.locator(shown[tabs[tabs.length - 2]])).toBeVisible({timeout: 10000});
+      await expect(page.locator(shown.history)).toBeVisible({timeout: 10000});
+    });
+
+    // Info bars stay in the flow on every width (Pierre's decision on #469): a bar sits
+    // right under the navbar, above the header, and pushes the header down by its height.
+    test('an info bar sits in the flow above the header and pushes it down by its height', async ({page}) => {
+      await open(page, 'read');
+      const reference = await headerOf(page);
+      const navbar = await boxOf(page, '#navbar');
+
+      // the Edit tab's sign-in banner
+      await open(page, 'edit');
+      await expect(page.locator('#article-signin-banner')).toBeVisible();
+      const banner = await boxOf(page, '#article-signin-banner');
+      expect(banner.y).toBe(navbar.y + navbar.height);
+      const pushed = await headerOf(page);
+      expect(pushed.title.y).toBe(reference.title.y + banner.height);
+      expect(pushed.follow.y).toBe(reference.follow.y + banner.height);
+      expect(pushed.tabs.y).toBe(reference.tabs.y + banner.height);
+
+      // the Bubble view's Compare banner
+      await open(page, 'bubble');
+      await page.locator('#compare-mode-button').click();
+      await expect(page.locator('.compare-announcement')).toBeVisible();
+      const compareBanner = await boxOf(page, '.compare-announcement');
+      expect(compareBanner.y).toBe(navbar.y + navbar.height);
+      expect((await headerOf(page)).tabs.y).toBe(reference.tabs.y + compareBanner.height);
     });
   });
 }
@@ -134,41 +163,6 @@ test('desktop: the title block is 136px and the view tabs row 48px (7368:260781,
   // 1344px wide: 48px margins
   expect(row.x).toBe(48);
   expect(row.width).toBe(1344);
-});
-
-test('desktop: an info bar is laid over the header instead of moving it', async ({page}) => {
-  await page.setViewportSize({width: 1440, height: 900});
-
-  // the Bubble view's Compare banner
-  await open(page, 'bubble');
-  const reference = await headerOf(page);
-  const navbar = await boxOf(page, '#navbar');
-  await page.locator('#compare-mode-button').click();
-  await expect(page.locator('#subject-info-bars .compare-announcement')).toBeVisible();
-  expect((await boxOf(page, '#subject-info-bars .compare-announcement')).y).toBe(navbar.y + navbar.height);
-  expectSameHeader(await headerOf(page), reference, 'bubble, compare banner');
-
-  // the Table view's
-  await open(page, 'table');
-  await page.locator('#compare-mode-button').click();
-  await expect(page.locator('#table-compare-announcement-root .compare-announcement')).toBeVisible();
-  expectSameHeader(await headerOf(page), reference, 'table, compare banner');
-
-  // the Edit tab's sign-in banner, under the navbar
-  await open(page, 'edit');
-  await expect(page.locator('#article-signin-banner')).toBeVisible();
-  expect((await boxOf(page, '#article-signin-banner')).y).toBe(navbar.y + navbar.height);
-  expectSameHeader(await headerOf(page), reference, 'edit, sign-in banner');
-});
-
-test('phone: an info bar stays in the flow, above the header', async ({page}) => {
-  await page.setViewportSize({width: 375, height: 900});
-  await open(page, 'read');
-  const reference = await headerOf(page);
-  await open(page, 'edit');
-  const banner = await boxOf(page, '#article-signin-banner');
-  expect(banner.height).toBeGreaterThan(0);
-  expect((await headerOf(page)).title.y).toBe(reference.title.y + banner.height);
 });
 
 test.describe('signed in', () => {

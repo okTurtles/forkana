@@ -40,8 +40,9 @@
      56px title (Inter 500 40/56, 7368:260785) and the 32px Follow under it
      (Action 7368:260786), with no gap between them;
    - the view tabs row (UnderNav_Views 7368:260789): 48px.
-   Info bars never push it down on a desktop: see .subject-info-bars in
-   features/subject-views.css. */
+   The info bars above it (Compare banners, notices, the sign-in banner) stay in the
+   flow on every width and push it down by their height, as figma's Announcements do
+   (7368:260311, 7368:264940). */
 /* (two classes, to win over `.repository .secondary-nav` above: the header is
    at the same y on a subject page and on the compare page, which is not a
    `.repository` page) */

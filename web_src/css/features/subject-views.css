@@ -428,56 +428,6 @@
   display: none;
 }
 
-/* ── Info bars (#469) ────────────────────────────────────────────────────────
-   The Compare banners above, the archived, transfer and invitation notices and the
-   Edit tab's sign-in banner (custom/templates/explore/repo_history.tmpl) share
-   .subject-info-bars. On a desktop it is laid over the top of the subject header,
-   right under the navbar where figma draws its Announcements (7368:260311,
-   7368:264940: 48px, edge to edge, at y 64), so that a bar coming or going never
-   changes the header's height or moves the title, the Follow button, the view tabs
-   or the content. On a phone it stays in the flow: a bar wraps to two or three lines
-   there and would cover the whole title block. `display: contents` keeps its bars
-   children of the page as far as layout goes, so the phone's Compare banner still
-   sticks to the top of the page while the graph scrolls (CompareAnnouncement.vue). */
-@media (min-width: 768px) {
-  .page-content:has(> .subject-info-bars) {
-    position: relative;
-  }
-
-  /* (!important: base.css gives the page's first child a top margin) */
-  .page-content > .subject-info-bars {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    margin: 0 !important;
-  }
-
-  /* The notices are strips like the Announcements: edge to edge, square, 48px for
-     a line of text, their content within the header's margins. (!important against
-     message.custom.css's `.ui.message { margin-top: -1px !important }`.) */
-  .subject-info-bars > .ui.message {
-    min-height: 48px;
-    margin: 0 !important;
-    padding: 14px var(--subject-margin-x);
-    border-radius: 0;
-  }
-
-  .subject-info-bars > .ui.message:has(button) {
-    padding-top: 6px;
-    padding-bottom: 6px;
-  }
-}
-
-@media (max-width: 767.98px) {
-  .subject-info-bars {
-    display: contents;
-  }
-}
-
 /* ── Transitions (#469) ──────────────────────────────────────────────────────
    The views and the Article view's tabs are already switched without a reload
    (web_src/js/features/repo-history.ts swaps only the section that changes). What
