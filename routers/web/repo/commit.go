@@ -486,6 +486,11 @@ func ArticleView(ctx *context.Context) {
 	}
 	ctx.Data["ArticleLink"] = articleLink
 
+	// this is the url repository notifications link to
+	if !markRepoNotificationsRead(ctx) {
+		return
+	}
+
 	renderArticleView(ctx)
 }
 

@@ -44,6 +44,7 @@
 @import "./features/console.css";
 @import "./features/bubble-graph.css";
 @import "./features/subject-views.css";
+@import "./features/subject-compare.css";
 
 @import "./markup/content.css";
 @import "./markup/codecopy.css";
@@ -73,6 +74,7 @@
 @import "./repo/clone.css";
 @import "./repo/commit-sign.css";
 @import "./repo/packages.css";
+@import "./repo/new-subject.css";
 
 @import "./editor/fileeditor.css";
 @import "./editor/combomarkdowneditor.css";

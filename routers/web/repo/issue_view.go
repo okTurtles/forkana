@@ -874,6 +874,10 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 					}
 				}
 				canWriteToHeadRepo = true
+			} else if pull.AllowMaintainerEdit {
+				// maintainers may push to the head branch when the PR allows edits, under the same
+				// rule the pre-receive hook enforces (the poster must be able to write the head repo)
+				canWriteToHeadRepo = issues_model.CanMaintainerWriteToBranch(ctx, perm, pull.HeadBranch, ctx.Doer)
 			}
 			// Load HeadRepo's BaseRepo if it's a fork (for "Fork of:" display)
 			if pull.HeadRepo.IsFork {
@@ -896,9 +900,6 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 			ctx.ServerError("GetUserRepoPermission", err)
 			return
 		}
-		if !canWriteToHeadRepo { // maintainers maybe allowed to push to head repo even if they can't write to it
-			canWriteToHeadRepo = pull.AllowMaintainerEdit && perm.CanWrite(unit.TypeCode)
-		}
 		allowMerge, err = pull_service.IsUserAllowedToMerge(ctx, pull, perm, ctx.Doer)
 		if err != nil {
 			ctx.ServerError("IsUserAllowedToMerge", err)
@@ -916,10 +917,16 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 	ctx.Data["ShowMergeInstructions"] = canWriteToHeadRepo
 	ctx.Data["AllowMerge"] = allowMerge
 
-	// Check if the current user is the owner of the base repository (target of the PR)
-	// This is used to restrict merge operations to repository owners only
-	isBaseRepoOwner := ctx.IsSigned && ctx.Doer.ID == pull.BaseRepo.OwnerID
-	ctx.Data["IsBaseRepoOwner"] = isBaseRepoOwner
+	// Check if the current user is the owner or a maintainer of the base repository (target
+	// of the PR). This is used to restrict merge operations to them
+	canMergeChangeRequest, err := repo_service.CanUserMergeArticleChangeRequest(ctx, ctx.Doer, pull.BaseRepo)
+	if err != nil {
+		ctx.ServerError("CanUserMergeArticleChangeRequest", err)
+		return
+	}
+	ctx.Data["CanMergeChangeRequest"] = canMergeChangeRequest
+	// the change request description keeps the possessive form for the owner only
+	ctx.Data["IsBaseRepoOwner"] = ctx.IsSigned && ctx.Doer.ID == pull.BaseRepo.OwnerID
 
 	prUnit, err := issue.Repo.GetUnit(ctx, unit.TypePullRequests)
 	if err != nil {

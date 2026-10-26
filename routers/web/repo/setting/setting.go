@@ -1197,7 +1197,7 @@ func handleSettingsPostArchive(ctx *context.Context) {
 		}
 	}
 
-	if err := repo_model.SetArchiveRepoState(ctx, repo, true); err != nil {
+	if err := repo_service.ArchiveRepository(ctx, repo); err != nil {
 		log.Error("Tried to archive a repo: %s", err)
 		ctx.Flash.Error(ctx.Tr("repo.settings.archive.error"))
 		ctx.Redirect(redirectURL)

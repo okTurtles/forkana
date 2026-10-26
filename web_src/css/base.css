@@ -58,6 +58,7 @@
   --color-button-secondary-hover-bg: #eff2f5;
   --color-button-secondary-active-bg: #e6eaef;
   --color-button-focus-ring: #b3a9ff;
+  --color-button-primary-border: #1f232826;
 }
 
 @media (min-width: 768px) and (max-width: 1200px) {

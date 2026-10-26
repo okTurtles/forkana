@@ -127,15 +127,24 @@ func CountArticleAttachmentRepos(ctx context.Context, attachmentID int64) (int64
 // shared, so it outlives its origin repository and must not be bound to it:
 // access follows the associations, exactly as LFS object access follows the
 // repositories holding the object.
-func ArticleAttachmentAccessible(ctx context.Context, user *user_model.User, attachmentID int64) (bool, error) {
+//
+// publicOnly restricts the repositories considered to non-private ones, for API
+// tokens limited to public resources.
+func ArticleAttachmentAccessible(ctx context.Context, user *user_model.User, attachmentID int64, publicOnly bool) (bool, error) {
 	if attachmentID == 0 {
 		return false, nil
 	}
-	if user != nil && user.IsAdmin {
+	if user != nil && user.IsAdmin && !publicOnly {
 		count, err := CountArticleAttachmentRepos(ctx, attachmentID)
 		return count > 0, err
 	}
-	cond := AccessibleRepositoryCondition(user, unit.TypeCode)
+	cond := builder.NewCond()
+	if user == nil || !user.IsAdmin {
+		cond = AccessibleRepositoryCondition(user, unit.TypeCode)
+	}
+	if publicOnly {
+		cond = cond.And(builder.Eq{"`repository`.is_private": false})
+	}
 	count, err := db.GetEngine(ctx).Where(cond).
 		Join("INNER", "repository", "`article_attachment`.repo_id = `repository`.id").
 		Count(&ArticleAttachment{AttachmentID: attachmentID})
