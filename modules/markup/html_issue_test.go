@@ -74,15 +74,15 @@ func TestRender_IssueList(t *testing.T) {
 	t.Run("IssueFootnote", func(t *testing.T) {
 		test(
 			"foo[^1][^2]\n\n[^1]: bar\n[^2]: baz",
-			`<p>foo<sup id="fnref:user-content-1-12345"><a href="#fn:user-content-1-12345" rel="nofollow">1 </a></sup><sup id="fnref:user-content-2-12345"><a href="#fn:user-content-2-12345" rel="nofollow">2 </a></sup></p>
-<div>
-<hr/>
+			`<p>foo<sup class="footnote-ref" id="fnref:user-content-1-12345"><a href="#fn:user-content-1-12345" rel="nofollow">[1]</a></sup><sup class="footnote-ref" id="fnref:user-content-2-12345"><a href="#fn:user-content-2-12345" rel="nofollow">[2]</a></sup></p>
+<div class="footnotes">
+<h2 class="footnotes-heading">citation.references</h2>
 <ol>
 <li id="fn:user-content-1-12345">
-<p>bar <a href="#fnref:user-content-1-12345" rel="nofollow">↩︎</a></p>
+<p><span class="footnote-backrefs"><a aria-label="citation.back_to_text" class="footnote-backref" href="#fnref:user-content-1-12345" rel="nofollow">^</a></span> bar</p>
 </li>
 <li id="fn:user-content-2-12345">
-<p>baz <a href="#fnref:user-content-2-12345" rel="nofollow">↩︎</a></p>
+<p><span class="footnote-backrefs"><a aria-label="citation.back_to_text" class="footnote-backref" href="#fnref:user-content-2-12345" rel="nofollow">^</a></span> baz</p>
 </li>
 </ol>
 </div>`,

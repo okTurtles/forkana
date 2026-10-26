@@ -9,8 +9,13 @@ package common
 import (
 	"bytes"
 	"fmt"
+	"html/template"
 	"strconv"
 	"unicode"
+
+	"code.gitea.io/gitea/modules/htmlutil"
+	"code.gitea.io/gitea/modules/markup/internal"
+	"code.gitea.io/gitea/modules/translation"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -48,6 +53,9 @@ type FootnoteLink struct {
 	ast.BaseInline
 	Index int
 	Name  []byte
+	// RefIndex is which use of the footnote this is (1 for the first): a source cited
+	// several times gets one back-link per use in the reference list (Forkana, issue #399).
+	RefIndex int
 }
 
 // Dump implements Node.Dump.
@@ -55,6 +63,7 @@ func (n *FootnoteLink) Dump(source []byte, level int) {
 	m := map[string]string{}
 	m["Index"] = strconv.Itoa(n.Index)
 	m["Name"] = fmt.Sprintf("%v", n.Name)
+	m["RefIndex"] = strconv.Itoa(n.RefIndex)
 	ast.DumpHelper(n, source, level, m, nil)
 }
 
@@ -66,11 +75,12 @@ func (n *FootnoteLink) Kind() ast.NodeKind {
 	return KindFootnoteLink
 }
 
-// NewFootnoteLink returns a new FootnoteLink node.
-func NewFootnoteLink(index int, name []byte) *FootnoteLink {
+// NewFootnoteLink returns a new FootnoteLink node for the refIndex-th use of a footnote.
+func NewFootnoteLink(index int, name []byte, refIndex int) *FootnoteLink {
 	return &FootnoteLink{
-		Index: index,
-		Name:  name,
+		Index:    index,
+		Name:     name,
+		RefIndex: refIndex,
 	}
 }
 
@@ -80,6 +90,8 @@ type FootnoteBackLink struct {
 	ast.BaseInline
 	Index int
 	Name  []byte
+	// RefCount is how many times the footnote is used in the text: one back-link per use.
+	RefCount int
 }
 
 // Dump implements Node.Dump.
@@ -87,6 +99,7 @@ func (n *FootnoteBackLink) Dump(source []byte, level int) {
 	m := map[string]string{}
 	m["Index"] = strconv.Itoa(n.Index)
 	m["Name"] = fmt.Sprintf("%v", n.Name)
+	m["RefCount"] = strconv.Itoa(n.RefCount)
 	ast.DumpHelper(n, source, level, m, nil)
 }
 
@@ -98,11 +111,12 @@ func (n *FootnoteBackLink) Kind() ast.NodeKind {
 	return KindFootnoteBackLink
 }
 
-// NewFootnoteBackLink returns a new FootnoteBackLink node.
-func NewFootnoteBackLink(index int, name []byte) *FootnoteBackLink {
+// NewFootnoteBackLink returns a new FootnoteBackLink node for a footnote used refCount times.
+func NewFootnoteBackLink(index int, name []byte, refCount int) *FootnoteBackLink {
 	return &FootnoteBackLink{
-		Index: index,
-		Name:  name,
+		Index:    index,
+		Name:     name,
+		RefCount: refCount,
 	}
 }
 
@@ -113,6 +127,8 @@ type Footnote struct {
 	Ref   []byte
 	Index int
 	Name  []byte
+	// RefCount is how many times the footnote is used in the text.
+	RefCount int
 }
 
 // Dump implements Node.Dump.
@@ -121,6 +137,7 @@ func (n *Footnote) Dump(source []byte, level int) {
 	m["Index"] = strconv.Itoa(n.Index)
 	m["Ref"] = string(n.Ref)
 	m["Name"] = string(n.Name)
+	m["RefCount"] = strconv.Itoa(n.RefCount)
 	ast.DumpHelper(n, source, level, m, nil)
 }
 
@@ -146,6 +163,9 @@ func NewFootnote(ref []byte) *Footnote {
 type FootnoteList struct {
 	ast.BaseBlock
 	Count int
+	// backToText is the back-links' label in the document's language, resolved once when the
+	// list is rendered (before its entries).
+	backToText string
 }
 
 // Dump implements Node.Dump.
@@ -303,6 +323,7 @@ func (s *footnoteParser) Parse(parent ast.Node, block text.Reader, pc parser.Con
 		return nil
 	}
 	index := 0
+	refIndex := 0
 	name := []byte{}
 	for def := list.FirstChild(); def != nil; def = def.NextSibling() {
 		d := def.(*Footnote)
@@ -316,7 +337,9 @@ func (s *footnoteParser) Parse(parent ast.Node, block text.Reader, pc parser.Con
 				}
 				d.Name = pc.IDs().Generate(val, KindFootnote)
 			}
+			d.RefCount++
 			index = d.Index
+			refIndex = d.RefCount
 			name = d.Name
 			break
 		}
@@ -325,7 +348,7 @@ func (s *footnoteParser) Parse(parent ast.Node, block text.Reader, pc parser.Con
 		return nil
 	}
 
-	return NewFootnoteLink(index, name)
+	return NewFootnoteLink(index, name, refIndex)
 }
 
 type footnoteASTTransformer struct{}
@@ -347,9 +370,12 @@ func (a *footnoteASTTransformer) Transform(node *ast.Document, reader text.Reade
 	}
 	pc.Set(footnoteListKey, nil)
 	for footnote := list.FirstChild(); footnote != nil; {
+		// Forkana (issue #399): the back-links ("^", or "^ a b" for a source cited several
+		// times) open the reference, as on Wikipedia, so they go at the start of its first
+		// paragraph rather than at the end of its last one.
 		container := footnote
 		next := footnote.NextSibling()
-		if fc := container.LastChild(); fc != nil && ast.IsParagraph(fc) {
+		if fc := container.FirstChild(); fc != nil && ast.IsParagraph(fc) {
 			container = fc
 		}
 		footnoteNode := footnote.(*Footnote)
@@ -358,7 +384,13 @@ func (a *footnoteASTTransformer) Transform(node *ast.Document, reader text.Reade
 		if index < 0 {
 			list.RemoveChild(list, footnote)
 		} else {
-			container.AppendChild(container, NewFootnoteBackLink(index, name))
+			backLink := NewFootnoteBackLink(index, name, footnoteNode.RefCount)
+			if fc := container.FirstChild(); fc != nil {
+				container.InsertBefore(container, fc, backLink)
+			} else {
+				// an empty definition (InsertBefore would count the child twice)
+				container.AppendChild(container, backLink)
+			}
 		}
 		footnote = next
 	}
@@ -378,14 +410,22 @@ func (a *footnoteASTTransformer) Transform(node *ast.Document, reader text.Reade
 
 // FootnoteHTMLRenderer is a renderer.NodeRenderer implementation that
 // renders FootnoteLink nodes.
+//
+// Forkana (issue #399) renders footnotes as numbered references, the way Wikipedia does:
+// a superscript "[1]" in the text, and a "References" list at the bottom of the document
+// whose entries open with a "^" back-link, or with "^ a b" when the source is cited more
+// than once (each letter returns to a different place in the text).
 type FootnoteHTMLRenderer struct {
 	html.Config
+	renderInternal *internal.RenderInternal
 }
 
-// NewFootnoteHTMLRenderer returns a new FootnoteHTMLRenderer.
-func NewFootnoteHTMLRenderer(opts ...html.Option) renderer.NodeRenderer {
+// NewFootnoteHTMLRenderer returns a new FootnoteHTMLRenderer. renderInternal may be nil, the
+// classes are then written as they are (and dropped by the sanitizer).
+func NewFootnoteHTMLRenderer(renderInternal *internal.RenderInternal, opts ...html.Option) renderer.NodeRenderer {
 	r := &FootnoteHTMLRenderer{
-		Config: html.NewConfig(),
+		Config:         html.NewConfig(),
+		renderInternal: renderInternal,
 	}
 	for _, opt := range opts {
 		opt.SetHTMLOption(&r.Config)
@@ -401,30 +441,95 @@ func (r *FootnoteHTMLRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegist
 	reg.Register(KindFootnoteList, r.renderFootnoteList)
 }
 
+// writeHTML writes HTML built by the renderer itself, keeping its "class" attributes through
+// the sanitizer (each tag may carry one).
+func (r *FootnoteHTMLRenderer) writeHTML(w util.BufWriter, s template.HTML) {
+	if r.renderInternal != nil {
+		s = r.renderInternal.ProtectSafeAttrs(s)
+	}
+	_, _ = w.WriteString(string(s))
+}
+
+// FootnoteRefID is the id of the refIndex-th use (1-based) of the footnote named name in the
+// text, the target of its back-link. The first use keeps the historical "fnref:<name>"; the
+// following ones add ":<n>", a character CleanValue never puts in a name.
+func FootnoteRefID(name []byte, refIndex int) string {
+	if refIndex <= 1 {
+		return "fnref:" + string(name)
+	}
+	return "fnref:" + string(name) + ":" + strconv.Itoa(refIndex)
+}
+
+// FootnoteBackLinkLetter is the letter of the n-th use (1-based) of a source cited several
+// times: a, b, …, z, aa, ab, … (Wikipedia's "^ a b").
+func FootnoteBackLinkLetter(n int) string {
+	var b []byte
+	for n > 0 {
+		n--
+		b = append([]byte{byte('a' + n%26)}, b...)
+		n /= 26
+	}
+	return string(b)
+}
+
+// documentLocale is the locale of the document the node is in: the language of its front
+// matter if it has one, else the default language (like the table of contents' title).
+func documentLocale(node ast.Node) translation.Locale {
+	for n := node; n != nil; n = n.Parent() {
+		if n.Kind() != ast.KindDocument {
+			continue
+		}
+		if lang, ok := n.AttributeString("lang"); ok {
+			switch v := lang.(type) {
+			case []byte:
+				return translation.NewLocale(string(v))
+			case string:
+				return translation.NewLocale(v)
+			}
+		}
+		break
+	}
+	return translation.NewLocale("") // the default language, as for the table of contents
+}
+
 func (r *FootnoteHTMLRenderer) renderFootnoteLink(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	if entering {
 		n := node.(*FootnoteLink)
-		is := strconv.Itoa(n.Index)
-		_, _ = w.WriteString(`<sup id="fnref:`)
-		_, _ = w.Write(n.Name)
-		_, _ = w.WriteString(`"><a href="#fn:`)
-		_, _ = w.Write(n.Name)
-		_, _ = w.WriteString(`" class="footnote-ref" role="doc-noteref">`) // FIXME: here and below, need to keep the classes
-		_, _ = w.WriteString(is)
-		_, _ = w.WriteString(` </a></sup>`) // the style doesn't work at the moment, so add a space to separate the names
+		r.writeHTML(w, htmlutil.HTMLFormat(`<sup class="footnote-ref" id="%s"><a href="#fn:%s" role="doc-noteref">[%d]</a></sup>`,
+			FootnoteRefID(n.Name, n.RefIndex), string(n.Name), n.Index))
 	}
 	return ast.WalkContinue, nil
 }
 
 func (r *FootnoteHTMLRenderer) renderFootnoteBackLink(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-	if entering {
-		n := node.(*FootnoteBackLink)
-		_, _ = w.WriteString(` <a href="#fnref:`)
-		_, _ = w.Write(n.Name)
-		_, _ = w.WriteString(`" class="footnote-backref" role="doc-backlink">`)
-		_, _ = w.WriteString("&#x21a9;&#xfe0e;")
-		_, _ = w.WriteString(`</a>`)
+	if !entering {
+		return ast.WalkContinue, nil
 	}
+	n := node.(*FootnoteBackLink)
+	label := ""
+	for p := node.Parent(); p != nil; p = p.Parent() {
+		if list, ok := p.(*FootnoteList); ok {
+			label = list.backToText
+			break
+		}
+	}
+	if label == "" {
+		label = documentLocale(node).TrString("citation.back_to_text")
+	}
+	r.writeHTML(w, `<span class="footnote-backrefs">`)
+	if n.RefCount <= 1 {
+		r.writeHTML(w, htmlutil.HTMLFormat(`<a href="#%s" class="footnote-backref" role="doc-backlink" aria-label="%s">^</a>`,
+			FootnoteRefID(n.Name, 1), label))
+	} else {
+		// Several uses: "^" is not a link, each letter is.
+		_, _ = w.WriteString("^")
+		for i := 1; i <= n.RefCount; i++ {
+			letter := FootnoteBackLinkLetter(i)
+			r.writeHTML(w, htmlutil.HTMLFormat(` <a href="#%s" class="footnote-backref" role="doc-backlink" aria-label="%s">%s</a>`,
+				FootnoteRefID(n.Name, i), label+" "+letter, letter))
+		}
+	}
+	_, _ = w.WriteString(`</span> `)
 	return ast.WalkContinue, nil
 }
 
@@ -445,34 +550,33 @@ func (r *FootnoteHTMLRenderer) renderFootnote(w util.BufWriter, source []byte, n
 }
 
 func (r *FootnoteHTMLRenderer) renderFootnoteList(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-	tag := "div"
 	if entering {
-		_, _ = w.WriteString("<")
-		_, _ = w.WriteString(tag)
-		_, _ = w.WriteString(` class="footnotes" role="doc-endnotes"`)
-		if node.Attributes() != nil {
-			html.RenderAttributes(w, node, html.GlobalAttributeFilter)
-		}
-		_ = w.WriteByte('>')
-		if r.Config.XHTML {
-			_, _ = w.WriteString("\n<hr />\n")
-		} else {
-			_, _ = w.WriteString("\n<hr>\n")
-		}
+		locale := documentLocale(node)
+		node.(*FootnoteList).backToText = locale.TrString("citation.back_to_text")
+		r.writeHTML(w, `<div class="footnotes" role="doc-endnotes">`)
+		r.writeHTML(w, htmlutil.HTMLFormat("\n<h2 class=\"footnotes-heading\">%s</h2>\n",
+			locale.TrString("citation.references")))
 		_, _ = w.WriteString("<ol>\n")
 	} else {
 		_, _ = w.WriteString("</ol>\n")
-		_, _ = w.WriteString("</")
-		_, _ = w.WriteString(tag)
-		_, _ = w.WriteString(">\n")
+		_, _ = w.WriteString("</div>\n")
 	}
 	return ast.WalkContinue, nil
 }
 
-type footnoteExtension struct{}
+type footnoteExtension struct {
+	renderInternal *internal.RenderInternal
+}
 
-// FootnoteExtension represents the Gitea Footnote
+// FootnoteExtension represents the Gitea Footnote, for the users whose output keeps no
+// classes (see NewFootnoteExtension).
 var FootnoteExtension = &footnoteExtension{}
+
+// NewFootnoteExtension returns the Gitea Footnote extension, whose rendered classes
+// ("footnote-ref", "footnotes", …) renderInternal keeps through the sanitizer.
+func NewFootnoteExtension(renderInternal *internal.RenderInternal) goldmark.Extender {
+	return &footnoteExtension{renderInternal: renderInternal}
+}
 
 // Extend extends the markdown converter with the Gitea Footnote parser
 func (e *footnoteExtension) Extend(m goldmark.Markdown) {
@@ -488,6 +592,6 @@ func (e *footnoteExtension) Extend(m goldmark.Markdown) {
 		),
 	)
 	m.Renderer().AddOptions(renderer.WithNodeRenderers(
-		util.Prioritized(NewFootnoteHTMLRenderer(), 500),
+		util.Prioritized(NewFootnoteHTMLRenderer(e.renderInternal), 500),
 	))
 }

@@ -58,7 +58,8 @@ test.describe('Article view layout (signed out)', () => {
     // items 5, 10, 11 and 12: summary, framed editor with the figma's toolbar, the tip
     await expect(page.locator('[data-role="article-summary"]')).toContainText('Summary');
     await expect(page.locator('.article-editor-box .toastui-editor-defaultUI')).toBeVisible({timeout: 10000});
-    for (const icon of ['heading', 'bold', 'italic', 'quote', 'code', 'link', 'bullet-list', 'ordered-list', 'task-list']) {
+    // (the link button is the article editor's subject link, followed by its cite button, #399)
+    for (const icon of ['heading', 'bold', 'italic', 'quote', 'code', 'forkana-subject-link', 'forkana-cite', 'bullet-list', 'ordered-list', 'task-list']) {
       // (on a narrow screen Toast UI folds the last ones into its "more" menu)
       await expect(page.locator(`.article-editor-box .toastui-editor-toolbar-icons.${icon}`)).toHaveCount(1);
     }

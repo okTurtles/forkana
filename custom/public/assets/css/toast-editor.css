@@ -592,7 +592,17 @@
   color: var(--color-primary);
 }
 
-[data-theme] .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons::before {
+/* Toast UI wraps a custom button (the article editor's link and cite, #399) in an item
+   wrapper with its own 32px box and margins: it takes the 24px buttons' place instead. */
+[data-theme] .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-item-wrapper {
+  display: flex;
+  height: 24px;
+  margin: 0;
+  line-height: 24px;
+}
+
+/* (the article editor's own link and cite buttons, #399, carry their icon as an <svg>) */
+[data-theme] .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons:not(.forkana-toolbar-icon)::before {
   content: "";
   position: absolute;
   inset: 4px;

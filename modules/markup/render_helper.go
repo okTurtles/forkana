@@ -37,6 +37,11 @@ type RenderHelperFuncs struct {
 	IsUsernameMentionable     func(ctx context.Context, username string) bool
 	RenderRepoFileCodePreview func(ctx context.Context, options RenderCodePreviewOptions) (template.HTML, error)
 	RenderRepoIssueIconTitle  func(ctx context.Context, options RenderIssueIconTitleOptions) (template.HTML, error)
+	// IsSubjectLinkExisting reports whether the subject a Forkana internal link points to
+	// exists, and when owner is not empty, whether that user has an article on it
+	// (ownerExists is subjectExists when owner is empty): one call answers both, for a link
+	// to a missing article that falls back to the subject.
+	IsSubjectLinkExisting func(ctx context.Context, subject, owner string) (subjectExists, ownerExists bool)
 }
 
 var DefaultRenderHelperFuncs *RenderHelperFuncs
