@@ -34,7 +34,9 @@ test('radio buttons are drawn in the brand purple, like the checkboxes', async (
   await context.close();
 });
 
-for (const viewport of [{width: 1440, height: 900}, {width: 375, height: 812}]) {
+// Figma Frame 1060 (3853:40362): the field and the card in one 348px column; on a phone
+// (Frame 1081, 3853:42070) the 375px frame minus 16px on each side
+for (const {viewport, columnWidth} of [{viewport: {width: 1440, height: 900}, columnWidth: 348}, {viewport: {width: 375, height: 812}, columnWidth: 343}]) {
   test(`landing search and feeds card line up at ${viewport.width}px`, async ({browser}, workerInfo) => {
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
     const page = await context.newPage();
@@ -45,6 +47,7 @@ for (const viewport of [{width: 1440, height: 900}, {width: 375, height: 812}]) 
     const feeds = await page.locator('.home-feeds-card').boundingBox();
     expect(search.x).toBeCloseTo(feeds.x, 0);
     expect(search.x + search.width).toBeCloseTo(feeds.x + feeds.width, 0);
+    expect(feeds.width).toBeCloseTo(columnWidth, 0);
     // never wider than the page (the hero keeps 16px on each side on a phone)
     expect(feeds.x).toBeGreaterThanOrEqual(16);
     expect(feeds.x + feeds.width).toBeLessThanOrEqual(viewport.width - 16);
@@ -52,8 +55,9 @@ for (const viewport of [{width: 1440, height: 900}, {width: 375, height: 812}]) 
   });
 }
 
-test('subjects are shown with the atom icon', async ({page}) => {
-  const subject = `atom-${Date.now()}`;
+test('subjects are shown with the atom icon', async ({page}, workerInfo) => {
+  // one subject per Playwright worker, which run at the same time
+  const subject = `atom-${workerInfo.workerIndex}-${Date.now()}`;
   await create_article_via_api('user2', subject, subject);
 
   await page.goto(`/explore/subjects?q=${subject}`);

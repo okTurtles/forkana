@@ -55,18 +55,15 @@
 }
 
 /* ===== Homepage column (#460) =====
-   The search field and the feeds card share one column, so their left and right edges
-   line up at every width: 348px on the signed-out Landing frame (Figma 641:65360), 560px
-   (the feeds card's width) when signed in. Both fill the column, and on a narrow screen the
-   column shrinks with the hero's 16px side padding. */
+   The search field and the feeds card share one 348px column, so their left and right edges
+   line up: Figma Frame 1060 (3853:40362) puts the field and the card in the same 348px column
+   when signed in, as wide as the field of the signed-out Landing frame (641:65360). Both fill
+   the column, and on a phone it shrinks with the hero's 16px side padding (343px, Figma Frame
+   1081 3853:42070). */
 .home-column {
   width: 100%;
   max-width: 348px;
   margin: 0 auto;
-}
-
-.home-column.home-column-with-feeds {
-  max-width: 560px;
 }
 
 /* ===== Homepage search suggestions ===== */
