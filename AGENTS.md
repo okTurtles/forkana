@@ -227,7 +227,9 @@ APP_NAME = Forkana
 PROTOCOL = http
 DOMAIN = localhost
 HTTP_PORT = 3000
-ROOT_URL = http://localhost:3000/
+; ROOT_URL defaults to {PROTOCOL}://{DOMAIN}:{HTTP_PORT}/.
+; Only set it when the public URL differs (e.g. behind a reverse proxy).
+; ROOT_URL = http://localhost:3000/
 RUN_MODE = dev
 
 [database]
