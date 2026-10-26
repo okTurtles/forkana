@@ -1,111 +1,127 @@
 {{define "shared/repo/table"}}
+{{/* The Table view, figma "Table view / Articles" (641:61176) and, in compare mode, "Table
+     view / Comparing articles" (641:61039). Sizes and colours are in
+     web_src/css/features/subject-views.css; paging, the expanded rows and compare mode in
+     web_src/js/features/repo-history-table.ts. */}}
+{{$subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)}}
 <div class="history-view-section history-view-section--table" data-view="table" {{if not .IsTableView}}hidden{{end}}>
-    <div class="ui stackable grid">
-        <div class="sixteen wide column">
-            <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-px-0 tw-border-0">
-                <h2 class="tw-text-xl tw-font-semibold tw-m-0">Articles</h2>
-                <div class="tw-flex tw-items-center tw-gap-2">
-                    <div class="ui floating dropdown button tw-border-0 tw-bg-transparent tw-shadow-none tw-hover:bg-transparent tw-active:bg-transparent tw-pr-0">
-                        <div style="transform: rotate(90deg);">
-                            {{svg "octicon-arrow-switch" 16}}
-                        </div>
-                        <span class="text tw-ml-1">Sort</span>
-                        {{svg "octicon-triangle-down" 16 "tw-ml-1"}}
-                        <div class="menu">
-                            <a class="item history-table-sort" data-sort="most_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "sort" "most_contrib" "selected" .SubjectSelected}}">Most contributors</a>
-                            <a class="item history-table-sort" data-sort="least_contrib" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "sort" "least_contrib" "selected" .SubjectSelected}}">Least contributors</a>
-                            <a class="item history-table-sort" data-sort="latest" href="{{QueryBuild (printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)) "view" "table" "sort" "latest" "selected" .SubjectSelected}}">Latest edited</a>
-                        </div>
-                    </div>
+    <div class="history-table">
+        <div class="history-table-heading">
+            <h2 class="history-table-title">{{ctx.Locale.Tr "repo.history_table_articles"}}</h2>
+            <div class="ui floating dropdown history-table-sort-button">
+                <span class="history-table-sort-icon">{{svg "octicon-arrow-switch" 16}}</span>
+                <span class="text">{{ctx.Locale.Tr "repo.history_table_sort"}}</span>
+                {{svg "octicon-triangle-down" 16 "history-table-sort-caret"}}
+                <div class="menu history-table-sort-menu">
+                    {{template "shared/repo/table_sort_item" (dict "Sort" "most_contrib" "Label" (ctx.Locale.Tr "repo.history_table_sort_most_contrib") "Current" .HistoryTableSort "SubjectPath" $subjectPath "Selected" .SubjectSelected)}}
+                    {{template "shared/repo/table_sort_item" (dict "Sort" "least_contrib" "Label" (ctx.Locale.Tr "repo.history_table_sort_least_contrib") "Current" .HistoryTableSort "SubjectPath" $subjectPath "Selected" .SubjectSelected)}}
+                    {{template "shared/repo/table_sort_item" (dict "Sort" "latest" "Label" (ctx.Locale.Tr "repo.history_table_sort_latest") "Current" .HistoryTableSort "SubjectPath" $subjectPath "Selected" .SubjectSelected)}}
                 </div>
             </div>
-
-            <div class="ui segment tw-px-0">
-                <table class="ui unstackable very basic fixed single line selectable table tw-mb-0" id="articles-table">
-                    <colgroup>
-                        <col class="checkbox">
-                        <col>
-                        <col>
-                        <col>
-                        <col class="actions">
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th></th>
-                            <th class="five wide">Contributors</th>
-                            <th class="three wide">Last edited</th>
-                            <th class="four wide">Owner</th>
-                            <th class="collapsing"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{if .HistoryForkEntries}}
-                        {{range $idx, $entry := .HistoryForkEntries}}
-                        {{$repo := $entry.Repo}}
-                        {{$repoLink := $repo.LinkCtx ctx}}
-                        <tr class="article-row" data-row="{{$idx}}" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repoLink}}">
-                            <td>
-                                <div class="ui checkbox">
-                                    <input type="checkbox" class="row-check">
-                                    <label></label>
-                                </div>
-                            </td>
-                            <td class="tw-font-semibold">{{template "shared/repo/contributor_count" (dict "Count" $entry.ContributorCount "Short" true)}}</td>
-                            <td>{{if $entry.Updated}}{{DateUtils.AbsoluteShort $entry.Updated}}{{else}}-{{end}}</td>
-                            <td>
-                                <div class="tw-flex tw-flex-col tw-gap-1">
-                                    <span class="tw-font-semibold">
-                                        {{$repo.OwnerName}}
-                                        {{if $repo.IsTombstone}}<span class="ui basic label">{{ctx.Locale.Tr "repo.tombstone.label"}}</span>{{end}}
-                                    </span>
-                                    <span class="tw-text-xs tw-text-gray-500">{{$repo.GetSubject ctx}}</span>
-                                </div>
-                            </td>
-                            <td class="collapsing tw-text-right">
-                                <button type="button" class="ui icon button row-toggle tw-border-0 tw-bg-transparent" data-target="desc-{{$idx}}" aria-label="Toggle description">
-                                    <span class="icon-down">{{svg "octicon-chevron-down"}}</span>
-                                    <span class="icon-up tw-hidden">{{svg "octicon-chevron-up"}}</span>
-                                </button>
-                            </td>
-                        </tr>
-                        <tr id="desc-{{$idx}}" class="tw-hidden">
-                            <td colspan="5">
-                                <div class="tw-pl-8 tw-pr-4 tw-py-4 tw-flex tw-items-start tw-justify-between tw-gap-4">
-                                    <div class="tw-flex tw-flex-col tw-gap-2">
-                                        <div class="tw-text-sm tw-font-semibold">{{$repo.OwnerName}}/{{$repo.Name}}</div>
-                                        <div class="tw-text-gray-600 tw-text-sm tw-leading-6">
-                                            {{if $entry.Description}}
-                                                {{$entry.Description}}
-                                            {{else}}
-                                                {{ctx.Locale.Tr "repo_no_desc"}}
-                                            {{end}}
-                                        </div>
-                                    </div>
-                                    <button type="button" class="ui button go-to-article" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repoLink}}">
-                                        View article
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {{end}}
-                        {{else if .SubjectForkGraphFailed}}
-                        {{/* the fork graph failed to build (a timeout, say): there may well be articles */}}
-                        <tr data-role="history-table-error">
-                            <td colspan="5" class="tw-text-center tw-text-sm">
-                                <span class="tw-text-red">{{ctx.Locale.Tr "repo.subject_articles_failed"}}</span>
-                                {{/* an empty href reloads the page as it is: same view, sort and selection */}}
-                                <a class="tw-ml-2" href="">{{ctx.Locale.Tr "repo.subject_articles_retry"}}</a>
-                            </td>
-                        </tr>
-                        {{else}}
-                        <tr>
-                            <td colspan="5" class="tw-text-center tw-text-sm tw-text-gray-500">No forks available.</td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
-            </div>
         </div>
+
+        <div class="history-table-box">
+            <table class="history-table-grid" id="articles-table">
+                <colgroup>
+                    <col class="history-table-col-check">
+                    <col class="history-table-col-count">
+                    <col class="history-table-col-date">
+                    <col class="history-table-col-owner">
+                    <col class="history-table-col-toggle">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th><span class="tw-sr-only">{{ctx.Locale.Tr "repo.history_table_compare_column"}}</span></th>
+                        <th>{{ctx.Locale.Tr "repo.history_table_contributors"}}</th>
+                        <th>{{ctx.Locale.Tr "repo.history_table_last_edited"}}</th>
+                        <th>{{ctx.Locale.Tr "repo.history_table_owner"}}</th>
+                        <th><span class="tw-sr-only">{{ctx.Locale.Tr "repo.history_table_summary_column"}}</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{if .HistoryForkEntries}}
+                    {{range $idx, $entry := .HistoryForkEntries}}
+                    {{$repo := $entry.Repo}}
+                    {{$repoLink := $repo.LinkCtx ctx}}
+                    <tr class="article-row" data-row="{{$idx}}" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repoLink}}" {{if $repo.IsTombstone}}data-tombstone="true"{{end}}>
+                        <td class="history-table-check">
+                            <input type="checkbox" class="row-check" aria-label="{{ctx.Locale.Tr "repo.history_table_compare_article" (printf "%s/%s" $repo.OwnerName $repo.Name)}}" {{if $repo.IsTombstone}}disabled{{end}}>
+                        </td>
+                        <td class="history-table-count">{{template "shared/repo/contributor_count" (dict "Count" $entry.ContributorCount "Short" true)}}</td>
+                        {{/* figma's date format, "03 Feb 2025" (641:61205): drawn on the server, then again in
+                             the reader's time zone (and month names) by repo-history-table.ts */}}
+                        <td>{{if $entry.Updated}}<time data-unix="{{$entry.Updated}}" datetime="{{$entry.Updated.FormatDate}}">{{$entry.Updated.Format "02 Jan 2006"}}</time>{{else}}-{{end}}</td>
+                        <td class="history-table-owner">
+                            {{$repo.OwnerName}}
+                            {{if $repo.IsTombstone}}<span class="ui basic label">{{ctx.Locale.Tr "repo.tombstone.label"}}</span>{{end}}
+                        </td>
+                        <td class="history-table-toggle-cell">
+                            <button type="button" class="row-toggle" data-target="desc-{{$idx}}" aria-expanded="false" aria-controls="desc-{{$idx}}" aria-label="{{ctx.Locale.Tr "repo.history_table_show_summary" (printf "%s/%s" $repo.OwnerName $repo.Name)}}">
+                                <span class="icon-down">{{svg "octicon-chevron-down"}}</span>
+                                <span class="icon-up tw-hidden">{{svg "octicon-chevron-up"}}</span>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr id="desc-{{$idx}}" class="article-detail-row tw-hidden">
+                        <td colspan="5">
+                            <div class="history-table-detail">
+                                {{/* The article's summary: its repository description, or else the
+                                     first paragraph of its README, fetched when the row is opened,
+                                     as the Bubble view does (an empty article and a deleted one have
+                                     none). */}}
+                                <p class="history-table-summary" data-role="summary"
+                                    {{if not (or $entry.Description $repo.IsEmpty $repo.IsTombstone)}}data-summary-src="{{AppSubUrl}}/{{PathEscape $repo.OwnerName}}/{{PathEscape $repo.Name}}/raw/branch/{{PathEscapeSegments $repo.DefaultBranch}}/README.md"{{end}}
+                                    data-empty="{{ctx.Locale.Tr "repo_no_desc"}}">{{$entry.Description}}</p>
+                                <button type="button" class="forkana-btn forkana-btn-secondary go-to-article" data-owner="{{$repo.OwnerName}}" data-subject="{{$repo.GetSubject ctx}}" data-repo="{{$repo.Name}}" data-archived="{{if $repo.IsArchived}}true{{end}}" data-article-link="{{$repoLink}}">
+                                    {{ctx.Locale.Tr "repo.history_table_go_to_article"}}
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {{end}}
+                    {{else if .SubjectForkGraphFailed}}
+                    {{/* the fork graph failed to build (a timeout, say): there may well be articles */}}
+                    <tr data-role="history-table-error">
+                        <td colspan="5" class="tw-text-center tw-text-sm">
+                            <span class="tw-text-red">{{ctx.Locale.Tr "repo.subject_articles_failed"}}</span>
+                            {{/* an empty href reloads the page as it is: same view, sort and selection */}}
+                            <a class="tw-ml-2" href="">{{ctx.Locale.Tr "repo.subject_articles_retry"}}</a>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="5" class="tw-text-center tw-text-sm tw-text-gray-500">{{ctx.Locale.Tr "repo.history_table_no_articles"}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{if .HistoryForkEntries}}
+            {{/* DataTable/Footer (641:61303): "8 of 12", then Previous / Next. Figma's page
+                 numbers are collapsed out of the design, so there are none here. */}}
+            <div class="history-table-footer" data-role="table-footer">
+                <span class="history-table-counter" data-role="table-counter" data-msg-counter="{{ctx.Locale.Tr "repo.history_table_counter"}}"></span>
+                <nav class="history-table-pagination" aria-label="{{ctx.Locale.Tr "repo.history_table_pages"}}">
+                    <button type="button" class="history-table-page-direction" data-role="table-prev">
+                        {{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "repo.issues.previous"}}</span>
+                    </button>
+                    <button type="button" class="history-table-page-direction" data-role="table-next">
+                        <span>{{ctx.Locale.Tr "repo.issues.next"}}</span>{{svg "octicon-chevron-right" 16}}
+                    </button>
+                </nav>
+            </div>
+            {{end}}
+        </div>
+        <div class="tw-sr-only" role="status" aria-live="polite" aria-atomic="true" data-role="table-status" data-msg-page="{{ctx.Locale.Tr "repo.history_table_page_status"}}"></div>
     </div>
 </div>
+{{end}}
+
+{{/* One item of the Sort menu (ActionList.Item/SingleSelect, 641:61313): the current
+     order carries figma's check mark in a 16px slot every item keeps. */}}
+{{define "shared/repo/table_sort_item"}}
+{{$current := eq .Sort .Current}}
+<a class="item history-table-sort{{if $current}} is-current{{end}}" data-sort="{{.Sort}}" {{if $current}}aria-current="true"{{end}}
+    href="{{QueryBuild .SubjectPath "view" "table" "sort" .Sort "selected" .Selected}}">
+    <span class="history-table-sort-check">{{if $current}}{{svg "octicon-check" 16}}{{end}}</span>{{.Label}}
+</a>
 {{end}}

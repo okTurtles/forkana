@@ -1,6 +1,6 @@
 import {
   canPickForCompare, compareAnnouncementFor, compareAvailableFor, replayCompareModeRequest, requestCompareMode,
-  resetCompareModeRequest, takeCompareModeRequest,
+  readCompareMessages, resetCompareModeRequest, subjectCompareUrl, takeCompareModeRequest,
 } from './compare-mode-request.ts';
 
 // the request is module state: every test starts without one
@@ -57,4 +57,19 @@ test('a compare action is announced once, the picked article first, then the ban
     .toBe('alice/moon: 1/2 selected – select one more to compare.');
   expect(compareAnnouncementFor(null, 'Select 2 articles to compare (0/2 selected).'))
     .toBe('Select 2 articles to compare (0/2 selected).');
+});
+
+test('the banner messages come from the page, with overrides and English fallbacks', () => {
+  const root = document.createElement('div');
+  root.setAttribute('data-msg-one', 'one picked');
+  root.setAttribute('data-msg-no-forks', 'no forks');
+  const messages = readCompareMessages(root, {one: `the table's one`, ready: ''});
+  expect(messages.one).toBe(`the table's one`);
+  expect(messages.unavailable).toBe('no forks');
+  expect(messages.ready).toBe('2/2 selected – ready to compare.');
+  expect(readCompareMessages(null).dismissNotice).toBe('Dismiss');
+});
+
+test(`the compare page of two owners' articles`, () => {
+  expect(subjectCompareUrl('/sub', 'Moon Landing', 'jane z', 'peter')).toBe('/sub/subject/Moon%20Landing/compare/jane%20z...peter');
 });

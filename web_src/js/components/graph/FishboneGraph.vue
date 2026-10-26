@@ -34,15 +34,15 @@ import BubbleNode from "./BubbleNode.vue";
 import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
 import { COMPARE_POPOVER_HEIGHT, COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
-import CompareAnnouncement, { type CompareAnnouncementMessages, type CompareAnnouncementState } from "./CompareAnnouncement.vue";
+import CompareAnnouncement from "./CompareAnnouncement.vue";
 import {
   COMPARE_MODE_STATE_EVENT, COMPARE_MODE_TOGGLE_EVENT, canPickForCompare, compareAnnouncementFor, compareAvailableFor,
-  replayCompareModeRequest, type CompareModeState,
+  readCompareMessages, replayCompareModeRequest, subjectCompareUrl, type CompareAnnouncementMessages,
+  type CompareAnnouncementState, type CompareModeState,
 } from "../../modules/compare-mode-request.ts";
 import type { ForkGraphNode, ForkGraphResponse } from "./fork-graph-api.ts";
 import ArticleDetailView, { type DetailOrigin } from "./ArticleDetailView.vue";
-import { GET } from "../../modules/fetch.ts";
-import { extractArticleSummary } from "./article-summary.ts";
+import { articleReadmeUrl, fetchReadmeSummary } from "./article-summary.ts";
 import ArticleHistoryPopup, { type HistoryEntry } from "./ArticleHistoryPopup.vue";
 import { attachZoomGestures, clampZoom } from "./zoom-gestures.ts";
 import { DETAIL_EDGE_MARGIN, DETAIL_VIEWPORT_CAP, detailDiameter, renderedDetailDiameter } from "./detail-size.ts";
@@ -1856,24 +1856,13 @@ async function fetchArticleSummary(n: Node) {
   if (!owner || !repo || !branch) return;
   summaryRequested.add(n.id);
   const suburl = window.config?.suburl || '';
-  const url = `${suburl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/raw/branch/${encodeURIComponent(branch)}/README.md`;
-  try {
-    const res = await GET(url);
-    if (!res.ok) {
-      /* A 404 (no README) is definitive; a server error is transient, so let
-         reopening the article retry it. */
-      if (res.status >= 500) summaryRequested.delete(n.id);
-      return;
-    }
-    const summary = extractArticleSummary(await res.text());
-    const live = state.graph[n.id];
-    if (summary && live && !live.description) live.description = summary;
-  } catch {
-    /* Network blip: allow a retry on the next open. Without a summary the
-       circle simply keeps its current layout — same as an article whose
-       repository has no description. */
-    summaryRequested.delete(n.id);
-  }
+  /* A 404 (no README) is definitive; a server error or a network blip is transient,
+     so reopening the article retries it. Without a summary the circle simply keeps
+     its current layout — same as an article whose repository has no description. */
+  const {summary, retry} = await fetchReadmeSummary(articleReadmeUrl(suburl, owner, repo, branch));
+  if (retry) summaryRequested.delete(n.id);
+  const live = state.graph[n.id];
+  if (summary && live && !live.description) live.description = summary;
 }
 
 /* An empty repository has no README and a tombstoned one deliberately shows
@@ -2557,7 +2546,7 @@ function onJointClick(joint: { id: string; sourceOwner: string; targetOwner: str
   if (joint.inert || !joint.subject || !joint.sourceOwner || !joint.targetOwner) return;
   const suburl = window.config?.suburl || '';
   const compareUrl = new URL(
-    `${suburl}/subject/${encodeURIComponent(joint.subject)}/compare/${encodeURIComponent(joint.sourceOwner)}...${encodeURIComponent(joint.targetOwner)}`,
+    subjectCompareUrl(suburl, joint.subject, joint.sourceOwner, joint.targetOwner),
     window.location.origin,
   );
   const target = state.graph[joint.targetId];
@@ -2621,19 +2610,7 @@ const liveArticleCount = computed(() => Object.values(state.graph).filter((n) =>
 const compareAvailable = computed(() => compareAvailableFor({loading: isLoading.value, failed: errorMessage.value !== null, liveArticles: liveArticleCount.value}));
 const announcementTarget = typeof document !== 'undefined' ? document.querySelector<HTMLElement>('#compare-announcement-root') : null;
 
-function readAnnouncementMessages(): CompareAnnouncementMessages {
-  const d = announcementTarget?.dataset ?? {};
-  return {
-    select: d.msgSelect || 'Select 2 articles to compare (0/2 selected).',
-    one: d.msgOne || '1/2 selected – select one more to compare.',
-    ready: d.msgReady || '2/2 selected – ready to compare.',
-    unavailable: d.msgNoForks || 'No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.',
-    compareNow: d.msgCompareNow || 'Compare now',
-    dismiss: d.msgDismiss || 'Exit compare mode',
-    dismissNotice: d.msgDismissNotice || 'Dismiss',
-  };
-}
-const announcementMessages = readAnnouncementMessages();
+const announcementMessages: CompareAnnouncementMessages = readCompareMessages(announcementTarget);
 
 const announcementState = computed<CompareAnnouncementState | null>(() => {
   if (isCompareMode.value) {
@@ -2765,8 +2742,7 @@ function goToComparison() {
   }
 
   const suburl = window.config.suburl || '';
-  const compareUrl = `${suburl}/subject/${encodeURIComponent(subject)}/compare/${encodeURIComponent(owner1)}...${encodeURIComponent(owner2)}`;
-  window.location.href = compareUrl;
+  window.location.href = subjectCompareUrl(suburl, subject, owner1, owner2);
 }
 </script>
 
