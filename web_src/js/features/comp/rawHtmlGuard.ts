@@ -11,8 +11,10 @@
 //     text, so it no longer starts with `<`;
 //   - an open tag left unfinished on its line (`<div`).
 // Such a block is now kept as a raw HTML block (Toast's `htmlComment` node, shown as source
-// text and written back byte for byte), and such inline HTML as plain text. Everything the
-// converters do understand still goes through them.
+// text and written back byte for byte). Such inline HTML is kept as an inline widget (see
+// rawInlineHtmlWidgetRule): shown as its source, not editable, written back byte for byte,
+// so editing the paragraph around a hidden `<!-- comment -->` does not save it as visible
+// text. Everything the converters do understand still goes through them.
 //
 // Saving: the WYSIWYG serializer's escaper misses the same constructs, so text typed in the
 // Visual editor such as `<!DOCTYPE html>`, `<?php` or `<div` was saved unescaped, became raw
@@ -23,6 +25,7 @@
 
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
 import type Editor from '@toast-ui/editor';
+import {stripWidgetPlaceholders} from './base64ImageWidget.ts';
 
 // Toast UI's own patterns (editor 3.2.2: HTML_TAG / reHTMLTag and reHTMLComment), written
 // out case-insensitively. The converters only cope with HTML these match at its very start.
@@ -61,11 +64,30 @@ export function escapeHtmlStarts(text: string, before = ''): string {
   });
 }
 
+// The widget raw inline HTML Toast UI cannot convert is kept in. An editor that wants it
+// lists this rule in its `widgetRules` and passes the same array to installRawHtmlGuard.
+// Toast UI writes a widget's text verbatim (`$$widgetN <!-- c -->$$`), and getMarkdown
+// strips the placeholder (installBase64WidgetPatch), which leaves the HTML as it was.
+// The rule's pattern matches nothing: these widgets are only made by the guard below, never
+// from text the user types.
+export const rawInlineHtmlWidgetRule = {
+  rule: /[^\s\S]/,
+  toDOM(text: string): HTMLElement {
+    const el = document.createElement('span');
+    el.className = 'raw-inline-html';
+    el.textContent = stripWidgetPlaceholders(text);
+    el.style.fontFamily = 'var(--fonts-monospace)';
+    el.style.opacity = '0.7';
+    return el;
+  },
+};
+
 type ToWwState = {
-  schema: {nodes: Record<string, unknown>},
+  schema: {nodes: Record<string, unknown>, text: (text: string) => unknown},
   openNode: (type: unknown) => void,
   closeNode: () => void,
   addText: (text: string) => void,
+  addNode: (type: unknown, attrs: Record<string, unknown>, content: unknown[]) => void,
 };
 type MdNode = {literal: string | null};
 type ToWwConvertor = (state: ToWwState, node: MdNode, context: unknown) => void;
@@ -80,7 +102,9 @@ type ToastConvertor = {
 
 // Installs both guards on one editor. Call it right after `new Editor(...)`, before any
 // setMarkdown. The patch is per instance: Toast UI builds the converter tables per editor.
-export function installRawHtmlGuard(editor: Editor): void {
+// `widgetRules` is the array given to the editor; without rawInlineHtmlWidgetRule in it,
+// unconvertible inline HTML is kept as plain text instead (escaped if its line is edited).
+export function installRawHtmlGuard(editor: Editor, widgetRules: readonly unknown[] = []): void {
   const convertor = (editor as {convertor?: ToastConvertor}).convertor;
   const toWw = convertor?.toWwConvertors;
   const textToMd = convertor?.toMdConvertors?.nodeTypeConvertors?.text;
@@ -102,6 +126,7 @@ export function installRawHtmlGuard(editor: Editor): void {
     state.closeNode();
   };
 
+  const widgetIndex = widgetRules.indexOf(rawInlineHtmlWidgetRule);
   const htmlInline = toWw.htmlInline;
   toWw.htmlInline = (state, node, context) => {
     const html = node.literal ?? '';
@@ -109,7 +134,13 @@ export function installRawHtmlGuard(editor: Editor): void {
       htmlInline(state, node, context);
       return;
     }
-    state.addText(html);
+    // `$$` would end the widget placeholder early.
+    if (widgetIndex < 0 || html.includes('$$')) {
+      state.addText(html);
+      return;
+    }
+    const info = `widget${widgetIndex}`;
+    state.addNode(state.schema.nodes.widget, {info}, [state.schema.text(`$$${info} ${html}$$`)]);
   };
 
   convertor.toMdConvertors.nodeTypeConvertors.text = (state, nodeInfo) => {

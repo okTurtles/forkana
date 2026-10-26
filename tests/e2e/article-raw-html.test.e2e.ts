@@ -86,11 +86,13 @@ test.describe('Article with raw HTML in the editor', () => {
       await expect(rawBlocks.filter({hasText: '<!DOCTYPE html>'})).toBeVisible();
       await expect(rawBlocks.filter({hasText: '<!-- a -- b -->'})).toBeVisible();
       await expect(rawBlocks.filter({hasText: 'div class="footer">indented'})).toBeVisible();
-      await expect(visual(page).locator('p', {hasText: 'Inline <?php echo 1; ?> instruction.'})).toBeVisible();
+      await expect(visual(page).locator('p', {hasText: 'Inline <?php echo 1; ?> instruction.'}).locator('.raw-inline-html')).toHaveText('<?php echo 1; ?>');
       expect(pageErrors).toEqual([]);
 
-      // An edit in the Visual editor saves the HTML unchanged. The commit request is
-      // answered here, so the article is not modified.
+      // Edits in the Visual editor, one of them in the paragraph with inline HTML, save the
+      // HTML unchanged. The commit request is answered here, so the article is not modified.
+      await clickAtEnd(visual(page).locator('p', {hasText: 'instruction.'}));
+      await page.keyboard.type(' Edited.');
       await clickAtEnd(visual(page).locator('p', {hasText: 'Last paragraph.'}));
       await page.keyboard.type(' Edited.');
       let posted = '';
@@ -104,7 +106,7 @@ test.describe('Article with raw HTML in the editor', () => {
       await submit.click({force: true});
       await expect.poll(() => posted, {timeout: 10000}).not.toBe('');
       // (the Source editor that wrote the article may have dropped its final newline)
-      expect(posted.replaceAll('\r\n', '\n').trimEnd()).toBe(ARTICLE.replace('Last paragraph.', 'Last paragraph. Edited.').trimEnd());
+      expect(posted.replaceAll('\r\n', '\n').trimEnd()).toBe(ARTICLE.replace('instruction.', 'instruction. Edited.').replace('Last paragraph.', 'Last paragraph. Edited.').trimEnd());
       expect(pageErrors).toEqual([]);
     } finally {
       try {

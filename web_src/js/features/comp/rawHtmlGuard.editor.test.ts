@@ -5,9 +5,9 @@
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
 import Editor from '@toast-ui/editor';
 import {installLosslessMarkdownTracker} from './losslessMarkdown.ts';
-import {installBase64WidgetPatch} from './base64ImageWidget.ts';
+import {createBase64WidgetRule, installBase64WidgetPatch} from './base64ImageWidget.ts';
 import {articleEditorMarkdownOptions} from './toastEditorOptions.ts';
-import {escapeHtmlStarts, installRawHtmlGuard, isConvertibleHtmlBlock} from './rawHtmlGuard.ts';
+import {escapeHtmlStarts, installRawHtmlGuard, isConvertibleHtmlBlock, rawInlineHtmlWidgetRule} from './rawHtmlGuard.ts';
 
 // Each of these made setMarkdown throw "Cannot read properties of null (reading '1')" in
 // Toast UI's htmlBlock / htmlInline converter, so the Edit page never loaded.
@@ -39,8 +39,11 @@ function createEditor(initialValue: string, initialEditType: 'markdown' | 'wysiw
   const textarea = document.createElement('textarea');
   textarea.value = initialValue;
   document.body.append(textarea);
-  const editor = new Editor({el, initialEditType, usageStatistics: false, ...articleEditorMarkdownOptions});
-  installRawHtmlGuard(editor);
+  const ref = {current: null as any};
+  const widgetRules = [createBase64WidgetRule(() => ref.current), rawInlineHtmlWidgetRule];
+  const editor = new Editor({el, initialEditType, usageStatistics: false, widgetRules, ...articleEditorMarkdownOptions});
+  ref.current = editor;
+  installRawHtmlGuard(editor, widgetRules);
   installBase64WidgetPatch(editor);
   installLosslessMarkdownTracker(editor, textarea);
   return {editor, textarea, el};
@@ -129,6 +132,58 @@ describe('text typed in the Visual editor', () => {
     const reopened = createEditor(markdown);
     await flush();
     expect(visualText(reopened.el)).toContain(`${typed} Hello world`);
+  });
+});
+
+// Review of #471, finding 1: inline HTML Toast UI cannot convert is a widget, not text, so
+// it is not escaped (and a hidden comment not made visible) when its paragraph is edited.
+describe('inline HTML Toast UI cannot convert, in a paragraph edited in the Visual editor', () => {
+  test.each([
+    '<!-- c -->',
+    '<?php echo 1; ?>',
+    '<!DOCTYPE x>',
+    '<![CDATA[x]]>',
+  ])('%s is saved unchanged', async (html) => {
+    const {editor, el} = createEditor(`a ${html} b\n\nOther paragraph.\n`);
+    await flush();
+    expect(el.querySelector('.toastui-editor-ww-container .raw-inline-html').textContent).toBe(html);
+    const view = editor.wwEditor.view;
+    let pos = -1;
+    view.state.doc.descendants((node: any, at: number) => {
+      if (pos < 0 && node.isText && node.text === ' b') pos = at + node.text.length;
+      return pos < 0;
+    });
+    view.dispatch(view.state.tr.insertText(' edited', pos, pos));
+    await flush();
+    expect(editor.getMarkdown().trimEnd()).toBe(`a ${html} b edited\n\nOther paragraph.`);
+  });
+
+  test('and in the Source editor after the Visual edit', async () => {
+    const {editor} = createEditor('a <!-- c --> b\n');
+    await flush();
+    typeInVisual(editor, 'x ');
+    await flush();
+    editor.changeMode('markdown');
+    await flush();
+    expect(editor.getMarkdown().trimEnd()).toBe('x a <!-- c --> b');
+  });
+});
+
+// Review of #471, finding 2: only plain (and link) text goes through the escaping text
+// writer; code is written verbatim by Toast UI's own paths (convertInline's noEscape for
+// inline code, the code block writer). Pinned so a Toast UI upgrade that moves them shows.
+describe('typed `<div>` outside plain text', () => {
+  test.each([
+    ['inline code', (schema: any) => schema.nodes.paragraph.create(null, schema.text('<div>', [schema.marks.code.create()])), '`<div>`'],
+    ['a code block', (schema: any) => schema.nodes.codeBlock.create(null, schema.text('<div>')), '```\n<div>\n```'],
+    ['a link text', (schema: any) => schema.nodes.paragraph.create(null, schema.text('<div>', [schema.marks.link.create({linkUrl: 'https://example.com'})])), '[\\<div>](https://example.com)'],
+  ])('in %s', async (_where, build, saved) => {
+    const {editor} = createEditor('Hello world\n');
+    await flush();
+    const view = editor.wwEditor.view;
+    view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, build(view.state.schema)));
+    await flush();
+    expect(editor.getMarkdown().trimEnd()).toBe(saved);
   });
 });
 
