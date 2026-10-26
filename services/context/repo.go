@@ -438,7 +438,7 @@ func repoAssignment(ctx *Context, repo *repo_model.Repository) {
 	// argument, which the template engine cannot always supply.
 	ctx.Data["SubjectName"] = ctx.Repo.Repository.GetSubject(ctx)
 	// what a shared link to any page of the article shows (#450)
-	ctx.Data[sharemeta.DataKey] = sharemeta.ForArticle(ctx, repo, ctx.Link)
+	ctx.Data[sharemeta.DataKey] = sharemeta.ForArticle(ctx, repo, ctx.Link, ctx.Repo.Permission.CanRead(unit_model.TypeCode))
 }
 
 // grantArticleInviteeAccess gives a user invited to collaborate on a private article read

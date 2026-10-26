@@ -1,4 +1,4 @@
-// Copyright 2026 The Forkana Authors. All rights reserved.
+// Copyright 2026 okTurtles Foundation. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package sharemeta
@@ -35,6 +35,12 @@ func TestFirstParagraph(t *testing.T) {
 			assert.Equal(t, c.expected, FirstParagraph([]byte(c.markdown)))
 		})
 	}
+}
+
+func TestTextSummary(t *testing.T) {
+	assert.Empty(t, TextSummary(""))
+	assert.Equal(t, "Fixes the dates, see the source.",
+		TextSummary("## Summary\n\n**Fixes** the dates, see [the source](https://example.com/a-very-long-url).\n\n- details"))
 }
 
 func TestEllipsis(t *testing.T) {

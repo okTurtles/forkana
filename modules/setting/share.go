@@ -1,4 +1,4 @@
-// Copyright 2026 The Forkana Authors. All rights reserved.
+// Copyright 2026 okTurtles Foundation. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package setting

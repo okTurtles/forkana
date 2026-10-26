@@ -5,12 +5,17 @@ package integration
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"code.gitea.io/gitea/models/organization"
 	repo_model "code.gitea.io/gitea/models/repo"
+	"code.gitea.io/gitea/models/unit"
+	"code.gitea.io/gitea/models/unittest"
 	"code.gitea.io/gitea/modules/setting"
+	repo_service "code.gitea.io/gitea/services/repository"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/PuerkitoBio/goquery"
@@ -21,7 +26,18 @@ import (
 // shareTags are the og: and twitter: tags of a page, by property or name.
 func shareTags(t *testing.T, link string) map[string]string {
 	t.Helper()
-	resp := MakeRequest(t, NewRequest(t, "GET", link), http.StatusOK)
+	return sessionShareTags(t, nil, link)
+}
+
+// sessionShareTags are the share tags of a page as the session's user (signed out when nil) sees it.
+func sessionShareTags(t *testing.T, session *TestSession, link string) map[string]string {
+	t.Helper()
+	var resp *httptest.ResponseRecorder
+	if session != nil {
+		resp = session.MakeRequest(t, NewRequest(t, "GET", link), http.StatusOK)
+	} else {
+		resp = MakeRequest(t, NewRequest(t, "GET", link), http.StatusOK)
+	}
 	doc := NewHTMLParser(t, resp.Body)
 	tags := map[string]string{}
 	doc.Find(`head meta`).Each(func(_ int, s *goquery.Selection) {
@@ -113,4 +129,39 @@ func TestShareMeta(t *testing.T) {
 		assert.True(t, strings.HasPrefix(tags["og:description"], "A long summary of the article."), tags["og:description"])
 		assert.True(t, strings.HasSuffix(tags["og:description"], "…"), tags["og:description"])
 	})
+}
+
+// TestShareMetaWithoutCodeAccess checks that a viewer who may not read an article's code
+// is not shared its README: org3/repo3 is private, its README's first paragraph is
+// "Description for repo3", and user15 is only given access to its issues (team 7).
+func TestShareMetaWithoutCodeAccess(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 3})
+	require.True(t, repo.IsPrivate)
+	require.Empty(t, repo.Description)
+	team := unittest.AssertExistsAndLoadBean(t, &organization.Team{ID: 7})
+	require.NoError(t, team.LoadUnits(t.Context()))
+	require.False(t, team.UnitEnabled(t.Context(), unit.TypeCode), "team 7 must not read code")
+	require.True(t, team.UnitEnabled(t.Context(), unit.TypeIssues))
+	require.NoError(t, repo_service.TeamAddRepository(t.Context(), team, repo))
+
+	const readme = "Description for repo3"
+	issuesLink := "/" + repo.OwnerName + "/" + repo.Name + "/issues"
+	issueLink := issuesLink + "/1"
+
+	issuesOnly := loginUser(t, "user15")
+	tags := sessionShareTags(t, issuesOnly, issuesLink)
+	assertSiteShareTags(t, tags)
+	assert.Equal(t, setting.ForkanaDescription, tags["og:description"])
+	tags = sessionShareTags(t, issuesOnly, issueLink)
+	assertSiteShareTags(t, tags)
+	assert.NotContains(t, tags["og:description"], readme)
+	// the issue's own content, which the viewer reads on the page anyway
+	assert.Equal(t, "content6", tags["og:description"])
+
+	// a reader of the code is shared the README
+	owner := loginUser(t, "user2")
+	tags = sessionShareTags(t, owner, issuesLink)
+	assert.Equal(t, readme, tags["og:description"])
 }

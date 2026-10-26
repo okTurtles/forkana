@@ -37,6 +37,7 @@ import (
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/services/context"
 	repo_service "code.gitea.io/gitea/services/repository"
+	"code.gitea.io/gitea/services/sharemeta"
 )
 
 const (
@@ -875,7 +876,7 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	}
 
 	// Find README.md file
-	readmeFile := findReadmeInEntries(entries)
+	readmeFile := sharemeta.FindReadme(entries)
 	if readmeFile == nil {
 		ctx.Data["ReadmeError"] = "No README.md file found in repository"
 		return
@@ -1160,20 +1161,6 @@ func listArticleForks(ctx *context.Context, page int) {
 	}
 	ctx.Data["ArticleForks"] = rows
 	setHistoryPage(ctx, int(total), page, len(rows))
-}
-
-// findReadmeInEntries finds a README file in the given entries
-func findReadmeInEntries(entries []*git.TreeEntry) *git.TreeEntry {
-	// Look for readme.md (case insensitive)
-	for _, entry := range entries {
-		if entry.IsRegular() || entry.IsExecutable() {
-			name := strings.ToLower(entry.Name())
-			if name == "readme.md" || name == "readme" || name == "readme.txt" {
-				return entry
-			}
-		}
-	}
-	return nil
 }
 
 // getReadmeContent reads content from a blob

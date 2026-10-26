@@ -17,17 +17,13 @@
 		{{- /* a change request of the article */ -}}
 		{{- $title = printf "%s · %s" .Issue.Title $siteName -}}
 		{{- $url = .Issue.HTMLURL ctx -}}
-		{{- if .Issue.Content -}}
-			{{- $description = StringUtils.EllipsisString .Issue.Content 200 -}}
-		{{- end -}}
+		{{- with ShareTextSummary .Issue.Content -}}{{- $description = . -}}{{- end -}}
 	{{- end -}}
 {{- else if .PageIsUserProfile -}}
 	{{- $title = printf "%s · %s" .ContextUser.DisplayName $siteName -}}
 	{{- $type = "profile" -}}
 	{{- $url = .ContextUser.HTMLURL ctx -}}
-	{{- if .ContextUser.Description -}}
-		{{- $description = StringUtils.EllipsisString .ContextUser.Description 200 -}}
-	{{- end -}}
+	{{- with ShareTextSummary .ContextUser.Description -}}{{- $description = . -}}{{- end -}}
 {{- else if .Title -}}
 	{{- $title = printf "%s · %s" .Title $siteName -}}
 {{- end -}}

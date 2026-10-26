@@ -1,4 +1,4 @@
-// Copyright 2026 The Forkana Authors. All rights reserved.
+// Copyright 2026 okTurtles Foundation. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 // Package sharemeta builds what a link to a subject or an article shows when it is shared
@@ -103,7 +103,10 @@ func subjectDescription(ctx context.Context, subject *repo_model.Subject, mainAr
 // ForArticle is the share data of an article page (any page of an article: its view, its
 // editor, its change requests): its subject and owner, and its summary. link is the page
 // requested, the canonical article url replaces it when it names the article itself.
-func ForArticle(ctx context.Context, repo *repo_model.Repository, link string) *Meta {
+// canReadCode tells whether the viewer may read the article's code: one who may not (a
+// collaborator with issue access only, a repository whose code unit is disabled) gets
+// its description alone, never its README.
+func ForArticle(ctx context.Context, repo *repo_model.Repository, link string, canReadCode bool) *Meta {
 	pageURL := httplib.MakeAbsoluteURL(ctx, link)
 	if strings.EqualFold(strings.TrimSuffix(link, "/"), repo.LinkCtx(ctx)) {
 		pageURL = repo.HTMLURL(ctx)
@@ -113,20 +116,35 @@ func ForArticle(ctx context.Context, repo *repo_model.Repository, link string) *
 		Type:  "article",
 		URL:   pageURL,
 		describe: func() string {
+			if !canReadCode {
+				return articleDescription(repo)
+			}
 			return ArticleSummary(ctx, repo)
 		},
 	}
+}
+
+// articleDescription is the article's description (public repository metadata), cut to
+// MaxDescriptionLength characters; none for a tombstone.
+func articleDescription(repo *repo_model.Repository) string {
+	if repo == nil || repo.IsTombstone() {
+		return ""
+	}
+	return Ellipsis(collapseSpaces(repo.Description), MaxDescriptionLength)
+}
+
+// TextSummary is the plain text of the first paragraph of a markdown text (a change
+// request's content, a profile's description), cut to MaxDescriptionLength characters.
+func TextSummary(markdown string) string {
+	return Ellipsis(FirstParagraph([]byte(markdown)), MaxDescriptionLength)
 }
 
 // ArticleSummary is the article's summary: its description, or else the first paragraph
 // of its README stripped of markdown, at most MaxDescriptionLength characters. A deleted
 // article (a tombstone) has none: its content must not be served.
 func ArticleSummary(ctx context.Context, repo *repo_model.Repository) string {
-	if repo == nil || repo.IsTombstone() {
-		return ""
-	}
-	if desc := collapseSpaces(repo.Description); desc != "" {
-		return Ellipsis(desc, MaxDescriptionLength)
+	if desc := articleDescription(repo); desc != "" || repo == nil || repo.IsTombstone() {
+		return desc
 	}
 	if repo.IsEmpty || repo.IsBroken() {
 		return ""
@@ -154,7 +172,7 @@ func readReadme(ctx context.Context, repo *repo_model.Repository) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
-	entry := findReadme(entries)
+	entry := FindReadme(entries)
 	if entry == nil {
 		return nil, nil
 	}
@@ -166,8 +184,9 @@ func readReadme(ctx context.Context, repo *repo_model.Repository) ([]byte, error
 	return io.ReadAll(io.LimitReader(rc, maxReadmeBytes))
 }
 
-// findReadme finds the README the article view renders (see explore.findReadmeInEntries).
-func findReadme(entries []*git.TreeEntry) *git.TreeEntry {
+// FindReadme finds the README among a tree's entries: the one the article view renders
+// (routers/web/explore), and so the one its shared summary is taken from.
+func FindReadme(entries []*git.TreeEntry) *git.TreeEntry {
 	for _, entry := range entries {
 		if entry.IsRegular() || entry.IsExecutable() {
 			switch strings.ToLower(entry.Name()) {

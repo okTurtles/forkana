@@ -23,6 +23,7 @@ import (
 	"code.gitea.io/gitea/modules/templates/eval"
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/services/gitdiff"
+	"code.gitea.io/gitea/services/sharemeta"
 	"code.gitea.io/gitea/services/webtheme"
 )
 
@@ -129,6 +130,7 @@ func NewFuncMap() template.FuncMap {
 		// what a shared link shows (base/head_opengraph, #450)
 		"ShareSiteName":        setting.ShareSiteName,
 		"ShareSiteDescription": setting.ShareSiteDescription,
+		"ShareTextSummary":     sharemeta.TextSummary,
 		"ShareImage": func(ctx context.Context) map[string]any {
 			return map[string]any{
 				"URL":    httplib.MakeAbsoluteURL(ctx, setting.StaticURLPrefix+"/assets"+setting.ShareImagePath),
