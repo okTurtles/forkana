@@ -15,7 +15,13 @@ func NewTemplateContext(ctx context.Context) TemplateContext {
 }
 
 func (c TemplateContext) parentContext() context.Context {
-	return c["_ctx"].(context.Context)
+	if parent, ok := c["_ctx"].(context.Context); ok {
+		return parent
+	}
+	// The error pages (500, 503) and the install page render with a minimal template
+	// context that has no request context. A template asking it for a value (an
+	// absolute url in base/head_opengraph) then gets none instead of a panic.
+	return context.Background()
 }
 
 func (c TemplateContext) Deadline() (deadline time.Time, ok bool) {

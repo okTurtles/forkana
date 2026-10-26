@@ -7,7 +7,8 @@
 {{- $title := $siteName -}}
 {{- $description := ShareSiteDescription -}}
 {{- $type := "website" -}}
-{{- $url := AbsoluteURL ctx .Link -}}
+{{- /* the error and install pages have no .Link: the app url then */ -}}
+{{- $url := AbsoluteURL ctx (or .Link "") -}}
 {{- if .ShareMeta -}}
 	{{- $title = .ShareMeta.Title -}}
 	{{- $description = .ShareMeta.Description -}}

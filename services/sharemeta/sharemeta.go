@@ -86,10 +86,8 @@ func subjectDescription(ctx context.Context, subject *repo_model.Subject, mainAr
 	if err != nil {
 		log.Warn("CountReadableArticlesBySubjectIDs for subject %d: %v", subject.ID, err)
 	}
-	count := counts[subject.ID]
-	if count < 1 {
-		count = 1 // the page renders the main article, so there is at least that one
-	}
+	// the page renders the main article, so there is at least that one
+	count := max(counts[subject.ID], 1)
 	articles := strconv.FormatInt(count, 10) + " article"
 	if count != 1 {
 		articles += "s"
