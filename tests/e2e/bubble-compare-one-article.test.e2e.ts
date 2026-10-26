@@ -78,6 +78,7 @@ test('signed out, "Fork this article" in the notice leads to sign in, then the f
 test.describe('signed in', () => {
   test.beforeAll(async ({browser}, workerInfo) => {
     await login_user(browser, workerInfo, 'user2');
+    await login_user(browser, workerInfo, 'user12');
   });
 
   test('"Fork this article" in the notice leads to the article\'s Fork button (#451 item 2)', async ({browser}, workerInfo) => {
@@ -91,6 +92,17 @@ test.describe('signed in', () => {
     await expect(link).toHaveAttribute('href', /\/subject\/[^?]+\/user12\?view=article&mode=edit$/);
     await link.click();
     await expect(page.locator('#fork-article-button')).toBeVisible();
+    await context.close();
+  });
+
+  test('the article\'s owner, who cannot fork it, is told so instead of offered a Fork link (#451 item 2)', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user12');
+    const page = await context.newPage();
+    const button = await openBubbleView(page);
+    await button.dispatchEvent('click');
+    const banner = page.locator('#compare-announcement-root .compare-announcement');
+    await expect(banner).toContainText('No forks yet. Compare needs at least 2 articles. Comparing starts once someone forks this article.');
+    await expect(banner.getByRole('link')).toHaveCount(0);
     await context.close();
   });
 });

@@ -64,14 +64,11 @@
    forks yet" tooltip draws it (7368:260912, #451): #25292e, radius 6, 8px around Inter
    400 12/18 in white (a **bold** lead in 600), the arrow #1f2328. Below-end, the arrow
    is not centred on the target: its centre is 21.25px in from the box's right edge
-   (Vector 1 7368:260914 at 265 of 294, 15.5 wide). The same in both themes, like the
-   tooltip theme. */
+   (Vector 1 7368:260914 at 265 of 294, 15.5 wide). The colours are tokens of
+   colors.custom.css, the same in both themes, like the tooltip theme. */
 .tippy-box[data-theme="forkana"] {
-  --forkana-tooltip-bg: #25292e;
-  --forkana-tooltip-arrow: #1f2328;
-  --forkana-tooltip-text: #ffffff;
-  background-color: var(--forkana-tooltip-bg);
-  color: var(--forkana-tooltip-text);
+  background-color: var(--color-forkana-tooltip-bg);
+  color: var(--color-forkana-tooltip-text);
   border: none;
   border-radius: 6px;
 }
@@ -88,7 +85,7 @@
 }
 
 .tippy-box[data-theme="forkana"] .tippy-svg-arrow-inner {
-  fill: var(--forkana-tooltip-arrow);
+  fill: var(--color-forkana-tooltip-arrow);
 }
 
 .tippy-box[data-theme="forkana"][data-placement="bottom-end"] > .tippy-svg-arrow {

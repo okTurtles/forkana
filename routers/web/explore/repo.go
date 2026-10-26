@@ -572,6 +572,7 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	if graph := subjectForkGraph(ctx); graph != nil && ctx.Data["IsArticleView"] != true {
 		ctx.PageData["subjectForkGraph"] = graph
 	}
+	setCompareForkLink(ctx)
 
 	// A tombstone keeps its git data on disk only so that its forks retain a valid
 	// ancestor. The git repository is deliberately left unopened, so no file, README or
@@ -784,6 +785,37 @@ func setArticleSignInLinks(ctx *context.Context) {
 	back := url.QueryEscape(currentURL)
 	ctx.Data["ArticleSignInLink"] = setting.AppSubURL + "/user/login?redirect_to=" + back
 	ctx.Data["ArticleSignUpLink"] = setting.AppSubURL + "/user/sign_up?redirect_to=" + back
+}
+
+// setCompareForkLink sets where the Compare banner's "No forks yet" notice leads with
+// "Fork this article" (#451), on a subject with a single article, the only one that
+// shows the notice: the article's Edit tab, whose Fork button forks it, or for a
+// signed-out reader the sign-in page, which returns there. A signed-in reader who
+// cannot fork the article (its owner or a maintainer, or one blocked by the subject
+// rule) gets no link, by the very rule the Edit tab offers its Fork button by
+// (NeedsFork, prepareArticleForkOnEditData), and the notice says so instead
+// ("CompareCannotFork").
+func setCompareForkLink(ctx *context.Context) {
+	graph := subjectForkGraph(ctx)
+	if graph == nil || liveArticleCount(graph.Articles()) != 1 {
+		return
+	}
+	editLink := ctx.Repo.Repository.LinkCtx(ctx) + "?view=article&mode=edit"
+	if ctx.Doer == nil {
+		ctx.Data["CompareForkLink"] = setting.AppSubURL + "/user/login?redirect_to=" + url.QueryEscape(editLink)
+		return
+	}
+	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, ctx.Repo.Repository)
+	if err != nil {
+		// only a link of a notice: the page is still rendered, the notice without it
+		log.Warn("CheckForkOnEditPermissions for %s: %v", ctx.Repo.Repository.FullName(), err)
+		return
+	}
+	if perms.NeedsFork {
+		ctx.Data["CompareForkLink"] = editLink
+	} else {
+		ctx.Data["CompareCannotFork"] = true
+	}
 }
 
 // loadArticleBaseRepo loads the repository a fork was made from, for the "Fork of:"
