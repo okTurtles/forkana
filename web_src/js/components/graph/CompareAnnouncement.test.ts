@@ -53,6 +53,17 @@ test('"Compare now" is offered once two are picked and the Compare box is closed
   expect(events).toEqual(['compare']);
 });
 
+test('"No forks yet" links "Fork this article" to the fork flow (#451)', () => {
+  const unavailableLink = {before: 'No forks yet. Compare needs at least 2 articles. ', text: 'Fork this article', href: '/subject/Moon/alice?view=article&mode=edit', after: ' to start comparing.'};
+  const {root} = mount({state: 'unavailable', messages: {...messages, unavailableLink}});
+  expect(text(root)).toBe(messages.unavailable);
+  const link = root.querySelector<HTMLAnchorElement>('.compare-announcement-message a');
+  expect(link.textContent).toBe('Fork this article');
+  expect(link.getAttribute('href')).toBe(unavailableLink.href);
+  // only that notice has the link
+  expect(mount({state: 'select', messages: {...messages, unavailableLink}}).root.querySelector('a')).toBeNull();
+});
+
 test('the x dismisses it', async () => {
   const {root, events} = mount({state: 'select'});
   const x = root.querySelector<HTMLButtonElement>('.compare-announcement-dismiss');

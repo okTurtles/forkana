@@ -47,18 +47,35 @@ export type CompareAnnouncementMessages = {
   dismiss: string;
   /** The x's label on the `unavailable` notice, which it only hides. */
   dismissNotice: string;
+  /** The `unavailable` message split around its "Fork this article" link (#451), or null
+     when the page gives no fork url: the message is then plain text. */
+  unavailableLink?: CompareMessageLink | null;
 };
+
+/** A message with one link in it: `before`, the link's `text` to `href`, then `after`. */
+export type CompareMessageLink = {before: string; text: string; href: string; after: string};
 
 /** The banner's localized messages, from the `data-msg-*` attributes the subject page puts
    on `root` (#compare-announcement-root), with English fallbacks. `overrides` replaces
    some of them (the Table view's own one-picked message); empty ones are ignored. */
 export function readCompareMessages(root: Element | null, overrides: Partial<CompareAnnouncementMessages> = {}): CompareAnnouncementMessages {
   const msg = (name: string) => root?.getAttribute(`data-msg-${name}`);
+  /* "No forks yet" comes with a %s where its "Fork this article" link goes (#451): the
+     link's text fills it for the plain message (what a screen reader hears), and the
+     banner draws it as a link to the page's fork url. */
+  const noForks = msg('no-forks') || 'No forks yet. Compare needs at least 2 articles. %s to start comparing.';
+  const forkText = msg('fork-link') || 'Fork this article';
+  const forkUrl = root?.getAttribute('data-fork-url');
+  const slot = noForks.indexOf('%s');
+  const unavailableLink = forkUrl && slot >= 0 ?
+    {before: noForks.slice(0, slot), text: forkText, href: forkUrl, after: noForks.slice(slot + 2)} :
+    null;
   return {
     select: overrides.select || msg('select') || 'Select 2 articles to compare (0/2 selected).',
     one: overrides.one || msg('one') || '1/2 selected – select one more to compare.',
     ready: overrides.ready || msg('ready') || '2/2 selected – ready to compare.',
-    unavailable: overrides.unavailable || msg('no-forks') || 'No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.',
+    unavailable: overrides.unavailable || noForks.replace('%s', () => forkText),
+    unavailableLink: overrides.unavailable ? null : unavailableLink,
     compareNow: overrides.compareNow || msg('compare-now') || 'Compare now',
     dismiss: overrides.dismiss || msg('dismiss') || 'Exit compare mode',
     dismissNotice: overrides.dismissNotice || msg('dismiss-notice') || 'Dismiss',

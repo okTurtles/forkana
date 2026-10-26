@@ -23,6 +23,15 @@ async function openGraph(page: Page) {
   return joint;
 }
 
+test('a hovered point of contention stays opaque: no connector shows through it (#447)', async ({page}) => {
+  const joint = await openGraph(page);
+  await joint.hover();
+  await expect(joint).toHaveCSS('stroke-width', '3px');
+  // the resting fill (--bubble-joint-fill, white in the light theme), not a translucent tint
+  // of the brand, which let the line the dot sits on show through
+  await expect(joint).toHaveCSS('fill', 'rgb(255, 255, 255)');
+});
+
 test('a point of contention is selected on its own, and Back returns to it (#431 items 1, 3, 5)', async ({page}) => {
   const joint = await openGraph(page);
   await joint.click();

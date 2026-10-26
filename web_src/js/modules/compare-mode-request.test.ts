@@ -70,6 +70,23 @@ test('the banner messages come from the page, with overrides and English fallbac
   expect(readCompareMessages(null).dismissNotice).toBe('Dismiss');
 });
 
+test('"No forks yet" links "Fork this article" to the page\'s fork url (#451)', () => {
+  const root = document.createElement('div');
+  root.setAttribute('data-msg-no-forks', 'No forks yet. %s to start comparing.');
+  root.setAttribute('data-msg-fork-link', 'Fork $& this');
+  root.setAttribute('data-fork-url', '/user/login?redirect_to=%2Fsubject%2FMoon');
+  const messages = readCompareMessages(root);
+  // the plain message (the screen reader's) has the link's text in place of the %s
+  expect(messages.unavailable).toBe('No forks yet. Fork $& this to start comparing.');
+  expect(messages.unavailableLink).toEqual({
+    before: 'No forks yet. ', text: 'Fork $& this', href: '/user/login?redirect_to=%2Fsubject%2FMoon', after: ' to start comparing.',
+  });
+  // no fork url on the page: plain text
+  root.removeAttribute('data-fork-url');
+  expect(readCompareMessages(root).unavailableLink).toBeNull();
+  expect(readCompareMessages(null).unavailable).toBe('No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.');
+});
+
 test(`the compare page of two owners' articles`, () => {
   expect(subjectCompareUrl('/sub', 'Moon Landing', 'jane z', 'peter')).toBe('/sub/subject/Moon%20Landing/compare/jane%20z...peter');
 });

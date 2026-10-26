@@ -143,12 +143,19 @@
     {{/* The Compare mode banner (figma "Announcement" 641:61937 / 641:61765 / 641:61848 /
          6661:53348) is drawn here, under the navbar and above the subject, by the bubble
          view (FishboneGraph teleports CompareAnnouncement.vue into it). The strings come
-         from the locale file. */}}
+         from the locale file. The "No forks yet" notice (6661:53348) links "Fork this
+         article" (the %s of its message) to the fork flow: the Edit tab of the article,
+         whose Fork button forks it, or for a signed-out reader sign in first, as the
+         other Fork buttons do. */}}
+    {{$forkLink := printf "%s?view=article&mode=edit" (.Repository.LinkCtx ctx)}}
+    {{if not .IsSigned}}{{$forkLink = printf "%s/user/login?redirect_to=%s" AppSubUrl (QueryEscape $forkLink)}}{{end}}
     <div id="compare-announcement-root"
         data-msg-select="{{ctx.Locale.Tr "repo.compare_mode_select"}}"
         data-msg-one="{{ctx.Locale.Tr "repo.compare_mode_one_selected"}}"
         data-msg-ready="{{ctx.Locale.Tr "repo.compare_mode_ready"}}"
-        data-msg-no-forks="{{ctx.Locale.Tr "repo.compare_mode_no_forks"}}"
+        data-msg-no-forks="{{ctx.Locale.Tr "repo.compare_mode_no_forks" "%s"}}"
+        data-msg-fork-link="{{ctx.Locale.Tr "repo.compare_mode_fork_link"}}"
+        data-fork-url="{{$forkLink}}"
         data-msg-compare-now="{{ctx.Locale.Tr "repo.compare_mode_compare_now"}}"
         data-msg-dismiss="{{ctx.Locale.Tr "repo.compare_mode_dismiss"}}"
         data-msg-dismiss-notice="{{ctx.Locale.Tr "repo.compare_mode_dismiss_notice"}}"></div>

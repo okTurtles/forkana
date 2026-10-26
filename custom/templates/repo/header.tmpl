@@ -48,6 +48,8 @@
 				data-label-off="{{ctx.Locale.Tr "repo.compare_mode"}}"
 				data-label-on="{{ctx.Locale.Tr "repo.compare_mode_on"}}"
 				data-unavailable="{{ctx.Locale.Tr "repo.compare_mode_unavailable"}}"
+				{{/* that tooltip hangs below the button, flush with its right edge (6661:52942, #451) */}}
+				data-tooltip-placement="bottom-end"
 				aria-label="{{ctx.Locale.Tr "repo.compare_mode"}}">
 				{{svg "forkana-file-diff-24" 16}}<span class="not-mobile tw-ml-1" data-role="compare-label">{{ctx.Locale.Tr "repo.compare_mode"}}</span>
 			</button>
