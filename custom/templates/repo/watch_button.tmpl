@@ -1,0 +1,24 @@
+{{/* The Article view's Watch button, at the end of the tabs' row (#433 item 3, figma
+     "View Tab" 641:65480, its trailing "Action" I641:65480;8575:17229;24375:95729): an
+     eye-24 icon and an Inter 600 14/20 #25292e label in a borderless 6/12-padded button,
+     always labelled "Watch" and marked pressed while the article is watched. It toggles
+     the same watch as the subject header's Follow star (repo/watch_unwatch), which the
+     Article view hides, and keeps that star in step: it sends the star's article id
+     (#repo-header-follow-sync) and, when that is its own article, ActionWatch answers
+     with the star too, out of band. It posts with style=button so that ActionWatch
+     answers with this template. A signed-out reader is sent to sign in. */}}
+{{if $.IsSigned}}
+<form class="article-watch-form" hx-boost="true" hx-target="this" hx-swap="outerHTML" hx-include="#repo-header-follow-sync" method="post" action="{{$.RepoOperationsLink}}/action/{{if $.IsWatchingRepo}}unwatch{{else}}watch{{end}}?style=button">
+	<button type="submit" class="forkana-btn forkana-btn-tertiary article-action-button" data-role="article-watch" aria-pressed="{{if $.IsWatchingRepo}}true{{else}}false{{end}}">
+		{{svg "octicon-eye" 16}}
+		<span>{{ctx.Locale.Tr "repo.watch"}}</span>
+	</button>
+</form>
+{{/* answering the button: the subject header's star for the same article, out of band */}}
+{{if $.WatchSyncFollow}}<div id="repo-header-follow-slot" hx-swap-oob="innerHTML">{{template "repo/watch_unwatch" $}}</div>{{end}}
+{{else}}
+<a class="forkana-btn forkana-btn-tertiary article-action-button" data-role="article-watch" href="{{$.ArticleSignInLink}}" data-tooltip-content="{{ctx.Locale.Tr "repo.article_watch_guest_user"}}">
+	{{svg "octicon-eye" 16}}
+	<span>{{ctx.Locale.Tr "repo.watch"}}</span>
+</a>
+{{end}}

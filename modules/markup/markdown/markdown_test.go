@@ -17,6 +17,7 @@ import (
 	"code.gitea.io/gitea/modules/util"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -546,4 +547,24 @@ func TestMarkdownLink(t *testing.T) {
 <a href="/base/foo" rel="nofollow">link2</a>
 <a href="#user-content-foo" rel="nofollow">link3</a></p>
 `, string(result))
+}
+
+// TestRenderMetaAs covers the markdownRenderMetaAs meta, which the article view sets to
+// "none" so that an article's front matter is not shown (#433).
+func TestRenderMetaAs(t *testing.T) {
+	input := "---\ntitle: \"Prodromus\"\nlicense: CC BY-SA 4.0\n---\n\ntest\n"
+
+	res, err := markdown.RenderString(markup.NewTestRenderContext(map[string]string{"markdownRenderMetaAs": "none"}), input)
+	require.NoError(t, err)
+	assert.Equal(t, "<p>test</p>\n", string(res))
+
+	res, err = markdown.RenderString(markup.NewTestRenderContext(), input)
+	require.NoError(t, err)
+	assert.Contains(t, string(res), `<details class="frontmatter-content">`, "the default stays a collapsed table")
+
+	// the front matter's own setting still wins
+	res, err = markdown.RenderString(markup.NewTestRenderContext(map[string]string{"markdownRenderMetaAs": "none"}),
+		"---\ngitea:\n  meta: table\nkey: val\n---\ntest\n")
+	require.NoError(t, err)
+	assert.Contains(t, string(res), "<table>")
 }

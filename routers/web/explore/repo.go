@@ -6,18 +6,24 @@ package explore
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
+	"maps"
 	"net/http"
+	"net/url"
 	"path"
 	"sort"
 	"strings"
 
 	"code.gitea.io/gitea/models/db"
+	git_model "code.gitea.io/gitea/models/git"
+	access_model "code.gitea.io/gitea/models/perm/access"
 	"code.gitea.io/gitea/models/renderhelper"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/cache"
 	"code.gitea.io/gitea/modules/charset"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/gitrepo"
@@ -533,6 +539,13 @@ func RenderRepositoryHistory(ctx *context.Context) {
 		return
 	}
 
+	// Where a signed-out reader is sent to sign in or up from the article (the banner of
+	// the Edit tab, its Fork and Submit changes buttons, the Watch button): back to this
+	// very page, query included, so that the view, the tab and the selection are kept.
+	if ctx.Doer == nil {
+		setArticleSignInLinks(ctx)
+	}
+
 	// Set up basic repository data
 	title := ctx.Repo.Repository.Owner.Name + "/" + ctx.Repo.Repository.Name + " (History)"
 	if ctx.Repo.Repository.Description != "" {
@@ -764,6 +777,47 @@ func handleRepoHistoryFeed(ctx *context.Context) bool {
 	return false
 }
 
+// setArticleSignInLinks sets the sign in and sign up links of a signed-out reader's
+// article page, which return to the page requested.
+func setArticleSignInLinks(ctx *context.Context) {
+	currentURL, _ := ctx.Data["CurrentURL"].(string) // AppSubURL + the request's URI
+	back := url.QueryEscape(currentURL)
+	ctx.Data["ArticleSignInLink"] = setting.AppSubURL + "/user/login?redirect_to=" + back
+	ctx.Data["ArticleSignUpLink"] = setting.AppSubURL + "/user/sign_up?redirect_to=" + back
+}
+
+// loadArticleBaseRepo loads the repository a fork was made from, for the "Fork of:"
+// line, when the reader may see it: a public fork of an article made private since
+// would otherwise name that article. A failed lookup leaves the line out.
+func loadArticleBaseRepo(ctx *context.Context) {
+	repo := ctx.Repo.Repository
+	if !repo.IsFork || repo.BaseRepo != nil {
+		return
+	}
+	base, err := repo_model.GetRepositoryByID(ctx, repo.ForkID)
+	if err != nil {
+		if !repo_model.IsErrRepoNotExist(err) {
+			log.Error("the base repository of %s: %v", repo.FullName(), err)
+		}
+		return
+	}
+	if base.IsPrivate {
+		perm, err := access_model.GetUserRepoPermission(ctx, base, ctx.Doer)
+		if err != nil {
+			log.Error("GetUserRepoPermission on %s: %v", base.FullName(), err)
+			return
+		}
+		if !perm.HasAnyUnitAccessOrPublicAccess() {
+			return
+		}
+	}
+	if err := base.LoadOwner(ctx); err != nil {
+		log.Error("the owner of %s: %v", base.FullName(), err)
+		return
+	}
+	repo.BaseRepo = base
+}
+
 // prepareArticleView prepares data for the article view (README display with read/edit/history/settings modes)
 // refPath is the reference path for rendering (e.g., "branch/main" or "commit/abc123")
 func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries []*git.TreeEntry, refPath string) {
@@ -784,6 +838,11 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	if _, ok := ctx.Data["ArticleLink"]; !ok {
 		ctx.Data["ArticleLink"] = ctx.Repo.Repository.LinkCtx(ctx)
 	}
+
+	// The path block names the article a fork was made from ("Fork of: …"). Only some
+	// routes load the base repository (not the subject page's article selection), and it
+	// is only a line of the page, so a failed lookup is logged and the line left out.
+	loadArticleBaseRepo(ctx)
 
 	// The Settings tab is only rendered for the article owner and the delegates managing
 	// its collaborators, so both must be known in every mode (edit mode refines ownership
@@ -876,6 +935,15 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			}).
 				WithMarkupType(markupType).
 				WithRelativePath(readmeTreePath)
+			// The article's front matter (the imports' title, source, license, attribution,
+			// fetched_at) is not shown: the figma's Read tab (641:65454) goes from the
+			// summary straight to the article. (A copy: the metas may be shared.)
+			metas := maps.Clone(rctx.RenderOptions.Metas)
+			if metas == nil {
+				metas = map[string]string{}
+			}
+			metas["markdownRenderMetaAs"] = string(markup.RenderMetaAsNone)
+			rctx = rctx.WithMetas(metas)
 
 			rd := charset.ToUTF8WithFallbackReader(io.MultiReader(bytes.NewReader(buf), dataRc), charset.ConvertOpts{})
 			var escapeStatus *charset.EscapeStatus
@@ -930,16 +998,25 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		// Set up fork-on-edit context data
 		prepareArticleForkOnEditData(ctx)
 	case "history":
-		// For history mode, get file commit history
-		commitsCount, err := gitRepo.FileCommitsCount(defaultBranch, readmeTreePath)
-		if err != nil {
-			ctx.ServerError("FileCommitsCount", err)
-			return
-		}
-
+		// The Sort menu (#435, figma 641:64306/641:64307) switches the table between the
+		// article's changes (its commit history, the default) and its forks. Its parameter
+		// is not "sort", which the Table view's own Sort menu uses on the same page.
 		page := ctx.FormInt("page")
 		if page <= 0 {
 			page = 1
+		}
+		if ctx.FormString("history") == "forks" {
+			ctx.Data["HistorySort"] = "forks"
+			listArticleForks(ctx, page)
+			return
+		}
+		ctx.Data["HistorySort"] = "changes"
+
+		// the History tab lists the changes to the article's file, so its pager counts those
+		commitsCount, err := readmeCommitsCount(ctx, gitRepo, defaultBranch, readmeTreePath, lastCommit)
+		if err != nil {
+			ctx.ServerError("FileCommitsCount", err)
+			return
 		}
 
 		commits, err := gitRepo.CommitsByFileAndRange(
@@ -961,13 +1038,128 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		}
 
 		ctx.Data["Commits"] = processedCommits
+		ctx.Data["CommitsFromOtherArticles"] = commitsFromOtherArticles(ctx, processedCommits)
 		ctx.Data["CommitCount"] = commitsCount
 		ctx.Data["FileTreePath"] = readmeTreePath
-
-		pager := context.NewPagination(int(commitsCount), setting.Git.CommitsRangeSize, page, 5)
-		pager.AddParamFromRequest(ctx.Req)
-		ctx.Data["Page"] = pager
+		setHistoryPage(ctx, int(commitsCount), page, len(processedCommits))
 	}
+}
+
+// commitsFromOtherArticles tells, by commit id, which changes of the History tab came
+// from another article (#435 item 12): a commit is the article's own when its author may
+// write to it (its owner, an organization's member, a collaborator, one of its
+// maintainers) and, for a fork, when it was made after the fork was created; anything
+// older came with the fork. A commit whose author has no account here is left as the
+// article's own.
+func commitsFromOtherArticles(ctx *context.Context, commits []*user_model.UserCommit) map[string]bool {
+	repo := ctx.Repo.Repository
+	canWrite := map[int64]bool{}
+	result := make(map[string]bool, len(commits))
+	for _, c := range commits {
+		if repo.IsFork && repo.CreatedUnix > 0 && c.Author != nil && c.Author.When.Before(repo.CreatedUnix.AsTime()) {
+			result[c.ID.String()] = true
+			continue
+		}
+		if c.User == nil {
+			continue
+		}
+		writes, ok := canWrite[c.User.ID]
+		if !ok {
+			writes = c.User.ID == repo.OwnerID
+			if !writes {
+				if perm, err := access_model.GetUserRepoPermission(ctx, repo, c.User); err == nil {
+					writes = perm.CanWrite(unit.TypeCode)
+				} else {
+					log.Warn("GetUserRepoPermission of %d on %s: %v", c.User.ID, repo.FullName(), err)
+				}
+			}
+			if !writes {
+				// the article's maintainers (#445) edit it directly too
+				if maintainer, err := repo_model.IsAcceptedArticleMaintainer(ctx, repo.ID, c.User.ID); err == nil {
+					writes = maintainer
+				} else {
+					log.Warn("IsAcceptedArticleMaintainer of %d on %s: %v", c.User.ID, repo.FullName(), err)
+				}
+			}
+			canWrite[c.User.ID] = writes
+		}
+		if !writes {
+			result[c.ID.String()] = true
+		}
+	}
+	return result
+}
+
+// readmeCommitsCount counts the commits of the default branch that changed the article's
+// file, cached under the last of them (nil: not cached). That last commit is looked up
+// from HEAD (GetCommitByPath) while the count runs on the default branch: the two agree
+// because Gitea keeps HEAD on the default branch (SetDefaultBranch moves both).
+func readmeCommitsCount(ctx *context.Context, gitRepo *git.Repository, branch, treePath string, lastCommit *git.Commit) (int64, error) {
+	count := func() (int64, error) { return gitRepo.FileCommitsCount(branch, treePath) }
+	if lastCommit == nil {
+		return count()
+	}
+	return cache.GetInt64(fmt.Sprintf("article-readme-commits:%d:%s:%s", ctx.Repo.Repository.ID, treePath, lastCommit.ID.String()), count)
+}
+
+// setHistoryPage sets the History tab's pager and the range its footer shows ("51-100
+// of 335", #435 item 13): the rows of this page, or none past the last page.
+func setHistoryPage(ctx *context.Context, total, page, rows int) {
+	pager := context.NewPagination(total, setting.Git.CommitsRangeSize, page, 5)
+	pager.AddParamFromRequest(ctx.Req)
+	ctx.Data["Page"] = pager
+	ctx.Data["HistoryTotal"] = total
+	if rows > 0 {
+		first := (page-1)*setting.Git.CommitsRangeSize + 1
+		ctx.Data["HistoryFirst"] = first
+		ctx.Data["HistoryLast"] = first + rows - 1
+	}
+}
+
+// articleForkRow is a row of the History tab's Forks listing (#435).
+type articleForkRow struct {
+	Repo *repo_model.Repository
+	// HeadCommitID is the head of the fork's default branch, empty when unknown.
+	HeadCommitID string
+}
+
+// listArticleForks sets the given page of the History tab's Forks listing: the direct
+// forks of the article shown that the doer may see, the most recently updated first,
+// with their branch heads as the branch table records them. A failed lookup is shown as
+// such (ArticleForksError) rather than as an article without forks.
+func listArticleForks(ctx *context.Context, page int) {
+	forks, total, err := repo_service.FindForksByLatestUpdate(ctx, ctx.Repo.Repository, ctx.Doer,
+		db.ListOptions{Page: page, PageSize: setting.Git.CommitsRangeSize})
+	if err != nil {
+		log.Error("FindForksByLatestUpdate for %s: %v", ctx.Repo.Repository.FullName(), err)
+		ctx.Data["ArticleForksError"] = true
+		return
+	}
+	forkList := repo_model.RepositoryList(forks)
+	if err := forkList.LoadOwners(ctx); err != nil {
+		log.Warn("LoadOwners for the forks of %s: %v", ctx.Repo.Repository.FullName(), err)
+	}
+	if err := forkList.LoadSubjects(ctx); err != nil {
+		log.Warn("LoadSubjects for the forks of %s: %v", ctx.Repo.Repository.FullName(), err)
+	}
+
+	var heads map[int64]string
+	if len(forks) > 0 { // (with no forks, the lookup's condition would be empty)
+		repoBranches := make(map[int64]string, len(forks))
+		for _, fork := range forks {
+			repoBranches[fork.ID] = fork.DefaultBranch
+		}
+		if heads, err = git_model.FindBranchesByRepoAndBranchName(ctx, repoBranches); err != nil {
+			log.Warn("branch heads of the forks of %s: %v", ctx.Repo.Repository.FullName(), err)
+		}
+	}
+
+	rows := make([]*articleForkRow, 0, len(forks))
+	for _, fork := range forks {
+		rows = append(rows, &articleForkRow{Repo: fork, HeadCommitID: heads[fork.ID]})
+	}
+	ctx.Data["ArticleForks"] = rows
+	setHistoryPage(ctx, int(total), page, len(rows))
 }
 
 // findReadmeInEntries finds a README file in the given entries

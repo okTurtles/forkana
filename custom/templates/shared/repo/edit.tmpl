@@ -1,38 +1,7 @@
 {{define "shared/repo/edit"}}
 {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}
-<div class="ui bottom attached">
-    <div class="tw-mb-4 tw-flex tw-items-center tw-justify-between">
-        <div>
-            <h2 class="tw-text-xl tw-font-semibold tw-m-0">
-                {{/* owner / repo */}}
-                {{if .Repository.Owner}}
-                    <a class="tw-text-primary" href="{{.Repository.Owner.HomeLink}}">{{.Repository.Owner.Name}}</a>
-                    <span class="tw-text-gray-400">/</span>
-                {{end}}
-                <a class="muted" href="{{.RepoLink}}">{{.Repository.Name}}</a>
-            </h2>
-            <div class="tw-mt-1 tw-text-sm tw-text-gray-600">
-                {{if .Repository.IsFork}}
-                    <span class="tw-inline-flex tw-items-center">
-                        {{svg "octicon-repo-forked" 14 "tw-mr-1"}}
-                        {{ctx.Locale.Tr "repo.editor.forked_of"}}
-                        {{if .Repository.BaseRepo}}
-                            {{/* Go html/template automatically HTML-escapes these strings to prevent XSS */}}
-                            <a class="tw-ml-1" href="{{.Repository.BaseRepo.Link}}">{{.Repository.BaseRepo.OwnerName}} / {{.Repository.BaseRepo.Name}}</a>
-                        {{else}}
-                            {{/* Go html/template automatically HTML-escapes these strings to prevent XSS */}}
-                            <span class="tw-ml-1">{{.Repository.Owner.Name}} / {{.Repository.Name}}</span>
-                        {{end}}
-                    </span>
-                {{end}}
-            </div>
-        </div>
-        <div class="tw-flex tw-items-center tw-gap-3">
-            <a class="tw-font-bold tw-inline-flex tw-items-center muted" href="#" data-global-click="onCopyContentButtonClick" data-clipboard-text="{{.Repository.Owner.Name}}/{{.Repository.Name}}@{{.BranchName}}">
-                {{svg "octicon-link" 14 "tw-mr-1"}} {{ctx.Locale.Tr "repo.editor.copy_ref"}}
-            </a>
-        </div>
-    </div>
+<div class="ui bottom attached article-mode-body">
+    {{template "shared/repo/article_path" .}}
     {{if .NotEditableReason}}
         <div class="ui warning message">
             <h4>{{.NotEditableReason}}</h4>
@@ -59,6 +28,16 @@
             </p>
         </div>
     {{else}}
+        {{/* #434 item 5: the Summary block (figma Textarea 641:65697, I6961:75226): an Inter 600 14/20
+             label, 4px above a white box with a 1px #d1d9e0 border, 6px radius and 8px 16px
+             padding around Inter 400 16/24 #59636e text. It shows the article's description;
+             it is not part of what the editor submits (the article file), so it is read-only. */}}
+        <div class="article-summary-field" data-role="article-summary">
+            <div class="article-summary-label">{{ctx.Locale.Tr "repo.article_summary"}}</div>
+            <div class="article-summary-box">{{or .Repository.Description (ctx.Locale.Tr "repo.article_summary_empty")}}</div>
+            {{/* FormControl.Caption I6961:75226;30948:151243: Inter 400 12/18 #59636e, 4px under the box */}}
+            <div class="article-summary-caption">{{ctx.Locale.Tr "repo.article_summary_caption" 200}}</div>
+        </div>
         {{/* Editor form */}}
         <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoOperationsLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}"
               data-can-edit-directly="{{if .CanEditDirectly}}true{{else}}false{{end}}"
@@ -81,12 +60,23 @@
             <input type="hidden" id="change_request_title" name="change_request_title" value="">
             <input type="hidden" id="change_request_description" name="change_request_description" value="">
 
-             <div class="field">
+             {{/* #434 items 10-12: the editor sits in one bordered box (figma "Markdown
+                  comment" 641:65701: 1px #d1d9e0, 6px radius) with the writing area framed
+                  inside it (Form/Textarea 641:65705) and the contribution tip at its
+                  foot (Tip 641:65771). Its toolbar is styled in toast-editor.css. */}}
+             <div class="field article-editor-box">
                  <div class="tw-p-0">
                      {{template "shared/citation_editor" .}}
                      <textarea id="edit_area" name="content" class="tw-hidden" data-id="repo-{{.Repository.Name}}-{{.ReadmeTreePath}}" data-raw-file-url="{{.RepoOperationsLink}}/raw/branch/{{PathEscapeSegments .BranchName}}/{{PathEscapeSegments .ReadmeTreePath}}" {{if .IsAttachmentEnabled}}data-attachment-upload-url="{{.RepoLink}}/editor-attachments"{{end}}>{{.FileContent}}</textarea>
                      <div class="editor-loading is-loading"></div>
                      <div id="toast-editor-container" style="min-height: 500px;"></div>
+                 </div>
+                 <div class="article-editor-tip" data-role="article-contribution-tip">
+                     {{svg "octicon-info" 16}}
+                     {{/* the contributing guidelines and the code of conduct are the Community
+                          notes and Terms pages of the footer: pages to be added later (Pierre,
+                          review finding 17 of #457) */}}
+                     <span>{{ctx.Locale.Tr "repo.article_contribution_tip" (print AppSubUrl "/community-notes") (print AppSubUrl "/terms")}}</span>
                  </div>
              </div>
         </form>
