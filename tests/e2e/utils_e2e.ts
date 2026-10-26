@@ -1,4 +1,4 @@
-import {expect} from '@playwright/test';
+import {expect, request} from '@playwright/test';
 import {chmod, readFile, writeFile} from 'node:fs/promises';
 import {isAbsolute, join, resolve} from 'node:path';
 import {cwd, env} from 'node:process';
@@ -154,6 +154,30 @@ export async function disableGeneratedHooks(owner: string, repoName: string): Pr
     }
     await chmod(hookPath, 0o755);
   }));
+}
+
+/**
+ * Create an article of `subjectName` owned by the fixture user `user`, through the API
+ * (POST /api/v1/user/repos, basic auth): a repository named `repoName`, with
+ * `description` and the default README, so that it is an article of the subject's fork
+ * graph (an empty repository is not). Independent of the create form's layout, which
+ * differs on a phone.
+ */
+export async function create_article_via_api(user: string, subjectName: string, repoName: string, description = ''): Promise<void> {
+  // with exactly one trailing slash, so the relative path below stays under a sub-path
+  const baseURL = `${(env.GITEA_URL || 'http://localhost:3000').replace(/\/+$/, '')}/`;
+  const api = await request.newContext({
+    baseURL,
+    extraHTTPHeaders: {Authorization: `Basic ${Buffer.from(`${user}:${LOGIN_PASSWORD}`).toString('base64')}`},
+  });
+  try {
+    const response = await api.post('api/v1/user/repos', {
+      data: {name: repoName, subject: subjectName, description, auto_init: true, readme: 'Default'},
+    });
+    expect(response.status(), await response.text()).toBe(201);
+  } finally {
+    await api.dispose();
+  }
 }
 
 /**

@@ -874,6 +874,10 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 					}
 				}
 				canWriteToHeadRepo = true
+			} else if pull.AllowMaintainerEdit {
+				// maintainers may push to the head branch when the PR allows edits, under the same
+				// rule the pre-receive hook enforces (the poster must be able to write the head repo)
+				canWriteToHeadRepo = issues_model.CanMaintainerWriteToBranch(ctx, perm, pull.HeadBranch, ctx.Doer)
 			}
 			// Load HeadRepo's BaseRepo if it's a fork (for "Fork of:" display)
 			if pull.HeadRepo.IsFork {
@@ -895,9 +899,6 @@ func preparePullViewReviewAndMerge(ctx *context.Context, issue *issues_model.Iss
 		if err != nil {
 			ctx.ServerError("GetUserRepoPermission", err)
 			return
-		}
-		if !canWriteToHeadRepo { // maintainers maybe allowed to push to head repo even if they can't write to it
-			canWriteToHeadRepo = pull.AllowMaintainerEdit && perm.CanWrite(unit.TypeCode)
 		}
 		allowMerge, err = pull_service.IsUserAllowedToMerge(ctx, pull, perm, ctx.Doer)
 		if err != nil {

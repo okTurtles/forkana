@@ -1,5 +1,6 @@
 import {createApp, nextTick} from 'vue';
-import CompareAnnouncement, {type CompareAnnouncementMessages} from './CompareAnnouncement.vue';
+import CompareAnnouncement from './CompareAnnouncement.vue';
+import type {CompareAnnouncementMessages} from '../../modules/compare-mode-request.ts';
 
 const messages: CompareAnnouncementMessages = {
   select: 'Select 2 articles to compare (0/2 selected).',

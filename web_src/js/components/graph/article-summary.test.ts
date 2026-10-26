@@ -1,4 +1,28 @@
-import {extractArticleSummary} from './article-summary.ts';
+import {articleReadmeUrl, extractArticleSummary, fetchReadmeSummary} from './article-summary.ts';
+
+describe('articleReadmeUrl', () => {
+  test('escapes each segment, keeping the slashes of a branch', () => {
+    expect(articleReadmeUrl('/sub', 'jane z', 'moon', 'feature/x y')).toBe('/sub/jane%20z/moon/raw/branch/feature/x%20y/README.md');
+  });
+});
+
+describe('fetchReadmeSummary', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('a 404 is final, a server or network error may be retried', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockResolvedValueOnce(new Response('', {status: 404}));
+    expect(await fetchReadmeSummary('/x')).toEqual({summary: '', retry: false});
+    fetchSpy.mockResolvedValueOnce(new Response('', {status: 502}));
+    expect(await fetchReadmeSummary('/x')).toEqual({summary: '', retry: true});
+    fetchSpy.mockRejectedValueOnce(new TypeError('network'));
+    expect(await fetchReadmeSummary('/x')).toEqual({summary: '', retry: true});
+    fetchSpy.mockResolvedValueOnce(new Response('# T\n\nBody.'));
+    expect(await fetchReadmeSummary('/x')).toEqual({summary: 'Body.', retry: false});
+  });
+});
 
 describe('extractArticleSummary', () => {
   test('strips front matter, skips heading and fence, unwraps links and emphasis', () => {

@@ -40,10 +40,13 @@ func TestSortHistoryTableEntries(t *testing.T) {
 	latest := rows()
 	sortHistoryTableEntries(latest, "latest")
 	assert.Equal(t, []string{"b", "d", "c", "a"}, names(latest))
+}
 
-	unsorted := rows()
-	sortHistoryTableEntries(unsorted, "")
-	assert.Equal(t, []string{"a", "b", "c", "d"}, names(unsorted), "anything else keeps the graph's order")
+func TestHistoryTableSort(t *testing.T) {
+	assert.Equal(t, "most_contrib", historyTableSort(""), "figma's Table view opens on Most contributors")
+	assert.Equal(t, "most_contrib", historyTableSort("bogus"))
+	assert.Equal(t, "least_contrib", historyTableSort("least_contrib"))
+	assert.Equal(t, "latest", historyTableSort("latest"))
 }
 
 func TestLiveArticleCount(t *testing.T) {
