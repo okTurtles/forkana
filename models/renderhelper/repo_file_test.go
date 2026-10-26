@@ -124,7 +124,7 @@ func TestRepoFileOrgMode(t *testing.T) {
 		assert.NoError(t, err)
 		// Repository 1 has subject_id 1, which is "example-subject"
 		assert.Equal(t, `<p>
-<a href="https://google.com/" rel="nofollow">https://google.com/</a>
+<a href="https://google.com/" class="external-link" rel="nofollow">https://google.com/</a>
 <a href="/subject/example-subject/user2/src/commit/1234/my-dir/ImageLink.svg" rel="nofollow">The Image Desc</a></p>
 `, rendered)
 	})

@@ -27,6 +27,7 @@
 			{{if not .NotEditableReason}}
 				<div class="field">
 					<div class="tw-p-0">
+						{{template "shared/citation_editor" .}}
 						<textarea id="edit_area" name="content" class="tw-hidden" data-id="repo-{{.Repository.Name}}-{{.TreePath}}"
 							data-previewable-extensions="{{.PreviewableExtensions}}"
 							data-line-wrap-extensions="{{.LineWrapExtensions}}"

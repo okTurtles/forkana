@@ -1,0 +1,374 @@
+// Copyright 2026 okTurtles Foundation. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+package citation
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"code.gitea.io/gitea/modules/test"
+
+	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/time/rate"
+)
+
+func TestNormalizeDOI(t *testing.T) {
+	for in, want := range map[string]string{
+		"10.1126/science.167.3918.449":                 "10.1126/science.167.3918.449",
+		"doi:10.1126/science.167.3918.449":             "10.1126/science.167.3918.449",
+		"https://doi.org/10.1126/science.167.3918.449": "10.1126/science.167.3918.449",
+		"https://dx.doi.org/10.1038/nature12373.":      "10.1038/nature12373",
+		"https://example.com/10.1126/x":                "",
+		"978-0-670-81446-6":                            "",
+		"":                                             "",
+	} {
+		assert.Equal(t, want, NormalizeDOI(in), in)
+	}
+}
+
+func TestNormalizeISBN(t *testing.T) {
+	for in, want := range map[string]string{
+		"978-0-670-81446-6":      "9780670814466",
+		"ISBN 978-0-670-81446-6": "9780670814466",
+		"0-670-81446-6":          "0670814466",
+		"0-8044-2957-X":          "080442957X",
+		"978-0-670-81446-7":      "", // bad check digit
+		"10.1126/science":        "",
+		"https://example.com/":   "",
+	} {
+		assert.Equal(t, want, NormalizeISBN(in), in)
+	}
+}
+
+func parse(t *testing.T, pageURL, page string) *Source {
+	t.Helper()
+	u, err := url.Parse(pageURL)
+	require.NoError(t, err)
+	return ParsePage(strings.NewReader(page), u)
+}
+
+func TestParsePage_Website(t *testing.T) {
+	src := parse(t, "https://nssdc.gsfc.nasa.gov/nmc/spacecraft/display.action?id=1959-014A", `<!doctype html>
+<html><head><title>
+  Luna 2
+</title></head><body><h1>Luna 2</h1></body></html>`)
+	assert.Equal(t, &Source{Type: TypeWebsite, Title: "Luna 2", Site: "nssdc.gsfc.nasa.gov"}, src)
+}
+
+func TestParsePage_NewsOpenGraph(t *testing.T) {
+	src := parse(t, "https://www.theguardian.com/science/2023/aug/23/india-moon-landing", `<html><head>
+<meta property="og:title" content="India lands spacecraft near south pole of moon in world first">
+<meta property="og:site_name" content="The Guardian">
+<meta property="og:type" content="article">
+<meta property="article:published_time" content="2023-08-23T13:05:41.000Z">
+<meta name="author" content="Amrit Dhillon">
+<meta property="article:author" content="https://www.theguardian.com/profile/amritdhillon">
+<title>India lands spacecraft | The Guardian</title>
+</head><body></body></html>`)
+	assert.Equal(t, &Source{
+		Type:      TypeNews,
+		Title:     "India lands spacecraft near south pole of moon in world first",
+		Site:      "The Guardian",
+		Authors:   []string{"Dhillon, Amrit"},
+		Published: "2023-08-23",
+	}, src)
+}
+
+func TestParsePage_NewsJSONLD(t *testing.T) {
+	src := parse(t, "https://news.example.org/2024/slim", `<html><head>
+<title>SLIM</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"Example"},
+{"@type":"NewsArticle","headline":"Japan announces successful SLIM lunar landing","datePublished":"2024-01-19T09:00:00Z",
+"author":[{"@type":"Person","name":"Michael Sheetz"}],"publisher":{"@type":"Organization","name":"CNBC"}}]}</script>
+</head><body></body></html>`)
+	assert.Equal(t, &Source{
+		Type:      TypeNews,
+		Title:     "Japan announces successful SLIM lunar landing",
+		Site:      "CNBC",
+		Authors:   []string{"Sheetz, Michael"},
+		Published: "2024-01-19",
+	}, src)
+}
+
+func TestParsePage_JSONLDArrayWithGraph(t *testing.T) {
+	src := parse(t, "https://news.example.org/2024/im1", `<html><head>
+<script type="application/ld+json">[{"@context":"https://schema.org","@graph":[{"@type":"WebPage"},
+{"@type":"NewsArticle","headline":"Odysseus lands on the Moon"}]}]</script>
+</head><body></body></html>`)
+	assert.Equal(t, TypeNews, src.Type)
+	assert.Equal(t, "Odysseus lands on the Moon", src.Title)
+}
+
+func TestParsePage_JournalTitleWhiteSpace(t *testing.T) {
+	src := parse(t, "https://journal.example.org/a/1", `<html><head>
+<meta name="citation_journal_title" content="Icarus">
+<title>
+  Lunar   regolith
+</title></head></html>`)
+	assert.Equal(t, TypeJournal, src.Type)
+	assert.Equal(t, "Lunar regolith", src.Title)
+}
+
+func TestClient_NoIdleConnections(t *testing.T) {
+	// the hosts are user-chosen: no connection to them may stay open after a lookup
+	transport := client().Transport.(*http.Transport)
+	assert.True(t, transport.DisableKeepAlives)
+	assert.Equal(t, lookupTimeout, transport.TLSHandshakeTimeout)
+	assert.Equal(t, lookupTimeout, transport.ResponseHeaderTimeout)
+}
+
+func TestParsePage_Journal(t *testing.T) {
+	src := parse(t, "https://www.science.org/doi/10.1126/science.167.3918.449", `<html><head>
+<meta name="citation_title" content="Preliminary examination of lunar samples from Apollo 11">
+<meta name="citation_author" content="Lunar Sample Preliminary Examination Team">
+<meta name="citation_journal_title" content="Science">
+<meta name="citation_publication_date" content="1970/01/30">
+<meta name="citation_volume" content="167">
+<meta name="citation_issue" content="3918">
+<meta name="citation_firstpage" content="449">
+<meta name="citation_lastpage" content="458">
+<meta name="citation_doi" content="10.1126/science.167.3918.449">
+</head></html>`)
+	assert.Equal(t, &Source{
+		Type:      TypeJournal,
+		Title:     "Preliminary examination of lunar samples from Apollo 11",
+		Authors:   []string{"Lunar Sample Preliminary Examination Team"},
+		Journal:   "Science",
+		Published: "1970-01-30",
+		Volume:    "167",
+		Issue:     "3918",
+		Pages:     "449–458",
+		DOI:       "10.1126/science.167.3918.449",
+	}, src)
+}
+
+func TestIsNewsHost(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"https://www.nytimes.com/2023/08/23/world/asia/india-moon-landing.html": true,
+		"https://apnews.com/article/x":                                          true,
+		"https://edition.cnn.com/x":                                             true,
+		"https://www.nasa.gov/":                                                 false,
+		"https://notnytimes.com/":                                               false,
+	} {
+		u, _ := url.Parse(raw)
+		assert.Equal(t, want, IsNewsHost(u), raw)
+	}
+}
+
+func TestLookup_DOIAndISBN(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/doi/10.1126/science.167.3918.449":
+			assert.Equal(t, "application/vnd.citationstyles.csl+json", r.Header.Get("Accept"))
+			_, _ = w.Write([]byte(`{"type":"article-journal","title":"Preliminary examination of lunar samples from Apollo 11",
+"container-title":"Science","author":[{"literal":"Lunar Sample Preliminary Examination Team"}],
+"issued":{"date-parts":[[1970,1,30]]},"volume":"167","issue":"3918","page":"449-458",
+"DOI":"10.1126/science.167.3918.449","URL":"https://doi.org/10.1126/science.167.3918.449"}`))
+		case r.URL.Path == "/books":
+			assert.Equal(t, "ISBN:9780670814466", r.URL.Query().Get("bibkeys"))
+			_, _ = w.Write([]byte(`{"ISBN:9780670814466":{"title":"A Man on the Moon","publish_date":"1994",
+"authors":[{"name":"Andrew Chaikin"}],"publishers":[{"name":"Viking"}],"url":"https://openlibrary.org/books/OL1M"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	defer test.MockVariableValue(&doiAPI, srv.URL+"/doi/")()
+	defer test.MockVariableValue(&openLibraryAPI, srv.URL+"/books")()
+	defer test.MockVariableValue(&client, func() *http.Client { return srv.Client() })()
+
+	src, err := Lookup(t.Context(), "https://doi.org/10.1126/science.167.3918.449")
+	require.NoError(t, err)
+	assert.Equal(t, &Source{
+		Type:      TypeJournal,
+		URL:       "https://doi.org/10.1126/science.167.3918.449",
+		Title:     "Preliminary examination of lunar samples from Apollo 11",
+		Authors:   []string{"Lunar Sample Preliminary Examination Team"},
+		Published: "1970-01-30",
+		Journal:   "Science",
+		Volume:    "167",
+		Issue:     "3918",
+		Pages:     "449–458",
+		DOI:       "10.1126/science.167.3918.449",
+	}, src)
+
+	src, err = Lookup(t.Context(), "ISBN 978-0-670-81446-6")
+	require.NoError(t, err)
+	assert.Equal(t, &Source{
+		Type:      TypeBook,
+		URL:       "https://openlibrary.org/books/OL1M",
+		Title:     "A Man on the Moon",
+		Authors:   []string{"Chaikin, Andrew"},
+		Published: "1994",
+		ISBN:      "9780670814466",
+		Publisher: "Viking",
+	}, src)
+}
+
+func TestLookup_Unsupported(t *testing.T) {
+	_, err := Lookup(t.Context(), "just some words")
+	assert.ErrorIs(t, err, ErrUnsupported)
+	_, err = Lookup(t.Context(), "ftp://example.com/file")
+	assert.ErrorIs(t, err, ErrUnsupported)
+}
+
+func TestLookup_RefusesPrivateHosts(t *testing.T) {
+	// The default client only reaches public internet hosts, on the standard ports: a user
+	// must not be able to make the server fetch an address on its own network.
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte(`<title>secret</title>`))
+	}))
+	defer srv.Close()
+
+	_, err := Lookup(t.Context(), srv.URL) // a loopback address on another port
+	require.ErrorIs(t, err, ErrUnsupported)
+	for _, target := range []string{"http://127.0.0.1/", "http://localhost/", "http://100.100.100.200/latest/meta-data/", "http://[::1]/"} {
+		_, err = Lookup(t.Context(), target)
+		require.Error(t, err, target)
+		assert.Contains(t, err.Error(), "deny", target) // refused by the dialer, before connecting
+	}
+	assert.Zero(t, hits.Load())
+
+	// a redirect may not go to another port either; the query itself was fine, so it is not
+	// ErrUnsupported (which the endpoint answers with 400)
+	redirect := &http.Request{URL: &url.URL{Scheme: "http", Host: "example.com:8080", Path: "/"}}
+	err = client().CheckRedirect(redirect, nil)
+	assert.ErrorIs(t, err, ErrRedirectRefused)
+	assert.ErrorIs(t, err, ErrUnsupported, "the reason is kept (review R1)")
+	assert.NoError(t, client().CheckRedirect(&http.Request{URL: &url.URL{Scheme: "https", Host: "example.com", Path: "/"}}, nil))
+}
+
+func TestParsePage_IgnoresTitlesAfterHead(t *testing.T) {
+	src := parse(t, "https://example.com/page", `<html><head></head><body><svg><title>Close</title></svg><h1>Page</h1></body></html>`)
+	assert.Empty(t, src.Title)
+}
+
+// resetLimits gives the test an empty cache and rate limit (they are package-level).
+func resetLimits(t *testing.T) {
+	t.Cleanup(test.MockVariableValue(&cache, expirable.NewLRU[string, *Source](cacheSize, nil, cacheTTL)))
+	t.Cleanup(test.MockVariableValue(&failures, expirable.NewLRU[string, error](cacheSize, nil, failureTTL)))
+	t.Cleanup(test.MockVariableValue(&limiters, expirable.NewLRU[int64, *rate.Limiter](limiterCacheSize, nil, time.Minute)))
+}
+
+func TestLookupFor_CacheAndRateLimit(t *testing.T) {
+	resetLimits(t)
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte(`{"type":"article-journal","title":"T"}`))
+	}))
+	defer srv.Close()
+	defer test.MockVariableValue(&doiAPI, srv.URL+"/")()
+	defer test.MockVariableValue(&client, func() *http.Client { return srv.Client() })()
+
+	// the same DOI, written two ways, is fetched once
+	src, err := LookupFor(t.Context(), 1, "10.1234/cache-test")
+	require.NoError(t, err)
+	assert.Equal(t, "T", src.Title)
+	_, err = LookupFor(t.Context(), 1, "https://doi.org/10.1234/CACHE-test")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, hits.Load())
+
+	now := time.Now()
+	for range lookupsPerMinute {
+		assert.True(t, allowLookup(42, now))
+	}
+	assert.False(t, allowLookup(42, now), "over the limit")
+	assert.True(t, allowLookup(43, now), "other users are not limited")
+	assert.True(t, allowLookup(42, now.Add(time.Minute)), "a new minute")
+}
+
+func TestLookupFor_UnsupportedNotCounted(t *testing.T) {
+	resetLimits(t)
+	// a query that is not a URL, DOI or ISBN fetches nothing: it does not use up the quota
+	for range lookupsPerMinute + 1 {
+		_, err := LookupFor(t.Context(), 7, "not a source")
+		require.ErrorIs(t, err, ErrUnsupported)
+	}
+	_, has := limiters.Get(7)
+	assert.False(t, has)
+}
+
+func TestAllowLookup_PerUserBucket(t *testing.T) {
+	resetLimits(t)
+	// each user has their own bucket: no shared window to reset everyone at once (review M3)
+	now := time.Now()
+	for range lookupsPerMinute {
+		require.True(t, allowLookup(1, now))
+	}
+	assert.False(t, allowLookup(1, now.Add(time.Second)), "the bucket is empty")
+	assert.True(t, allowLookup(1, now.Add(3*time.Second)), "one lookup back every 3 seconds")
+	assert.False(t, allowLookup(1, now.Add(4*time.Second)))
+	// a user arriving later gets a full bucket, whatever the first user did
+	for range lookupsPerMinute {
+		require.True(t, allowLookup(2, now.Add(4*time.Second)))
+	}
+}
+
+func TestLookupFor_SharedFetchCachedFailureAndCopies(t *testing.T) {
+	resetLimits(t)
+	var hits atomic.Int32
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if strings.Contains(r.URL.Path, "missing") {
+			http.NotFound(w, r)
+			return
+		}
+		<-release
+		_, _ = w.Write([]byte(`{"type":"article-journal","title":"T","author":[{"family":"A","given":"B"}]}`))
+	}))
+	defer srv.Close()
+	defer test.MockVariableValue(&doiAPI, srv.URL+"/")()
+	defer test.MockVariableValue(&client, func() *http.Client { return srv.Client() })()
+
+	// two concurrent lookups of one source make one fetch
+	var wg sync.WaitGroup
+	results := make([]*Source, 2)
+	for i := range results {
+		wg.Go(func() {
+			src, err := LookupFor(t.Context(), int64(i+1), "10.1234/shared")
+			assert.NoError(t, err)
+			results[i] = src
+		})
+	}
+	for hits.Load() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(20 * time.Millisecond) // let the second lookup join the first
+	close(release)
+	wg.Wait()
+	assert.EqualValues(t, 1, hits.Load())
+
+	// each caller gets its own copy: changing it does not change the cache
+	results[0].Title = "changed"
+	results[0].Authors[0] = "changed"
+	src, err := LookupFor(t.Context(), 3, "10.1234/shared")
+	require.NoError(t, err)
+	assert.Equal(t, "T", src.Title)
+	assert.Equal(t, []string{"A, B"}, src.Authors)
+
+	// a failed lookup is remembered for a while
+	_, err = LookupFor(t.Context(), 1, "10.1234/missing")
+	require.Error(t, err)
+	_, err = LookupFor(t.Context(), 1, "10.1234/missing")
+	require.Error(t, err)
+	assert.EqualValues(t, 2, hits.Load())
+}
+
+func TestParseQuery_DropsFragmentAndUserInfo(t *testing.T) {
+	q, err := parseQuery("https://user:secret@example.com/page?a=1#section")
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/page?a=1", q.pageURL)
+}

@@ -54,7 +54,7 @@ func processNodeA(ctx *RenderContext, node *html.Node) {
 				if !isAnchorIDUserContent(attr.Val) {
 					node.Attr[idx].Val = "#user-content-" + anchorID
 				}
-			} else {
+			} else if !processForkanaLink(ctx, node, idx, attr.Val) {
 				node.Attr[idx].Val = ctx.RenderHelper.ResolveLink(attr.Val, LinkTypeDefault)
 			}
 		}

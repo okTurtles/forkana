@@ -114,7 +114,7 @@ func SpecializedMarkdown(ctx *markup.RenderContext) *GlodmarkRender {
 			extension.Strikethrough,
 			extension.TaskList,
 			extension.DefinitionList,
-			common.FootnoteExtension,
+			common.NewFootnoteExtension(&ctx.RenderInternal),
 			highlighting.NewHighlighting(
 				highlighting.WithFormatOptions(
 					chromahtml.WithClasses(true),
@@ -135,6 +135,8 @@ func SpecializedMarkdown(ctx *markup.RenderContext) *GlodmarkRender {
 			parser.WithAttribute(),
 			parser.WithAutoHeadingID(),
 			parser.WithASTTransformers(util.Prioritized(NewASTTransformer(&ctx.RenderInternal), 10000)),
+			// before the standard link parser (200), which leaves these links as text
+			parser.WithInlineParsers(util.Prioritized(NewInternalLinkParser(), 199)),
 		),
 		goldmark.WithRendererOptions(html.WithUnsafe()),
 	)
