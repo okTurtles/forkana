@@ -749,9 +749,13 @@
     border-radius: 6px 6px 0 0;
   }
 
+  /* (height: auto, as the Source editor's Write / Preview tabs, #469, take a row of
+     their own in it: Toast UI's fixed height pushed them up over the Visual / Source
+     tabs) */
   [data-theme] .article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar {
     flex-direction: column;
     align-items: stretch;
+    height: auto;
     border-radius: 0;
   }
 

@@ -1,7 +1,7 @@
 <form class="flex-text-inline" hx-boost="true" hx-target="this" hx-swap="outerHTML" hx-include="#article-watch-sync" method="post" action="{{$.RepoOperationsLink}}/action/{{if $.IsWatchingRepo}}unwatch{{else}}watch{{end}}"{{if not $.IsSigned}} data-tooltip-content="{{ctx.Locale.Tr "repo.follow_guest_user"}}"{{end}}>
 	{{$buttonText := ctx.Locale.Tr "repo.follow_article"}}
 	{{if $.IsWatchingRepo}}{{$buttonText = ctx.Locale.Tr "repo.following_article"}}{{end}}
-	<button type="submit" class="follow-article-button tw-flex tw-items-center tw-gap-1 tw-bg-transparent tw-border-0 tw-p-0 tw-text-sm tw-text-inherit tw-cursor-pointer"{{if not $.IsSigned}} disabled{{end}} aria-label="{{$buttonText}}">
+	<button type="submit" class="follow-article-button"{{if not $.IsSigned}} disabled{{end}} aria-label="{{$buttonText}}">
 		{{if $.IsWatchingRepo}}
 			{{svg "octicon-star-fill" 16 "tw-text-primary"}}
 		{{else}}

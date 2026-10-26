@@ -124,13 +124,8 @@
    the header, the tabs and the content are at the same y as on the subject page and
    nothing moves between the two. The anchor is the page's first child: its zero
    margin overrides base.css's `.page-content > :first-child { margin-top }`. */
-/* The subject page's header gets `.repository .secondary-nav { padding-top: 12px }`
-   (web_src/css/repo/header.css); the compare page is not a `.repository` page, so the
-   same header sat 12px higher there. */
-.page-content.subject-compare .secondary-nav {
-	padding-top: 12px;
-}
-
+/* The subject header is at the same y here as on the subject page: its padding is set
+   by `.secondary-nav.subject-header` (web_src/css/repo/header.css, #469), on both. */
 .page-content > .subject-compare-back-anchor {
 	position: relative;
 	height: 0;

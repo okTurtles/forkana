@@ -28,15 +28,124 @@
   flex-wrap: nowrap;
 }
 
-/* Subject header variant with the article Follow control under the title */
-.repo-header-with-follow {
-  padding-bottom: 38px;
+/* ── The subject header (#469) ────────────────────────────────────────────
+   custom/templates/repo/header.tmpl, the same on every view and article tab, so
+   that nothing above the content moves when one switches between them. Figma
+   "Notes – Width system" (7368:275653) and the header of every Views frame
+   (Bubble view 7368:260690, Table view 7368:260448, Article view Read 7368:264676,
+   Edit 7368:264887, History 7368:263253):
+   - 1344px wide at 1440: 48px margins on a desktop, 24 on a tablet, 16 on a phone
+     (--subject-margin-x, base.css);
+   - the title block (Frame 168 7368:260781): 136px, 24px above and below the
+     56px title (Inter 500 40/56, 7368:260785) and the 32px Follow under it
+     (Action 7368:260786), with no gap between them;
+   - the view tabs row (UnderNav_Views 7368:260789): 48px.
+   Info bars never push it down on a desktop: see .subject-info-bars in
+   features/subject-views.css. */
+/* (two classes, to win over `.repository .secondary-nav` above: the header is
+   at the same y on a subject page and on the compare page, which is not a
+   `.repository` page) */
+.secondary-nav.subject-header {
+  padding-top: 0;
+  margin-bottom: 0;
+}
+
+.subject-header .ui.container.subject-header-container {
+  width: auto;
+  max-width: none;
+  margin-left: var(--subject-margin-x);
+  margin-right: var(--subject-margin-x);
+}
+
+/* Two classes deep: the header carries `.repo-header`'s gap and margin. */
+.subject-header .repo-header.repo-header-with-follow {
+  gap: 0;
+  margin: 0;
+  padding: 24px 0;
+}
+
+.subject-header .repo-header-with-follow h1 {
+  margin: 0;
+  font-size: 40px;
+  line-height: 56px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .repo-header-follow {
   display: flex;
   justify-content: center;
-  margin-top: 6px;
+  height: 32px;
+}
+
+/* Follow: an invisible button with the star (Action 7368:260786, the design
+   system's tertiary button 6507:58668): 32px tall, 6px 12px, the 16px star 8px
+   from an Inter 600 14/20 #25292e label, 6px corners. */
+.follow-article-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-button-text);
+  cursor: pointer;
+}
+
+.follow-article-button:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+
+.follow-article-button:disabled {
+  cursor: default;
+}
+
+/* The view tabs row: 48px, a 1px #d1d9e0 70% rule under it; each tab 48px tall,
+   8px from the next, 0 8px around its 16px icon and Inter 14/20 #1f2328 label
+   (8px apart), 600 on the open one, which the brand's 2px underline marks
+   (UnderlineNav I7368:260789;26717:2830 and its Item (01) / Item (02)). */
+.subject-header overflow-menu {
+  min-height: 48px;
+  border-bottom-color: color-mix(in srgb, var(--color-border-light) 70%, transparent) !important;
+}
+
+#subject-view-tabs {
+  gap: 8px;
+}
+
+/* (an id and !important: overflow-menu's own `.item { margin-bottom: 0 !important }`;
+   the -1px lays the open tab's underline over the row's rule, as figma's inside
+   strokes do) */
+#subject-view-tabs > .item {
+  box-sizing: border-box;
+  height: 48px;
+  margin-bottom: -1px !important;
+  padding: 0 8px;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-primary);
+}
+
+#subject-view-tabs > .item.active {
+  font-weight: var(--font-weight-semibold);
+}
+
+#subject-view-tabs > .item > .svg {
+  margin: 0;
+}
+
+#subject-view-tabs > .item > .not-mobile {
+  margin-left: -4px !important; /* "Bubble view" is one label: 4px between its words, not the 8px gap */
 }
 
 /* ── Subject view tabs row (#386) ─────────────────────────────────────────
@@ -91,29 +200,19 @@ overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
    bubble view's own `width <= 767px` switch (the same boundary, spelled the
    way the CSS here spells it).
 
-   On a phone the subject header eats the top of the screen: the template gives
-   it `tw-pt-14` (56px) and .repo-header-with-follow's 38px below, under a 40px
-   title. 1rem each way and a 20px title leave room for the article itself.
-
-   THE SELECTORS ARE DELIBERATELY TWO DEEP. Tailwind's utilities are generated
-   with !important in this repo (`.tw-pt-14{padding-top:3.5rem!important}`) and
-   land ~35KB LATER in index.css than this file, so a single-class rule — even
-   an important one — loses to them on source order. `.secondary-nav` is the
-   real parent in both templates/repo/header.tmpl and its custom override, so
-   this is honest specificity, not a hack.
-
-   Only the h1 is retargeted: that is the subject title (custom/templates/repo/
-   header.tmpl). The plain repository header's `.flex-item-title` is an
-   owner/name breadcrumb and is left alone. */
+   On a phone the title block (figma "Article view / Read" Mobile 7368:415073)
+   is 16px above and below, 16px at the sides (the container's margin), the
+   title Inter 500 24px and Follow right under it: 91px with the title's line
+   at 27px. The selectors are two deep, like the desktop ones above. */
 @media (max-width: 767.98px) {
-  .secondary-nav .repo-header {
-    padding-top: 1rem !important;
-    padding-bottom: 1rem !important;
+  .subject-header .repo-header.repo-header-with-follow {
+    padding: 16px 0;
   }
 
-  .secondary-nav .repo-header h1 {
-    font-size: 20px !important;
-    text-align: center !important;
+  /* (!important: the title carries `tw-text-40`, an important utility) */
+  .subject-header .repo-header-with-follow h1 {
+    font-size: 24px !important;
+    line-height: 27px;
   }
 
   /* The view tabs row on a phone (figma Mobile 641:63048, UnderNav_Views):

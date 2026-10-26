@@ -140,6 +140,12 @@
    footer below the fold (#149). */
 </style>
 <div role="main" aria-label="{{.Title}}" class="page-content repository file list">
+    {{/* #469: the info bars (the Compare banners, the archived, transfer and invitation
+         notices, the Edit tab's sign-in banner) share one wrapper, which a desktop lays over
+         the top of the subject header instead of pushing the header, the view tabs and the
+         content down (web_src/css/features/subject-views.css); a phone keeps them in the
+         flow, where a two- or three-line bar would cover the title. */}}
+    <div class="subject-info-bars" id="subject-info-bars">
     {{/* The Compare mode banner (figma "Announcement" 641:61937 / 641:61765 / 641:61848 /
          6661:53348) is drawn here, under the navbar and above the subject, by the bubble
          view (FishboneGraph teleports CompareAnnouncement.vue into it). The strings come
@@ -238,9 +244,10 @@
         </button>
     </div>
     {{end}}
+    </div>
     {{template "repo/header" .}}
 
-    <div class="ui container">
+    <div class="ui container subject-views-container">
         {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName) }}
         <div id="repo-history-app"
             class="history-view-app"

@@ -1,7 +1,13 @@
-<div class="secondary-nav">
+{{/* #469: the subject header, the same on every view (Bubble, Table, Article) and every
+     article tab (Read, Edit, History): the title block (figma Frame 168 7368:260781, 136px:
+     24px above and below, the 56px title and the 32px Follow with no gap) and the view
+     tabs row (UnderNav_Views 7368:260789, 48px), both 1344px wide at 1440 (48px margins,
+     24 on a tablet, 16 on a phone). Its sizes are in web_src/css/repo/header.css; the info
+     bars above it are laid over it on a desktop instead of pushing it down. */}}
+<div class="secondary-nav subject-header">
 {{with .Repository}}
-	<div class="ui container">
-		<div class="repo-header tw-flex tw-flex-col tw-items-center tw-pt-14 repo-header-with-follow">
+	<div class="ui container subject-header-container">
+		<div class="repo-header tw-flex tw-flex-col tw-items-center repo-header-with-follow">
 			<h1 class="tw-text-40 tw-m-0">{{$.SubjectName}}</h1>
 			<!-- Does header need to be a link?
 				<a class="muted" href="{{$.RepoLink}}"></a>
@@ -23,7 +29,7 @@
 {{end}}
 	{{$subjectUrl := printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName)}}
 	{{$bubbleUrl := QueryBuild $subjectUrl "view" "bubble" "selected" .SubjectSelected}}
-	<div class="ui container">
+	<div class="ui container subject-header-container">
 		<overflow-menu class="ui secondary pointing menu">
 			<div class="overflow-menu-items tw-justify-center" id="subject-view-tabs" data-owner="{{.Repository.Owner.Name}}" data-subject="{{.SubjectName}}">
 				<a class="{{if .IsBubbleView}}active {{end}}item" href="{{$bubbleUrl}}" data-view="bubble">
