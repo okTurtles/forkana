@@ -23,11 +23,14 @@ test('radio buttons are drawn in the brand purple, like the checkboxes', async (
   await expect(checked).toHaveCSS('border-radius', '50%');
   expect(await checked.evaluate((el) => getComputedStyle(el).backgroundImage)).toContain('rgb(78, 64, 250)');
 
-  // an unchecked one has no dot, and turns purple when picked
-  const unchecked = page.locator('form input[type="radio"]:not(:checked)').first();
+  // an unchecked one ("Limited") has no dot, and gets the purple dot when picked
+  const unchecked = page.locator('form input[type="radio"]').nth(1);
+  await expect(unchecked).not.toBeChecked();
   expect(await unchecked.evaluate((el) => getComputedStyle(el).backgroundImage)).toBe('none');
   await unchecked.check();
+  await page.mouse.move(0, 0); // off the radio, so its border is not the hover one
   await expect(unchecked).toHaveCSS('border-top-color', brandPurple);
+  expect(await unchecked.evaluate((el) => getComputedStyle(el).backgroundImage)).toContain('rgb(78, 64, 250)');
   await context.close();
 });
 
