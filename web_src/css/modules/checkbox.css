@@ -63,6 +63,44 @@ input[type="checkbox"]:focus-visible,
   outline: 2px solid var(--color-primary);
   outline-offset: 1px;
 }
+/* Every other radio (#460): a 16px circle in the brand purple instead of the browser's own
+   radio, which took the theme's `accent-color` (--color-accent, Gitea's blue). Unchecked it is
+   the Figma radio 6869:67860 (white fill, 1px input border); checked, the border turns purple and
+   a purple dot fills the middle, the same purple as the checked checkbox above. The filter-menu
+   radios keep their square checkbox look, so they are left out. */
+input[type="radio"]:not(.flex-items-menu input) {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  border: 1px solid var(--color-input-border);
+  border-radius: 50%;
+  background-color: var(--color-input-background);
+  cursor: pointer;
+  vertical-align: middle;
+}
+input[type="radio"]:not(.flex-items-menu input):hover {
+  border-color: var(--color-primary);
+}
+input[type="radio"]:not(.flex-items-menu input):checked {
+  border-color: var(--color-primary);
+  /* the dot: 8px across in the 16px circle */
+  background-image: radial-gradient(circle, var(--color-primary) 0 3.5px, transparent 4px);
+}
+input[type="radio"]:not(.flex-items-menu input):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+input[type="radio"]:not(.flex-items-menu input):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+input[type="radio"]:not(.flex-items-menu input):disabled:hover {
+  border-color: var(--color-input-border);
+}
+input[type="radio"]:not(.flex-items-menu input):checked:disabled:hover {
+  border-color: var(--color-primary);
+}
 .flex-items-menu input[name="clear-filter"] {
   display: none;
 }

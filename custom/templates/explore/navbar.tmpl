@@ -6,7 +6,7 @@
 		points each inactive tab back at the keyword last searched on it. QueryBuild omits an empty
 		keyword and query-escapes the value. */}}
 		<a class="{{if .PageIsExploreSubjects}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/subjects?" AppSubUrl) "q" (Iif .PageIsExploreSubjects .Keyword "")}}">
-			{{svg "octicon-goal"}} {{ctx.Locale.Tr "explore.repos"}}
+			{{svg "forkana-atom"}} {{ctx.Locale.Tr "explore.repos"}}
 		</a>
 		{{if not .UsersPageIsDisabled}}
 			<a class="{{if .PageIsExploreUsers}}active {{end}}item" data-explore-tab-link href="{{QueryBuild (printf "%s/explore/users?" AppSubUrl) "q" (Iif .PageIsExploreUsers .Keyword "")}}">
