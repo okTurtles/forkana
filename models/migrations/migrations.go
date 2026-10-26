@@ -405,6 +405,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(328, "Forkana: add is_forked and forked_repo_id to pull_request", v1_25_custom.AddIsForkedToPullRequest),
 		newMigration(329, "Forkana: add is_tombstoned and tombstoned_unix to repository", v1_25_custom.AddTombstoneToRepository),
 		newMigration(330, "Forkana: create article_attachment table and add purpose to attachment", v1_25_custom.AddArticleAttachmentTable),
+		newMigration(331, "Forkana: create article_collaborator table", v1_25_custom.CreateArticleCollaboratorTable),
 	}
 	return preparedMigrations
 }

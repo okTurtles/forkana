@@ -257,6 +257,12 @@ func (ns *notificationService) RepoTransferRejected(ctx context.Context, doer, i
 	}
 }
 
+func (ns *notificationService) ArticleCollaboratorInvited(ctx context.Context, doer, invitee *user_model.User, repo *repo_model.Repository, _ repo_model.ArticleCollaboratorRole) {
+	if err := activities_model.CreateArticleCollaboratorInviteNotification(ctx, doer, invitee, repo); err != nil {
+		log.Error("CreateArticleCollaboratorInviteNotification: %v", err)
+	}
+}
+
 func (ns *notificationService) RepoPendingTransfer(ctx context.Context, doer, newOwner *user_model.User, repo *repo_model.Repository) {
 	err := db.WithTx(ctx, func(ctx context.Context) error {
 		return activities_model.CreateRepoTransferNotification(ctx, doer, newOwner, repo)

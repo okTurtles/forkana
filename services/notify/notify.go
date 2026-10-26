@@ -372,6 +372,13 @@ func RepoPendingTransfer(ctx context.Context, doer, newOwner *user_model.User, r
 	}
 }
 
+// ArticleCollaboratorInvited notifies a user invited to maintain an article
+func ArticleCollaboratorInvited(ctx context.Context, doer, invitee *user_model.User, repo *repo_model.Repository, role repo_model.ArticleCollaboratorRole) {
+	for _, notifier := range notifiers {
+		notifier.ArticleCollaboratorInvited(ctx, doer, invitee, repo, role)
+	}
+}
+
 // RepoTransferRejected notifies the user who started a repository transfer that it was rejected
 func RepoTransferRejected(ctx context.Context, doer, initiator *user_model.User, repo *repo_model.Repository) {
 	for _, notifier := range notifiers {

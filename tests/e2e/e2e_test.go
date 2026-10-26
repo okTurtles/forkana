@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"code.gitea.io/gitea/cmd"
@@ -101,7 +102,9 @@ func TestE2e(t *testing.T) {
 		t.Run(testname, func(t *testing.T) {
 			// Default 2 minute timeout
 			onGiteaRun(t, func(*testing.T, *url.URL) {
-				cmd := exec.Command(runArgs[0], runArgs...)
+				// Each subtest gets its own Gitea, so it runs its own spec file only: without the
+				// path, every subtest would run the whole suite again.
+				cmd := exec.Command(runArgs[0], slices.Concat(runArgs[1:], []string{path})...)
 				cmd.Env = os.Environ()
 				cmd.Env = append(cmd.Env, "GITEA_URL="+setting.AppURL)
 

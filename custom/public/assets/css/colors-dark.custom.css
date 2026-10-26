@@ -85,6 +85,7 @@
   --color-button-secondary-active-bg: #282e33;
   /* the dark "Outline focus" of the Design System file (STYLES > Dark mode, node 40000080:133320) */
   --color-button-focus-ring: #3b2fd4;
+  --color-button-primary-border: #f0f6fc1a;
   /* the landing title in the dark Landing frame (Figma 5629:47735) */
   --color-home-title: #f0f6fc;
 
@@ -204,6 +205,7 @@
     --color-button-secondary-active-bg: #282e33;
     /* the dark "Outline focus" of the Design System file (STYLES > Dark mode, node 40000080:133320) */
     --color-button-focus-ring: #3b2fd4;
+    --color-button-primary-border: #f0f6fc1a;
     /* the landing title in the dark Landing frame (Figma 5629:47735) */
     --color-home-title: #f0f6fc;
 

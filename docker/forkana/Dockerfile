@@ -81,6 +81,7 @@ RUN apk --no-cache add \
     git \
     curl \
     gnupg \
+    msmtp \
     openssh-keygen \
     && rm -rf /var/cache/apk/*
 

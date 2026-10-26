@@ -62,7 +62,7 @@
                         data-article-tab="history">
                         {{svg "octicon-history" 16}} History
                     </a>
-                    {{if .IsRepoOwner}}
+                    {{if .CanManageArticleCollaborators}}
                         <a class="{{if .IsArticleModeSettings}}active {{end}}item"
                             href="{{QueryBuild $articleLink "view" "article" "mode" "settings"}}"
                             data-article-tab="settings">
@@ -78,8 +78,8 @@
                             <div class="tw-flex tw-items-center tw-justify-between tw-mb-4">
                                 <div class="tw-flex tw-items-center tw-gap-2">
                                     {{if .IsSigned}}
-                                        {{if .IsRepoOwner}}
-                                            {{/* User can edit directly - show simple submit button */}}
+                                        {{if .CanEditDirectly}}
+                                            {{/* The owner and the maintainers edit directly - show simple submit button */}}
                                             <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
                                                 {{svg "octicon-check" 16 "tw-mr-1"}}
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}

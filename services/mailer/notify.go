@@ -207,6 +207,12 @@ func (m *mailNotifier) RepoPendingTransfer(ctx context.Context, doer, newOwner *
 	}
 }
 
+func (m *mailNotifier) ArticleCollaboratorInvited(ctx context.Context, doer, invitee *user_model.User, repo *repo_model.Repository, role repo_model.ArticleCollaboratorRole) {
+	if err := SendArticleCollaboratorInviteMail(ctx, doer, invitee, repo, role); err != nil {
+		log.Error("SendArticleCollaboratorInviteMail: %v", err)
+	}
+}
+
 func (m *mailNotifier) WorkflowRunStatusUpdate(ctx context.Context, repo *repo_model.Repository, sender *user_model.User, run *actions_model.ActionRun) {
 	if err := MailActionsTrigger(ctx, sender, repo, run); err != nil {
 		log.Error("MailActionsTrigger: %v", err)
