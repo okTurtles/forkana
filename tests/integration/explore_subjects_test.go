@@ -128,10 +128,11 @@ func TestExploreSubjectsListMarkup(t *testing.T) {
 	// The name links through AppSubUrl, so the page survives a sub-path deployment.
 	assert.Contains(t, html, `href="`+setting.AppSubURL+`/subject/Markup%20Probe%20Subject"`)
 
-	// The leading glyph is the target that matches the Subjects tab, not the stock book. The
-	// substring holds whether or not the SVG set is loaded, since the fallback for a missing
-	// icon still spells the icon name out.
-	assert.Contains(t, html, "octicon-goal")
+	// The leading glyph is the atom that matches the Subjects tab (#460), not the stock book or
+	// the target it replaced. The substring holds whether or not the SVG set is loaded, since the
+	// fallback for a missing icon still spells the icon name out.
+	assert.Contains(t, html, "forkana-atom")
+	assert.NotContains(t, html, "octicon-goal")
 	assert.NotContains(t, html, "octicon-book")
 
 	// Neither the stock repository counts nor the created/updated line belong in the row.
