@@ -77,6 +77,7 @@
   --color-text-primary: #e6edf3;
   --color-text-secondary: #8d96a0;
   --color-text-tertiary: #6e7681;
+  --color-radio-border: #6e7681;
   --color-button-text: #e6edf3;
   --color-button-hover: #30363d;
   --color-button-text-disabled: #6e7681;
@@ -197,6 +198,7 @@
     --color-text-primary: #e6edf3;
     --color-text-secondary: #8d96a0;
     --color-text-tertiary: #6e7681;
+    --color-radio-border: #6e7681;
     --color-button-text: #e6edf3;
     --color-button-hover: #30363d;
     --color-button-text-disabled: #6e7681;

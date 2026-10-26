@@ -52,6 +52,8 @@
   --color-text-primary: #1f2328;
   --color-text-secondary: #656d76;
   --color-text-tertiary: #969aa5;
+  /* the unchecked radio's ring (Figma _RadioInput 7061:69602, #460) */
+  --color-radio-border: #818b98;
   /* the label of a default (neutral) button in the layout, Primer's fgColor of
      Button (e.g. "Compare" 484:188986, "Read full article" 1842:35659) */
   --color-button-text: #25292e;

@@ -56,10 +56,11 @@
 
 /* ===== Homepage column (#460) =====
    The search field and the feeds card share one 348px column, so their left and right edges
-   line up: Figma Frame 1060 (3853:40362) puts the field and the card in the same 348px column
-   when signed in, as wide as the field of the signed-out Landing frame (641:65360). Both fill
-   the column, and on a phone it shrinks with the hero's 16px side padding (343px, Figma Frame
-   1081 3853:42070). */
+   line up: Figma Home > Frame 1060 (7368:416692, in "Follow Subject and Watch article / Feed
+   page" 7368:415362) puts the field and the card in the same 348px column when signed in, as
+   wide as the field of the signed-out Landing frame (7368:422742). Both fill the column, and on
+   a phone it shrinks with the hero's 16px side padding (343px, Mobile Landing 7368:422760 and
+   Frame 1081 7368:418412). */
 .home-column {
   width: 100%;
   max-width: 348px;
@@ -169,19 +170,24 @@
 
 /* ===== Homepage feeds card ===== */
 
+/* Figma Home > Frame 1060 (7368:416692): 48px between the field and the card, also on a
+   phone (Frame 1081, 7368:418412 to 7368:418426) */
 .home-feeds-card {
   width: 100%;
-  margin-top: 24px;
+  margin-top: 48px;
   border: 1px solid var(--color-secondary);
   border-radius: 8px;
   overflow: hidden;
 }
 
+/* "Your feeds" (Figma 7368:416712 / 7368:418435): a 36px header, 8px side padding, Inter 600
+   16/24 in #59636e (--color-muted-text) */
 .home-feeds-card-header {
-  padding: 12px 16px;
+  padding: 6px 8px 5px; /* 36px with the 1px border below, drawn inside in Figma */
   font-weight: var(--font-weight-semibold);
-  font-size: 14px;
-  color: var(--color-text);
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-muted-text);
   background: var(--color-feeds-card-header);
   border-bottom: 1px solid var(--color-secondary);
 }
