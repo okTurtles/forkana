@@ -23,6 +23,7 @@ import {
 } from '../dropzone.ts';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './base64ImageWidget.ts';
 import {installLosslessMarkdownTracker} from './losslessMarkdown.ts';
+import {installRawHtmlGuard} from './rawHtmlGuard.ts';
 import {ensureFilesWithinLimit} from './editorFileLimit.ts';
 
 // Event dispatched when editor content changes
@@ -104,6 +105,8 @@ export class ToastCommentEditor {
         createBase64WidgetRule(() => this.editor),
       ],
     });
+    // Raw HTML Toast UI cannot convert must not crash the Visual editor (issue #446).
+    installRawHtmlGuard(this.editor);
 
     // Override getMarkdown to strip internal $$widget placeholders
     installBase64WidgetPatch(this.editor);
