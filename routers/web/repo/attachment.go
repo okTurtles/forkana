@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"net/http"
 
+	auth_model "code.gitea.io/gitea/models/auth"
 	access_model "code.gitea.io/gitea/models/perm/access"
 	repo_model "code.gitea.io/gitea/models/repo"
 	system_model "code.gitea.io/gitea/models/system"
+	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/httpcache"
 	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/log"
@@ -139,6 +141,18 @@ func DeleteAttachment(ctx *context.Context) {
 	})
 }
 
+// attachmentReadScope returns the API token scope required to read an attachment linked to the given unit
+func attachmentReadScope(unitType unit.Type) (auth_model.AccessTokenScope, bool) {
+	switch unitType {
+	case unit.TypeIssues, unit.TypePullRequests:
+		return auth_model.AccessTokenScopeReadIssue, true
+	case unit.TypeReleases:
+		return auth_model.AccessTokenScopeReadRepository, true
+	default:
+		return "", false
+	}
+}
+
 // attachmentServingScope returns the repository named by the request URL, when the route has
 // one. "/{username}/{reponame}/attachments/{uuid}" already carries the assigned repository,
 // while "/article/{username}/{subjectname}/attachments/{uuid}" is served without
@@ -187,13 +201,26 @@ func ServeAttachment(ctx *context.Context, uuid string) {
 	if repository == nil { // If not linked to an issue or release
 		// Article attachments are shared across the repositories associated with them, so
 		// access follows those associations rather than the repository they were uploaded to.
-		canServe, err := attachment.CanServe(ctx, ctx.Doer, attachmentServingScope(ctx), attach)
+		publicOnly, err := context.IsPublicOnlyToken(ctx)
+		if err != nil {
+			ctx.ServerError("IsPublicOnlyToken", err)
+			return
+		}
+		scope := attachmentServingScope(ctx)
+		canServe, err := attachment.CanServe(ctx, ctx.Doer, scope, attach, publicOnly)
 		if err != nil {
 			ctx.ServerError("CanServe", err)
 			return
 		}
 		if !canServe {
 			ctx.HTTPError(http.StatusNotFound)
+			return
+		}
+
+		// Article attachments are repository content served from the code unit, so API
+		// tokens need read:repository, like the "/raw/" and "/archive/" routes.
+		context.CheckTokenScopes(ctx, scope, auth_model.AccessTokenScopeReadRepository)
+		if ctx.Written() {
 			return
 		}
 	} else { // If we have the repository we check access
@@ -205,6 +232,13 @@ func ServeAttachment(ctx *context.Context, uuid string) {
 		if !perm.CanRead(unitType) {
 			ctx.HTTPError(http.StatusNotFound)
 			return
+		}
+
+		if requiredScope, ok := attachmentReadScope(unitType); ok {
+			context.CheckTokenScopes(ctx, repository, requiredScope)
+			if ctx.Written() {
+				return
+			}
 		}
 	}
 

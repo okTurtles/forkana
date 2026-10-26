@@ -102,39 +102,55 @@ func RequireUnitReader(unitTypes ...unit.Type) func(ctx *Context) {
 	}
 }
 
-// CheckRepoScopedToken check whether personal access token has repo scope
-func CheckRepoScopedToken(ctx *Context, repo *repo_model.Repository, level auth_model.AccessTokenScopeLevel) {
-	if !ctx.IsBasicAuth || ctx.Data["IsApiToken"] != true {
+// apiTokenScope returns the scope of the API token that authenticated the request, if any.
+func apiTokenScope(ctx *Context) (auth_model.AccessTokenScope, bool) {
+	if ctx.Data["IsApiToken"] != true {
+		return "", false
+	}
+	scope, ok := ctx.Data["ApiTokenScope"].(auth_model.AccessTokenScope)
+	return scope, ok
+}
+
+// IsPublicOnlyToken reports whether the request is authenticated by an API token limited to public resources.
+func IsPublicOnlyToken(ctx *Context) (bool, error) {
+	scope, ok := apiTokenScope(ctx)
+	if !ok {
+		return false, nil
+	}
+	return scope.PublicOnly()
+}
+
+// CheckTokenScopes checks whether the authenticated API token contains any of the given scopes.
+func CheckTokenScopes(ctx *Context, repo *repo_model.Repository, scopes ...auth_model.AccessTokenScope) {
+	scope, ok := apiTokenScope(ctx)
+	if !ok {
 		return
 	}
 
-	scope, ok := ctx.Data["ApiTokenScope"].(auth_model.AccessTokenScope)
-	if ok { // it's an API token (personal access token or OAuth2 token) whose scope must be enforced
-		var scopeMatched bool
-
-		requiredScopes := auth_model.GetRequiredScopes(level, auth_model.AccessTokenScopeCategoryRepository)
-
-		// check if scope only applies to public resources
-		publicOnly, err := scope.PublicOnly()
-		if err != nil {
-			ctx.ServerError("HasScope", err)
-			return
-		}
-
-		if publicOnly && repo.IsPrivate {
-			ctx.HTTPError(http.StatusForbidden)
-			return
-		}
-
-		scopeMatched, err = scope.HasScope(requiredScopes...)
-		if err != nil {
-			ctx.ServerError("HasScope", err)
-			return
-		}
-
-		if !scopeMatched {
-			ctx.HTTPError(http.StatusForbidden)
-			return
-		}
+	publicOnly, err := scope.PublicOnly()
+	if err != nil {
+		ctx.ServerError("PublicOnly", err)
+		return
 	}
+
+	if publicOnly && repo != nil && repo.IsPrivate {
+		ctx.HTTPError(http.StatusForbidden)
+		return
+	}
+
+	scopeMatched, err := scope.HasAnyScope(scopes...)
+	if err != nil {
+		ctx.ServerError("HasAnyScope", err)
+		return
+	}
+
+	if !scopeMatched {
+		ctx.HTTPError(http.StatusForbidden)
+	}
+}
+
+// CheckRepoScopedToken checks whether the authenticated API token has repo scope.
+// Tokens are checked whether they were sent via basic auth or an Authorization token/bearer header.
+func CheckRepoScopedToken(ctx *Context, repo *repo_model.Repository, level auth_model.AccessTokenScopeLevel) {
+	CheckTokenScopes(ctx, repo, auth_model.GetRequiredScopes(level, auth_model.AccessTokenScopeCategoryRepository)...)
 }
