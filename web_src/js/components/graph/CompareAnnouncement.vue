@@ -118,7 +118,7 @@ const dismissLabel = computed(() => props.state === 'unavailable' ? props.messag
   line-height: 20px;
 }
 
-/* "Fork this article" (Announcement 6661:53348, its text's style 3): Inter 600,
+/* "Fork this article" (the Announcement I7368:260916;38494:155070 of 7368:260887): Inter 600,
    underlined, #4e40fa (= --color-primary) */
 .compare-announcement-link {
   color: var(--color-primary);

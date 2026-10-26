@@ -1,5 +1,5 @@
 // #451: the Bubble view of a subject with a single article (figma "Bubble view /
-// Comparing disabled", 6661:52942). Compare has nothing to compare there: its tooltip
+// Comparing disabled", 7368:260887). Compare has nothing to compare there: its tooltip
 // says why, below the button, and pressing it shows the "No forks yet" notice in the
 // header, whose "Fork this article" leads to the fork flow (signing in first).
 import {test, expect} from '@playwright/test';
@@ -27,13 +27,34 @@ async function openBubbleView(page: Page) {
 test('the Compare tooltip is shown below the button (#451 item 1)', async ({page}) => {
   const button = await openBubbleView(page);
   await button.hover();
-  const tooltip = page.locator('.tippy-box[data-theme="tooltip"]', {hasText: 'No forks yet'});
+  // figma's Tooltip (7368:260912): #25292e, 8px around Inter 12/18 in white, "No forks
+  // yet." in 600
+  const tooltip = page.locator('.tippy-box[data-theme="forkana"]', {hasText: 'No forks yet'});
   await expect(tooltip).toBeVisible();
   // tippy flips it above when there is no room below: there is plenty here
-  await expect(tooltip).toHaveAttribute('data-placement', /^bottom/);
+  await expect(tooltip).toHaveAttribute('data-placement', 'bottom-end');
+  await expect(tooltip).toHaveCSS('background-color', 'rgb(37, 41, 46)');
+  await expect(tooltip).toHaveCSS('border-radius', '6px');
+  const content = tooltip.locator('.tippy-content');
+  await expect(content).toHaveText('No forks yet. Compare needs at least 2 articles.');
+  await expect(content).toHaveCSS('padding', '8px');
+  await expect(content).toHaveCSS('font-size', '12px');
+  await expect(content).toHaveCSS('line-height', '18px');
+  await expect(content.locator('strong')).toHaveText('No forks yet.');
+  await expect(content.locator('strong')).toHaveCSS('font-weight', '600');
+
+  // below the button, flush with its right edge: the arrow tip 10px under it, the box
+  // 18px, the arrow's centre 21.25px in from the box's right edge
   const buttonBox = await button.boundingBox();
   const tooltipBox = await tooltip.boundingBox();
-  expect(tooltipBox.y).toBeGreaterThanOrEqual(buttonBox.y + buttonBox.height);
+  const arrowBox = await tooltip.locator('.tippy-svg-arrow svg').boundingBox();
+  const buttonBottom = buttonBox.y + buttonBox.height;
+  // within 1px: tippy rounds the tooltip to whole pixels, the button is not
+  const near = (value: number, want: number) => expect(Math.abs(value - want)).toBeLessThanOrEqual(1);
+  near(tooltipBox.y - buttonBottom, 18);
+  near(arrowBox.y - buttonBottom, 10);
+  near(tooltipBox.x + tooltipBox.width, buttonBox.x + buttonBox.width);
+  near(tooltipBox.x + tooltipBox.width - (arrowBox.x + arrowBox.width / 2), 21.25);
 });
 
 test('signed out, "Fork this article" in the notice leads to sign in, then the fork flow (#451 item 2)', async ({page}) => {
