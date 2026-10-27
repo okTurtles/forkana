@@ -33,14 +33,15 @@ function article(middle: string): string {
 }
 
 // The article editor's construction order (toast-editor.ts).
-function createEditor(initialValue: string, initialEditType: 'markdown' | 'wysiwyg' = 'wysiwyg') {
+function createEditor(initialValue: string, initialEditType: 'markdown' | 'wysiwyg' = 'wysiwyg', withRawInlineWidget = true) {
   const el = document.createElement('div');
   document.body.append(el);
   const textarea = document.createElement('textarea');
   textarea.value = initialValue;
   document.body.append(textarea);
   const ref = {current: null as any};
-  const widgetRules = [createBase64WidgetRule(() => ref.current), rawInlineHtmlWidgetRule];
+  const widgetRules: unknown[] = [createBase64WidgetRule(() => ref.current)];
+  if (withRawInlineWidget) widgetRules.push(rawInlineHtmlWidgetRule);
   const editor = new Editor({el, initialEditType, usageStatistics: false, widgetRules, ...articleEditorMarkdownOptions});
   ref.current = editor;
   installRawHtmlGuard(editor, widgetRules);
@@ -166,6 +167,35 @@ describe('inline HTML Toast UI cannot convert, in a paragraph edited in the Visu
     editor.changeMode('markdown');
     await flush();
     expect(editor.getMarkdown().trimEnd()).toBe('x a <!-- c --> b');
+  });
+
+  // CI review of #471: the fallback to plain text. A widget's placeholder ends at the first
+  // `$$`, so HTML containing `$$` is kept as text rather than be cut short there. As text it
+  // is escaped once its paragraph is edited (visible in Read mode), but never truncated.
+  test('with `$$` in it, it is kept as text: escaped when edited, never cut short', async () => {
+    const html = '<?php echo "$$"; ?>';
+    const {editor, el} = createEditor(`a ${html} b\n`);
+    await flush();
+    expect(el.querySelector('.raw-inline-html')).toBeNull();
+    expect(visualText(el)).toBe(`a ${html} b`);
+    expect(editor.getMarkdown()).toBe(`a ${html} b\n`);
+    typeInVisual(editor, 'x ');
+    await flush();
+    const saved = editor.getMarkdown();
+    expect(saved.trimEnd()).toBe(`x a \\${html} b`);
+    const reopened = createEditor(saved);
+    await flush();
+    expect(visualText(reopened.el)).toBe(`x a ${html} b`);
+  });
+
+  test('without the widget rule, it opens as text, escaped when edited', async () => {
+    const {editor, el} = createEditor('a <!-- c --> b\n', 'wysiwyg', false);
+    await flush();
+    expect(el.querySelector('.raw-inline-html')).toBeNull();
+    expect(visualText(el)).toBe('a <!-- c --> b');
+    typeInVisual(editor, 'x ');
+    await flush();
+    expect(editor.getMarkdown().trimEnd()).toBe('x a \\<!-- c --> b');
   });
 });
 
