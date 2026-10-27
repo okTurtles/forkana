@@ -161,7 +161,48 @@
 
 /* The Edit tab's Fork and Submit changes for a signed-out reader are .forkana-btn-group
    (ButtonGroup I6961:75221) and .forkana-btn-primary-unavailable (View Tab 641:65671),
-   in modules/button.css. */
+   in modules/button.css. Signed in, Submit changes is .forkana-btn-primary (Button
+   7368:264915), or .forkana-btn-primary-unavailable when it cannot be used. Fork and
+   Submit changes are 9px apart (Frame 9 7368:264912). */
+.article-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.article-edit-actions .forkana-btn:disabled {
+  cursor: default;
+  filter: none;
+}
+
+/* Fork's count (CounterLabel I7368:264913;30258:5608): a pill 18px tall, 0 6px, #818b98
+   at 12% under an Inter 600 label; #818b98 like the label in the unavailable button. */
+.article-fork-count {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-button-text-disabled) 12%, transparent);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+/* The Edit tab's row has no Watch (Trailing I7368:264911;24375:95728, hidden in
+   "Article view / Logged out - Edit" 7368:264887): Fork and Submit changes end it. Read
+   and History keep it. The page is re-rendered with the tab, so the attribute is current. */
+#article-view-root[data-article-mode="edit"] .article-watch {
+  display: none;
+}
+
+/* The tabs are 0 16px (TabNav.Link I7368:264911;24375:95723): base.css gives every
+   tabular menu item an important 11.55px 12px, to match Gitea's dashboard bar. (On a
+   phone they keep 12px at the sides, below.) */
+@media (min-width: 768px) {
+  #article-tabs .ui.tabular.menu > a.item {
+    padding: 0 16px !important;
+  }
+}
 
 /* ── The article's path (Frame 566 641:65486) ───────────────────────────────── */
 .article-path {
@@ -178,12 +219,16 @@
   min-width: 0;
 }
 
+/* Bold: the Breadcrumbs instance's texts override the component's 400 with 700 (owner,
+   "/" and article, I7368:264927 in the Edit frame 7368:264887, the same in Read
+   7368:264715 and History 7368:263286). */
 .article-breadcrumb {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   font-size: 14px;
   line-height: 20px;
+  font-weight: var(--font-weight-bold);
 }
 
 .article-breadcrumb a,
@@ -253,8 +298,11 @@
 }
 
 /* ── Edit ───────────────────────────────────────────────────────────────────
-   The Summary block (Textarea 641:65697), and the editor 74px under it (Frame 307
-   641:65700 at y 675 after the summary's end at 601). */
+   The Summary block (Textarea 7368:264938), 24px under the article's path (Frame 952
+   7368:264918, gap 24) and 24px above the editor: the .article-mode-body's gap alone
+   ("Article view / Logged out - Edit" 7368:264887: the summary ends at 601, the editor,
+   Frame 307 7368:264941, starts at 625). The older frame had the editor 74px down
+   (641:65700), which the form's 50px top margin made. */
 .article-summary-field {
   display: flex;
   flex-direction: column;
@@ -285,10 +333,6 @@
   font-size: 12px;
   line-height: 18px;
   color: var(--color-text-light-3);
-}
-
-#article-edit-form {
-  margin-top: 50px;
 }
 
 /* ── The sign-in banner (Announcement 641:65699) ─────────────────────────────

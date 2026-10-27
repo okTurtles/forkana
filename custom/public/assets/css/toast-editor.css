@@ -654,13 +654,16 @@
 
 /* The toolbar spans the band (the tabs are laid over its left end), so that Toast UI,
    which folds into its "more" menu whatever does not fit the toolbar's own width, sees
-   the room there is: shrunk to its content, it used to fold the last three buttons. */
+   the room there is: shrunk to its content, it used to fold the last three buttons.
+   Its buttons end 8px from the band's right edge and start 13px from its top ("Frame
+   386" 7368:265002 in "Article view / Logged out - Edit": 24px tall at y 13, ending at
+   632 of 640). */
 [data-theme] .article-editor-box .toastui-editor-defaultUI-toolbar {
   flex: 1;
   justify-content: flex-end;
   height: 47px;
-  align-items: center;
-  padding: 0 16px 0 260px;
+  align-items: flex-start;
+  padding: 13px 8px 0 260px;
   background: transparent;
   border: none;
 }
@@ -730,14 +733,37 @@
   color: var(--color-primary);
 }
 
-/* Below 760px of editor the Visual/Source tabs take their own row above the buttons,
-   and the buttons start at the left and wrap. Above it, the 260px the tabs take on the
-   toolbar's row and the 16px between the button groups (which Toast UI does not count
-   when it decides what to fold into "more") still leave room for every button: they
-   need about 370px. A container query, as the editor's width, not the window's, is
-   what matters. (The ID-qualified rule near the top of this file outweighed the
-   generic phone rule there.) */
-@container article-editor (max-width: 760px) {
+/* On the one row, the Source editor's Write / Preview tabs (with a tab preview, #469)
+   take a row of their own under it, after a rule: Toast UI puts them first in the
+   toolbar's row, where they ran under the Visual / Source tabs. */
+@container article-editor (min-width: 624px) {
+  [data-theme] .article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar {
+    flex-wrap: wrap;
+    height: auto;
+  }
+
+  [data-theme] .article-editor-box .toastui-editor-defaultUI .toastui-editor-md-tab-container {
+    order: 1;
+    flex-basis: 100%;
+    border-top: 1px solid var(--color-border-light);
+  }
+}
+
+/* (a tooltip starts at its button: on one line, those of the buttons at the toolbar's
+   right end are not squeezed into a column against the editor's edge) */
+[data-theme] .article-editor-box .toastui-editor-tooltip {
+  white-space: nowrap;
+}
+
+/* Below 624px of editor the Visual/Source tabs take their own row above the buttons,
+   and the buttons start at the left and wrap. From 624px, which the 640px column has
+   (figma "Article view / Logged out - Edit" 7368:264887, Toolbar 7368:264999), the tabs
+   and the buttons share one row: the 260px the tabs take, the article editor's buttons
+   (four groups of 80, 80, 80 and 68px, 16px apart, which Toast UI does not count when
+   it decides what to fold into "more": 356px) and the 8px after them. A container
+   query, as the editor's width, not the window's, is what matters. (The ID-qualified
+   rule near the top of this file outweighed the generic phone rule there.) */
+@container article-editor (max-width: 623.98px) {
   [data-theme] .article-editor-box #toast-editor-container .toastui-editor-mode-switch {
     position: static;
     order: -1;

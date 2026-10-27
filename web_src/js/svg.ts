@@ -21,6 +21,7 @@ import octiconClock from '../../public/assets/img/svg/octicon-clock.svg';
 import octiconCode from '../../public/assets/img/svg/octicon-code.svg';
 import octiconColumns from '../../public/assets/img/svg/octicon-columns.svg';
 import octiconCopy from '../../public/assets/img/svg/octicon-copy.svg';
+import octiconCrossReference from '../../public/assets/img/svg/octicon-cross-reference.svg';
 import octiconDiffAdded from '../../public/assets/img/svg/octicon-diff-added.svg';
 import octiconDiffModified from '../../public/assets/img/svg/octicon-diff-modified.svg';
 import octiconDiffRemoved from '../../public/assets/img/svg/octicon-diff-removed.svg';
@@ -29,6 +30,7 @@ import octiconDotFill from '../../public/assets/img/svg/octicon-dot-fill.svg';
 import octiconDownload from '../../public/assets/img/svg/octicon-download.svg';
 import octiconEye from '../../public/assets/img/svg/octicon-eye.svg';
 import octiconFile from '../../public/assets/img/svg/octicon-file.svg';
+import octiconFileCode from '../../public/assets/img/svg/octicon-file-code.svg';
 import octiconFileDirectoryFill from '../../public/assets/img/svg/octicon-file-directory-fill.svg';
 import octiconFileDirectoryOpenFill from '../../public/assets/img/svg/octicon-file-directory-open-fill.svg';
 import octiconFileSubmodule from '../../public/assets/img/svg/octicon-file-submodule.svg';
@@ -66,6 +68,7 @@ import octiconPlus from '../../public/assets/img/svg/octicon-plus.svg';
 import octiconProject from '../../public/assets/img/svg/octicon-project.svg';
 import octiconProjectRoadmap from '../../public/assets/img/svg/octicon-project-roadmap.svg';
 import octiconQuote from '../../public/assets/img/svg/octicon-quote.svg';
+import octiconReply from '../../public/assets/img/svg/octicon-reply.svg';
 import octiconRepo from '../../public/assets/img/svg/octicon-repo.svg';
 import octiconRepoForked from '../../public/assets/img/svg/octicon-repo-forked.svg';
 import octiconRepoTemplate from '../../public/assets/img/svg/octicon-repo-template.svg';
@@ -107,6 +110,7 @@ const svgs = {
   'octicon-code': octiconCode,
   'octicon-columns': octiconColumns,
   'octicon-copy': octiconCopy,
+  'octicon-cross-reference': octiconCrossReference,
   'octicon-diff-added': octiconDiffAdded,
   'octicon-diff-modified': octiconDiffModified,
   'octicon-diff-removed': octiconDiffRemoved,
@@ -115,6 +119,7 @@ const svgs = {
   'octicon-download': octiconDownload,
   'octicon-eye': octiconEye,
   'octicon-file': octiconFile,
+  'octicon-file-code': octiconFileCode,
   'octicon-file-directory-fill': octiconFileDirectoryFill,
   'octicon-file-directory-open-fill': octiconFileDirectoryOpenFill,
   'octicon-file-submodule': octiconFileSubmodule,
@@ -152,6 +157,7 @@ const svgs = {
   'octicon-project': octiconProject,
   'octicon-project-roadmap': octiconProjectRoadmap,
   'octicon-quote': octiconQuote,
+  'octicon-reply': octiconReply,
   'octicon-repo': octiconRepo,
   'octicon-repo-forked': octiconRepoForked,
   'octicon-repo-template': octiconRepoTemplate,

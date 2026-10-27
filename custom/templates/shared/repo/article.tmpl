@@ -87,43 +87,47 @@
                         </div>
                     {{end}}
                     {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}
+                        {{/* Fork and Submit changes at the end of the row, 9px apart (Frame 9
+                             7368:264912 of "Article view / Logged out - Edit" 7368:264887).
+                             Submit changes is the design system's medium primary button
+                             (Button 7368:264915: 32px, 6/12 padding, Inter 600 14/20, no icon),
+                             in its unavailable colours when it cannot be used. */}}
                         <div class="tw-flex tw-items-center">
-                            <div class="tw-flex tw-items-center tw-gap-2">
+                            <div class="article-edit-actions">
                                 {{if .IsSigned}}
                                     {{if .CanEditDirectly}}
                                         {{/* The owner and the maintainers edit directly - show simple submit button */}}
-                                        <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
-                                            {{svg "octicon-check" 16 "tw-mr-1"}}
+                                        <button type="button" id="submit-changes-button" class="forkana-btn forkana-btn-primary" data-fork-and-edit="false">
                                             {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                         </button>
                                     {{else if .BlockedByOwnArticle}}
                                         {{/* User owns an independent article for this subject (not a fork of this repo) */}}
                                         {{/* They cannot submit change requests here - redirect to their own article */}}
-                                        <a href="{{.OwnRepoForSubject.Link}}?view=article&mode=edit" class="ui primary button">
-                                            {{svg "octicon-pencil" 16 "tw-mr-1"}}
+                                        <a href="{{.OwnRepoForSubject.Link}}?view=article&mode=edit" class="forkana-btn forkana-btn-primary">
+                                            {{svg "octicon-pencil" 16}}
                                             {{ctx.Locale.Tr "repo.editor.edit_your_article"}}
                                         </a>
                                     {{else if .HasExistingFork}}
                                         {{/* User has an existing fork of this repo - show both options */}}
                                         {{if .ExistingForkArchived}}
                                             {{/* An archived fork is read-only, so editing it is refused: only a change request is possible */}}
-                                            <span class="ui secondary button disabled" data-tooltip-content="{{ctx.Locale.Tr "repo.editor.existing_fork_archived"}}">
+                                            <span class="forkana-btn forkana-btn-unavailable disabled" data-tooltip-content="{{ctx.Locale.Tr "repo.editor.existing_fork_archived"}}">
                                                 {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
                                             </span>
                                         {{else}}
-                                            <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="ui secondary button">
+                                            <a href="{{.ExistingFork.Link}}?view=article&mode=edit" class="forkana-btn forkana-btn-secondary">
                                                 {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
                                             </a>
                                         {{end}}
                                         {{if .CanSubmitChangeRequest}}
-                                        <button type="button" id="pre-submit-changes-button" class="ui primary button"
+                                        <button type="button" id="pre-submit-changes-button" class="forkana-btn forkana-btn-primary"
                                             data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
                                             {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                         </button>
                                         {{end}}
                                     {{else if .NeedsFork}}
                                         {{/* User needs to create a fork - show fork-and-submit button */}}
-                                        <button type="button" id="fork-article-button" class="ui secondary button"
+                                        <button type="button" id="fork-article-button" class="forkana-btn forkana-btn-secondary"
                                             data-fork-and-edit="true"
                                             data-tooltip-content="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
                                             data-fork-confirm-title="{{ctx.Locale.Tr "repo.fork_article_confirm_title"}}"
@@ -131,14 +135,15 @@
                                             data-fork-confirm-body2="{{ctx.Locale.Tr "repo.fork_article_confirm_body2"}}"
                                             data-fork-confirm-yes="{{ctx.Locale.Tr "repo.fork_article_confirm_yes"}}"
                                             data-fork-confirm-cancel="{{ctx.Locale.Tr "repo.fork_article_confirm_cancel"}}">
-                                            {{svg "octicon-repo-forked" 16 "tw-mr-1"}}
-                                            {{ctx.Locale.Tr "repo.fork_article"}}
+                                            {{/* Button 7368:264913: the label and the article's fork count, no icon */}}
+                                            <span>{{ctx.Locale.Tr "repo.fork_article"}}</span>
+                                            <span class="article-fork-count" data-role="article-fork-count"
+                                                aria-label="{{ctx.Locale.TrN .Repository.NumForks "repo.article_forks_1" "repo.article_forks_n" .Repository.NumForks}}">{{.Repository.NumForks}}</span>
                                         </button>
                                         {{/* Submit Change Request - opens modal for title/description, then creates branch + commit + PR */}}
                                         {{if .CanSubmitChangeRequest}}
-                                        <button type="button" id="pre-submit-changes-button" class="ui primary button"
+                                        <button type="button" id="pre-submit-changes-button" class="forkana-btn forkana-btn-primary"
                                             data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
-                                            {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
                                             {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                         </button>
                                         {{end}}
@@ -148,25 +153,23 @@
                                              It handles unexpected permission states where the user is signed in
                                              but none of the specific conditions (owner, blocked, has fork, needs fork) apply. */}}
                                         <span data-tooltip-content="{{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
-                                            <button type="button" class="ui primary button disabled" aria-label="{{ctx.Locale.Tr "repo.editor.submit_changes"}} - {{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
-                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                            <button type="button" class="forkana-btn forkana-btn-primary-unavailable disabled" disabled aria-label="{{ctx.Locale.Tr "repo.editor.submit_changes"}} - {{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
                                         </span>
                                     {{end}}
                                 {{else}}
                                     {{/* #434 items 8 and 9: a signed-out reader sees Fork, with the
-                                         article's fork count, and Submit changes. Fork is the figma's
-                                         ButtonGroup I6961:75221 (its "First Button" 36329:8527 and
-                                         "Last Button" 36329:8532): one control, the count split off by
-                                         a rule. Submit changes keeps its unavailable colours (Button
-                                         I641:65671;8356:68208). Both need an account, so both lead
-                                         to sign in. */}}
+                                         article's fork count, and Submit changes, both in their
+                                         unavailable colours (Button 7368:264913: 84×32, #f6f8fa, a
+                                         #818b98 10% border, an Inter 600 14/20 #818b98 label and its
+                                         count in a CounterLabel; Button 7368:264915). Both need an
+                                         account, so both lead to sign in. */}}
                                     {{$signIn := .ArticleSignInLink}}
-                                    <a class="forkana-btn-group" id="signed-out-fork-button" href="{{$signIn}}"
+                                    <a class="forkana-btn forkana-btn-unavailable" id="signed-out-fork-button" href="{{$signIn}}"
                                         data-tooltip-content="{{ctx.Locale.Tr "repo.article_fork_guest_user"}}">
-                                        <span class="forkana-btn-group-item">{{ctx.Locale.Tr "repo.fork_article"}}</span>
-                                        <span class="forkana-btn-group-item forkana-btn-group-count" data-role="article-fork-count"
+                                        <span>{{ctx.Locale.Tr "repo.fork_article"}}</span>
+                                        <span class="article-fork-count" data-role="article-fork-count"
                                             aria-label="{{ctx.Locale.TrN .Repository.NumForks "repo.article_forks_1" "repo.article_forks_n" .Repository.NumForks}}">{{.Repository.NumForks}}</span>
                                     </a>
                                     <a class="forkana-btn forkana-btn-primary-unavailable" id="signed-out-submit-button" href="{{$signIn}}"

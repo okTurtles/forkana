@@ -3,6 +3,7 @@ import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 import {installLosslessMarkdownTracker} from './comp/losslessMarkdown.ts';
+import {installRawHtmlGuard, rawInlineHtmlWidgetRule} from './comp/rawHtmlGuard.ts';
 import {defaultToolbarItems} from './comp/toastEditorToolbar.ts';
 import {articleEditorMarkdownOptions} from './comp/toastEditorOptions.ts';
 import {showErrorToast} from '../modules/toast.ts';
@@ -85,6 +86,7 @@ export async function createToastEditor(
   const editorRef = {current: null as Editor | null};
   const widgetRules = [
     createBase64WidgetRule((): Editor => editorRef.current!),
+    rawInlineHtmlWidgetRule,
   ];
   const editor: Editor = new Editor({
     el: container,
@@ -170,6 +172,10 @@ export async function createToastEditor(
     widgetRules,
   });
   editorRef.current = editor;
+  // An article with raw HTML Toast UI cannot convert (`<!DOCTYPE html>`, `<?php`, an indented
+  // `<div>`…) must still open in the Visual editor, and text typed there must not be saved as
+  // such HTML (issue #446). Before the tracker below loads the content.
+  installRawHtmlGuard(editor, widgetRules);
 
   // Intercept drop and paste events in the capture phase to block oversized files
   container.addEventListener('drop', (e: DragEvent) => {
