@@ -6,11 +6,13 @@ import {html, htmlRaw} from '../utils/html.ts';
 
 type TippyOpts = {
   role?: string,
-  theme?: 'default' | 'tooltip' | 'menu' | 'box-with-header' | 'bare' | 'warning',
+  theme?: 'default' | 'tooltip' | 'menu' | 'box-with-header' | 'bare' | 'warning' | 'forkana',
 } & Partial<Props>;
 
 const visibleInstances = new Set<Instance>();
 const arrowSvg = html`<svg width="16" height="7"><path d="m0 7 8-7 8 7Z" class="tippy-svg-arrow-outer"/><path d="m0 8 8-7 8 7Z" class="tippy-svg-arrow-inner"/></svg>`;
+// figma's Tooltip arrow ("Vector 1" 7368:260914, 15.5×8.5): 16×8, one fill
+const forkanaArrowSvg = html`<svg width="16" height="8"><path d="m0 8 8-8 8 8Z" class="tippy-svg-arrow-inner"/></svg>`;
 
 export function createTippy(target: Element, opts: TippyOpts = {}): Instance {
   // the callback functions should be destructured from opts,
@@ -94,6 +96,17 @@ function attachTooltip(target: Element, content: Content = null): Instance {
     finalContent = html`<div class="tippy-warning-content"><svg class="tippy-warning-icon" viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2L1 21h22L12 2zm0 3.83L19.53 19H4.47L12 5.83zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg><span>${htmlRaw(formattedContent)}</span></div>`;
   }
 
+  /* figma's Tooltip component (6521:88691, e.g. 7368:260913, #451): its message may lead
+     with a **bold** run ("No forks yet."), the rest escaped as text. Its arrow tip stands
+     10px from the target and the box 18px. */
+  let forkanaOpts: Pick<Partial<Props>, 'arrow' | 'offset'> = {};
+  if (theme === 'forkana' && typeof content === 'string') {
+    allowHTML = true;
+    const parts = content.split(/\*\*(.+?)\*\*/);
+    finalContent = parts.map((part, i) => (i % 2 ? html`<strong>${part}</strong>` : html`${part}`)).join('');
+    forkanaOpts = {arrow: forkanaArrowSvg, offset: [0, 18]};
+  }
+
   const props: TippyOpts = {
     content: finalContent,
     delay: 100,
@@ -104,6 +117,7 @@ function attachTooltip(target: Element, content: Content = null): Instance {
     placement: target.getAttribute('data-tooltip-placement') as Placement || 'top-start',
     followCursor: target.getAttribute('data-tooltip-follow-cursor') as Props['followCursor'] || false,
     ...(target.getAttribute('data-tooltip-interactive') === 'true' ? {interactive: true, aria: {content: 'describedby', expanded: false}} : {}),
+    ...forkanaOpts,
   };
 
   if (!target._tippy) {

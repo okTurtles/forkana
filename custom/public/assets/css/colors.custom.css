@@ -129,6 +129,13 @@
 
   /* Bubble graph: no override needed here, gitea-light gets the same light values that
      base.custom.css already sets on :root (which matches this same element). */
+
+  /* figma's Tooltip (component 6521:88691, e.g. 7368:260912, #451), the forkana tippy
+     theme (web_src/css/modules/tippy.css): dark in every theme, so the same values in
+     colors-dark.custom.css */
+  --color-forkana-tooltip-bg: #25292e;
+  --color-forkana-tooltip-arrow: #1f2328;
+  --color-forkana-tooltip-text: #ffffff;
 }
 
 /* Colorblind diff colors — orange (removed) vs blue (added).

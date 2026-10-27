@@ -40,6 +40,9 @@ const emit = defineEmits<{
 }>();
 
 const message = computed(() => props.messages[props.state]);
+/* #451: "No forks yet" links its "Fork this article" to the fork flow (the page's fork
+   url, readCompareMessages); without one it stays plain text. */
+const link = computed(() => props.state === 'unavailable' ? props.messages.unavailableLink : null);
 const dismissLabel = computed(() => props.state === 'unavailable' ? props.messages.dismissNotice : props.messages.dismiss);
 </script>
 
@@ -52,7 +55,9 @@ const dismissLabel = computed(() => props.state === 'unavailable' ? props.messag
     <span class="compare-announcement-icon" aria-hidden="true">
       <svg viewBox="0 0 16 16" width="16" height="16"><path fill="currentColor" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
     </span>
-    <p class="compare-announcement-message">{{ message }}</p>
+    <!-- eslint-disable-next-line vue/singleline-html-element-content-newline, vue/multiline-html-element-content-newline -->
+    <p v-if="link" class="compare-announcement-message">{{ link.before }}<a class="compare-announcement-link" :href="link.href">{{ link.text }}</a>{{ link.after }}</p>
+    <p v-else class="compare-announcement-message">{{ message }}</p>
     <div class="compare-announcement-actions">
       <button
         v-if="showCompareNow && state === 'ready'" type="button" class="compare-announcement-primary"
@@ -111,6 +116,18 @@ const dismissLabel = computed(() => props.state === 'unavailable' ? props.messag
   font-size: 14px;
   font-weight: 400;
   line-height: 20px;
+}
+
+/* "Fork this article" (the Announcement I7368:260916;38494:155070 of 7368:260887): Inter 600,
+   underlined, #4e40fa (= --color-primary) */
+.compare-announcement-link {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.compare-announcement-link:hover {
+  color: var(--color-primary-hover);
 }
 
 /* Actions: a 4px gap, the primary action then the 32×32 dismiss */

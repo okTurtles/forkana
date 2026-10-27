@@ -153,6 +153,11 @@
   --bubble-joint-stroke: var(--bubble-dark-joint-stroke);
   --bubble-shadow-color: var(--bubble-dark-shadow-color);
   --bubble-overlay-bg: var(--bubble-dark-overlay-bg);
+
+  /* the Tooltip of figma (colors.custom.css): the same as in the light theme */
+  --color-forkana-tooltip-bg: #25292e;
+  --color-forkana-tooltip-arrow: #1f2328;
+  --color-forkana-tooltip-text: #ffffff;
 }
 
 /* "gitea-auto" keeps data-theme="gitea-auto" on <html>, so the selectors above never match it.
@@ -274,6 +279,11 @@
     --bubble-joint-stroke: var(--bubble-dark-joint-stroke);
     --bubble-shadow-color: var(--bubble-dark-shadow-color);
     --bubble-overlay-bg: var(--bubble-dark-overlay-bg);
+
+    /* the Tooltip of figma (colors.custom.css): the same as in the light theme */
+    --color-forkana-tooltip-bg: #25292e;
+    --color-forkana-tooltip-arrow: #1f2328;
+    --color-forkana-tooltip-text: #ffffff;
   }
 }
 
