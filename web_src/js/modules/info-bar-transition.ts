@@ -52,22 +52,58 @@ function slide(el: HTMLElement, keyframes: Keyframe[], done?: () => void) {
   }
   // (box-sizing so that the height animated is the whole box; overflow so that the bar's
   // content is revealed from the top rather than drawn over what is below)
-  const animation = el.animate(keyframes, {duration: INFO_BAR_DURATION, easing: 'ease-out'});
+  const animation = el.animate(keyframes, {duration: INFO_BAR_DURATION, easing: 'ease-out', fill: 'forwards'});
   el.style.overflow = 'hidden';
   el.style.boxSizing = 'border-box';
   running.set(el, animation);
+  /* The slide is driven frame by frame rather than by the clock. A bar often appears
+     with a tab whose content is heavy to set up (the Edit tab's editor), which keeps the
+     main thread busy for the first frames: on a clock, a slow machine (WebKit on CI) had
+     spent the 200ms before the first frame was drawn, and the bar appeared at once. Here
+     the bar is drawn at its first keyframe, then each frame advances the slide by the
+     time since the last one, but never by more than 34ms (two frames at 60Hz): it always
+     takes at least six frames, and 200ms when nothing holds the page up. */
+  const resetStyles = () => {
+    el.style.overflow = '';
+    el.style.boxSizing = '';
+  };
   const finish = () => {
     if (running.get(el) !== animation) return;
     running.delete(el);
-    el.style.overflow = '';
-    el.style.boxSizing = '';
     done?.();
   };
-  animation.addEventListener('finish', finish);
+  animation.pause();
+  animation.currentTime = 0;
+  let elapsed = 0;
+  let last: number | null = null;
+  const step = (now: number) => {
+    if (running.get(el) !== animation) return;
+    if (last !== null) elapsed += Math.min(now - last, 34);
+    last = now;
+    if (elapsed >= INFO_BAR_DURATION) {
+      // The end is handled here, in this frame, not on the animation's `finish` event,
+      // which comes after the frame is drawn. The last keyframe stays applied (fill) for
+      // one more frame, while whoever asked hides or removes the bar: a closed bar was
+      // otherwise drawn at full height for a frame, between its animation's end and its
+      // removal. (The last keyframe of an opening is the bar's own height.)
+      animation.currentTime = INFO_BAR_DURATION;
+      finish();
+      requestAnimationFrame(() => {
+        animation.cancel();
+        // (the styles stay if another slide of this bar has started meanwhile)
+        if (!running.has(el)) resetStyles();
+      });
+      return;
+    }
+    animation.currentTime = elapsed;
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  // cancelled while it runs: another slide of this bar takes over, or the slide is undone
   animation.addEventListener('cancel', () => {
-    if (running.get(el) === animation) running.delete(el);
-    el.style.overflow = '';
-    el.style.boxSizing = '';
+    if (running.get(el) !== animation) return;
+    running.delete(el);
+    resetStyles();
   });
 }
 

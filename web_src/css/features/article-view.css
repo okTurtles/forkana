@@ -325,9 +325,18 @@
   padding: 6px 8px 6px 0;
 }
 
-.article-signin-banner-text a {
-  color: inherit;
+/* figma's override on 'Sign in/Sign up' (I7368:264940;31888:12492): one underlined run,
+   weight 400, in the message's colour. They are two links (two targets), so the run is the
+   span around them (custom/options/locale, article_signin_banner), "/" included. */
+.article-signin-banner-links {
   text-decoration: underline;
+}
+
+.article-signin-banner-text a,
+.article-signin-banner-text a:hover {
+  color: inherit;
+  font-weight: var(--font-weight-normal);
+  text-decoration: none;
 }
 
 .article-signin-banner-dismiss {

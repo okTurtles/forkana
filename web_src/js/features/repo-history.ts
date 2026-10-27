@@ -238,7 +238,12 @@ export function initRepoHistory() {
         if (bannerOnScreen) delta -= bannerHeight() - bannerBefore;
         if (Math.abs(delta) >= 0.5) window.scrollBy(0, delta);
       }
-      html.style.overflowAnchor = '';
+      // Back on two frames later, once the new section has been laid out and drawn with
+      // anchoring off, so that the browser picks its next anchor in it rather than going
+      // on from one in the section just replaced.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        html.style.overflowAnchor = '';
+      }));
     };
   }
 

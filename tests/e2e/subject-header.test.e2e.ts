@@ -58,8 +58,9 @@ async function open(page: Page, view: string) {
 }
 
 // waits for the info bars' slides (and the views' fade) to end
+// (the info bars' slides are paused animations, moved on frame by frame: info-bar-transition.ts)
 async function settle(page: Page) {
-  await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
+  await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running' || a.playState === 'paused').length)).toBe(0);
 }
 
 // The Follow label reads "Follow" or "Following", for the article each view stands for,
@@ -208,6 +209,41 @@ for (const {width, column} of layouts) {
   });
 }
 
+// The text styles of the header and the sign-in banner, with figma's per-character
+// overrides: the title (7368:260785, Inter 500 40/56 #1f2328, the colour of its 'Landing'
+// override), Follow (7368:260786, 600 #25292e), the view tabs (7368:260789, 600 open, 400
+// otherwise, #1f2328), and the banner's message (I7368:264940;31888:12492, with 'Sign
+// in/Sign up' one underlined run at 400). The message is #1f2328, as every other
+// Announcement's: this one's #000000 base fill looks like an artefact of the instance, and
+// is left for Pierre to decide.
+test('desktop: the header and the sign-in banner have figma text styles', async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await open(page, 'edit');
+  const style = (selector: string) => page.locator(selector).first().evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return {weight: cs.fontWeight, size: cs.fontSize, lineHeight: cs.lineHeight, color: cs.color, decoration: cs.textDecorationLine};
+  });
+  expect(await style('.subject-header h1')).toMatchObject({weight: '500', size: '40px', lineHeight: '56px', color: 'rgb(31, 35, 40)'});
+  expect(await style('.follow-article-button')).toMatchObject({weight: '600', size: '14px', lineHeight: '20px', color: 'rgb(37, 41, 46)'});
+  expect(await style('#subject-view-tabs > .item.active')).toMatchObject({weight: '600', size: '14px', color: 'rgb(31, 35, 40)'});
+  expect(await style('#subject-view-tabs > .item:not(.active)')).toMatchObject({weight: '400', size: '14px', color: 'rgb(31, 35, 40)'});
+
+  await expect(page.locator('#article-signin-banner')).toBeVisible();
+  expect(await style('.article-signin-banner-text')).toMatchObject({weight: '400', size: '14px', lineHeight: '20px', color: 'rgb(31, 35, 40)'});
+  // one underlined run, "/" included, over two links that look like the text around them
+  const links = page.locator('.article-signin-banner-links');
+  await expect(links).toHaveText('Sign in/Sign up');
+  expect((await style('.article-signin-banner-links')).decoration).toBe('underline');
+  for (const link of await links.locator('a').all()) {
+    expect(await link.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {weight: cs.fontWeight, color: cs.color};
+    })).toEqual({weight: '400', color: 'rgb(31, 35, 40)'});
+  }
+  await links.locator('a').first().hover();
+  expect((await style('.article-signin-banner-links a')).color).toBe('rgb(31, 35, 40)');
+});
+
 test('desktop: the title block is 136px and the view tabs row 48px (7368:260781, 7368:260789)', async ({page}) => {
   await page.setViewportSize({width: 1440, height: 900});
   await open(page, 'bubble');
@@ -248,9 +284,13 @@ test.describe('signed in', () => {
   }
 });
 
-// Switches the article tab in the page and waits for it (and, for Edit, its editor).
+// Switches the article tab in the page and waits for it (and, for Edit, its editor). The
+// tab is pressed where it is on screen, as a reader would: a locator click first scrolls
+// its target into view, and in WebKit that sometimes scrolled the page to the top even
+// with the tab in full view, which is not what the page does.
 async function switchTab(page: Page, tab: string) {
-  await page.locator(`#article-tabs a[data-article-tab="${tab}"]`).click();
+  const box = await page.locator(`#article-tabs a[data-article-tab="${tab}"]`).boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect(page.locator(shown[tab])).toBeVisible({timeout: 10000});
   await expect(page.locator(`${shown[tab]} .toastui-editor-defaultUI`)).toHaveCount(tab === 'edit' ? 1 : 0, {timeout: 10000});
   // an info bar slides for 200ms, and the editor used to focus itself (and scroll) in a
@@ -325,14 +365,15 @@ test.describe('switching tabs does not move the page', () => {
 
   // Signed out, the Edit tab's sign-in banner opens above the header (an info bar, in the
   // flow): what is on screen moves with it while it slides, or, when it is above the
-  // window, not at all, the page being scrolled by its height. The row of tabs, once it
-  // has settled, is where it was in the window, to the pixel a scroll position is rounded
-  // to.
+  // window, not at all, the page being scrolled by its height. Scrolled past the banner
+  // (250px: below the 68px navbar and the banner, up to 68px on a phone), the row of
+  // tabs, once it has settled, is where it was in the window, to the pixel a scroll
+  // position is rounded to.
   for (const width of [1440, 375]) {
     test(`signed out at ${width}px, scrolled: the row of tabs stays in the window`, async ({page}) => {
       await page.setViewportSize({width, height: 700});
       await open(page, 'read');
-      await page.evaluate(() => window.scrollTo(0, 120));
+      await page.evaluate(() => window.scrollTo(0, 250));
       const rowY = () => page.evaluate(() => document.querySelector('#article-tabs').getBoundingClientRect().y);
       const before = await rowY();
       for (const tab of ['edit', 'read', 'history']) {
