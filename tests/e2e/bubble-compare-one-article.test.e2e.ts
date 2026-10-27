@@ -40,6 +40,8 @@ test('the Compare tooltip is shown below the button (#451 item 1)', async ({page
   await expect(content).toHaveCSS('padding', '8px');
   await expect(content).toHaveCSS('font-size', '12px');
   await expect(content).toHaveCSS('line-height', '18px');
+  await expect(content).toHaveCSS('font-weight', '400');
+  await expect(content).toHaveCSS('color', 'rgb(255, 255, 255)');
   await expect(content.locator('strong')).toHaveText('No forks yet.');
   await expect(content.locator('strong')).toHaveCSS('font-weight', '600');
 
@@ -64,6 +66,16 @@ test('signed out, "Fork this article" in the notice leads to sign in, then the f
   const banner = page.locator('#compare-announcement-root .compare-announcement');
   await expect(banner).toContainText('No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.');
   const link = banner.getByRole('link', {name: 'Fork this article'});
+  // figma's Message (I7368:260916;38494:155070): Inter 400 14/20 in #1f2328, its
+  // "Fork this article" run 600, underlined, #4e40fa
+  const message = banner.locator('.compare-announcement-message');
+  await expect(message).toHaveCSS('font-weight', '400');
+  await expect(message).toHaveCSS('font-size', '14px');
+  await expect(message).toHaveCSS('line-height', '20px');
+  await expect(message).toHaveCSS('color', 'rgb(31, 35, 40)');
+  await expect(link).toHaveCSS('font-weight', '600');
+  await expect(link).toHaveCSS('color', 'rgb(78, 64, 250)');
+  await expect(link).toHaveCSS('text-decoration-line', 'underline');
   await expect(link).toBeVisible();
   const href = await link.getAttribute('href');
   const target = new URL(href, page.url());
@@ -102,6 +114,10 @@ test.describe('signed in', () => {
     await button.dispatchEvent('click');
     const banner = page.locator('#compare-announcement-root .compare-announcement');
     await expect(banner).toContainText('No forks yet. Compare needs at least 2 articles. Comparing starts once someone forks this article.');
+    // the message's own style, as every banner message (figma's Message, Inter 400 14/20 #1f2328)
+    const message = banner.locator('.compare-announcement-message');
+    await expect(message).toHaveCSS('font-weight', '400');
+    await expect(message).toHaveCSS('color', 'rgb(31, 35, 40)');
     await expect(banner.getByRole('link')).toHaveCount(0);
     await context.close();
   });
