@@ -66,15 +66,16 @@ export function readCompareMessages(root: Element | null, overrides: Partial<Com
   const noForks = msg('no-forks') || 'No forks yet. Compare needs at least 2 articles. %s to start comparing.';
   const forkText = msg('fork-link') || 'Fork this article';
   const forkUrl = root?.getAttribute('data-fork-url');
-  const slot = noForks.indexOf('%s');
-  const unavailableLink = forkUrl && slot >= 0 ?
-    {before: noForks.slice(0, slot), text: forkText, href: forkUrl, after: noForks.slice(slot + 2)} :
+  // exactly one %s makes a link; a translation with none or several is plain text
+  const parts = noForks.split('%s');
+  const unavailableLink = forkUrl && parts.length === 2 ?
+    {before: parts[0], text: forkText, href: forkUrl, after: parts[1]} :
     null;
   return {
     select: overrides.select || msg('select') || 'Select 2 articles to compare (0/2 selected).',
     one: overrides.one || msg('one') || '1/2 selected – select one more to compare.',
     ready: overrides.ready || msg('ready') || '2/2 selected – ready to compare.',
-    unavailable: overrides.unavailable || noForks.replace('%s', () => forkText),
+    unavailable: overrides.unavailable || parts.join(forkText),
     unavailableLink: overrides.unavailable ? null : unavailableLink,
     compareNow: overrides.compareNow || msg('compare-now') || 'Compare now',
     dismiss: overrides.dismiss || msg('dismiss') || 'Exit compare mode',

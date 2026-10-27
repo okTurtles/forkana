@@ -87,6 +87,17 @@ test('"No forks yet" links "Fork this article" to the page\'s fork url (#451)', 
   expect(readCompareMessages(null).unavailable).toBe('No forks yet. Compare needs at least 2 articles. Fork this article to start comparing.');
 });
 
+test('a translation without exactly one %s gets no link, and no literal %s', () => {
+  const root = document.createElement('div');
+  root.setAttribute('data-fork-url', '/subject/Moon/alice?view=article&mode=edit');
+  root.setAttribute('data-msg-no-forks', 'No forks. %s, really %s.');
+  expect(readCompareMessages(root).unavailableLink).toBeNull();
+  expect(readCompareMessages(root).unavailable).toBe('No forks. Fork this article, really Fork this article.');
+  root.setAttribute('data-msg-no-forks', 'No forks yet.');
+  expect(readCompareMessages(root).unavailableLink).toBeNull();
+  expect(readCompareMessages(root).unavailable).toBe('No forks yet.');
+});
+
 test(`the compare page of two owners' articles`, () => {
   expect(subjectCompareUrl('/sub', 'Moon Landing', 'jane z', 'peter')).toBe('/sub/subject/Moon%20Landing/compare/jane%20z...peter');
 });
