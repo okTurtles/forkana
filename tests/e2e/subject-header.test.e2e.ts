@@ -259,52 +259,88 @@ async function switchTab(page: Page, tab: string) {
   await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)));
 }
 
-// #469: opening the Edit tab used to scroll the page down to the editor (Toast UI focused
-// it, through the lossless tracker's initial setMarkdown). The page stays where it is now.
-test.describe('switching tabs does not scroll the page', () => {
-  // (WebKit, rarely, puts the page back at the top while the article section is swapped:
-  // seen once in five runs of the four projects, never reproduced outside the test runner)
-  test.describe.configure({retries: 1});
+// #469: switching Read / Edit / History must not move anything above the content, nor the
+// page. It used to: opening Edit scrolled down to the editor (Toast UI focused it), the
+// loader showed above the article while the tab was fetched (14px), the Edit tab's taller
+// buttons made the row of tabs taller on a phone, and WebKit's scroll anchoring, its
+// anchor in the section being swapped, scrolled the page (sometimes to the top).
 
+// The boxes that must not move, in the page, and the scroll position. The first line of
+// content is the article's path, in Read, Edit and History (Settings has its own).
+const FIRST_CONTENT = '#article-view-root .article-path';
+
+type Layout = {scrollY: number, boxes: Record<string, Box>};
+
+async function layoutOf(page: Page, withContent = true): Promise<Layout> {
+  await page.evaluate(() => document.fonts.ready);
+  const boxes: Record<string, Box> = {
+    title: await boxOf(page, '.subject-header h1'),
+    viewTabs: await boxOf(page, '#subject-view-tabs'),
+    tabsRow: await boxOf(page, '#article-tabs'),
+  };
+  if (withContent) boxes.firstContent = await boxOf(page, FIRST_CONTENT);
+  return {scrollY: await page.evaluate(() => window.scrollY), boxes};
+}
+
+function expectSameLayout(actual: Layout, expected: Layout, label: string) {
+  expect(Math.abs(actual.scrollY - expected.scrollY), `${label}: scrollY ${expected.scrollY} -> ${actual.scrollY}`).toBeLessThanOrEqual(0.5);
+  for (const [key, box] of Object.entries(actual.boxes)) {
+    for (const side of ['x', 'y', 'width', 'height'] as const) {
+      const before = expected.boxes[key][side];
+      expect(Math.abs(box[side] - before), `${label}: ${key}.${side} ${before} -> ${box[side]}`).toBeLessThanOrEqual(0.5);
+    }
+  }
+}
+
+test.describe('switching tabs does not move the page', () => {
   test.beforeAll(async ({browser}, workerInfo) => {
     await login_user(browser, workerInfo, owner);
   });
 
-  test('signed in: window.scrollY is unchanged', async ({browser}, workerInfo) => {
-    const context = await load_logged_in_context(browser, workerInfo, owner);
-    const page = await context.newPage();
-    await page.setViewportSize({width: 1440, height: 400});
-    await open(page, 'read');
-    await page.evaluate(() => window.scrollTo(0, 120));
-    const scrollY = await page.evaluate(() => window.scrollY);
-    expect(scrollY).toBeGreaterThan(0);
-    for (const tab of ['edit', 'read', 'history', 'edit']) {
-      await switchTab(page, tab);
-      expect(Math.abs(await page.evaluate(() => window.scrollY) - scrollY), tab).toBeLessThanOrEqual(1);
+  for (const width of [1440, 375]) {
+    for (const scrolled of [0, 120]) {
+      test(`signed in at ${width}px, scrolled to ${scrolled}: the header, the row of tabs and the content stay put`, async ({browser}, workerInfo) => {
+        const context = await load_logged_in_context(browser, workerInfo, owner);
+        const page = await context.newPage();
+        // (tall enough for the row of tabs to be in the window: clicking a tab out of it
+        // would scroll the page to it)
+        await page.setViewportSize({width, height: 700});
+        await open(page, 'read');
+        await page.evaluate((y) => window.scrollTo(0, y), scrolled);
+        const reference = await layoutOf(page);
+        expect(Math.abs(reference.scrollY - scrolled)).toBeLessThanOrEqual(1);
+        // Read, Edit, History and the owner's Settings
+        for (const tab of ['edit', 'history', 'read', 'edit']) {
+          await switchTab(page, tab);
+          expectSameLayout(await layoutOf(page), reference, tab);
+        }
+        await switchTab(page, 'settings');
+        expectSameLayout(await layoutOf(page, false), reference, 'settings');
+        // the editor was not focused on its own
+        expect(await page.evaluate(() => Boolean(document.activeElement?.closest('.toastui-editor-defaultUI')))).toBe(false);
+        await context.close();
+      });
     }
-    // the editor was not focused on its own
-    expect(await page.evaluate(() => Boolean(document.activeElement?.closest('.toastui-editor-defaultUI')))).toBe(false);
-    await context.close();
-  });
+  }
 
-  // Signed out, the Edit tab's sign-in banner slides open above the header, above the part
-  // of the page on screen: the browser keeps what is on screen in place (scroll
-  // anchoring), so the tab row does not move in the window.
-  test('signed out: what is on screen stays in place', async ({page, browserName}) => {
-    // WebKit does not always keep what is on screen in place when the bar above it closes
-    // while the article below is swapped (its scroll anchor goes with the old article)
-    // eslint-disable-next-line playwright/no-skipped-test
-    test.skip(browserName === 'webkit', 'WebKit scroll anchoring');
-    await page.setViewportSize({width: 1440, height: 400});
-    await open(page, 'read');
-    await page.evaluate(() => window.scrollTo(0, 120));
-    const rowY = () => page.evaluate(() => document.querySelector('#article-tabs').getBoundingClientRect().y);
-    const before = await rowY();
-    for (const tab of ['edit', 'read', 'history']) {
-      await switchTab(page, tab);
-      expect(Math.abs(await rowY() - before), tab).toBeLessThanOrEqual(1);
-    }
-  });
+  // Signed out, the Edit tab's sign-in banner opens above the header (an info bar, in the
+  // flow): what is on screen moves with it while it slides, or, when it is above the
+  // window, not at all, the page being scrolled by its height. The row of tabs, once it
+  // has settled, is where it was in the window, to the pixel a scroll position is rounded
+  // to.
+  for (const width of [1440, 375]) {
+    test(`signed out at ${width}px, scrolled: the row of tabs stays in the window`, async ({page}) => {
+      await page.setViewportSize({width, height: 700});
+      await open(page, 'read');
+      await page.evaluate(() => window.scrollTo(0, 120));
+      const rowY = () => page.evaluate(() => document.querySelector('#article-tabs').getBoundingClientRect().y);
+      const before = await rowY();
+      for (const tab of ['edit', 'read', 'history']) {
+        await switchTab(page, tab);
+        expect(Math.abs(await rowY() - before), tab).toBeLessThanOrEqual(1);
+      }
+    });
+  }
 });
 
 type BarSample = {height: number, gap: number};

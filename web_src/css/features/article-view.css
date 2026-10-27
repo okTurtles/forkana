@@ -17,6 +17,23 @@
   margin-inline: auto;
 }
 
+/* #469: at least a window tall, so that a tab shorter than the one before (History after
+   Read) cannot make the page so short that the browser scrolls it back up, moving the
+   header and the row of tabs. */
+.history-view-section--article #article-view-root:has(#article-tabs) {
+  min-height: 100vh;
+}
+
+/* While another tab of the article on screen is fetched (repo-history.ts), its body is
+   dimmed, in place of a loader that would push it down (#469). */
+#article-view-root [data-role="article-content"] .article-mode-body {
+  transition: opacity 0.15s ease-out;
+}
+
+#article-view-root [data-role="article-content"][aria-busy="true"] .article-mode-body {
+  opacity: 0.5;
+}
+
 /* ── Vertical rhythm ─────────────────────────────────────────────────────────
    24px from the view tabs to the tokens (the section's padding, in
    subject-views.css), from the tokens to the tabs, from the tabs to the article's
@@ -108,12 +125,22 @@
   margin: 0;
 }
 
+/* One height in every tab (#469): Watch alone in Read and History is 32px, the Edit
+   tab's Fork / Submit changes buttons up to 38px; the row of tabs must not change height
+   with them, nor, on a phone, the row they take above the tabs. They are centred in 40px
+   (the tabs' height), on one line. */
 .article-tabs-trailing {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 9px;
+  height: 40px;
   margin-left: auto;
   align-self: center;
+}
+
+.article-tabs-trailing > * {
+  flex-shrink: 0;
 }
 
 /* A borderless button (Action 6507:58668, the design system's tertiary button): an
@@ -137,7 +164,10 @@
    in modules/button.css. */
 
 /* ── The article's path (Frame 566 641:65486) ───────────────────────────────── */
+/* (32px at least, the height of its CopyRef button: History has the Sort menu there
+   instead, which is shorter, and the first line of content keeps one height, #469) */
 .article-path {
+  min-height: 32px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -643,9 +673,19 @@ a.article-history-page-direction:hover {
     gap: 8px;
   }
 
+  /* (the buttons that do not fit the width scroll sideways inside their row, rather than
+     wrapping to a second line and pushing the tabs down) */
   .article-tabs-trailing {
     order: -1;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  /* at the end of the row while they fit (an auto margin rather than flex-end, which
+     would put the first buttons out of reach once they do not) */
+  .article-tabs-trailing > :first-child {
+    margin-left: auto;
   }
 
   #article-tabs .ui.tabular.menu {

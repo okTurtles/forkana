@@ -213,6 +213,35 @@ export function initRepoHistory() {
     articleContentEl = articleSection.querySelector('[data-role="article-content"]');
   }
 
+  /* #469: switching Read / Edit / History swaps the whole article section, the row of
+     tabs that was clicked included. The row must stay where it is in the window. The
+     browser's scroll anchoring does not do that reliably here: its anchor is often in
+     the section just replaced, and WebKit then moves the page (sometimes to the top).
+     So it is held by hand: anchoring is off during the swap, and the page is scrolled by
+     however much the row moved. A sign-in banner shown or hidden above it on screen is
+     not compensated, as it slides open or closed (info-bar-transition.ts) and the row
+     is meant to slide with it; one above the window changes at once, and is. Call
+     before the swap; call what it returns after. */
+  function holdArticleTabsRow(): () => void {
+    const row = () => articleSection?.querySelector<HTMLElement>('#article-tabs') ?? null;
+    const banner = document.querySelector<HTMLElement>('#article-signin-banner');
+    const bannerHeight = () => (banner && banner.getClientRects().length ? banner.getBoundingClientRect().height : 0);
+    const before = row()?.getBoundingClientRect().top;
+    const bannerBefore = bannerHeight();
+    const html = document.documentElement;
+    html.style.overflowAnchor = 'none';
+    return () => {
+      const after = row()?.getBoundingClientRect().top;
+      if (before !== undefined && after !== undefined) {
+        let delta = after - before;
+        const bannerOnScreen = banner && banner.getBoundingClientRect().bottom > 0;
+        if (bannerOnScreen) delta -= bannerHeight() - bannerBefore;
+        if (Math.abs(delta) >= 0.5) window.scrollBy(0, delta);
+      }
+      html.style.overflowAnchor = '';
+    };
+  }
+
   function toggleHidden(el: Element | null, hidden: boolean) {
     if (!el) return;
     if (hidden) el.setAttribute('hidden', '');
@@ -327,7 +356,16 @@ export function initRepoHistory() {
   let historyTable: HistoryTable | null = null;
 
   function updateArticleStatus() {
-    if (loaderEl) toggleHidden(loaderEl, !isLoading.value);
+    /* While another tab of the article on screen is fetched, that article stays: the
+       loader, above it, would push it (and its row of tabs) down for as long as the fetch
+       takes (#469). The content is marked busy instead (dimmed in
+       features/article-view.css); the loader is for an article not on screen yet. */
+    const contentShown = articleContentEl !== null && !articleContentEl.hasAttribute('hidden');
+    if (loaderEl) toggleHidden(loaderEl, !isLoading.value || contentShown);
+    if (articleContentEl) {
+      if (isLoading.value && contentShown) articleContentEl.setAttribute('aria-busy', 'true');
+      else articleContentEl.removeAttribute('aria-busy');
+    }
     if (errorEl) {
       const showError = !isLoading.value && Boolean(loadError.value);
       toggleHidden(errorEl, !showError);
@@ -411,12 +449,12 @@ export function initRepoHistory() {
     const currentToken = ++articleRequestToken;
     isLoading.value = true;
     loadError.value = '';
-    updateArticleStatus();
     /* The content on screen is another article's: hidden while this one is fetched
        (the loader is outside it), so a failed fetch cannot leave article A under the
        selection of B. The same article in another mode stays until it is replaced. */
     toggleHidden(articleEmptyEl, true);
     toggleHidden(articleContentEl, !matchesSelection(loadedArticle, selection));
+    updateArticleStatus();
     const url = articleUrlFor(selection, mode);
     try {
       const response = await GET(url);
@@ -435,6 +473,7 @@ export function initRepoHistory() {
       syncArchivedNotice(doc);
       syncTransferNotice(doc);
       if (articleSection) {
+        const keepRow = holdArticleTabsRow();
         articleSection.innerHTML = newSection.innerHTML;
         // htmx only acts on content it has processed: without this, the Watch button
         // (hx-boost, with the CSRF header from <body hx-headers>) would post as a plain form
@@ -451,6 +490,7 @@ export function initRepoHistory() {
         } else if (articleMode.value === 'settings') {
           initArticleSettings();
         }
+        keepRow();
       }
       isLoading.value = false;
       updateArticleStatus();
