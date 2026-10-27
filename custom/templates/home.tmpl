@@ -79,12 +79,12 @@
 						<div class="home-feed-item-time">{{DateUtils.TimeSince .GetCreate}}</div>
 					</div>
 					<div class="home-feed-item-icon">
-						{{svg (printf "octicon-%s" (ActionIcon .GetOpType)) 20 "text grey"}}
+						{{svg (printf "octicon-%s" (ActionIcon .GetOpType)) 16}}
 					</div>
 				</div>
 				{{end}}
 				{{if .Feeds}}
-				<!-- Secondary large button (Figma 3853:40422), it was the primary one before #404 item 5 -->
+				<!-- Secondary large button (Figma 7368:416752), it was the primary one before #404 item 5 -->
 				<a href="{{AppSubUrl}}/feeds" class="home-feeds-see-all forkana-btn forkana-btn-secondary forkana-btn-lg">{{ctx.Locale.Tr "home.see_all"}}</a>
 				{{else}}
 				<!-- Empty state (Figma 6315:57313) -->

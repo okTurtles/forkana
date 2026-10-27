@@ -175,40 +175,57 @@
 .home-feeds-card {
   width: 100%;
   margin-top: 48px;
-  border: 1px solid var(--color-secondary);
+  /* #d1d9e0, the card's stroke (7368:416712 / 7368:416713) */
+  border: 1px solid var(--color-border-light);
   border-radius: 8px;
   overflow: hidden;
 }
 
-/* "Your feeds" (Figma 7368:416712 / 7368:418435): a 36px header, 8px side padding, Inter 600
-   16/24 in #59636e (--color-muted-text) */
+/* "Your feeds" (Figma 7368:416712 / 7368:418435): a 36px header from the card's outer edge,
+   the text 8px from its left edge and 6px from its top, Inter 600 16/24 in #59636e
+   (--color-muted-text). Figma draws the strokes inside the frame, so the card's 1px border
+   counts towards those 36, 8 and 6px: 1 + 5 + 24 + 5 + 1. */
 .home-feeds-card-header {
-  padding: 6px 8px 5px; /* 36px with the 1px border below, drawn inside in Figma */
+  padding: 5px 7px;
   font-weight: var(--font-weight-semibold);
   font-size: 16px;
   line-height: 24px;
   color: var(--color-muted-text);
   background: var(--color-feeds-card-header);
-  border-bottom: 1px solid var(--color-secondary);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
+/* A feed item, after the rows of Figma Home > Frame 1063 (7368:416721, 7368:416733,
+   7368:416742): 8px above and below, 16px in from the card's outer edges (15px plus its 1px
+   border), a 1px #d1d9e0 separator under every row but the last, 12px between the avatar, the
+   text and the action icon. */
 .home-feed-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  margin: 0 1rem;
-  padding: 12px 0;
-  border-top: 1px solid var(--color-secondary);
+  margin: 0 15px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
-.home-feeds-card-header + .home-feed-item {
-  border-top: none;
+.home-feed-item:has(+ :not(.home-feed-item)) {
+  border-bottom: none;
+}
+
+/* The avatar (7368:416736): 24px square, radius 6, a 1px #d1d9e0 stroke inside, 4px below the
+   top of the text */
+.home-feed-item-avatar {
+  flex-shrink: 0;
+  padding-top: 4px;
+  line-height: 0;
 }
 
 .home-feed-item-avatar img {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
 }
 
 .home-feed-item-body {
@@ -216,32 +233,58 @@
   min-width: 0;
 }
 
+/* The sentence (7368:416739): Inter 12/18 in #59636e, 400 for the words and 600 for the user
+   and the article, which are links of the same colour, underlined on hover. The article starts
+   its own line (a line separator in the Figma text). */
 .home-feed-item-action {
-  font-size: 13px;
-  color: var(--color-text);
-  line-height: 1.4;
+  font-size: 12px;
+  font-weight: var(--font-weight-normal);
+  line-height: 18px;
+  color: var(--color-muted-text);
   /* a long subject or user name without spaces wraps inside the card instead of
      pushing it wider than the search field above it (#460) */
   overflow-wrap: anywhere;
 }
 
-.home-feed-item-time {
-  font-size: 12px;
-  color: var(--color-text-light-3);
-  margin-top: 2px;
+.home-feed-item-action a {
+  font-weight: var(--font-weight-semibold);
+  color: inherit;
 }
 
+.home-feed-item-action a:hover {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.home-feed-item-action a:last-of-type:not(:first-of-type) {
+  display: block;
+}
+
+/* The time (7368:416740): Inter 400 10px in #59636e, 4px under the sentence. Figma gives the
+   text a 20px line height but a 16px tall box, and the row (56 = 36 + 4 + 16) is built on the
+   box, so the line is 16px here. */
+.home-feed-item-time {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--color-muted-text);
+}
+
+/* The action icon (7368:416741): 16px in #1f2328 (--color-text-primary), centred on the row */
 .home-feed-item-icon {
   flex-shrink: 0;
-  color: var(--color-text-light-3);
+  align-self: center;
+  line-height: 0;
+  color: var(--color-text-primary);
 }
 
 /* The design system's large secondary button (.forkana-btn-secondary.forkana-btn-lg in
-   web_src/css/modules/button.css), full width inside the card's 16px side margins
-   (Figma 3853:40422, #404 item 5). */
+   web_src/css/modules/button.css), full width inside the card's 16px side margins, 16px under
+   the last row and 16px above the card's bottom edge (Figma 7368:416752, Frame 1064
+   7368:416719; 15px plus the card's 1px border). */
 .home-feeds-see-all {
   display: flex;
-  margin: 4px 1rem 1rem;
+  margin: 16px 15px 15px;
 }
 
 /* "It's quiet in here… for now" when the feed has nothing yet (Figma 6315:57313):
