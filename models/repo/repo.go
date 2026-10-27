@@ -724,13 +724,18 @@ func (repo *Repository) LinkCtx(ctx context.Context) string {
 	return repo.articleLink(ctx)
 }
 
+// SubjectLink returns the url of the subject page, /subject/{subject}; an article's url
+// (articleLink) extends it.
+func SubjectLink(subjectName string) string {
+	return setting.AppSubURL + "/subject/" + url.PathEscape(subjectName)
+}
+
 // articleLink returns the article view url of this repository,
 // /subject/{subject}/{owner}, using the repository name in place of the subject when
 // none is assigned. When the owner holds several articles for the subject, the ones
 // past the first are addressed by appending their article index.
 func (repo *Repository) articleLink(ctx context.Context) string {
-	subject := repo.GetSubject(ctx)
-	link := setting.AppSubURL + "/subject/" + url.PathEscape(subject) + "/" + url.PathEscape(repo.OwnerName)
+	link := SubjectLink(repo.GetSubject(ctx)) + "/" + url.PathEscape(repo.OwnerName)
 	// The suffix follows the position alone. Archived and deleted articles are the
 	// usual ones to sit past the first position, but nothing stops an owner from
 	// holding several active articles for a subject, and two of them sharing this url

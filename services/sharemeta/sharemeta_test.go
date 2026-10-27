@@ -29,6 +29,12 @@ func TestFirstParagraph(t *testing.T) {
 		},
 		{"skips the lists and the quotes", "- one\n- two\n\n> quoted\n\nText.", "Text."},
 		{"a document without a paragraph", "# Title\n\n- item", ""},
+		{
+			"skips a front matter, even with a blank line in it",
+			"---\ntitle: Moon\n\nlicense: cc\n---\n\n# Moon\n\nThe Moon is Earth's only natural satellite.",
+			"The Moon is Earth's only natural satellite.",
+		},
+		{"skips a compact front matter", "---\ntitle: Moon\n---\nThe Moon.", "The Moon."},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

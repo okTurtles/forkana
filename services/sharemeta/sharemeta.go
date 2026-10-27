@@ -9,7 +9,6 @@ package sharemeta
 import (
 	"context"
 	"io"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +20,7 @@ import (
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/log"
+	"code.gitea.io/gitea/modules/markup/markdown"
 	"code.gitea.io/gitea/modules/setting"
 
 	"github.com/yuin/goldmark"
@@ -74,7 +74,7 @@ func ForSubject(ctx context.Context, subject *repo_model.Subject, mainArticle *r
 	return &Meta{
 		Title: titleWithSite(subject.Name),
 		Type:  "website",
-		URL:   httplib.MakeAbsoluteURL(ctx, setting.AppSubURL+"/subject/"+url.PathEscape(subject.Name)),
+		URL:   httplib.MakeAbsoluteURL(ctx, repo_model.SubjectLink(subject.Name)),
 		describe: func() string {
 			return subjectDescription(ctx, subject, mainArticle, doer)
 		},
@@ -201,8 +201,11 @@ var markdownParser = goldmark.New(goldmark.WithExtensions(extension.GFM, extensi
 // FirstParagraph is the plain text of the first paragraph of a markdown document:
 // headings, lists, quotes, tables, code blocks and html are skipped, and so are the
 // paragraphs holding nothing but images; links keep their text, images and footnote
-// references are dropped.
+// references are dropped. A YAML front matter is skipped too, as the article view hides
+// it (wiki2md writes one into every imported article); one that is not valid YAML is
+// rendered by the article view, and so is kept here.
 func FirstParagraph(source []byte) string {
+	source, _ = markdown.ExtractMetadataBytes(source, new(any))
 	doc := markdownParser.Parse(text.NewReader(source))
 	for block := doc.FirstChild(); block != nil; block = block.NextSibling() {
 		if block.Kind() != ast.KindParagraph {
