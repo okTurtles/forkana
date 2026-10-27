@@ -1,6 +1,7 @@
 import {defineComponent, h, type PropType} from 'vue';
 import {parseDom, serializeXml} from './utils.ts';
 import {html, htmlRaw} from './utils/html.ts';
+import forkanaAtom from '../../public/assets/img/svg/forkana-atom.svg';
 import giteaDoubleChevronLeft from '../../public/assets/img/svg/gitea-double-chevron-left.svg';
 import giteaDoubleChevronRight from '../../public/assets/img/svg/gitea-double-chevron-right.svg';
 import giteaEmptyCheckbox from '../../public/assets/img/svg/gitea-empty-checkbox.svg';
@@ -44,7 +45,6 @@ import octiconGitPullRequest from '../../public/assets/img/svg/octicon-git-pull-
 import octiconGitPullRequestClosed from '../../public/assets/img/svg/octicon-git-pull-request-closed.svg';
 import octiconGitPullRequestDraft from '../../public/assets/img/svg/octicon-git-pull-request-draft.svg';
 import octiconGlobe from '../../public/assets/img/svg/octicon-globe.svg';
-import octiconGoal from '../../public/assets/img/svg/octicon-goal.svg';
 import octiconGrabber from '../../public/assets/img/svg/octicon-grabber.svg';
 import octiconHeading from '../../public/assets/img/svg/octicon-heading.svg';
 import octiconHorizontalRule from '../../public/assets/img/svg/octicon-horizontal-rule.svg';
@@ -90,6 +90,7 @@ import octiconX from '../../public/assets/img/svg/octicon-x.svg';
 import octiconXCircleFill from '../../public/assets/img/svg/octicon-x-circle-fill.svg';
 
 const svgs = {
+  'forkana-atom': forkanaAtom,
   'gitea-double-chevron-left': giteaDoubleChevronLeft,
   'gitea-double-chevron-right': giteaDoubleChevronRight,
   'gitea-empty-checkbox': giteaEmptyCheckbox,
@@ -133,7 +134,6 @@ const svgs = {
   'octicon-git-pull-request-closed': octiconGitPullRequestClosed,
   'octicon-git-pull-request-draft': octiconGitPullRequestDraft,
   'octicon-globe': octiconGlobe,
-  'octicon-goal': octiconGoal,
   'octicon-grabber': octiconGrabber,
   'octicon-heading': octiconHeading,
   'octicon-horizontal-rule': octiconHorizontalRule,

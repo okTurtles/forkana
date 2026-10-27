@@ -171,7 +171,7 @@ function renderRows(s: Session): void {
     if (row.kind === 'subject') {
       el = createElementFromHTML(html`
         <div class="citation-subject-row" role="option">
-          ${htmlRaw(svg('octicon-goal', 16, 'citation-subject-icon'))}
+          ${htmlRaw(svg('forkana-atom', 16, 'citation-subject-icon'))}
           <span class="citation-subject-text"><span class="citation-subject-name">${row.subject.name}</span><span class="citation-subject-meta">${articlesText(row.subject.articles)}</span></span>
           ${htmlRaw(row.subject.articles ? svg('octicon-chevron-right', 12, 'citation-subject-chevron') : '')}
         </div>
@@ -186,7 +186,7 @@ function renderRows(s: Session): void {
     } else if (row.kind === 'author') {
       el = createElementFromHTML(html`
         <div class="citation-subject-row" role="option">
-          ${htmlRaw(svg('octicon-goal', 16, 'citation-subject-icon'))}
+          ${htmlRaw(svg('forkana-atom', 16, 'citation-subject-icon'))}
           <span class="citation-subject-text"><span class="citation-subject-name">${row.subject}</span><span class="citation-subject-meta">${citationText('by_author', row.owner)}</span></span>
         </div>
       `);

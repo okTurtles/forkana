@@ -67,6 +67,8 @@
   --color-button-hover: #eff2f5;
   --color-button-text-disabled: #818b98;
   --color-button-border-disabled: #818b981a;
+  /* the unchecked radio's ring (modules/checkbox.css, #460), light value of colors.custom.css */
+  --color-radio-border: #818b98;
 }
 
 @media (min-width: 768px) and (max-width: 1200px) {

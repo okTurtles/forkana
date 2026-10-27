@@ -14,80 +14,85 @@
 			{{ctx.Locale.Tr "home.whats_on_your_mind"}}
 		</h1>
 
-		<!-- Search + Dropdown -->
-		<!-- Field sized after the Landing frame (Figma 641:65360 / 6313:56406): 348x40, 1px border, radius 6, 12px
-				 side padding, 16px icon 8px before the text, Inter 14/20. -->
-		<div class="home-search tw-mx-auto tw-max-w-[348px]">
-			<!-- "ignore-dirty" keeps the global leave-confirmation (initGlobalFormDirtyLeaveConfirm)
-					 away from a search field: a typed keyword is not unsaved work, and without it opening
-					 one of the suggestions below asks the user to confirm leaving the page first. -->
-			<form id="home-search-form" class="tw-relative ignore-dirty" action="{{AppSubUrl}}/explore/subjects" method="get">
-				<span class="home-search-icon tw-pointer-events-none tw-absolute tw-inset-y-0 tw-left-[12px] tw-flex tw-items-center">
-					{{svg "octicon-search" 16}}
-				</span>
-				<input
-					id="home-search-input"
-					name="q"
-					type="text"
-					placeholder="{{ctx.Locale.Tr "home.search_placeholder"}}"
-					autocomplete="off"
-					role="combobox"
-					aria-autocomplete="list"
-					aria-expanded="false"
-					aria-controls="home-search-suggestions"
-					class="tw-w-full tw-rounded-md tw-border tw-border-input-border focus:tw-border-primary tw-outline-none tw-pl-[35px] tw-pr-[11px] tw-py-[9px] tw-text-[14px] tw-leading-[20px] tw-shadow-[inset_0_1px_0_rgba(31,35,40,0.04)]"
-				/>
-				<!-- Secondary small button (Figma 5743:44869); appears while the field holds text
-						 (initHomeSearch). The search icon on the left stays decorative, Enter still submits. -->
-				<button id="home-search-button" type="submit" class="home-search-button forkana-btn forkana-btn-secondary forkana-btn-sm tw-hidden">
-					{{ctx.Locale.Tr "home.search_button"}}
-				</button>
-			</form>
+		<!-- One 348px column for the search field and, when signed in, the feeds card under it (#460),
+				 so that their left and right edges line up (Figma Home > Frame 1060 7368:416692, and the
+				 signed-out Landing frames 7368:422742 / 7368:422760). -->
+		<div class="home-column">
+			<!-- Search + Dropdown -->
+			<!-- Field after the Landing frames (Figma 7368:422754 / 7368:422773): 40px tall, 1px border, radius 6,
+					 12px side padding, 16px icon 8px before the text, Inter 14/20; as wide as the column. -->
+			<div class="home-search">
+				<!-- "ignore-dirty" keeps the global leave-confirmation (initGlobalFormDirtyLeaveConfirm)
+						 away from a search field: a typed keyword is not unsaved work, and without it opening
+						 one of the suggestions below asks the user to confirm leaving the page first. -->
+				<form id="home-search-form" class="tw-relative ignore-dirty" action="{{AppSubUrl}}/explore/subjects" method="get">
+					<span class="home-search-icon tw-pointer-events-none tw-absolute tw-inset-y-0 tw-left-[12px] tw-flex tw-items-center">
+						{{svg "octicon-search" 16}}
+					</span>
+					<input
+						id="home-search-input"
+						name="q"
+						type="text"
+						placeholder="{{ctx.Locale.Tr "home.search_placeholder"}}"
+						autocomplete="off"
+						role="combobox"
+						aria-autocomplete="list"
+						aria-expanded="false"
+						aria-controls="home-search-suggestions"
+						class="tw-w-full tw-rounded-md tw-border tw-border-input-border focus:tw-border-primary tw-outline-none tw-pl-[35px] tw-pr-[11px] tw-py-[9px] tw-text-[14px] tw-leading-[20px] tw-shadow-[inset_0_1px_0_rgba(31,35,40,0.04)]"
+					/>
+					<!-- Secondary small button (Figma 5743:44869); appears while the field holds text
+							 (initHomeSearch). The search icon on the left stays decorative, Enter still submits. -->
+					<button id="home-search-button" type="submit" class="home-search-button forkana-btn forkana-btn-secondary forkana-btn-sm tw-hidden">
+						{{ctx.Locale.Tr "home.search_button"}}
+					</button>
+				</form>
 
-			<!-- Validation message for an empty search, hidden until the search is submitted blank -->
-			<div id="home-search-error" class="home-search-error tw-hidden tw-text-left" role="alert">
-				{{ctx.Locale.Tr "home.search_empty_error"}}
+				<!-- Validation message for an empty search, hidden until the search is submitted blank -->
+				<div id="home-search-error" class="home-search-error tw-hidden tw-text-left" role="alert">
+					{{ctx.Locale.Tr "home.search_empty_error"}}
+				</div>
+
+				<!-- Dropdown, filled in by initHomeSearch (web_src/js/features/home-search.ts) -->
+				<div id="home-search-suggestions" class="home-search-suggestions tw-hidden"
+							role="listbox" aria-label="{{ctx.Locale.Tr "home.search_suggestions"}}"></div>
 			</div>
 
-			<!-- Dropdown, filled in by initHomeSearch (web_src/js/features/home-search.ts) -->
-			<div id="home-search-suggestions" class="home-search-suggestions tw-hidden"
-						role="listbox" aria-label="{{ctx.Locale.Tr "home.search_suggestions"}}"></div>
-		</div>
-
-		{{if .IsSigned}}
-		<!-- Feeds card -->
-		<div class="home-feeds-card tw-mx-auto tw-mt-6 tw-text-left">
-			<div class="home-feeds-card-header">{{ctx.Locale.Tr "home.your_feeds"}}</div>
-			{{range .Feeds}}
-			<div class="home-feed-item">
-				<div class="home-feed-item-avatar">
-					{{ctx.AvatarUtils.AvatarByAction .}}
-				</div>
-				<div class="home-feed-item-body">
-					<div class="home-feed-item-action">
-						{{if gt .ActUser.ID 0}}
-							<a href="{{AppSubUrl}}/{{(.GetActUserName ctx) | PathEscape}}" title="{{.GetActDisplayNameTitle ctx}}" class="tw-font-semibold">{{.GetActDisplayName ctx}}</a>
-						{{else}}
-							<span class="tw-font-semibold">{{.ShortActUserName ctx}}</span>
-						{{end}}
-						{{template "shared/feed_action_text" .}}
+			{{if .IsSigned}}
+			<!-- Feeds card -->
+			<div class="home-feeds-card tw-text-left">
+				<div class="home-feeds-card-header">{{ctx.Locale.Tr "home.your_feeds"}}</div>
+				{{range .Feeds}}
+				<div class="home-feed-item">
+					<div class="home-feed-item-avatar">
+						{{ctx.AvatarUtils.AvatarByAction .}}
 					</div>
-					<div class="home-feed-item-time">{{DateUtils.TimeSince .GetCreate}}</div>
+					<div class="home-feed-item-body">
+						<div class="home-feed-item-action">
+							{{if gt .ActUser.ID 0}}
+								<a href="{{AppSubUrl}}/{{(.GetActUserName ctx) | PathEscape}}" title="{{.GetActDisplayNameTitle ctx}}" class="tw-font-semibold">{{.GetActDisplayName ctx}}</a>
+							{{else}}
+								<span class="tw-font-semibold">{{.ShortActUserName ctx}}</span>
+							{{end}}
+							{{template "shared/feed_action_text" .}}
+						</div>
+						<div class="home-feed-item-time">{{DateUtils.TimeSince .GetCreate}}</div>
+					</div>
+					<div class="home-feed-item-icon">
+						{{svg (printf "octicon-%s" (ActionIcon .GetOpType)) 16}}
+					</div>
 				</div>
-				<div class="home-feed-item-icon">
-					{{svg (printf "octicon-%s" (ActionIcon .GetOpType)) 20 "text grey"}}
-				</div>
+				{{end}}
+				{{if .Feeds}}
+				<!-- Secondary large button (Figma 7368:416752), it was the primary one before #404 item 5 -->
+				<a href="{{AppSubUrl}}/feeds" class="home-feeds-see-all forkana-btn forkana-btn-secondary forkana-btn-lg">{{ctx.Locale.Tr "home.see_all"}}</a>
+				{{else}}
+				<!-- Empty state (Figma 6315:57313) -->
+				<div class="home-feeds-empty">{{ctx.Locale.Tr "home.feeds_empty"}}</div>
+				{{end}}
 			</div>
 			{{end}}
-			{{if .Feeds}}
-			<!-- Secondary large button (Figma 3853:40422), it was the primary one before #404 item 5 -->
-			<a href="{{AppSubUrl}}/feeds" class="home-feeds-see-all forkana-btn forkana-btn-secondary forkana-btn-lg">{{ctx.Locale.Tr "home.see_all"}}</a>
-			{{else}}
-			<!-- Empty state (Figma 6315:57313) -->
-			<div class="home-feeds-empty">{{ctx.Locale.Tr "home.feeds_empty"}}</div>
-			{{end}}
 		</div>
-		{{end}}
 	</section>
 </main>
 {{template "base/footer" .}}

@@ -63,6 +63,46 @@ input[type="checkbox"]:focus-visible,
   outline: 2px solid var(--color-primary);
   outline-offset: 1px;
 }
+/* Every other radio (#460): a 16px circle in the brand purple instead of the browser's own
+   radio, which took the theme's `accent-color` (--color-accent, Gitea's blue). After the Figma
+   _RadioInput (Radio instances 7416:433672 unchecked and 7416:433670 checked): unchecked, a white
+   circle with a 1px #818b98 ring (--color-radio-border); checked, a #4e40fa circle (fill and
+   ring) with a 7px white dot in the middle. The filter-menu radios keep their square checkbox
+   look, so they are left out. The exclusion sits in :where() so these rules weigh no more than
+   the checkbox's `input[type="checkbox"]`, and a component's own radio rule (for example
+   `.review-radio-option input[type="radio"]`'s margin) still wins. */
+input[type="radio"]:not(:where(.flex-items-menu input)) {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--color-radio-border);
+  border-radius: 50%;
+  background-color: var(--color-input-background);
+  cursor: pointer;
+  vertical-align: middle;
+}
+input[type="radio"]:not(:where(.flex-items-menu input)):hover {
+  border-color: var(--color-primary);
+}
+input[type="radio"]:not(:where(.flex-items-menu input)):checked {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  /* the dot: 7px across in the 16px circle */
+  background-image: radial-gradient(circle, var(--color-primary-contrast) 0 3.5px, transparent 4px);
+}
+input[type="radio"]:not(:where(.flex-items-menu input)):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+input[type="radio"]:not(:where(.flex-items-menu input)):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+input[type="radio"]:not(:where(.flex-items-menu input)):disabled:not(:checked):hover {
+  border-color: var(--color-radio-border);
+}
 .flex-items-menu input[name="clear-filter"] {
   display: none;
 }
