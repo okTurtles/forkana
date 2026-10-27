@@ -219,12 +219,16 @@
   min-width: 0;
 }
 
+/* Bold: the Breadcrumbs instance's texts override the component's 400 with 700 (owner,
+   "/" and article, I7368:264927 in the Edit frame 7368:264887, the same in Read
+   7368:264715 and History 7368:263286). */
 .article-breadcrumb {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   font-size: 14px;
   line-height: 20px;
+  font-weight: var(--font-weight-bold);
 }
 
 .article-breadcrumb a,

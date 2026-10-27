@@ -204,6 +204,28 @@ test.describe('Article Edit tab against figma 7368:264887', () => {
     expect(Math.round(writing.y - (b.y + b.height))).toBe(8);
   });
 
+  test('text overrides: the bold path and the tip\'s links', async ({page}) => {
+    await openEdit(page);
+    // Breadcrumbs I7368:264927: the owner, the "/" and the article overridden to 700,
+    // the links #4e40fa, the "/" #59636e
+    const links = page.locator('[data-role="article-breadcrumb"] a');
+    for (const link of await links.all()) {
+      expect(await style(link, 'font-weight', 'font-size', 'line-height')).toEqual({'font-weight': '700', 'font-size': '14px', 'line-height': '20px'});
+      expectColor(await rgb(link, 'color'), '#4e40fa');
+    }
+    const divider = page.locator('.article-breadcrumb-divider');
+    expect((await style(divider, 'font-weight'))['font-weight']).toBe('700');
+    expectColor(await rgb(divider, 'color'), '#59636e');
+    // TipText I7368:265012;1721:98: Inter 400 12/20 #59636e, its two links #4e40fa,
+    // neither bold nor underlined
+    const tip = page.locator('[data-role="article-contribution-tip"]');
+    expectColor(await rgb(tip, 'color'), '#59636e');
+    for (const link of await tip.locator('a').all()) {
+      expect(await style(link, 'font-weight', 'font-size', 'line-height', 'text-decoration-line')).toEqual({'font-weight': '400', 'font-size': '12px', 'line-height': '20px', 'text-decoration-line': 'none'});
+      expectColor(await rgb(link, 'color'), '#4e40fa');
+    }
+  });
+
   test('Summary: 24px from the path above and from the editor below', async ({page}) => {
     await openEdit(page);
     const path = await box(page.locator('.article-path'));
