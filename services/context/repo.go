@@ -35,6 +35,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/util"
 	asymkey_service "code.gitea.io/gitea/services/asymkey"
+	"code.gitea.io/gitea/services/sharemeta"
 
 	"github.com/editorconfig/editorconfig-core-go/v2"
 )
@@ -436,6 +437,8 @@ func repoAssignment(ctx *Context, repo *repo_model.Repository) {
 	// Resolved here so the templates never have to call GetSubject with a context
 	// argument, which the template engine cannot always supply.
 	ctx.Data["SubjectName"] = ctx.Repo.Repository.GetSubject(ctx)
+	// what a shared link to any page of the article shows (#450)
+	ctx.Data[sharemeta.DataKey] = sharemeta.ForArticle(ctx, repo, ctx.Link, ctx.Repo.Permission.CanRead(unit_model.TypeCode))
 }
 
 // grantArticleInviteeAccess gives a user invited to collaborate on a private article read
@@ -1119,6 +1122,19 @@ func RepoAssignmentBySubject(ctx *Context) {
 	}
 
 	AssignSubjectRepository(ctx, repo)
+	if ctx.Written() {
+		return
+	}
+
+	// What a shared link to the subject shows (#450). The main article is the one taken
+	// here, even when the Article view later renders another one that is selected.
+	if err := repo.LoadSubject(ctx); err != nil {
+		ctx.ServerError("LoadSubject", err)
+		return
+	}
+	if repo.SubjectRelation != nil {
+		ctx.Data[sharemeta.DataKey] = sharemeta.ForSubject(ctx, repo.SubjectRelation, repo, ctx.Doer)
+	}
 }
 
 // Why prepareSubjectRepository refuses a repository; any other error is a server error.

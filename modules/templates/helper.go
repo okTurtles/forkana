@@ -5,6 +5,7 @@
 package templates
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/url"
@@ -15,12 +16,14 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/base"
 	"code.gitea.io/gitea/modules/htmlutil"
+	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/markup"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/svg"
 	"code.gitea.io/gitea/modules/templates/eval"
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/services/gitdiff"
+	"code.gitea.io/gitea/services/sharemeta"
 	"code.gitea.io/gitea/services/webtheme"
 )
 
@@ -124,6 +127,19 @@ func NewFuncMap() template.FuncMap {
 		"MetaKeywords": func() string {
 			return setting.UI.Meta.Keywords
 		},
+		// what a shared link shows (base/head_opengraph, #450)
+		"ShareSiteName":        setting.ShareSiteName,
+		"ShareSiteDescription": setting.ShareSiteDescription,
+		"ShareTextSummary":     sharemeta.TextSummary,
+		"ShareImage": func(ctx context.Context) map[string]any {
+			return map[string]any{
+				"URL":    httplib.MakeAbsoluteURL(ctx, setting.StaticURLPrefix+"/assets"+setting.ShareImagePath),
+				"Width":  setting.ShareImageWidth,
+				"Height": setting.ShareImageHeight,
+				"Alt":    setting.ShareImageAlt,
+			}
+		},
+		"AbsoluteURL": httplib.MakeAbsoluteURL,
 		"EnableTimetracking": func() bool {
 			return setting.Service.EnableTimetracking
 		},
