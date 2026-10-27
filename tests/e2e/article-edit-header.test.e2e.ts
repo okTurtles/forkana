@@ -79,6 +79,79 @@ test.describe('Article Edit tab against figma 7368:264887', () => {
     expect(Math.round(s.y + s.height / 2)).toBe(Math.round(tabs.y + 20));
   });
 
+  test('signed out: Fork, its count, the tabs, and no Watch in the Edit tab', async ({page}) => {
+    await openEdit(page);
+    // Button 7368:264913: 84×32, #f6f8fa, a #818b98 10% border, Inter 600 14/20 #818b98, no icon
+    const fork = page.locator('#signed-out-fork-button');
+    await expect(fork.locator('svg')).toHaveCount(0);
+    const f = await box(fork);
+    expect(f.height).toBe(32);
+    expect(Math.abs(f.width - 84)).toBeLessThanOrEqual(2);
+    expectColor(await rgb(fork, 'background-color'), '#f6f8fa');
+    expectColor(await rgb(fork, 'color'), '#818b98');
+    expect((await style(fork, 'border-top-color'))['border-top-color']).toBe('rgba(129, 139, 152, 0.1)');
+    expect(await style(fork, 'font-weight', 'font-size', 'line-height', 'border-radius')).toEqual({
+      'font-weight': '600', 'font-size': '14px', 'line-height': '20px', 'border-radius': '6px',
+    });
+    // CounterLabel I7368:264913;30258:5608: an 18px pill, 0 6px, #818b98 at 12%, 8px after the label
+    const count = fork.locator('[data-role="article-fork-count"]');
+    await expect(count).toHaveText(/^\d+$/);
+    const c = await box(count);
+    expect(c.height).toBe(18);
+    expect(await style(count, 'padding-left', 'border-top-left-radius')).toEqual({'padding-left': '6px', 'border-top-left-radius': '9999px'});
+    expect((await style(count, 'background-color'))['background-color']).toMatch(/0\.12\)$/);
+
+    // TabNav 7368:264911: Read / Edit / History, 0 16px, 4px apart; its Trailing (Watch)
+    // is hidden in this frame, so the Edit tab has no Watch; Read keeps it
+    const tabs = page.locator('#article-tabs .ui.tabular.menu > a.item');
+    await expect(tabs).toHaveText(['Read', 'Edit', 'History']);
+    expect(await style(tabs.first(), 'padding-left', 'padding-right')).toEqual({'padding-left': '16px', 'padding-right': '16px'});
+    expect(Math.round((await box(tabs.first())).height)).toBe(40);
+    const t0 = await box(tabs.nth(0));
+    const t1 = await box(tabs.nth(1));
+    expect(Math.round(t1.x - (t0.x + t0.width))).toBe(4);
+    await expect(page.locator('#article-tabs .article-watch')).toBeHidden();
+    await page.locator('#article-tabs a[data-article-tab="read"]').click();
+    await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible({timeout: 10000});
+    await expect(page.locator('#article-tabs .article-watch')).toBeVisible();
+  });
+
+  test('editor toolbar: the figma\'s button set on the tabs\' row, and the Insert menu', async ({page}) => {
+    await openEdit(page);
+    // _Markdown toolbar 7368:265005: H B I | quote code link | lists | (mention,
+    // cross-reference) and a 40px button with a dropdown: here Cite, with the
+    // cross-reference icon, and the menu of the code block, image and table
+    const toolbar = page.locator('.article-editor-box .toastui-editor-defaultUI-toolbar');
+    const names = await toolbar.locator('button.toastui-editor-toolbar-icons:visible').evaluateAll((els) => els.map((el) => Array.from(el.classList).find((c) => !['toastui-editor-toolbar-icons', 'forkana-toolbar-icon'].includes(c))));
+    expect(names).toEqual(['heading', 'bold', 'italic', 'quote', 'code', 'forkana-subject-link', 'bullet-list', 'ordered-list', 'task-list', 'forkana-cite', 'forkana-more']);
+    await expect(toolbar.locator('.forkana-cite svg.octicon-cross-reference')).toHaveCount(1);
+    await expect(toolbar.locator('.forkana-more svg.octicon-reply')).toHaveCount(1);
+    await expect(toolbar.locator('.forkana-more svg.octicon-triangle-down')).toHaveCount(1);
+    const groups = toolbar.locator('.toastui-editor-toolbar-group:visible');
+    const widths = [];
+    for (let i = 0; i < await groups.count(); i++) widths.push(Math.round((await box(groups.nth(i))).width));
+    expect(widths).toEqual([80, 80, 80, 68]);
+    const more = await box(toolbar.locator('.forkana-more'));
+    expect([Math.round(more.width), Math.round(more.height)]).toEqual([40, 24]);
+
+    // one row: the Visual / Source tabs and every button in the 47px band
+    const band = await box(page.locator('.article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar'));
+    expect(band.height).toBe(48);
+    const tab = await box(page.locator('.article-editor-box .toastui-editor-mode-switch .tab-item.active'));
+    // (the open tab stands 1px over the rule under the band)
+    for (const b of [tab, more]) expect(b.y + b.height).toBeLessThanOrEqual(band.y + band.height + 1);
+    expect(more.x).toBeGreaterThan(tab.x + tab.width);
+
+    // the menu
+    await page.locator('.toastui-editor-ww-container .ProseMirror p').first().click();
+    await toolbar.locator('.forkana-more').click();
+    const items = page.locator('.forkana-more-popup .forkana-more-item');
+    await expect(items).toHaveText(['Code block', 'Image', 'Table']);
+    await items.filter({hasText: 'Table'}).click();
+    await expect(page.locator('.forkana-more-popup')).toBeHidden();
+    await expect(page.locator('.toastui-editor-ww-container table')).toHaveCount(1);
+  });
+
   test('editor header: tabs and toolbar', async ({page}) => {
     await openEdit(page);
     const frame = await box(page.locator('.article-editor-box'));
@@ -118,7 +191,8 @@ test.describe('Article Edit tab against figma 7368:264887', () => {
     expect(first.height).toBe(24);
     expect(Math.round(first.y - b.y)).toBe(13);
     expect(Math.round(b.x + b.width - (last.x + last.width))).toBe(8);
-    expectColor(await rgb(icons.first(), 'color'), '#59636e');
+    // (one that is not active: the one for the block the caret is in is brand purple)
+    expectColor(await rgb(page.locator('.article-editor-box .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons:not(.active):visible').first(), 'color'), '#59636e');
     const groups = page.locator('.article-editor-box .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-group');
     const g0 = await box(groups.nth(0));
     const g1 = await box(groups.nth(1));
