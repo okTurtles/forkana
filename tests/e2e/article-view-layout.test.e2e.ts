@@ -10,8 +10,10 @@ test.describe('Article view layout (signed out)', () => {
     await page.goto(`${article}?mode=read`);
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
 
-    // #433 items 1, 5 and 9: no Compare button, no placeholder line, no back link
-    await expect(page.locator('#compare-mode-button')).toBeHidden();
+    // #433 items 5 and 9: no placeholder line, no back link. #469: the subject header is
+    // the one of every view, its Compare button and Follow star included
+    // (subject-header.test.e2e.ts)
+    await expect(page.locator('#compare-mode-button')).toBeVisible();
     await expect(page.locator('[data-role="back-to-bubble"]')).toHaveCount(0);
     await expect(page.locator('#article-view-root')).not.toContainText('marked this article as correct');
 
@@ -25,7 +27,7 @@ test.describe('Article view layout (signed out)', () => {
     await expect(watch).toBeVisible();
     await expect(watch).toContainText('Watch');
     await expect(watch).toHaveAttribute('href', /\/user\/login\?redirect_to=/);
-    await expect(page.locator('.repo-header-follow')).toBeHidden();
+    await expect(page.locator('.repo-header-follow')).toBeVisible();
 
     // item 4: the path names the article by its subject, both parts are links
     const breadcrumb = page.locator('[data-role="article-breadcrumb"]');
@@ -126,7 +128,7 @@ test.describe('Article view Watch button (signed in)', () => {
 
   // #433 item 3: the Watch button of a tab swapped in without a reload still posts through
   // htmx (with its CSRF header) and is answered with itself, and the subject header's
-  // (hidden) Follow star follows it
+  // Follow star (shown in the Article view too since #469) follows it
   test('Watch works after switching tabs, and keeps the Follow star in step', async ({browser}, workerInfo) => {
     const context = await load_logged_in_context(browser, workerInfo, watcherByProject[workerInfo.project.name] ?? 'user4');
     const page = await context.newPage();

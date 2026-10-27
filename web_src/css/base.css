@@ -29,6 +29,9 @@
   --checkbox-size: 16px; /* height and width of checkbox and radio inputs */
   --page-spacing: 16px; /* space between page elements */
   --page-margin-x: 32px; /* minimum space on left and right side of page */
+  /* side margins of a subject page's header and views (#469, figma "Notes – Width
+     system" 7368:275653): 48px on a desktop, 24 on a tablet, 16 on a phone */
+  --subject-margin-x: 48px;
   --page-space-bottom: 64px; /* space between last page element and footer */
 
   /* z-index */
@@ -74,12 +77,14 @@
 @media (min-width: 768px) and (max-width: 1200px) {
   :root {
     --page-margin-x: 16px;
+    --subject-margin-x: 24px;
   }
 }
 
 @media (max-width: 767.98px) {
   :root {
     --page-margin-x: 8px;
+    --subject-margin-x: 16px;
   }
 }
 

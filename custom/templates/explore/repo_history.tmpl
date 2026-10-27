@@ -250,7 +250,7 @@
     {{end}}
     {{template "repo/header" .}}
 
-    <div class="ui container">
+    <div class="ui container subject-views-container">
         {{ $subjectPath := printf "%s/subject/%s" AppSubUrl (PathEscape .SubjectName) }}
         <div id="repo-history-app"
             class="history-view-app"

@@ -119,29 +119,31 @@
    4px 8px padding, 4px gap; arrow-left 16px in #1f2328 (= --color-text-primary),
    "Back" Inter 600 12px/20px in #25292e (= --color-button-text). It was a link in
    the brand colour. */
-/* It takes no room (#431): it is laid over the top padding of the subject header, which
-   is where the figma draws it (y 84 = 20px under the 64px navbar, the title at 112), so
-   the header, the tabs and the content are at the same y as on the subject page and
-   nothing moves between the two. The anchor is the page's first child: its zero
-   margin overrides base.css's `.page-content > :first-child { margin-top }`. */
-/* The subject page's header gets `.repository .secondary-nav { padding-top: 12px }`
-   (web_src/css/repo/header.css); the compare page is not a `.repository` page, so the
-   same header sat 12px higher there. */
-.page-content.subject-compare .secondary-nav {
-	padding-top: 12px;
-}
-
-.page-content > .subject-compare-back-anchor {
+/* It takes no room (#431): it is laid over the subject header, so the header, the tabs
+   and the content are at the same y as on the subject page and nothing moves between the
+   two. Since #469 the figma draws it (Button 7368:261776 in "Bubble view / Point of
+   contention" 7368:261767) 16px into the 136px title block, at the header's left margin
+   (its arrow at x 48, the button's edge 8px left of it): beside the title's 56px line,
+   which starts 24px into the block, rather than above it. The title block keeps clear of
+   it at the sides (web_src/css/repo/header.css), so a long title wraps before it runs
+   under the button. The
+   anchor is the page's first child: its zero margin overrides base.css's
+   `.page-content > :first-child { margin-top }`; its sides are the subject header's
+   (--subject-margin-x), not a page container's. */
+/* The subject header is at the same y here as on the subject page: its padding is set
+   by `.secondary-nav.subject-header` (web_src/css/repo/header.css, #469), on both. */
+.page-content > .ui.container.subject-compare-back-anchor {
 	position: relative;
+	width: auto;
+	max-width: none;
 	height: 0;
-	margin-top: 0 !important;
-	margin-bottom: 0 !important;
+	margin: 0 var(--subject-margin-x) !important;
 }
 
 .subject-compare-back {
 	position: absolute;
-	top: 20px;
-	left: -8px; /* the arrow, not the button's edge, lines up with the content (x 48 in the figma) */
+	top: 16px;
+	left: -8px; /* the arrow, not the button's edge, lines up with the header's margin (x 48 in the figma) */
 	z-index: 1;
 	display: inline-flex;
 	align-items: center;
@@ -169,14 +171,16 @@
 }
 
 /* Phones: the mobile frame (641:64701) has only the arrow, at x 16 (Navbar 641:64702).
-   Here it stays over the header's top-left corner, as an icon button above the title's
-   line, so it still takes no room. */
+   Here it stays over the header's top-left corner, as a 28px icon button beside the
+   title's line, so it still takes no room; the title block keeps 36px clear of it at
+   both sides (web_src/css/repo/header.css). */
 @media (max-width: 767.98px) {
 	.subject-compare-back {
 		top: 0;
 		left: 0;
 		padding: 6px;
 	}
+
 
 	.subject-compare-back-label {
 		display: none;

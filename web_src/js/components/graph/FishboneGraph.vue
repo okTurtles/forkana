@@ -35,6 +35,7 @@ import CreateFirstArticleBubble from "./CreateFirstArticleBubble.vue";
 import ArticleComparePopup from "./ArticleComparePopup.vue";
 import { COMPARE_POPOVER_HEIGHT, COMPARE_SHEET_QUERY, compareBoxMode, placeComparePopover, type CompareCircle, type ComparePopoverLayout } from "./compare-popover.ts";
 import CompareAnnouncement from "./CompareAnnouncement.vue";
+import { collapseInfoBar, expandInfoBar } from "../../modules/info-bar-transition.ts";
 import {
   COMPARE_MODE_STATE_EVENT, COMPARE_MODE_TOGGLE_EVENT, canPickForCompare, compareAnnouncementFor, compareAvailableFor,
   readCompareMessages, replayCompareModeRequest, subjectCompareUrl, type CompareAnnouncementMessages,
@@ -2611,6 +2612,8 @@ const compareAvailable = computed(() => compareAvailableFor({loading: isLoading.
 const announcementTarget = typeof document !== 'undefined' ? document.querySelector<HTMLElement>('#compare-announcement-root') : null;
 
 const announcementMessages: CompareAnnouncementMessages = readCompareMessages(announcementTarget);
+const onInfoBarEnter = (el: Element, done: () => void) => expandInfoBar(el as HTMLElement, done);
+const onInfoBarLeave = (el: Element, done: () => void) => collapseInfoBar(el as HTMLElement, done);
 
 const announcementState = computed<CompareAnnouncementState | null>(() => {
   if (isCompareMode.value) {
@@ -2959,12 +2962,18 @@ function goToComparison() {
       </div>
 
       <!-- The Compare mode banner (#421 item 1), drawn under the navbar. -->
-      <Teleport v-if="announcementTarget && announcementState" :to="announcementTarget">
-        <CompareAnnouncement
-          :state="announcementState" :messages="announcementMessages"
-          :show-compare-now="compareMode === 'none'"
-          @dismiss="dismissAnnouncement" @compare="goToComparison"
-        />
+      <!-- #469: it slides open and closed (info-bar-transition.ts), in a wrapper that
+           takes the slide, so the banner's own markup is unchanged. -->
+      <Teleport v-if="announcementTarget" :to="announcementTarget">
+        <Transition :css="false" @enter="onInfoBarEnter" @leave="onInfoBarLeave">
+          <div v-if="announcementState" class="info-bar-slide">
+            <CompareAnnouncement
+              :state="announcementState" :messages="announcementMessages"
+              :show-compare-now="compareMode === 'none'"
+              @dismiss="dismissAnnouncement" @compare="goToComparison"
+            />
+          </div>
+        </Transition>
       </Teleport>
 
       <!-- The Compare box as a bottom sheet (figma "." 641:63496), on a phone or

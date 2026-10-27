@@ -74,9 +74,13 @@ export function initArticleEditor() {
     const editor = await createToastEditor(textarea, {
       height: '500px',
       initialEditType: 'wysiwyg',
-      previewStyle: 'vertical',
+      // #469 (figma "Notes – Width system" 7368:275653): the Source editor is the 640px
+      // column like the Visual one, with Write / Preview tabs instead of two panes
+      previewStyle: 'tab',
       usageStatistics: false,
       hideModeSwitch: false,  // Allow mode switching
+      // #469: opening the Edit tab must not scroll the page to the editor
+      autofocus: false,
     });
 
     // Handle Fork Article button (fork and edit in user's own fork)

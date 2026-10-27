@@ -7,41 +7,31 @@
    custom/public/assets/css/toast-editor.css, beside the rest of the editor's. */
 
 /* ── Width ───────────────────────────────────────────────────────────────────
-   The Read tab is an 800px column (Frame 759 641:65466); Edit and History are 1080px
-   (Frame 965 641:65666, 641:64059). The subject header's view tabs above take the
-   same width in the Article view (UnderNav_Views 641:65474, 641:65665, 641:64057), and
-   the Compare button and the Follow star are not there: Compare is the Bubble view's,
-   and the Article view's Watch button (#433 item 3) stands for the Follow star. The
-   view is switched without reloading (repo-history.ts), hence :has(). */
+   #469 (figma "Notes – Width system" 7368:275653): Read, Edit and History are the same
+   640px column (Frame 759 7368:264687, Frame 965 7368:264897 and 7368:263261), so the
+   Read / Edit / History row stays still between them, and the subject header above is
+   the one of every other view, Follow and Compare included (repo/header.css): nothing
+   above the content moves when the view or the tab changes. */
 #article-view-root {
-  max-width: 1080px;
+  max-width: 640px;
   margin-inline: auto;
 }
 
-#article-view-root[data-article-mode="read"] {
-  max-width: 800px;
+/* #469: at least a window tall, so that a tab shorter than the one before (History after
+   Read) cannot make the page so short that the browser scrolls it back up, moving the
+   header and the row of tabs. */
+.history-view-section--article #article-view-root:has(#article-tabs) {
+  min-height: 100vh;
 }
 
-/* (:has() on the page while the Article view is shown, hence `.page-content:has(…)`) */
-.page-content:has(.history-view-section--article:not([hidden])) .secondary-nav overflow-menu {
-  max-width: 1080px;
-  margin-inline: auto;
+/* While another tab of the article on screen is fetched (repo-history.ts), its body is
+   dimmed, in place of a loader that would push it down (#469). */
+#article-view-root [data-role="article-content"] .article-mode-body {
+  transition: opacity 0.15s ease-out;
 }
 
-.page-content:has(.history-view-section--article:not([hidden]) [data-article-mode="read"]) .secondary-nav overflow-menu {
-  max-width: 800px;
-}
-
-.page-content:has(.history-view-section--article:not([hidden])) :is(#compare-mode-button, .repo-header-follow) {
-  display: none;
-}
-
-/* The title block is 48px above and 32px below the title (Frame 168 641:65472,
-   padding 48/48/32/48) once the Follow star is gone. Two classes deep and important
-   to outweigh the tw-pt-14 and .repo-header-with-follow it carries elsewhere. */
-.page-content:has(.history-view-section--article:not([hidden])) .secondary-nav .repo-header {
-  padding-top: 48px !important;
-  padding-bottom: 32px !important;
+#article-view-root [data-role="article-content"][aria-busy="true"] .article-mode-body {
+  opacity: 0.5;
 }
 
 /* ── Vertical rhythm ─────────────────────────────────────────────────────────
@@ -135,12 +125,22 @@
   margin: 0;
 }
 
+/* One height in every tab (#469): Watch alone in Read and History is 32px, the Edit
+   tab's Fork / Submit changes buttons up to 38px; the row of tabs must not change height
+   with them, nor, on a phone, the row they take above the tabs. They are centred in 40px
+   (the tabs' height), on one line. */
 .article-tabs-trailing {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 9px;
+  height: 40px;
   margin-left: auto;
   align-self: center;
+}
+
+.article-tabs-trailing > * {
+  flex-shrink: 0;
 }
 
 /* A borderless button (Action 6507:58668, the design system's tertiary button): an
@@ -205,7 +205,10 @@
 }
 
 /* ── The article's path (Frame 566 641:65486) ───────────────────────────────── */
+/* (32px at least, the height of its CopyRef button: History has the Sort menu there
+   instead, which is shorter, and the first line of content keeps one height, #469) */
 .article-path {
+  min-height: 32px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -366,9 +369,18 @@
   padding: 6px 8px 6px 0;
 }
 
-.article-signin-banner-text a {
-  color: inherit;
+/* figma's override on 'Sign in/Sign up' (I7368:264940;31888:12492): one underlined run,
+   weight 400, in the message's colour. They are two links (two targets), so the run is the
+   span around them (custom/options/locale, article_signin_banner), "/" included. */
+.article-signin-banner-links {
   text-decoration: underline;
+}
+
+.article-signin-banner-text a,
+.article-signin-banner-text a:hover {
+  color: inherit;
+  font-weight: var(--font-weight-normal);
+  text-decoration: none;
 }
 
 .article-signin-banner-dismiss {
@@ -470,13 +482,17 @@
   visibility: visible;
 }
 
-/* ── History: the table (DataTable 641:64085) ─────────────────────────────────
-   A 1px #d1d9e0 frame with 6px corners. Header (ColumnHeaderCell 484:190754): 32px,
-   #f6f8fa, 6px 12px, Inter 600 12/20 #59636e; columns 220, 190, 498, 100 and 68 of
-   1076px. Rows (Frame 609 641:64100): 36px, 6px 12px, Inter 12/20 under a 1px #d1d9e0
-   rule; the user's 24px avatar has 6px corners (Avatar 641:64104) and their name is
-   semibold; the date #59636e. */
+/* ── History: the table (DataTable 7368:263295, was 641:64085) ────────────────
+   A 1px #d1d9e0 frame with 6px corners. Header (Column headers 7368:263301): 32px,
+   #f6f8fa, 6px 12px, Inter 600 12/20 #59636e; columns at 640 (#469): User 168, Code 88,
+   Date 104 and the 32px icon column, the Message filling the rest on one line that ends
+   with "…". Rows (Frame 609 7368:263310): 36px, 6px 12px, Inter 12/20 under a 1px
+   #d1d9e0 rule; the user's 24px avatar has 6px corners (Avatar 7368:263314) and their
+   name is semibold; the date #59636e. */
+/* (positioned so that the rows' absolutely placed screen-reader labels, .tw-sr-only, are
+   clipped by the frame too: they used to make a phone's page scroll sideways) */
 .article-history-table {
+  position: relative;
   border: 1px solid var(--color-border-light);
   border-radius: 6px;
   overflow: hidden;
@@ -511,10 +527,18 @@
   border-bottom: 1px solid var(--color-border-light);
 }
 
-.article-history-table .col-user { width: 220px; }
-.article-history-table .col-code { width: 190px; }
-.article-history-table .col-date { width: 100px; }
-.article-history-table .col-icon { width: 68px; text-align: center; }
+.article-history-table .col-user { width: 168px; }
+.article-history-table .col-code,
+.article-history-table #commits-table thead .col-code.sha { width: 88px; } /* (over repo.css's 200px for #commits-table's .sha) */
+.article-history-table .col-date { width: 104px; }
+.article-history-table .col-icon { width: 32px; padding-left: 0; padding-right: 0; text-align: center; }
+
+/* the short sha on one line in its 88px column */
+.article-history-table td.col-code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .article-history-table td.col-date {
   color: var(--color-text-light-3);
@@ -702,9 +726,19 @@ a.article-history-page-direction:hover {
     gap: 8px;
   }
 
+  /* (the buttons that do not fit the width scroll sideways inside their row, rather than
+     wrapping to a second line and pushing the tabs down) */
   .article-tabs-trailing {
     order: -1;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  /* at the end of the row while they fit (an auto margin rather than flex-end, which
+     would put the first buttons out of reach once they do not) */
+  .article-tabs-trailing > :first-child {
+    margin-left: auto;
   }
 
   #article-tabs .ui.tabular.menu {
@@ -724,7 +758,7 @@ a.article-history-page-direction:hover {
   }
 
   .article-history-table table {
-    min-width: 800px;
+    min-width: 640px;
   }
 
   .article-history-footer {

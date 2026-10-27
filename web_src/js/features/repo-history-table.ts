@@ -1,5 +1,6 @@
-import {createApp, h, reactive} from 'vue';
+import {Transition, createApp, h, reactive} from 'vue';
 import CompareAnnouncement from '../components/graph/CompareAnnouncement.vue';
+import {collapseInfoBar, expandInfoBar} from '../modules/info-bar-transition.ts';
 import {fetchReadmeSummary} from '../components/graph/article-summary.ts';
 import {matchesSelection, type RepoSelection} from '../modules/repo-selection.ts';
 import {getCurrentLocale} from '../utils.ts';
@@ -289,10 +290,15 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
   const bannerRoot = document.querySelector<HTMLElement>('#table-compare-announcement-root');
   if (bannerRoot) {
     createApp({
+      // #469: it slides open and closed (info-bar-transition.ts), in a wrapper that takes
+      // the slide, as the Bubble view's does
       render() {
         const state = tableCompareState(compare.on, compare.picks.length, compare.unavailableShown);
-        if (!state) return null;
-        return h(CompareAnnouncement, {
+        return h(Transition, {
+          css: false,
+          onEnter: (el: Element, done: () => void) => expandInfoBar(el as HTMLElement, done),
+          onLeave: (el: Element, done: () => void) => collapseInfoBar(el as HTMLElement, done),
+        }, () => (state ? h('div', {class: 'info-bar-slide'}, [h(CompareAnnouncement, {
           state,
           messages,
           showCompareNow: true,
@@ -301,7 +307,7 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
             else compare.unavailableShown = false;
           },
           onCompare: goToComparison,
-        });
+        })]) : null));
       },
     }).mount(bannerRoot);
   }

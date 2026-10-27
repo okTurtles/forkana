@@ -19,6 +19,10 @@ export type ToastEditorOptions = {
   usageStatistics?: boolean;
   hideModeSwitch?: boolean;
   toolbarItems?: string[][];
+  // Toast UI focuses the editor once created (its default), and the browser then scrolls
+  // to it. The Article view creates its editor when the Edit tab is opened, where the page
+  // must stay put (#469): it passes false.
+  autofocus?: boolean;
 };
 
 // Same pattern as ToastCommentEditor's `_giteaToastCommentEditor`: the textarea is hidden and
@@ -54,6 +58,7 @@ export async function createToastEditor(
     usageStatistics = false,
     hideModeSwitch = false,   // must be false to show the tabs
     toolbarItems = defaultToolbarItems,
+    autofocus = true,
   } = options;
 
   // The article editor's link button links to a Forkana subject, and a Cite button cites a
@@ -95,6 +100,7 @@ export async function createToastEditor(
     previewStyle,
     usageStatistics,
     hideModeSwitch,
+    autofocus,
     toolbarItems: articleTools?.items ?? toolbarItems,
     ...articleEditorMarkdownOptions,
     // NOTE: no `events.change` here, the lossless tracker installed below owns the
@@ -258,7 +264,7 @@ export async function createToastEditor(
   // Internal links written with spaces ([Solar System](subject/Solar System)) become links in
   // the Visual editor; before the tracker, see internal-link-view.ts.
   installInternalLinkView(editor);
-  installLosslessMarkdownTracker(editor, textarea);
+  installLosslessMarkdownTracker(editor, textarea, {focus: autofocus});
   if (articleTools) installArticleTools(editor, container, articleTools);
 
   // Published only after the tracker is installed, so every consumer that reaches the editor

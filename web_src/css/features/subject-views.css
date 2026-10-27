@@ -1,33 +1,44 @@
 /* Subject page: the Table and Article views (the Bubble view lays itself out in
    ./bubble-graph.css and keeps its own spacing).
 
-   Both views start 3rem below the view submenu (Bubble view / Table view /
-   Article view), except an Article view with an article chosen (24px, the rule
-   after this one). The gap lives on the section itself, ONE rule for both,
-   instead of a top margin on whatever happens to be its first child: those
-   used to differ (tw-mt-20 on the table's grid, tw-mt-10 on the article root)
-   and Fomantic's `:first-child` margin rules cancelled one of them, so the
-   "Please select an article" box sat flush against the submenu. Padding,
-   unlike a margin, cannot collapse out of the section either. */
-.history-view-section--table,
-.history-view-section--article {
-  padding-top: 3rem;
+   Width (#469, figma "Notes – Width system" 7368:275653): below the view tabs
+   the subject page is 1344px wide at 1440, with the subject header's margins
+   (--subject-margin-x, repo/header.css): that is the Bubble view's width. The
+   Table view and the Article view's Read, Edit and History tabs are a 640px
+   column centred in it (Table view 7368:260448 Frame 742; Article view
+   7368:264676 Frame 759, 7368:264887 Frame 965, 7368:263253 Frame 965), so
+   neither the header nor the Read / Edit / History row moves between them. */
+.ui.container.subject-views-container {
+  width: auto;
+  max-width: none;
+  margin-left: var(--subject-margin-x);
+  margin-right: var(--subject-margin-x);
 }
 
-/* Except once an article is chosen: the Article view then starts 24px below the
-   submenu, where its tokens sit in the figma (641:65454: the view tabs end at 248, the
-   tokens start at 272), also while that article loads or fails to (the loader and the
-   error stay where it will be). Only the "Please select an article" box keeps 3rem. */
-.history-view-section--article:not(:has([data-role="article-empty"]:not([hidden]))) {
+/* Both views start 24px below the view tabs (Frame 758532358 7368:260450 and the
+   Article view's 7368:264687: the tabs end at 248, the table and the tokens start at
+   272). The gap lives on the section itself, ONE rule for both, instead of a top
+   margin on whatever happens to be its first child: Fomantic's `:first-child` margin
+   rules cancelled those. Padding, unlike a margin, cannot collapse out of the section
+   either. */
+.history-view-section--table,
+.history-view-section--article {
   padding-top: 24px;
 }
 
+/* Except the "Please select an article" box of an Article view with no article
+   chosen, which keeps the 3rem it had. */
+.history-view-section--article:has([data-role="article-empty"]:not([hidden])) {
+  padding-top: 3rem;
+}
+
 /* ── Table view ──────────────────────────────────────────────────────────────
-   figma "Table view / Articles" (641:61176) and "Table view / Comparing
-   articles" (641:61039). Figma px; the table is figma's 802px wide ("Frame 742"
-   641:61183), centred, and shrinks with the window. */
+   figma "Table view / Articles" (641:61176, now 7368:260448) and "Table view /
+   Comparing articles" (641:61039, now 7368:260309). Figma px; the table is the
+   640px reading column ("Frame 742" 7368:260457, #469), centred, and shrinks with
+   the window. */
 .history-table {
-  max-width: 802px;
+  max-width: 640px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -144,13 +155,21 @@
   color: var(--color-text-primary);
 }
 
-/* Columns: the checkbox 32, Contributors 228, Last edited 240, Owner 250 and
-   the chevron 52 (of 802): the column headers' x in 641:61189 */
+/* Columns at 640 (Column headers 7368:260463): the checkbox 32, Contributors 228,
+   Last edited 240, Owner 88 and the chevron 52, so that the labels start at 32, 268
+   and 508 as figma's do. Contributors and Owner are a share of the table's width
+   (228 and 88 of 640) and Last edited takes the rest, so a narrower table keeps the
+   same proportions. */
 .history-table-col-check { width: 32px; }
-.history-table-col-count { width: 28.4%; }
-.history-table-col-date { width: 29.9%; }
-.history-table-col-owner { width: 31.2%; }
+.history-table-col-count { width: 35.625%; }
+.history-table-col-owner { width: 13.75%; }
 .history-table-col-toggle { width: 52px; }
+
+/* On a phone the owner's name needs more than 13.75% of 343px */
+@media (max-width: 767.98px) {
+  .history-table-col-count { width: 24%; }
+  .history-table-col-owner { width: 24%; }
+}
 
 /* Column headers (DataTable/ColumnHeaderCell): 28px, #f6f8fa, 4px 8px, Inter
    600 14/20 in #59636e, a 1px #d1d9e0 line under them */
@@ -386,6 +405,17 @@
   margin-top: 0 !important;
 }
 
+/* #469: with no article chosen, the Article view's section holds the "Please select an
+   article" box, the loader and the error message directly (the placeholder section in
+   explore/repo_history.tmpl), not in #article-view-root: they are the same 640px
+   reading column (figma "Notes – Width system" 7368:275653: Table view and Article
+   Read / Edit / History are 640), not the full width of the page. */
+.history-view-section--article > :is([data-role="article-empty"], [data-role="article-loader"], [data-role="article-error"]) {
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 /* The Compare mode banner (#421 item 1, CompareAnnouncement.vue) is teleported
    into this root, under the navbar. The root itself takes no box, so the
    banner is a direct child of .page-content as far as layout goes: it spans
@@ -407,4 +437,36 @@
 
 .page-content:has(.history-view-section--table[hidden]) #table-compare-announcement-root {
   display: none;
+}
+
+/* ── Transitions (#469) ──────────────────────────────────────────────────────
+   The views and the Article view's tabs are already switched without a reload
+   (web_src/js/features/repo-history.ts swaps only the section that changes). What
+   comes in fades in, briefly: a view when it is shown, and the body of a Read, Edit
+   or History tab when it replaces another, under the row of tabs, which stays. */
+@media (prefers-reduced-motion: no-preference) {
+  .history-view-section:not([hidden]),
+  #article-view-root .article-mode-body {
+    animation: fadein 0.15s ease-out;
+  }
+}
+
+/* ── Info bars that slide (#469) ─────────────────────────────────────────────
+   web_src/js/modules/info-bar-transition.ts slides the info bars open and closed. A
+   bar closing keeps this class, which keeps it displayed (the id outweighs tw-hidden's
+   important display), until it has slid to 0. */
+#article-signin-banner.is-info-bar-leaving,
+#article-archived-notice.is-info-bar-leaving {
+  display: flex !important;
+}
+
+/* The Compare banners slide in a wrapper (FishboneGraph.vue, repo-history-table.ts). On
+   a phone the banner sticks to the top of the page (CompareAnnouncement.vue): a sticky
+   box stays within its parent, so the wrapper is what sticks. */
+@media (max-width: 767.98px) {
+  .info-bar-slide {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
 }

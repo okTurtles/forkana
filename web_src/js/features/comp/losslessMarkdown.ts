@@ -44,6 +44,9 @@ export type LosslessEditor = {
   // clampStaleMappedPos below keeps valid. The unit-test fakes omit it, and the clamp is
   // skipped when it is absent.
   convertor?: {getMappedPos?(): unknown, setMappedPos?(pos: unknown): void};
+  // Optional: puts the caret at the start of the document, focusing the editor only when
+  // asked. The unit-test fakes omit it.
+  moveCursorToStart?(focus?: boolean): void;
 };
 
 // A 1-based [line, ch] position in the markdown (Source) editor.
@@ -143,7 +146,7 @@ function resolveSerialization(pristine: string, baseline: string, serialized: st
   return unescapeTypedMarkdown(serialized, adopted);
 }
 
-export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea: HTMLTextAreaElement): void {
+export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea: HTMLTextAreaElement, {focus = true}: {focus?: boolean} = {}): void {
   // Captured after installBase64WidgetPatch: strips $$widget$$ placeholders, so baseline
   // comparisons can never differ on placeholder syntax alone.
   const baseGetMarkdown = editor.getMarkdown.bind(editor);
@@ -274,7 +277,14 @@ export function installLosslessMarkdownTracker(editor: LosslessEditor, textarea:
 
   // Initial content load, guarded so the setMarkdown-triggered change event cannot
   // overwrite the textarea (and thus later submits) with WYSIWYG-normalized output.
-  if (textarea.value) {
+  if (textarea.value && !focus) {
+    // Not with the caret at the end (setMarkdown's default): Toast UI then focuses the
+    // editor and scrolls the page to its caret, so opening the Article view's Edit tab
+    // jumped down the page (#469). The caret goes to the start instead, a structurally
+    // valid position, without focus.
+    applyMarkdown(textarea.value, false);
+    editor.moveCursorToStart?.(false);
+  } else if (textarea.value) {
     applyMarkdown(textarea.value);
   } else if (!editor.isMarkdownMode()) {
     wysiwygBaseline = baseGetMarkdown();
