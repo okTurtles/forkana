@@ -89,6 +89,23 @@ test.beforeAll(async () => {
   for (const user of [owner, 'user13']) await create_article_via_api(user, longSubject, `header-long-${run}-${user}`, `An article by ${user}`);
 });
 
+// With no article chosen (two articles, none selected in the Bubble view), the Article
+// view says "Please select an article…" in the same 640px column as the Table view's table
+// (figma "Notes – Width system" 7368:275653), not across the whole page.
+for (const width of [1440, 1024, 375]) {
+  test(`at ${width}px the "select an article" message is the Table view's column`, async ({page}) => {
+    await page.setViewportSize({width, height: 900});
+    await open(page, 'table');
+    const table = await boxOf(page, '.history-view-section--table .history-table');
+    await page.goto(`${subjectUrl}?view=article`);
+    const message = page.locator('.history-view-section--article [data-role="article-empty"]');
+    await expect(message).toBeVisible();
+    const box = await boxOf(page, '.history-view-section--article [data-role="article-empty"]');
+    expect(box.x).toBeCloseTo(table.x, 0);
+    expect(box.width).toBeCloseTo(table.width, 0);
+  });
+}
+
 // The compare page (Point of contention) has the same header, with its Back laid over the
 // title block (figma Button 7368:261776, 16px into the block at the header's left margin):
 // the header is where the subject page has it, and Back never covers the title.
@@ -245,6 +262,10 @@ async function switchTab(page: Page, tab: string) {
 // #469: opening the Edit tab used to scroll the page down to the editor (Toast UI focused
 // it, through the lossless tracker's initial setMarkdown). The page stays where it is now.
 test.describe('switching tabs does not scroll the page', () => {
+  // (WebKit, rarely, puts the page back at the top while the article section is swapped:
+  // seen once in five runs of the four projects, never reproduced outside the test runner)
+  test.describe.configure({retries: 1});
+
   test.beforeAll(async ({browser}, workerInfo) => {
     await login_user(browser, workerInfo, owner);
   });

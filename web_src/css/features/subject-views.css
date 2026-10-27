@@ -405,6 +405,17 @@
   margin-top: 0 !important;
 }
 
+/* #469: with no article chosen, the Article view's section holds the "Please select an
+   article" box, the loader and the error message directly (the placeholder section in
+   explore/repo_history.tmpl), not in #article-view-root: they are the same 640px
+   reading column (figma "Notes – Width system" 7368:275653: Table view and Article
+   Read / Edit / History are 640), not the full width of the page. */
+.history-view-section--article > :is([data-role="article-empty"], [data-role="article-loader"], [data-role="article-error"]) {
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 /* The Compare mode banner (#421 item 1, CompareAnnouncement.vue) is teleported
    into this root, under the navbar. The root itself takes no box, so the
    banner is a direct child of .page-content as far as layout goes: it spans
