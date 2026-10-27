@@ -654,13 +654,16 @@
 
 /* The toolbar spans the band (the tabs are laid over its left end), so that Toast UI,
    which folds into its "more" menu whatever does not fit the toolbar's own width, sees
-   the room there is: shrunk to its content, it used to fold the last three buttons. */
+   the room there is: shrunk to its content, it used to fold the last three buttons.
+   Its buttons end 8px from the band's right edge and start 13px from its top ("Frame
+   386" 7368:265002 in "Article view / Logged out - Edit": 24px tall at y 13, ending at
+   632 of 640). */
 [data-theme] .article-editor-box .toastui-editor-defaultUI-toolbar {
   flex: 1;
   justify-content: flex-end;
   height: 47px;
-  align-items: center;
-  padding: 0 16px 0 260px;
+  align-items: flex-start;
+  padding: 13px 8px 0 260px;
   background: transparent;
   border: none;
 }

@@ -239,7 +239,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       await expect(submitButton).toHaveAttribute('data-fork-and-edit', 'false');
 
       // Button should contain "Submit Changes" text
-      await expect(submitButton).toContainText('Submit Changes');
+      await expect(submitButton).toContainText('Submit changes');
 
       // Button should be primary style (not secondary like Fork button)
       await expect(submitButton).toHaveClass(/primary/);

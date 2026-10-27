@@ -87,13 +87,17 @@
                         </div>
                     {{end}}
                     {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}
+                        {{/* Fork and Submit changes at the end of the row, 9px apart (Frame 9
+                             7368:264912 of "Article view / Logged out - Edit" 7368:264887).
+                             Submit changes is the design system's medium primary button
+                             (Button 7368:264915: 32px, 6/12 padding, Inter 600 14/20, no icon),
+                             in its unavailable colours when it cannot be used. */}}
                         <div class="tw-flex tw-items-center">
-                            <div class="tw-flex tw-items-center tw-gap-2">
+                            <div class="article-edit-actions">
                                 {{if .IsSigned}}
                                     {{if .CanEditDirectly}}
                                         {{/* The owner and the maintainers edit directly - show simple submit button */}}
-                                        <button type="button" id="submit-changes-button" class="ui primary button" data-fork-and-edit="false">
-                                            {{svg "octicon-check" 16 "tw-mr-1"}}
+                                        <button type="button" id="submit-changes-button" class="forkana-btn forkana-btn-primary" data-fork-and-edit="false">
                                             {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                         </button>
                                     {{else if .BlockedByOwnArticle}}
@@ -116,7 +120,7 @@
                                             </a>
                                         {{end}}
                                         {{if .CanSubmitChangeRequest}}
-                                        <button type="button" id="pre-submit-changes-button" class="ui primary button"
+                                        <button type="button" id="pre-submit-changes-button" class="forkana-btn forkana-btn-primary"
                                             data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
                                             {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                         </button>
@@ -136,9 +140,8 @@
                                         </button>
                                         {{/* Submit Change Request - opens modal for title/description, then creates branch + commit + PR */}}
                                         {{if .CanSubmitChangeRequest}}
-                                        <button type="button" id="pre-submit-changes-button" class="ui primary button"
+                                        <button type="button" id="pre-submit-changes-button" class="forkana-btn forkana-btn-primary"
                                             data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
-                                            {{svg "octicon-git-pull-request" 16 "tw-mr-1"}}
                                             {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                         </button>
                                         {{end}}
@@ -148,8 +151,7 @@
                                              It handles unexpected permission states where the user is signed in
                                              but none of the specific conditions (owner, blocked, has fork, needs fork) apply. */}}
                                         <span data-tooltip-content="{{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
-                                            <button type="button" class="ui primary button disabled" aria-label="{{ctx.Locale.Tr "repo.editor.submit_changes"}} - {{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
-                                                {{svg "octicon-check" 16 "tw-mr-1"}}
+                                            <button type="button" class="forkana-btn forkana-btn-primary-unavailable disabled" disabled aria-label="{{ctx.Locale.Tr "repo.editor.submit_changes"}} - {{ctx.Locale.Tr "repo.editor.editing_unavailable"}}">
                                                 {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                             </button>
                                         </span>
