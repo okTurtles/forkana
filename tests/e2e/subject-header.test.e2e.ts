@@ -52,6 +52,14 @@ async function open(page: Page, view: string) {
   await page.goto(views[view]);
   await expect(page.locator(shown[view])).toBeVisible({timeout: 10000});
   await expect(page.locator('.repo-header-follow')).toBeVisible();
+  // the views' script is running (it records the view in the history), so that tabs are
+  // switched in the page rather than by following their links
+  await page.waitForFunction(() => window.history.state !== null);
+}
+
+// waits for the info bars' slides (and the views' fade) to end
+async function settle(page: Page) {
+  await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
 }
 
 // The Follow label reads "Follow" or "Following", for the article each view stands for,
@@ -130,6 +138,7 @@ for (const {width, column} of layouts) {
       // the Edit tab's sign-in banner
       await open(page, 'edit');
       await expect(page.locator('#article-signin-banner')).toBeVisible();
+      await settle(page);
       const banner = await boxOf(page, '#article-signin-banner');
       expect(banner.y).toBe(navbar.y + navbar.height);
       const pushed = await headerOf(page);
@@ -141,6 +150,7 @@ for (const {width, column} of layouts) {
       await open(page, 'bubble');
       await page.locator('#compare-mode-button').click();
       await expect(page.locator('.compare-announcement')).toBeVisible();
+      await settle(page);
       const compareBanner = await boxOf(page, '.compare-announcement');
       expect(compareBanner.y).toBe(navbar.y + navbar.height);
       expect((await headerOf(page)).tabs.y).toBe(reference.tabs.y + compareBanner.height);
@@ -186,4 +196,154 @@ test.describe('signed in', () => {
       await context.close();
     });
   }
+});
+
+// Switches the article tab in the page and waits for it (and, for Edit, its editor).
+async function switchTab(page: Page, tab: string) {
+  await page.locator(`#article-tabs a[data-article-tab="${tab}"]`).click();
+  await expect(page.locator(shown[tab])).toBeVisible({timeout: 10000});
+  await expect(page.locator(`${shown[tab]} .toastui-editor-defaultUI`)).toHaveCount(tab === 'edit' ? 1 : 0, {timeout: 10000});
+  // an info bar slides for 200ms, and the editor used to focus itself (and scroll) in a
+  // timer right after it was created
+  await settle(page);
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)));
+}
+
+// #469: opening the Edit tab used to scroll the page down to the editor (Toast UI focused
+// it, through the lossless tracker's initial setMarkdown). The page stays where it is now.
+test.describe('switching tabs does not scroll the page', () => {
+  test.beforeAll(async ({browser}, workerInfo) => {
+    await login_user(browser, workerInfo, owner);
+  });
+
+  test('signed in: window.scrollY is unchanged', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, owner);
+    const page = await context.newPage();
+    await page.setViewportSize({width: 1440, height: 400});
+    await open(page, 'read');
+    await page.evaluate(() => window.scrollTo(0, 120));
+    const scrollY = await page.evaluate(() => window.scrollY);
+    expect(scrollY).toBeGreaterThan(0);
+    for (const tab of ['edit', 'read', 'history', 'edit']) {
+      await switchTab(page, tab);
+      expect(Math.abs(await page.evaluate(() => window.scrollY) - scrollY), tab).toBeLessThanOrEqual(1);
+    }
+    // the editor was not focused on its own
+    expect(await page.evaluate(() => Boolean(document.activeElement?.closest('.toastui-editor-defaultUI')))).toBe(false);
+    await context.close();
+  });
+
+  // Signed out, the Edit tab's sign-in banner slides open above the header, above the part
+  // of the page on screen: the browser keeps what is on screen in place (scroll
+  // anchoring), so the tab row does not move in the window.
+  test('signed out: what is on screen stays in place', async ({page, browserName}) => {
+    // WebKit does not always keep what is on screen in place when the bar above it closes
+    // while the article below is swapped (its scroll anchor goes with the old article)
+    // eslint-disable-next-line playwright/no-skipped-test
+    test.skip(browserName === 'webkit', 'WebKit scroll anchoring');
+    await page.setViewportSize({width: 1440, height: 400});
+    await open(page, 'read');
+    await page.evaluate(() => window.scrollTo(0, 120));
+    const rowY = () => page.evaluate(() => document.querySelector('#article-tabs').getBoundingClientRect().y);
+    const before = await rowY();
+    for (const tab of ['edit', 'read', 'history']) {
+      await switchTab(page, tab);
+      expect(Math.abs(await rowY() - before), tab).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+type BarSample = {height: number, gap: number};
+
+// Clicks `action` in the page, then samples every frame the height of a bar and how far
+// the title is below it: from the click until `settleMs` after the bar first changed (an
+// article tab is fetched first), or 8s.
+function sampleBar(page: Page, bar: string, action: string, settleMs = 400): Promise<BarSample[]> {
+  return page.evaluate(async ({bar, action, settleMs}) => {
+    const measure = () => {
+      const el = document.querySelector(bar);
+      const rect = el?.getBoundingClientRect();
+      const height = rect && el.getClientRects().length ? rect.height : 0;
+      const title = document.querySelector('.subject-header h1').getBoundingClientRect().y;
+      return {height, gap: title - (height ? rect.bottom : 0)};
+    };
+    const samples = [measure()];
+    document.querySelector<HTMLElement>(action).click();
+    let end = performance.now() + 8000;
+    let changed = false;
+    while (performance.now() < end) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const sample = measure();
+      samples.push(sample);
+      if (!changed && Math.abs(sample.height - samples[0].height) > 0.5) {
+        changed = true;
+        end = performance.now() + settleMs;
+      }
+    }
+    return samples;
+  }, {bar, action, settleMs});
+}
+
+// heights going from 0 to full (opening) or from full to 0 (closing), through frames in
+// between and never back the other way
+function expectSlide(samples: BarSample[], opening: boolean, label: string) {
+  const heights = samples.map((s) => s.height);
+  const full = Math.max(...heights);
+  const trace = `${label}: ${heights.map(Math.round).join(',')}`;
+  expect(full, trace).toBeGreaterThan(30);
+  expect(heights.some((h) => h > 1 && h < full - 1), trace).toBe(true);
+  const direction = opening ? 1 : -1;
+  expect(heights.every((h, i) => i === 0 || (h - heights[i - 1]) * direction >= -0.5), trace).toBe(true);
+  expect(heights.at(-1), trace).toBeCloseTo(opening ? full : 0, 0);
+}
+
+test.describe('info bars slide open and closed', () => {
+  // (frames are sampled: a busy machine can drop the few frames of a 200ms slide)
+  test.describe.configure({retries: 1});
+
+  test.beforeEach(async ({page}) => {
+    await page.setViewportSize({width: 1440, height: 900});
+  });
+
+  test('the Bubble view Compare banner, with the header riding on it', async ({page}) => {
+    await open(page, 'bubble');
+    const opening = await sampleBar(page, '.info-bar-slide', '#compare-mode-button');
+    expectSlide(opening, true, 'opening');
+    const closing = await sampleBar(page, '.info-bar-slide', '#compare-mode-button');
+    expectSlide(closing, false, 'closing');
+    // the header moves with the bar frame by frame: never a jump between the two
+    const gaps = [...opening, ...closing].filter((s) => s.height > 0).map((s) => Math.round(s.gap));
+    expect(new Set(gaps).size, gaps.join(',')).toBe(1);
+  });
+
+  test('the Edit tab sign-in banner (signed out)', async ({page}) => {
+    await open(page, 'read');
+    expectSlide(await sampleBar(page, '#article-signin-banner', '#article-tabs a[data-article-tab="edit"]'), true, 'opening');
+    expectSlide(await sampleBar(page, '#article-signin-banner', '#article-tabs a[data-article-tab="read"]'), false, 'closing');
+    await expect(page.locator('#article-signin-banner')).toBeHidden();
+  });
+
+  test('with reduced motion they appear and go at once', async ({page}) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await open(page, 'bubble');
+    // (the first sample is taken before the click)
+    const opening = (await sampleBar(page, '.info-bar-slide', '#compare-mode-button', 150)).slice(1);
+    expect(opening[0].height).toBeGreaterThan(30);
+    expect(opening.every((s) => s.height === opening[0].height)).toBe(true);
+    const closing = (await sampleBar(page, '.info-bar-slide', '#compare-mode-button', 150)).slice(1);
+    expect(closing.every((s) => s.height === 0)).toBe(true);
+  });
+
+  test('a bar shown on the first load does not slide in', async ({page}) => {
+    await page.goto(views.edit);
+    const heights = await page.evaluate(async () => {
+      const out: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        out.push(document.querySelector('#article-signin-banner').getBoundingClientRect().height);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+      return out;
+    });
+    expect(heights.every((h) => h === heights[0] && h > 30), heights.join(',')).toBe(true);
+  });
 });

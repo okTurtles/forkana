@@ -439,3 +439,23 @@
     animation: fadein 0.15s ease-out;
   }
 }
+
+/* ── Info bars that slide (#469) ─────────────────────────────────────────────
+   web_src/js/modules/info-bar-transition.ts slides the info bars open and closed. A
+   bar closing keeps this class, which keeps it displayed (the id outweighs tw-hidden's
+   important display), until it has slid to 0. */
+#article-signin-banner.is-info-bar-leaving,
+#article-archived-notice.is-info-bar-leaving {
+  display: flex !important;
+}
+
+/* The Compare banners slide in a wrapper (FishboneGraph.vue, repo-history-table.ts). On
+   a phone the banner sticks to the top of the page (CompareAnnouncement.vue): a sticky
+   box stays within its parent, so the wrapper is what sticks. */
+@media (max-width: 767.98px) {
+  .info-bar-slide {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+}

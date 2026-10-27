@@ -79,6 +79,8 @@ export function initArticleEditor() {
       previewStyle: 'tab',
       usageStatistics: false,
       hideModeSwitch: false,  // Allow mode switching
+      // #469: opening the Edit tab must not scroll the page to the editor
+      autofocus: false,
     });
 
     // Handle Fork Article button (fork and edit in user's own fork)

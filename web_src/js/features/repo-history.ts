@@ -14,6 +14,7 @@ import {
 import {parseSubjectLocation, pickInitialSelection, selectionFromHistoryState, withCarriedQuery, type HistoryState, type ViewKey} from './repo-history-state.ts';
 import {COMPARE_MODE_TOGGLE_EVENT, requestCompareMode, takeCompareModeRequest, takeCompareRequestFromUrl} from '../modules/compare-mode-request.ts';
 import {initHistoryTable, type HistoryTable} from './repo-history-table.ts';
+import {watchInfoBars} from '../modules/info-bar-transition.ts';
 
 function buildSubjectUrl(base: string, view?: ViewKey): string {
   if (!view) return base;
@@ -88,6 +89,17 @@ function selectionFromElement(el: Element): RepoSelection | null {
 export function initRepoHistory() {
   const root = document.querySelector<HTMLElement>('#repo-history-app');
   if (!root) return;
+
+  // #469: the info bars that views and tabs show and hide without a reload slide open and
+  // closed instead of making the page jump: the Edit tab's sign-in banner (shown through
+  // CSS) and the archived notice (tw-hidden). The Compare banners slide on their own.
+  const pageContent = root.closest<HTMLElement>('.page-content');
+  const slidingBars: HTMLElement[] = [];
+  for (const selector of ['#article-signin-banner', '#article-archived-notice']) {
+    const bar = document.querySelector<HTMLElement>(selector);
+    if (bar) slidingBars.push(bar);
+  }
+  if (pageContent && slidingBars.length) watchInfoBars(slidingBars, pageContent);
 
   // The selection is no longer kept in localStorage (#402): drop what earlier versions left.
   clearLegacyStoredSelection();
