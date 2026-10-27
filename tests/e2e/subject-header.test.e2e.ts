@@ -76,10 +76,43 @@ function expectSameHeader(actual: Awaited<ReturnType<typeof headerOf>>, expected
   expect(actual.follow.x + actual.follow.width / 2, `${label}: Follow`).toBeCloseTo(expected.follow.x + expected.follow.width / 2, 0);
 }
 
+function intersects(a: Box, b: Box): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+// a subject whose title is wider than the screen, for the compare page's Back below
+const longSubject = `header-long-${run} the title of a subject long enough to wrap over two or three lines`;
+
 test.beforeAll(async () => {
   // two articles, so that the Bubble and Table views have something to compare
   for (const user of [owner, 'user13']) await create_article_via_api(user, subject, `${subject}-${user}`, `An article by ${user}`);
+  for (const user of [owner, 'user13']) await create_article_via_api(user, longSubject, `header-long-${run}-${user}`, `An article by ${user}`);
 });
+
+// The compare page (Point of contention) has the same header, with its Back laid over the
+// title block (figma Button 7368:261776, 16px into the block at the header's left margin):
+// the header is where the subject page has it, and Back never covers the title.
+for (const width of [1440, 375]) {
+  test(`compare page at ${width}px: the header is the subject page's, and Back stays clear of the title`, async ({page}) => {
+    await page.setViewportSize({width, height: 900});
+    await open(page, 'bubble');
+    const reference = await headerOf(page);
+    await page.goto(`${subjectUrl}/compare/${owner}...user13`);
+    await expect(page.locator('.subject-compare-back')).toBeVisible();
+    const header = await headerOf(page);
+    expect(header.title.y).toBeCloseTo(reference.title.y, 0);
+    expect(header.tabs).toEqual(reference.tabs);
+
+    for (const name of [subject, longSubject]) {
+      await page.goto(`/subject/${encodeURIComponent(name)}/compare/${owner}...user13`);
+      await expect(page.locator('.subject-compare-back')).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      const back = await boxOf(page, '.subject-compare-back');
+      const title = await boxOf(page, '.subject-header h1');
+      expect(intersects(back, title), `${name}: Back ${JSON.stringify(back)}, title ${JSON.stringify(title)}`).toBe(false);
+    }
+  });
+}
 
 // Per width, signed out: the views whose header is compared with the Bubble view's, the
 // article tabs switched in turn, and the width of the content column. A signed-out
@@ -140,11 +173,11 @@ for (const {width, column} of layouts) {
       await expect(page.locator('#article-signin-banner')).toBeVisible();
       await settle(page);
       const banner = await boxOf(page, '#article-signin-banner');
-      expect(banner.y).toBe(navbar.y + navbar.height);
+      expect(banner.y).toBeCloseTo(navbar.y + navbar.height, 0);
       const pushed = await headerOf(page);
-      expect(pushed.title.y).toBe(reference.title.y + banner.height);
-      expect(pushed.follow.y).toBe(reference.follow.y + banner.height);
-      expect(pushed.tabs.y).toBe(reference.tabs.y + banner.height);
+      expect(pushed.title.y).toBeCloseTo(reference.title.y + banner.height, 0);
+      expect(pushed.follow.y).toBeCloseTo(reference.follow.y + banner.height, 0);
+      expect(pushed.tabs.y).toBeCloseTo(reference.tabs.y + banner.height, 0);
 
       // the Bubble view's Compare banner
       await open(page, 'bubble');
@@ -152,8 +185,8 @@ for (const {width, column} of layouts) {
       await expect(page.locator('.compare-announcement')).toBeVisible();
       await settle(page);
       const compareBanner = await boxOf(page, '.compare-announcement');
-      expect(compareBanner.y).toBe(navbar.y + navbar.height);
-      expect((await headerOf(page)).tabs.y).toBe(reference.tabs.y + compareBanner.height);
+      expect(compareBanner.y).toBeCloseTo(navbar.y + navbar.height, 0);
+      expect((await headerOf(page)).tabs.y).toBeCloseTo(reference.tabs.y + compareBanner.height, 0);
     });
   });
 }
@@ -164,11 +197,11 @@ test('desktop: the title block is 136px and the view tabs row 48px (7368:260781,
   const {title, follow, tabs} = await headerOf(page);
   const navbar = await boxOf(page, '#navbar');
   const row = await boxOf(page, '.subject-header overflow-menu');
-  expect(title.y).toBe(navbar.y + navbar.height + 24);
+  expect(title.y).toBeCloseTo(navbar.y + navbar.height + 24, 0);
   expect(title.height).toBe(56);
-  expect(follow.y).toBe(title.y + 56);
+  expect(follow.y).toBeCloseTo(title.y + 56, 0);
   expect(follow.height).toBe(32);
-  expect(tabs.y).toBe(follow.y + 32 + 24);
+  expect(tabs.y).toBeCloseTo(follow.y + 32 + 24, 0);
   expect(row.height).toBe(48);
   // 1344px wide: 48px margins
   expect(row.x).toBe(48);

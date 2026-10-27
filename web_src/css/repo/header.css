@@ -58,11 +58,15 @@
   margin-right: var(--subject-margin-x);
 }
 
-/* Two classes deep: the header carries `.repo-header`'s gap and margin. */
+/* Two classes deep: the header carries `.repo-header`'s gap and margin. The title keeps
+   72px from the sides: the compare page lays its 65px Back over the block's left end
+   (figma Button 7368:261776, 8px left of the margin, base.custom.css), and a long title
+   wraps before it runs under the button. The same on every page, so the title wraps the
+   same way, and the header is the same height, on the subject page and the compare page. */
 .subject-header .repo-header.repo-header-with-follow {
   gap: 0;
   margin: 0;
-  padding: 24px 0;
+  padding: 24px 72px;
 }
 
 .subject-header .repo-header-with-follow h1 {
@@ -206,8 +210,9 @@ overflow-menu:has(> #compare-mode-button) .overflow-menu-items {
    title Inter 500 24px and Follow right under it: 91px with the title's line
    at 27px. The selectors are two deep, like the desktop ones above. */
 @media (max-width: 767.98px) {
+  /* (36px from the sides: the compare page's 28px Back icon, and a gap) */
   .subject-header .repo-header.repo-header-with-follow {
-    padding: 16px 0;
+    padding: 16px 36px;
   }
 
   /* (!important: the title carries `tw-text-40`, an important utility) */
