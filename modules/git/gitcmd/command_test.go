@@ -73,5 +73,8 @@ func TestCommandString(t *testing.T) {
 	assert.Equal(t, cmd.prog+` a "-m msg" "it's a test" "say \"hello\""`, cmd.LogString())
 
 	cmd = NewCommand("url: https://a:b@c/", "/root/dir-a/dir-b")
-	assert.Equal(t, cmd.prog+` "url: https://sanitized-credential@c/" .../dir-a/dir-b`, cmd.LogString())
+	assert.Equal(t, cmd.prog+` "url: https://(masked)@c/" .../dir-a/dir-b`, cmd.LogString())
+
+	cmd = NewCommand("url: a:b@c/", "/root/dir-a/dir-b")
+	assert.Equal(t, cmd.prog+` "url: (masked)@c/" .../dir-a/dir-b`, cmd.LogString())
 }
