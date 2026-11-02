@@ -42,6 +42,9 @@ func TestPrepareSubjectAndRepoName(t *testing.T) {
 		{"''''''''''''''''", "", "''''''''''''''''", repo_model.GenerateSlugFromName("''''''''''''''''"), false},
 		{"'''", "subject", "'''", repo_model.GenerateSlugFromName("'''"), false},
 		{"東京", "subject", "東京", repo_model.GenerateSlugFromName("東京"), false},
+		// ... and so is "1980", what the script generates for a title with a non-Latin letter
+		{"Москва 1980", "1980", "Москва 1980", repo_model.GenerateSlugFromName("Москва 1980"), false},
+		{"1980", "1980", "1980", "1980", false},
 		// "subject" is only a placeholder for such titles
 		{"Brand New", "subject", "Brand New", "subject", false},
 		// a new subject must follow the rule

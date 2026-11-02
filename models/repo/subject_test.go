@@ -324,6 +324,21 @@ func TestGenerateSlugFromName(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	// #401: a non-Latin letter used to be dropped, so these all had the slug "1980" or "2004"
+	slugs := map[string]string{}
+	for _, name := range []string{"1980", "Москва 1980", "東京 1980", "Ελλάδα 2004", "東京 2004", "2004"} {
+		slug := repo_model.GenerateSlugFromName(name)
+		assert.Regexp(t, `^[a-z0-9-]+$`, slug, name)
+		assert.NotContains(t, slugs, slug, "%q has the slug of %q", name, slugs[slug])
+		slugs[slug] = name
+	}
+	assert.Equal(t, "1980", repo_model.GenerateSlugFromName("1980"))
+	assert.Regexp(t, `^subject-[0-9a-f]{16}$`, repo_model.GenerateSlugFromName("Москва 1980"))
+	assert.Equal(t, repo_model.GenerateSlugFromName("Москва 1980"), repo_model.GenerateSlugFromName("москва  1980"))
+	// Latin letters keep the slug they always had, with or without an ASCII base
+	assert.Equal(t, "strae-1980", repo_model.GenerateSlugFromName("Straße 1980"))
+	assert.Equal(t, "odz-2004", repo_model.GenerateSlugFromName("Łódź 2004"))
 }
 
 // TestCreateSubject_UniqueSlug tests that CreateSubject enforces unique slugs

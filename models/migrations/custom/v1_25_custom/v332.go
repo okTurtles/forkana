@@ -13,9 +13,11 @@ import (
 )
 
 // ResluggifySymbolSubjects gives the subjects whose name has no ASCII letter or digit (three
-// apostrophes, "東京") the slug repo_model.GenerateSlugFromName now gives them (#401). They all used to get
-// the slug "subject" (or "subject-2", "subject-3"… when migration 326 found several), so
-// typing any such title opened whichever of them held "subject".
+// apostrophes, "東京"), or has a non-Latin letter ("Москва 1980"), the slug
+// repo_model.GenerateSlugFromName now gives them (#401). The first ones all used to get the
+// slug "subject" (or "subject-2", "subject-3"… when migration 326 found several), the others
+// the slug of their ASCII part ("1980"), so typing such a title opened whichever subject held
+// that slug.
 //
 // Names and repositories are left alone: only the slug, which no URL shows, changes. A subject
 // keeps its slug when the new one is already taken. Moving a subject can free a slug that

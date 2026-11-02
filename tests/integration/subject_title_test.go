@@ -479,4 +479,36 @@ func TestSubjectTitleWithoutASCIILetters(t *testing.T) {
 			unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: subject})
 		}
 	})
+
+	t.Run("A non-Latin letter next to a digit is not dropped", func(t *testing.T) {
+		// these used to share the slug of the bare number
+		ids := map[int64]string{}
+		for i, subject := range []string{"1980", "Москва 1980", "東京 2004", "Ελλάδα 2004"} {
+			req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &api.CreateRepoOption{Name: fmt.Sprintf("mixed-script-%d", i), Subject: subject}).AddTokenAuth(token)
+			DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &apiRepo)
+			assert.Equal(t, subject, apiRepo.Subject)
+			stored := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: subject})
+			assert.NotContains(t, ids, stored.ID, "%q resolved to %q", subject, ids[stored.ID])
+			ids[stored.ID] = subject
+		}
+
+		// the web form's script sends "1980" as the repository name of "Москва 1980": the server
+		// generates the real one
+		user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		session4 := loginUser(t, user4.Name)
+		req := NewRequestWithValues(t, "POST", "/repo/create", map[string]string{
+			"_csrf":     GetUserCSRFToken(t, session4),
+			"uid":       strconv.FormatInt(user4.ID, 10),
+			"subject":   "Москва 1980",
+			"repo_name": "1980",
+		})
+		session4.MakeRequest(t, req, http.StatusSeeOther)
+		moscow := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: "Москва 1980"})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user4.ID, SubjectID: moscow.ID})
+		assert.Equal(t, moscow.Slug, repo.Name)
+
+		// the search for the bare number does not report the Moscow subject as an exact match
+		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q=1980"), http.StatusOK)
+		assert.NotContains(t, NewHTMLParser(t, resp.Body).Find(`a.ui.basic.button[href^="/subject/"]`).AttrOr("href", ""), url.PathEscape("Москва"))
+	})
 }

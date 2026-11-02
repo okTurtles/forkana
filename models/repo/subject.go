@@ -69,24 +69,26 @@ func removeAccents(name string) string {
 }
 
 // GenerateSlugFromName creates a URL-safe slug from a subject display name. Two names with the
-// same slug are the same subject (the slug is UNIQUE), so as long as the name has an ASCII
-// letter or digit the slug ignores case, accents, spaces and punctuation:
+// same slug are the same subject (the slug is UNIQUE), so for a name in the Latin script the
+// slug ignores case, accents, spaces and punctuation:
 //
 //	"The Moon" → "the-moon"
 //	"the moon!" → "the-moon"
 //	"El Camiño?" → "el-camino"
 //
-// A name without any (only punctuation, symbols, emoji or non-Latin letters: apostrophes,
-// "東京", "Москва") used to get the slug "subject", so all such names were one and the same
-// subject: typing three apostrophes opened an existing title of sixteen (#401). Each of them now gets a slug of
-// its own, "subject-" followed by a hash of the name that ignores only case, accents and what
-// the title normalization ignores (underscores, extra spaces, directional marks). An empty
-// name still gets "subject".
+// The slug only keeps ASCII letters and digits, so it used to drop every other letter: a name
+// with nothing left (only punctuation, symbols, emoji or non-Latin letters: apostrophes,
+// "東京", "Москва") got the slug "subject", and "Москва 1980" got the slug of "1980". Such
+// names were one and the same subject: typing three apostrophes opened an existing title of
+// sixteen (#401). A name with nothing left or with a letter outside the Latin script now gets
+// a slug of its own, "subject-" followed by a hash of the name that ignores only case, accents
+// and what the title normalization ignores (underscores, extra spaces, directional marks). An
+// empty name still gets "subject".
 //
 // The slug is also the repository name generated for a new article (see
 // GenerateRepoNameFromSubject), so it only uses a-z, 0-9 and hyphens.
 func GenerateSlugFromName(name string) string {
-	if slug := asciiSlug(name); slug != "" {
+	if slug := asciiSlug(name); slug != "" && !hasNonLatinLetter(name) {
 		return slug
 	}
 	canonical := strings.ToLower(removeAccents(subjecttitle.Normalize(name)))
@@ -95,6 +97,18 @@ func GenerateSlugFromName(name string) string {
 	}
 	sum := sha256.Sum256([]byte(canonical))
 	return slugFallback + "-" + hex.EncodeToString(sum[:])[:symbolSlugHashLength]
+}
+
+// hasNonLatinLetter reports whether the name has a letter that asciiSlug drops although it is
+// not an accented Latin letter: "Москва 1980", "東京 2004". Latin letters without an ASCII
+// base ("ß", "ø", "ł") are dropped too but keep the slug they always had.
+func hasNonLatinLetter(name string) bool {
+	for _, r := range removeAccents(name) {
+		if r > unicode.MaxASCII && unicode.IsLetter(r) && !unicode.Is(unicode.Latin, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // asciiSlug keeps the ASCII letters and digits of the name, lowercased and without accents,

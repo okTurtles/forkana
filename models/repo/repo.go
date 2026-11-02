@@ -1482,13 +1482,20 @@ func GenerateRepoNameFromSubject(subject string) string {
 
 // IsGeneratedRepoName reports whether repoName is the name generated for the subject, either by
 // GenerateRepoNameFromSubject or by the create form's script (generateRepoNameFromSubject in
-// web_src/js/features/repo-common.ts). The script fills in "subject" for a subject without any
-// ASCII letter or digit, as the server used to, since it does not compute the hash that
-// GenerateSlugFromName now puts in such a slug: the server generates the real name.
+// web_src/js/features/repo-common.ts). The script does not compute the hash GenerateSlugFromName
+// puts in the slug of a subject without any ASCII letter or digit, or with a non-Latin letter:
+// it fills in what the server used to generate ("subject" for "東京", "1980" for "Москва 1980"),
+// and the server generates the real name.
 func IsGeneratedRepoName(repoName, subject string) bool {
 	if subject == "" {
 		return false
 	}
-	return repoName == GenerateRepoNameFromSubject(subject) ||
-		(repoName == slugFallback && asciiSlug(subject) == "")
+	if repoName == GenerateRepoNameFromSubject(subject) {
+		return true
+	}
+	legacy := asciiSlug(subject)
+	if legacy == "" {
+		return repoName == slugFallback
+	}
+	return hasNonLatinLetter(subject) && repoName == legacy
 }

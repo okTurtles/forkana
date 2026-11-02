@@ -46,6 +46,10 @@ func Test_ResluggifySymbolSubjects(t *testing.T) {
 		{Name: "Subject", Slug: "subject-3"},
 		{Name: "The Moon", Slug: "the-moon"},
 		{Name: "the moon!", Slug: "the-moon-2"},
+		// a non-Latin letter was dropped: these shared the slug of "1980"
+		{Name: "Москва 1980", Slug: "1980"},
+		{Name: "1980", Slug: "1980-2"},
+		{Name: "Ελλάδα 2004", Slug: "2004"},
 	}
 	for _, s := range legacy {
 		_, err := x.Insert(s)
@@ -67,8 +71,13 @@ func Test_ResluggifySymbolSubjects(t *testing.T) {
 		"Subject":  "subject",
 		"The Moon": "the-moon",
 		// its slug is taken by an older subject: it keeps its own
-		"the moon!": "the-moon-2",
+		"the moon!":   "the-moon-2",
+		"Москва 1980": repo_model.GenerateSlugFromName("Москва 1980"),
+		// "1980" was freed by "Москва 1980"
+		"1980":        "1980",
+		"Ελλάδα 2004": repo_model.GenerateSlugFromName("Ελλάδα 2004"),
 	}, slugs)
+	assert.NotEqual(t, "2004", slugs["Ελλάδα 2004"])
 	assert.NotEqual(t, slugs[sixteen], slugs["東京"])
 	assert.NotEqual(t, repo_model.GenerateSlugFromName("'''"), slugs[sixteen])
 
