@@ -223,6 +223,15 @@ test.describe('Article Edit tab against figma 7368:264887', () => {
     expect(Math.round(writing.x - frame.x)).toBe(8); // (Form/Textarea 7368:264946 at 8,56, the frame's border included)
     expect(Math.round(writing.width)).toBe(Math.round(frame.width) - 16);
     expect(Math.round(writing.y - (b.y + b.height))).toBe(8);
+
+    // #478: the editor is 1008px from the frame's top edge ("Comment box" 7368:264944:
+    // the toolbar and the writing area, the tip under it, outside); a long article
+    // scrolls inside it
+    const editor = await box(page.locator('.article-editor-box .toastui-editor-defaultUI'));
+    expect(Math.abs(editor.y + editor.height - frame.y - 1008)).toBeLessThanOrEqual(2);
+    await page.locator('#toast-editor-container').evaluate((el) => (el as HTMLElement & {_giteaToastEditor: {setMarkdown: (md: string) => void}})._giteaToastEditor.setMarkdown(Array.from({length: 120}, (_, i) => `Paragraph ${i}.`).join('\n\n')));
+    expect(Math.abs((await box(page.locator('.article-editor-box .toastui-editor-defaultUI'))).height - editor.height)).toBeLessThanOrEqual(1);
+    expect(await page.locator('.article-editor-box .toastui-editor-ww-container .toastui-editor-contents').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
   });
 
   // #478 (#434 item 5, "double line"): a heading of the article is Inter 700 20/32 over
