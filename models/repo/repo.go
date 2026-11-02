@@ -1479,3 +1479,16 @@ func GenerateRepoNameFromSubject(subject string) string {
 	// This ensures that repo names and subject slugs are always identical
 	return GenerateSlugFromName(subject)
 }
+
+// IsGeneratedRepoName reports whether repoName is the name generated for the subject, either by
+// GenerateRepoNameFromSubject or by the create form's script (generateRepoNameFromSubject in
+// web_src/js/features/repo-common.ts). The script fills in "subject" for a subject without any
+// ASCII letter or digit, as the server used to, since it does not compute the hash that
+// GenerateSlugFromName now puts in such a slug: the server generates the real name.
+func IsGeneratedRepoName(repoName, subject string) bool {
+	if subject == "" {
+		return false
+	}
+	return repoName == GenerateRepoNameFromSubject(subject) ||
+		(repoName == slugFallback && asciiSlug(subject) == "")
+}

@@ -406,6 +406,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(329, "Forkana: add is_tombstoned and tombstoned_unix to repository", v1_25_custom.AddTombstoneToRepository),
 		newMigration(330, "Forkana: create article_attachment table and add purpose to attachment", v1_25_custom.AddArticleAttachmentTable),
 		newMigration(331, "Forkana: create article_collaborator table", v1_25_custom.CreateArticleCollaboratorTable),
+		newMigration(332, "Forkana: give subjects without ASCII letters or digits a slug of their own", v1_25_custom.ResluggifySymbolSubjects),
 	}
 	return preparedMigrations
 }

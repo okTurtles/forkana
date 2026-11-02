@@ -278,7 +278,33 @@ func TestGenerateSlugFromName(t *testing.T) {
 		{
 			name:     "Only special characters",
 			input:    "!!!???",
+			expected: "subject-6f5d923bb84f2a35",
+		},
+		{
+			name:     "Only spaces and underscores",
+			input:    " _ ",
 			expected: "subject",
+		},
+		{
+			// #401: every name without an ASCII letter or digit used to get "subject"
+			name:     "Only apostrophes",
+			input:    "'''",
+			expected: "subject-be24f5ee6f33a7ab",
+		},
+		{
+			name:     "More apostrophes",
+			input:    "''''''''''''''''",
+			expected: "subject-e160ec46a8f3e206",
+		},
+		{
+			name:     "Non-Latin script",
+			input:    "東京",
+			expected: "subject-130016b2599bf7e5",
+		},
+		{
+			name:     "Non-Latin script, title normalization and case ignored",
+			input:    "  東京 ",
+			expected: "subject-130016b2599bf7e5",
 		},
 		{
 			name:     "Mixed case with numbers",

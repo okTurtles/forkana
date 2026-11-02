@@ -6,6 +6,8 @@ package repo
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"slices"
@@ -46,40 +48,69 @@ func (s *Subject) TableName() string {
 	return "subject"
 }
 
-// GenerateSlugFromName creates a URL-safe slug from a subject display name
-// Examples:
+var (
+	slugInvalidCharsRe = regexp.MustCompile(`[^a-z0-9-]+`)
+	slugHyphensRe      = regexp.MustCompile(`-{2,}`)
+)
+
+// slugFallback is the slug of an empty name. A name that is not empty but has no ASCII letter
+// or digit gets a slug of its own (see GenerateSlugFromName).
+const slugFallback = "subject"
+
+// symbolSlugHashLength is the number of hexadecimal digits of the hash in the slug of a name
+// without any ASCII letter or digit ("subject-" followed by them).
+const symbolSlugHashLength = 16
+
+// removeAccents decomposes the name and drops the combining marks: "Camiño" → "Camino".
+func removeAccents(name string) string {
+	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+	normalized, _, _ := transform.String(t, name)
+	return normalized
+}
+
+// GenerateSlugFromName creates a URL-safe slug from a subject display name. Two names with the
+// same slug are the same subject (the slug is UNIQUE), so as long as the name has an ASCII
+// letter or digit the slug ignores case, accents, spaces and punctuation:
 //
 //	"The Moon" → "the-moon"
 //	"the moon!" → "the-moon"
 //	"El Camiño?" → "el-camino"
+//
+// A name without any (only punctuation, symbols, emoji or non-Latin letters: apostrophes,
+// "東京", "Москва") used to get the slug "subject", so all such names were one and the same
+// subject: typing three apostrophes opened an existing title of sixteen (#401). Each of them now gets a slug of
+// its own, "subject-" followed by a hash of the name that ignores only case, accents and what
+// the title normalization ignores (underscores, extra spaces, directional marks). An empty
+// name still gets "subject".
+//
+// The slug is also the repository name generated for a new article (see
+// GenerateRepoNameFromSubject), so it only uses a-z, 0-9 and hyphens.
 func GenerateSlugFromName(name string) string {
-	// Normalize Unicode (NFD = decompose accents)
-	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
-	normalized, _, _ := transform.String(t, name)
+	if slug := asciiSlug(name); slug != "" {
+		return slug
+	}
+	canonical := strings.ToLower(removeAccents(subjecttitle.Normalize(name)))
+	if canonical == "" {
+		return slugFallback
+	}
+	sum := sha256.Sum256([]byte(canonical))
+	return slugFallback + "-" + hex.EncodeToString(sum[:])[:symbolSlugHashLength]
+}
 
-	// Convert to lowercase
-	slug := strings.ToLower(normalized)
+// asciiSlug keeps the ASCII letters and digits of the name, lowercased and without accents,
+// with single hyphens between words. It is empty when the name has no ASCII letter or digit.
+func asciiSlug(name string) string {
+	slug := strings.ToLower(removeAccents(name))
 
 	// Replace spaces and underscores with hyphens
 	slug = strings.ReplaceAll(slug, " ", "-")
 	slug = strings.ReplaceAll(slug, "_", "-")
 
-	// Remove all characters except alphanumeric and hyphens
-	reg := regexp.MustCompile(`[^a-z0-9-]+`)
-	slug = reg.ReplaceAllString(slug, "")
-
-	// Collapse multiple consecutive hyphens
-	for strings.Contains(slug, "--") {
-		slug = strings.ReplaceAll(slug, "--", "-")
-	}
-
-	// Trim leading/trailing hyphens
+	// Remove all characters except alphanumeric and hyphens, collapse runs of hyphens and trim
+	// leading and trailing ones
+	slug = slugInvalidCharsRe.ReplaceAllString(slug, "")
+	slug = slugHyphensRe.ReplaceAllString(slug, "-")
 	slug = strings.Trim(slug, "-")
-
-	// Ensure slug is not empty
-	if slug == "" {
-		slug = "subject"
-	}
 
 	// Limit length
 	const maxSlugLength = 100

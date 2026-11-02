@@ -346,7 +346,8 @@ func TestGenerateRepoNameFromSubject(t *testing.T) {
 		},
 
 		// Edge cases - empty and special characters
-		// NOTE: After unification with GenerateSlugFromName, empty fallback is "subject"
+		// NOTE: After unification with GenerateSlugFromName, a subject without any ASCII letter
+		// or digit gets "subject-" and a hash of its name
 		{
 			name:     "Empty string",
 			subject:  "",
@@ -355,7 +356,7 @@ func TestGenerateRepoNameFromSubject(t *testing.T) {
 		{
 			name:     "Only special characters",
 			subject:  "!!!",
-			expected: "subject",
+			expected: "subject-e84c538e7fe25073",
 		},
 		{
 			name:     "Only spaces",
@@ -365,12 +366,12 @@ func TestGenerateRepoNameFromSubject(t *testing.T) {
 		{
 			name:     "Only dots",
 			subject:  "...",
-			expected: "subject",
+			expected: "subject-ab5df625bc76dbd4",
 		},
 		{
 			name:     "Only hyphens",
 			subject:  "---",
-			expected: "subject",
+			expected: "subject-cb3f91d54eee30e5",
 		},
 		{
 			name:     "Only underscores",
@@ -380,7 +381,7 @@ func TestGenerateRepoNameFromSubject(t *testing.T) {
 		{
 			name:     "Single hyphen",
 			subject:  "-",
-			expected: "subject",
+			expected: "subject-3973e022e93220f9",
 		},
 		{
 			name:     "Single underscore",

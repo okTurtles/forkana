@@ -32,8 +32,8 @@ func PrepareSubjectAndRepoName(ctx context.Context, subject, repoName string) (s
 	}
 
 	if repoName == "" ||
-		repoName == repo_model.GenerateRepoNameFromSubject(subject) ||
-		repoName == repo_model.GenerateRepoNameFromSubject(resolved) {
+		repo_model.IsGeneratedRepoName(repoName, subject) ||
+		repo_model.IsGeneratedRepoName(repoName, resolved) {
 		repoName = repo_model.GenerateRepoNameFromSubject(resolved)
 	}
 	return resolved, repoName, nil

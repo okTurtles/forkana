@@ -182,3 +182,46 @@ func TestResolveSubjectName(t *testing.T) {
 	// resolving never creates a subject
 	unittest.AssertNotExistsBean(t, &repo_model.Subject{Slug: "brand-new-thing"})
 }
+
+// TestGetOrCreateSubjectWithoutASCIILetters covers #401: every title without an ASCII letter or
+// digit used to share the slug "subject", so creating three apostrophes opened an existing title
+// of sixteen, and the explore search said the three already existed.
+func TestGetOrCreateSubjectWithoutASCIILetters(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	const sixteen = "''''''''''''''''"
+	long, err := repo_model.GetOrCreateSubject(ctx, sixteen)
+	require.NoError(t, err)
+	assert.Equal(t, sixteen, long.Name)
+
+	short, err := repo_model.GetOrCreateSubject(ctx, "'''")
+	require.NoError(t, err)
+	assert.Equal(t, "'''", short.Name, "the apostrophes are stored as typed")
+	assert.NotEqual(t, long.ID, short.ID)
+
+	// each one is found again under its own title, after the title normalization
+	for title, want := range map[string]int64{"'''": short.ID, " '''_": short.ID, sixteen: long.ID} {
+		found, err := repo_model.GetOrCreateSubject(ctx, title)
+		require.NoError(t, err)
+		assert.Equal(t, want, found.ID, "GetOrCreateSubject(%q)", title)
+	}
+
+	// non-Latin titles are subjects of their own too; case and accents are still ignored
+	tokyo, err := repo_model.GetOrCreateSubject(ctx, "東京")
+	require.NoError(t, err)
+	moscow, err := repo_model.GetOrCreateSubject(ctx, "Москва")
+	require.NoError(t, err)
+	assert.NotEqual(t, tokyo.ID, moscow.ID)
+	assert.NotEqual(t, short.ID, tokyo.ID)
+	found, err := repo_model.GetOrCreateSubject(ctx, "москва")
+	require.NoError(t, err)
+	assert.Equal(t, moscow.ID, found.ID)
+
+	// an empty title is still rejected, and a title with an ASCII letter keeps its slug
+	_, err = repo_model.GetOrCreateSubject(ctx, " _ ")
+	assert.Equal(t, subjecttitle.ProblemEmpty, subjectNameProblem(err))
+	subject, err := repo_model.GetOrCreateSubject(ctx, "'''Subject'''")
+	require.NoError(t, err)
+	assert.Equal(t, "subject", subject.Slug)
+}
