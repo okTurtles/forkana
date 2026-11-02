@@ -4,12 +4,12 @@
 package explore
 
 import (
+	"context"
 	"time"
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/log"
-	"code.gitea.io/gitea/services/context"
 )
 
 // gitZeroTime is how git reads Go's zero time, "0001-01-01T00:00:00Z": the date the
@@ -24,12 +24,12 @@ var gitZeroTime = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
 // dated by the creation of the article it was imported into: the root of the fork network
 // (a fork copies its parent's commits, and is created later).
 type articleChangeTimes struct {
-	ctx      *context.Context
+	ctx      context.Context
 	repo     *repo_model.Repository
 	imported time.Time // the root article's creation, once looked up
 }
 
-func newArticleChangeTimes(ctx *context.Context, repo *repo_model.Repository) *articleChangeTimes {
+func newArticleChangeTimes(ctx context.Context, repo *repo_model.Repository) *articleChangeTimes {
 	return &articleChangeTimes{ctx: ctx, repo: repo}
 }
 
@@ -54,21 +54,23 @@ func (t *articleChangeTimes) of(commit *git.Commit) time.Time {
 	return t.imported
 }
 
-// articleRootCreated is when the root of the article's fork network was created.
-func articleRootCreated(ctx *context.Context, repo *repo_model.Repository) time.Time {
+// articleRootCreated is when the root of the article's fork network was created: one
+// query finds the root (FindForkTreeRoot's recursive CTE), one loads it. A fork whose
+// parent is gone counts as its own root, the topmost repository the CTE can reach.
+func articleRootCreated(ctx context.Context, repo *repo_model.Repository) time.Time {
 	root := repo
-	for range 100 { // (a fork chain is short; this only guards against a cycle)
-		if !root.IsFork || root.ForkID == 0 {
-			break
-		}
-		parent, err := repo_model.GetRepositoryByID(ctx, root.ForkID)
-		if err != nil {
-			if !repo_model.IsErrRepoNotExist(err) {
-				log.Warn("GetRepositoryByID(%d): %v", root.ForkID, err)
+	if repo.IsFork && repo.ForkID > 0 {
+		rootID, err := repo_model.FindForkTreeRoot(ctx, repo.ID)
+		switch {
+		case err != nil:
+			log.Warn("FindForkTreeRoot(%d): %v", repo.ID, err)
+		case rootID != repo.ID:
+			if r, err := repo_model.GetRepositoryByID(ctx, rootID); err == nil {
+				root = r
+			} else if !repo_model.IsErrRepoNotExist(err) {
+				log.Warn("GetRepositoryByID(%d): %v", rootID, err)
 			}
-			break
 		}
-		root = parent
 	}
 	if root.CreatedUnix == 0 {
 		return time.Time{}
