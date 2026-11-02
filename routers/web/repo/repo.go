@@ -182,12 +182,16 @@ func Create(ctx *context.Context) {
 		// Prefill the name of the existing subject it resolves to, if any (it may predate the
 		// subject title rule), or else the normalized title. An invalid new title is prefilled
 		// normalized too: the form's hint explains the rule and the POST rejects it.
-		subject, err := repo_model.ResolveSubjectName(ctx, typed)
+		subject, existing, err := repo_model.ResolveSubject(ctx, typed)
 		if err != nil && !repo_model.IsErrSubjectNameInvalid(err) {
-			ctx.ServerError("ResolveSubjectName", err)
+			ctx.ServerError("ResolveSubject", err)
 			return
 		}
 		ctx.Data["subject"] = subject
+		if existing != nil {
+			// the form's script lets this title through even if it breaks the rule
+			ctx.Data["ExistingSubject"] = existing.Name
+		}
 		ctx.Data["repo_name"] = repo_model.GenerateRepoNameFromSubject(subject)
 	}
 

@@ -71,14 +71,21 @@ func lookupSubjectForCreate(ctx context.Context, name string) (string, *Subject,
 // existing subject the given name resolves to (by slug), or else the normalized name, which
 // must then follow the subject title rule (ErrSubjectNameInvalid otherwise).
 func ResolveSubjectName(ctx context.Context, name string) (string, error) {
+	name, _, err := ResolveSubject(ctx, name)
+	return name, err
+}
+
+// ResolveSubject is ResolveSubjectName that also returns the existing subject the name resolves
+// to, or nil when a new subject would be created.
+func ResolveSubject(ctx context.Context, name string) (string, *Subject, error) {
 	name, existing, err := lookupSubjectForCreate(ctx, name)
 	if err != nil {
-		return name, err
+		return name, nil, err
 	}
 	if existing != nil {
-		return existing.Name, nil
+		return existing.Name, existing, nil
 	}
-	return name, nil
+	return name, nil, nil
 }
 
 // ErrSubjectNameInvalid is returned when a new subject's title does not follow the subject
