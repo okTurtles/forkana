@@ -23,9 +23,11 @@ test.describe('Article settings modals', () => {
     await expect(cancel).toHaveText('Cancel');
     await expect(cancel.locator('svg')).toHaveCount(0);
 
+    // user2 owns the unarchived repo1, so all five dialogs are rendered: transfer,
+    // archive, delete, invite collaborator and remove collaborator.
     const cancelButtons = page.locator('.ui.modal[id^="article-"] .actions .cancel.button');
-    expect(await cancelButtons.count()).toBeGreaterThanOrEqual(3);
-    await expect(page.locator('.ui.modal[id^="article-"] .actions .cancel.button svg')).toHaveCount(0);
+    await expect(cancelButtons).toHaveCount(5);
+    await expect(cancelButtons.locator('svg')).toHaveCount(0);
 
     await context.close();
   });
