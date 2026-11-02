@@ -646,8 +646,7 @@ func EditPullRequest(ctx *context.APIContext) {
 	}
 
 	// refused before any other field is applied, so the request doesn't partly apply
-	if form.Body != nil && issue_service.IsContentLocked(issue) {
-		ctx.APIError(http.StatusForbidden, "the description of a change request can't be edited")
+	if refuseLockedBodyEdit(ctx, issue, form.Body) {
 		return
 	}
 

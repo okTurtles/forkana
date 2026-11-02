@@ -817,8 +817,7 @@ func EditIssue(ctx *context.APIContext) {
 	}
 
 	// refused before any other field is applied, so the request doesn't partly apply
-	if form.Body != nil && issue_service.IsContentLocked(issue) {
-		ctx.APIError(http.StatusForbidden, "the description of a change request can't be edited")
+	if refuseLockedBodyEdit(ctx, issue, form.Body) {
 		return
 	}
 
@@ -1082,4 +1081,14 @@ func closeOrReopenIssue(ctx *context.APIContext, issue *issues_model.Issue, stat
 			return
 		}
 	}
+}
+
+// refuseLockedBodyEdit answers 403 and returns true when the request would change the
+// description of an issue whose content is locked (change requests, #146).
+func refuseLockedBodyEdit(ctx *context.APIContext, issue *issues_model.Issue, body *string) bool {
+	if body == nil || !issue_service.IsContentLocked(issue) {
+		return false
+	}
+	ctx.APIError(http.StatusForbidden, "the description of a change request can't be edited")
+	return true
 }
