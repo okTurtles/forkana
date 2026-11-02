@@ -68,8 +68,9 @@ export async function createToastEditor(
     container.style.height = height;
   }
 
-  // Server-provided raw URL of the file being edited, used to resolve relative image paths.
-  const rawFileUrl = textarea.getAttribute('data-raw-file-url') || '';
+  // Server-provided media URL of the file being edited (LFS-aware, as in the Read view), used to
+  // resolve relative image paths.
+  const mediaFileUrl = textarea.getAttribute('data-media-file-url') || '';
   // Endpoint that stores a pasted/dropped image as a repo attachment and returns its uuid.
   const attachmentUploadUrl = textarea.getAttribute('data-attachment-upload-url') || '';
 
@@ -152,7 +153,7 @@ export async function createToastEditor(
         const {skipChildren, getChildrenText} = context;
         skipChildren();
         const altText = getChildrenText(node);
-        const src = resolveRelativeSrc(node.destination, rawFileUrl);
+        const src = resolveRelativeSrc(node.destination, mediaFileUrl);
         return [
           {type: 'openTag', tagName: 'img', attributes: {src, alt: altText}},
           {type: 'closeTag', tagName: 'img'},
@@ -167,7 +168,7 @@ export async function createToastEditor(
   // such HTML (issue #446). Before the tracker below loads the content.
   installRawHtmlGuard(editor, widgetRules);
   // `<img src="pic.png">` written as HTML, like a markdown image above (issue #167).
-  installImageSrcResolver(editor, rawFileUrl);
+  installImageSrcResolver(editor, mediaFileUrl);
 
   // Intercept drop and paste events in the capture phase to block oversized files
   container.addEventListener('drop', (e: DragEvent) => {

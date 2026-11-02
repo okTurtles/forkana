@@ -3,8 +3,9 @@
 // An article can show an image stored in its repository by a relative path, written as
 // markdown (`![a](pic.png)`) or as HTML (`<img src="pic.png">`). The page of the editor is
 // not the file, so the browser would resolve such a path against the page url and miss it:
-// the editor resolves it against the raw url of the file being edited, which the server
-// provides (data-raw-file-url), the way the Read view resolves it against the repository.
+// the editor resolves it against the media url of the file being edited, which the server
+// provides (data-media-file-url). That is the "/media/" route the Read view uses too, so an
+// image stored in LFS displays in both.
 // Only what the Visual editor shows changes: the markdown keeps the path as written.
 
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
@@ -17,8 +18,8 @@ export function isRelativeImageSrc(src: string): boolean {
 }
 
 // resolveRelativeSrc resolves a relative image path (e.g. "./img/a.png", "../b.png")
-// against the raw URL of the file being edited. The base URL is provided by the server
-// (data-raw-file-url), so it already accounts for appSubUrl and branch names containing
+// against the media URL of the file being edited. The base URL is provided by the server
+// (data-media-file-url), so it already accounts for appSubUrl and branch names containing
 // slashes; native URL resolution handles "./" and "../" segments correctly.
 export function resolveRelativeSrc(src: string, baseFileUrl: string): string {
   if (!baseFileUrl || !isRelativeImageSrc(src)) return src;

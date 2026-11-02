@@ -71,6 +71,10 @@ test.describe('Article images', () => {
       const visual = page.locator('.toastui-editor-ww-container .ProseMirror');
       await expectLoaded(visual.locator('img[alt="md-image"]'));
       await expectLoaded(visual.locator('img[alt="html-image"]'));
+      // from the "/media/" route, like the Read view, which also serves images stored in LFS
+      for (const alt of ['md-image', 'html-image']) {
+        await expect(visual.locator(`img[alt="${alt}"]`)).toHaveAttribute('src', /\/user2\/[^/]+\/media\/branch\//);
+      }
       // the markdown keeps the paths as written
       expect((await page.locator('#edit_area').inputValue()).trimEnd()).toBe(README.trimEnd());
     } finally {

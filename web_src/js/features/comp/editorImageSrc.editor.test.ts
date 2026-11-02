@@ -9,8 +9,8 @@ import {articleEditorMarkdownOptions} from './toastEditorOptions.ts';
 import {installRawHtmlGuard, rawInlineHtmlWidgetRule} from './rawHtmlGuard.ts';
 import {installImageSrcResolver, resolveRelativeSrc} from './editorImageSrc.ts';
 
-const RAW = 'http://localhost:3000/user2/repo1/raw/branch/main/README.md';
-const BASE = 'http://localhost:3000/user2/repo1/raw/branch/main';
+const FILE_URL = 'http://localhost:3000/user2/repo1/media/branch/main/README.md';
+const BASE = 'http://localhost:3000/user2/repo1/media/branch/main';
 
 const SOURCE = [
   '# Images',
@@ -48,7 +48,7 @@ function createEditor(initialValue: string) {
       image(node: any, {skipChildren, getChildrenText}: any) {
         skipChildren();
         return [
-          {type: 'openTag', tagName: 'img', attributes: {src: resolveRelativeSrc(node.destination, RAW), alt: getChildrenText(node)}},
+          {type: 'openTag', tagName: 'img', attributes: {src: resolveRelativeSrc(node.destination, FILE_URL), alt: getChildrenText(node)}},
           {type: 'closeTag', tagName: 'img'},
         ];
       },
@@ -56,7 +56,7 @@ function createEditor(initialValue: string) {
   });
   ref.current = editor;
   installRawHtmlGuard(editor, widgetRules);
-  installImageSrcResolver(editor, RAW);
+  installImageSrcResolver(editor, FILE_URL);
   installBase64WidgetPatch(editor);
   installLosslessMarkdownTracker(editor, textarea);
   return {editor, el};

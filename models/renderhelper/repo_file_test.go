@@ -64,7 +64,7 @@ func TestRepoFile(t *testing.T) {
 ![/image](/image)
 `)
 		assert.NoError(t, err)
-		// Repository 1 has subject_id 1, which is "example-subject"
+		// Files resolve under the repository routes, not the article url (#167).
 		assert.Equal(t, `<p><a href="/user2/repo1/src/commit/1234/test" rel="nofollow">/test</a>
 <a href="/user2/repo1/src/commit/1234/image" target="_blank" rel="nofollow noopener"><img src="/user2/repo1/media/commit/1234/image" alt="/image"/></a></p>
 `, rendered)
@@ -101,7 +101,7 @@ func TestRepoFile(t *testing.T) {
 <video src="LINK">
 `)
 		assert.NoError(t, err)
-		// Repository 1 has subject_id 1, which is "example-subject"
+		// Files resolve under the repository routes, not the article url (#167).
 		assert.Equal(t, `<a href="/user2/repo1/src/commit/1234/my-dir/LINK" target="_blank" rel="nofollow noopener"><img src="/user2/repo1/media/commit/1234/my-dir/LINK"/></a>
 <video src="/user2/repo1/media/commit/1234/my-dir/LINK">
 </video>`, rendered)
@@ -123,7 +123,7 @@ func TestRepoFileOrgMode(t *testing.T) {
 [[ImageLink.svg][The Image Desc]]
 `)
 		assert.NoError(t, err)
-		// Repository 1 has subject_id 1, which is "example-subject"
+		// Files resolve under the repository routes, not the article url (#167).
 		assert.Equal(t, `<p>
 <a href="https://google.com/" class="external-link" rel="nofollow">https://google.com/</a>
 <a href="/user2/repo1/src/commit/1234/my-dir/ImageLink.svg" rel="nofollow">The Image Desc</a></p>
