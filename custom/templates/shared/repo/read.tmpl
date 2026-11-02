@@ -4,12 +4,13 @@
     {{template "shared/repo/article_path" .}}
     {{/* #433 item 7, #478: the article's summary, Inter 400 16/24 #59636e on at most two
          lines (figma Text 7368:264726: 640×48, ending with "…"), 24px under the path. It
-         is the article's description or, without one, its first paragraph: the summary
-         the Bubble and Table views show (routers/web/explore/article_summary.go).
+         is the article's description. An article without one shows none here: the
+         Bubble and Table views fall back to its first paragraph, but here that paragraph
+         is right below, and would be read twice (Pierre's decision on #478).
          The "James99 and 3 others you know marked this article as correct" line that
          used to be here was a hard-coded placeholder, absent from the figma (item 5). */}}
-    {{if .ArticleSummary}}
-        <p class="article-summary" data-role="article-summary" title="{{.ArticleSummary}}">{{.ArticleSummary}}</p>
+    {{if .Repository.Description}}
+        <p class="article-summary" data-role="article-summary" title="{{.Repository.Description}}">{{.Repository.Description}}</p>
     {{end}}
     {{if .IsFileTooLarge}}
         <div class="ui error message">

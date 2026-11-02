@@ -960,19 +960,11 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			return
 		}
 
-		// (read once: the summary and the rendering both need it, and it is small)
+		// (read once, for whichever of the two renderings below is used; it is small)
 		raw, err := io.ReadAll(charset.ToUTF8WithFallbackReader(io.MultiReader(bytes.NewReader(buf), dataRc), charset.ConvertOpts{}))
 		if err != nil {
 			ctx.ServerError("ReadAll", err)
 			return
-		}
-
-		// The summary under the article's path (#433 item 7, #478; figma Text 7368:264726):
-		// its description, or else its first paragraph, the summary the Bubble and Table
-		// views show for an article without a description.
-		ctx.Data["ArticleSummary"] = ctx.Repo.Repository.Description
-		if ctx.Repo.Repository.Description == "" {
-			ctx.Data["ArticleSummary"] = articleSummary(util.UnsafeBytesToString(raw))
 		}
 
 		// Detect if this is markup

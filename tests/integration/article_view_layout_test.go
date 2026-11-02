@@ -97,9 +97,9 @@ func TestArticleViewLayout(t *testing.T) {
 		assert.Equal(t, "The summary of this article", strings.TrimSpace(doc.Find(`p[data-role="article-summary"]`).Text()))
 	})
 
-	// #478: without a description, the summary is the article's first paragraph, as in
-	// the Bubble and Table views (repo1's README: "# repo1", then "Description for repo1")
-	t.Run("ReadSummaryWithoutDescription", func(t *testing.T) {
+	// #478: without a description there is no summary: the first paragraph, which the
+	// Bubble and Table views fall back to, is right below in the Read tab
+	t.Run("ReadNoSummaryWithoutDescription", func(t *testing.T) {
 		original := repo.Description
 		repo.Description = ""
 		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "description"))
@@ -109,7 +109,7 @@ func TestArticleViewLayout(t *testing.T) {
 		}()
 
 		doc := get(t, nil, "mode=read")
-		assert.Equal(t, "Description for repo1", strings.TrimSpace(doc.Find(`p[data-role="article-summary"]`).Text()))
+		assert.Equal(t, 0, doc.Find(`[data-role="article-summary"]`).Length())
 	})
 
 	// #478: the "…" menu ends the row in Read and History; Edit has Fork and Submit

@@ -6,6 +6,19 @@ import {login_user, load_logged_in_context} from './utils_e2e.ts';
 const article = '/subject/example-subject/user2';
 
 test.describe('Article view layout (signed out)', () => {
+  // #478: Watch then "…": 9px apart on a desktop (Frame 5's gap in Read 7368:264676);
+  // side by side on a phone, Watch being the 32×32 icon (Mobile 7368:263684)
+  for (const {width, gap, watchSize} of [{width: 1440, gap: 9, watchSize: null}, {width: 375, gap: 0, watchSize: 32}]) {
+    test(`at ${width}px: Watch, then the "…" button`, async ({page}) => {
+      await page.setViewportSize({width, height: 900});
+      await page.goto(`${article}?mode=read`);
+      const watch = await page.locator('#article-tabs [data-role="article-watch"]').boundingBox();
+      const more = await page.locator('#article-tabs .article-more-button').boundingBox();
+      expect(more.x - (watch.x + watch.width)).toBeCloseTo(gap, 0);
+      expect(watchSize === null || (watch.width === watchSize && watch.height === watchSize)).toBe(true);
+    });
+  }
+
   test('Read tab: tokens, Watch, path, no placeholders', async ({page}) => {
     await page.goto(`${article}?mode=read`);
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
@@ -36,13 +49,8 @@ test.describe('Article view layout (signed out)', () => {
     await expect(more).toBeVisible();
     const row = await page.locator('#article-tabs').boundingBox();
     const button = await more.boundingBox();
-    const watchBox = await watch.boundingBox();
     expect([button.width, button.height]).toEqual([40, 28]);
     expect(button.x + button.width).toBeCloseTo(row.x + row.width, 0);
-    // (side by side on a phone, where Watch is the 32×32 icon: Mobile 7368:263684)
-    const phone = page.viewportSize().width < 768;
-    expect(button.x - (watchBox.x + watchBox.width)).toBeCloseTo(phone ? 0 : 9, 0);
-    if (phone) expect([watchBox.width, watchBox.height]).toEqual([32, 32]);
     await more.click();
     const menu = page.locator('[data-role="article-more"] > .menu');
     await expect(menu).toBeVisible();

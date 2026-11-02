@@ -228,42 +228,44 @@
   background: var(--color-button-hover);
 }
 
-.ui.dropdown.article-more-dropdown > .menu {
-  top: calc(100% + 2.5px) !important;
-  right: 0 !important;
-  left: auto !important;
+/* (the ID outweighs Fomantic's .ui.dropdown .menu rules, so nothing needs !important) */
+#article-tabs .ui.dropdown.article-more-dropdown > .menu {
+  top: calc(100% + 2.5px);
+  right: 0;
+  left: auto;
   width: 108px;
-  min-width: 108px !important;
-  margin: 0 !important;
+  min-width: 108px;
+  margin: 0;
   padding: 12px;
-  border: none !important;
-  border-radius: 12px !important;
+  border: none;
+  border-radius: 12px;
   background: var(--color-box-body);
-  box-shadow:
-    0 6px 18px 0 color-mix(in srgb, #25292e 12%, transparent),
-    0 6px 12px -3px color-mix(in srgb, #25292e 4%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent) !important;
+  /* figma's #25292e at 12% and 4%: --color-shadow, which stays dark in the dark theme
+     (as the Table view's Sort menu, subject-views.css) */
+  box-shadow: 0 6px 18px 0 var(--color-shadow),
+    0 6px 12px -3px color-mix(in srgb, var(--color-shadow) 30%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
 }
 
-.ui.dropdown.article-more-dropdown > .menu > .item.article-more-report {
-  display: flex !important;
+#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-report {
+  display: flex;
   align-items: center;
   gap: 8px;
   height: 20px;
   min-height: 0;
-  padding: 0 !important;
-  border: none !important;
+  padding: 0 !important; /* (Fomantic's item padding is itself !important) */
+  border: none;
   font-size: 12px;
-  line-height: 20px !important;
+  line-height: 20px;
   font-weight: var(--font-weight-normal);
-  color: var(--color-red) !important;
-  background: none !important;
+  color: var(--color-red);
+  background: none;
   cursor: not-allowed;
 }
 
-.article-more-report .svg {
+#article-tabs .article-more-report .svg {
   flex-shrink: 0;
-  margin: 0 !important;
+  margin: 0;
   color: var(--color-danger-icon);
 }
 
