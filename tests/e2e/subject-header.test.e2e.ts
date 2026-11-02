@@ -38,8 +38,8 @@ function boxOf(page: Page, selector: string): Promise<Box> {
   });
 }
 
-// (Compare is null in the Article view, which has none: #478, figma 7368:263253 and
-// 7368:264887)
+// (Compare is null in the Article view's Edit and History tabs, which have none: #478,
+// figma 7368:264887 and 7368:263253)
 async function headerOf(page: Page) {
   await page.evaluate(() => document.fonts.ready);
   return {
@@ -163,8 +163,8 @@ for (const {width, column} of layouts) {
         await open(page, view);
         const header = await headerOf(page);
         expectSameHeader(header, reference, view);
-        // Compare in the Bubble and Table views, not in the Article view (#478)
-        expect(header.compare === null, `${view}: no Compare`).toBe(view !== 'table');
+        // Compare in the Bubble and Table views and the Read tab, not in History (#478)
+        expect(header.compare === null, `${view}: no Compare`).toBe(view === 'history');
         const content = await boxOf(page, '.history-view-section:not([hidden]) :is(.history-table, #article-view-root)');
         expect(content.width, `${view}: content column`).toBe(column);
       }
@@ -252,6 +252,19 @@ test('desktop: the header and the sign-in banner have figma text styles', async 
   }
   await links.locator('a').first().hover();
   expect((await style('.article-signin-banner-links a')).color).toBe('rgb(31, 35, 40)');
+});
+
+// #478: Compare is in the Read tab's header ("Article view / Logged out - Read only"
+// 7368:264676); pressed there it does what it did before: it opens the Bubble view in
+// compare mode, whose banner says what to do next
+test('Compare in the Read tab opens the Bubble view in compare mode', async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await open(page, 'read');
+  await page.locator('#compare-mode-button').click();
+  await expect(page.locator(shown.bubble)).toBeVisible({timeout: 10000});
+  await expect(page).toHaveURL(/view=bubble/);
+  await expect(page.locator('.compare-announcement')).toBeVisible({timeout: 10000});
+  await expect(page.locator('#compare-mode-button')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('desktop: the title block is 136px and the view tabs row 48px (7368:260781, 7368:260789)', async ({page}) => {

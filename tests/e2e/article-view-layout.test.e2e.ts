@@ -6,6 +6,21 @@ import {login_user, load_logged_in_context} from './utils_e2e.ts';
 const article = '/subject/example-subject/user2';
 
 test.describe('Article view layout (signed out)', () => {
+  // #478: Compare is in the Read tab's header and not in the Edit and History tabs'
+  // (their frames hide it: 7368:264887, 7368:263253), also when the tabs are switched in
+  // the page (pressing it: subject-header.test.e2e.ts, on a subject with two articles)
+  test('Compare: shown in Read, hidden in Edit and History', async ({page}) => {
+    await page.goto(`${article}?mode=read`);
+    const compare = page.locator('#compare-mode-button');
+    await expect(compare).toBeVisible();
+    await page.waitForFunction(() => window.history.state !== null);
+    for (const tab of ['history', 'edit', 'read']) {
+      await page.locator(`#article-tabs a[data-article-tab="${tab}"]`).click();
+      await expect(page.locator(`#article-view-root[data-article-mode="${tab}"]`)).toBeVisible({timeout: 10000});
+      await expect(compare).toBeVisible({visible: tab === 'read'});
+    }
+  });
+
   // #478: Watch then "…": 9px apart on a desktop (Frame 5's gap in Read 7368:264676);
   // side by side on a phone, Watch being the 32×32 icon (Mobile 7368:263684)
   for (const {width, gap, watchSize} of [{width: 1440, gap: 9, watchSize: null}, {width: 375, gap: 0, watchSize: 32}]) {
@@ -24,9 +39,9 @@ test.describe('Article view layout (signed out)', () => {
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
 
     // #433 items 5 and 9: no placeholder line, no back link. #469: the subject header is
-    // the one of every view (subject-header.test.e2e.ts), but for Compare, which the
-    // Article view frames do not have (#478: 7368:263253, 7368:264887)
-    await expect(page.locator('#compare-mode-button')).toBeHidden();
+    // the one of every view (subject-header.test.e2e.ts), Compare included in the Read
+    // tab (#478: "Article view / Logged out - Read only" 7368:264676)
+    await expect(page.locator('#compare-mode-button')).toBeVisible();
     await expect(page.locator('[data-role="back-to-bubble"]')).toHaveCount(0);
     await expect(page.locator('#article-view-root')).not.toContainText('marked this article as correct');
 
