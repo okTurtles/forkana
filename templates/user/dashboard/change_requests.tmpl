@@ -1,0 +1,144 @@
+{{/* The change requests hub (#94), Figma "09 · Changes hub" (7368:274515): Received
+     (7368:274516), Sent (7368:274718) and Mentions (7368:274915), the Filter (7368:275387)
+     and Sort (7368:275446) menus, and the phone frames (7368:275056, 7368:275255,
+     7368:275473). The measurements are in web_src/css/features/changes-hub.css. */}}
+{{template "base/head" .}}
+{{$base := QueryBuild (print AppSubUrl "/pulls?") "tab" .TabParam "state" .StateFilter "sort" .SortParam "q" .Keyword}}
+<div role="main" aria-label="{{.Title}}" class="page-content changes-hub">
+	<div class="changes-hub-container">
+		<a href="{{AppSubUrl}}/" class="changes-hub-back">{{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "home.back"}}</span></a>
+		{{template "base/alert" .}}
+
+		<div class="changes-hub-header">
+			<h1 class="changes-hub-title">{{ctx.Locale.Tr "change_requests_hub.title"}}</h1>
+			<p class="changes-hub-description">{{ctx.Locale.Tr "change_requests_hub.description"}}</p>
+		</div>
+
+		<nav class="changes-hub-tabs" aria-label="{{ctx.Locale.Tr "change_requests_hub.tabs"}}">
+			{{range $t := .Tabs}}
+				{{$active := eq $t $.Tab}}
+				<a class="changes-hub-tab{{if $active}} active{{end}}" data-tab="{{$t}}" href="{{QueryBuild (print AppSubUrl "/pulls?") "tab" (Iif (eq $t "received") "" $t) "state" $.StateFilter "sort" $.SortParam "q" $.Keyword}}"{{if $active}} aria-current="page"{{end}}>
+					<span class="changes-hub-tab-inner">
+						{{if eq $t "received"}}{{svg "octicon-inbox" 16}}{{else if eq $t "sent"}}{{svg "octicon-paper-airplane" 16}}{{else}}{{svg "octicon-mention" 16}}{{end}}
+						<span class="changes-hub-tab-label">{{ctx.Locale.Tr (print "change_requests_hub.tab." $t)}}</span>
+						<span class="changes-hub-counter">{{CountFmt (index $.TabCounts $t)}}</span>
+					</span>
+				</a>
+			{{end}}
+		</nav>
+
+		<div class="changes-hub-toolbar">
+			<form class="changes-hub-search" action="{{AppSubUrl}}/pulls" method="get" role="search">
+				{{if .TabParam}}<input type="hidden" name="tab" value="{{.TabParam}}">{{end}}
+				{{if .StateFilter}}<input type="hidden" name="state" value="{{.StateFilter}}">{{end}}
+				{{if .SortParam}}<input type="hidden" name="sort" value="{{.SortParam}}">{{end}}
+				<input type="search" name="q" value="{{.Keyword}}" placeholder="{{ctx.Locale.Tr "change_requests_hub.search_placeholder"}}" aria-label="{{ctx.Locale.Tr "change_requests_hub.search_placeholder"}}">
+				<button type="submit" class="changes-hub-search-button" aria-label="{{ctx.Locale.Tr "search.search"}}">{{svg "octicon-search" 16}}</button>
+			</form>
+			<div class="changes-hub-menus">
+				<div class="ui dropdown changes-hub-menu" id="changes-hub-filter">
+					<span class="changes-hub-menu-text">{{svg "octicon-filter" 16}}<span>{{ctx.Locale.Tr "change_requests_hub.filter"}}</span></span>
+					{{svg "octicon-triangle-down" 16 "changes-hub-menu-caret"}}
+					<div class="menu changes-hub-filter-menu">
+						<a class="item changes-hub-clear" href="{{QueryBuild $base "state" ""}}">{{ctx.Locale.Tr "change_requests_hub.filter.clear"}}</a>
+						<div class="changes-hub-menu-divider" role="separator"></div>
+						{{range $s := .States}}
+							{{$checked := SliceUtils.Contains $.SelectedStates $s}}
+							<a class="item changes-hub-filter-item" data-state="{{$s}}" role="menuitemcheckbox" aria-checked="{{if $checked}}true{{else}}false{{end}}" href="{{QueryBuild $base "state" (index $.StateToggles $s)}}">
+								<span class="changes-hub-checkbox{{if $checked}} checked{{end}}">{{if $checked}}{{svg "octicon-check" 12}}{{end}}</span>
+								{{ctx.Locale.Tr (print "change_requests_hub.state." $s)}}
+							</a>
+						{{end}}
+					</div>
+				</div>
+				<div class="ui dropdown changes-hub-menu" id="changes-hub-sort">
+					<span class="changes-hub-menu-text">{{svg "octicon-arrow-switch" 16}}<span>{{ctx.Locale.Tr "change_requests_hub.sort"}}</span></span>
+					{{svg "octicon-triangle-down" 16 "changes-hub-menu-caret"}}
+					<div class="left menu changes-hub-sort-menu">
+						{{range $s := .Sorts}}
+							<a class="item{{if eq $s $.SortType}} active selected{{end}}" data-sort="{{$s}}" href="{{QueryBuild $base "sort" (Iif (eq $s "recentupdate") "" $s)}}">{{ctx.Locale.Tr (print "change_requests_hub.sort." $s)}}</a>
+						{{end}}
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="changes-hub-list" data-tab="{{.Tab}}">
+			{{range .Rows}}
+				{{$who := Iif (and $.SignedUser (eq .Who.ID $.SignedUser.ID)) (ctx.Locale.Tr "change_requests_hub.you") .Who.GetDisplayName}}
+				<a class="changes-hub-row" href="{{.Issue.Link}}" data-state="{{.State}}">
+					<span class="changes-hub-avatar">{{ctx.AvatarUtils.Avatar .Who 28}}</span>
+					<span class="changes-hub-text">
+						<span class="changes-hub-line">
+							{{if eq $.Tab "sent"}}
+								{{ctx.Locale.Tr "change_requests_hub.sent_line" (HTMLFormat "<strong>%s</strong>" $who) .Article}}
+							{{else if eq $.Tab "mentions"}}
+								{{ctx.Locale.Tr "change_requests_hub.mentions_line" (HTMLFormat "<strong>%s</strong>" $who) (HTMLFormat "<strong>%s</strong>" .Article)}}
+							{{else}}
+								{{ctx.Locale.Tr "change_requests_hub.received_line" (HTMLFormat "<strong>%s</strong>" $who) (HTMLFormat "<strong>%s</strong>" .Article)}}
+							{{end}}
+						</span>
+						{{if eq $.Tab "mentions"}}
+							{{if .Quote}}<span class="changes-hub-quote">"{{.Quote}}"</span>{{end}}
+							<span class="changes-hub-sub not-mobile">{{DateUtils.TimeSince .When}}</span>
+						{{else}}
+							<span class="changes-hub-sub not-mobile">{{.Issue.Title}} · {{DateUtils.TimeSince .When}}</span>
+						{{end}}
+						<span class="changes-hub-mobile-meta only-mobile">
+							<span class="changes-hub-state changes-hub-state-{{.State}}">{{template "user/dashboard/change_request_state" .State}}</span>
+							<span>{{DateUtils.TimeSince .When}}</span>
+						</span>
+					</span>
+					{{if .HasConflicts}}
+						<span class="changes-hub-conflicts not-mobile" data-tooltip-content="{{ctx.Locale.Tr "change_requests_hub.has_conflicts"}}" aria-label="{{ctx.Locale.Tr "change_requests_hub.has_conflicts"}}">{{svg "octicon-alert" 14}}</span>
+					{{end}}
+					<span class="changes-hub-state changes-hub-state-{{.State}} not-mobile">{{template "user/dashboard/change_request_state" .State}}</span>
+					<span class="changes-hub-chevron">{{svg "octicon-chevron-right" 24}}</span>
+				</a>
+			{{else}}
+				<div class="changes-hub-empty">
+					{{if or .Keyword .StateFilter}}
+						{{ctx.Locale.Tr "change_requests_hub.empty.filtered"}}
+					{{else}}
+						{{ctx.Locale.Tr (print "change_requests_hub.empty." .Tab)}}
+					{{end}}
+				</div>
+			{{end}}
+
+			{{if .Rows}}
+				<div class="changes-hub-footer">
+					<span class="changes-hub-shown">{{ctx.Locale.Tr "change_requests_hub.shown" .ShownUpTo .Total}}</span>
+					{{with .Page.Paginater}}
+						<nav class="changes-hub-pagination" aria-label="{{ctx.Locale.Tr "change_requests_hub.pagination"}}">
+							{{if .HasPrevious}}
+								<a class="changes-hub-page-direction" href="{{QueryBuild $base "page" .Previous}}" rel="prev">{{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "change_requests_hub.previous"}}</span></a>
+							{{else}}
+								<span class="changes-hub-page-direction disabled" aria-disabled="true">{{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "change_requests_hub.previous"}}</span></span>
+							{{end}}
+							<span class="changes-hub-pages not-mobile">
+								{{range .Pages}}
+									{{if eq .Num -1}}
+										<span class="changes-hub-page gap">…</span>
+									{{else if .IsCurrent}}
+										<span class="changes-hub-page current" aria-current="page">{{.Num}}</span>
+									{{else}}
+										<a class="changes-hub-page" href="{{QueryBuild $base "page" .Num}}">{{.Num}}</a>
+									{{end}}
+								{{end}}
+							</span>
+							{{if .HasNext}}
+								<a class="changes-hub-page-direction" href="{{QueryBuild $base "page" .Next}}" rel="next"><span>{{ctx.Locale.Tr "change_requests_hub.next"}}</span>{{svg "octicon-chevron-right" 16}}</a>
+							{{else}}
+								<span class="changes-hub-page-direction disabled" aria-disabled="true"><span>{{ctx.Locale.Tr "change_requests_hub.next"}}</span>{{svg "octicon-chevron-right" 16}}</span>
+							{{end}}
+						</nav>
+					{{end}}
+				</div>
+			{{end}}
+		</div>
+		{{if and (eq .Tab "mentions") .Rows (not .Page.Paginater.HasNext)}}
+			<p class="changes-hub-end only-mobile">{{ctx.Locale.Tr "change_requests_hub.mentions_end"}}</p>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}

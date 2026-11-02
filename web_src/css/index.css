@@ -46,6 +46,7 @@
 @import "./features/subject-views.css";
 @import "./features/article-view.css";
 @import "./features/subject-compare.css";
+@import "./features/changes-hub.css";
 
 @import "./markup/content.css";
 @import "./markup/codecopy.css";

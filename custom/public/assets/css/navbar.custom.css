@@ -64,3 +64,36 @@
 #navbar .ui.dropdown .menu.user-menu > .item {
   border-radius: 8px;
 }
+
+/* ── #94: the "Change request" entry ───────────────────────────────────────
+   Figma "09 · Changes hub" (Received 7368:274516): Button 7368:274543 puts its
+   CounterLabel (6484:44075) 8px after the Inter 600 14/20 label — an 18px pill,
+   0 6px, #818b98 at 12% under a #25292e number — and, on the hub, underlines
+   the label with a 1px rule right under its 20px line (Frame 1, I7368:274543;
+   40000504:108946, a 109×21 box with a 1px bottom stroke) instead of filling
+   the item. The counter is the open change requests to the user's articles. */
+#navbar-change-requests {
+  gap: 8px;
+}
+
+#navbar-change-requests .navbar-item-label {
+  line-height: 20px;
+}
+
+#navbar-change-requests.navbar-item-current .navbar-item-label {
+  box-shadow: inset 0 -1px 0 currentcolor;
+  padding-bottom: 1px;
+}
+
+#navbar-change-requests .navbar-counter {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-button-text-disabled) 12%, transparent);
+  color: var(--color-button-text);
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+}

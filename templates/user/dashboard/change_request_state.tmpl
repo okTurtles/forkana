@@ -1,0 +1,3 @@
+{{/* A change request's state label (StateLabel 5785:108041 Open, 5785:108047 Closed,
+     5785:108043 Merged): its icon and name. The argument is open, merged or closed. */}}
+{{if eq . "merged"}}{{svg "octicon-git-merge" 16}}{{else if eq . "closed"}}{{svg "octicon-git-pull-request-closed" 16}}{{else}}{{svg "octicon-git-pull-request" 16}}{{end}}<span>{{ctx.Locale.Tr (print "change_requests_hub.state." .)}}</span>

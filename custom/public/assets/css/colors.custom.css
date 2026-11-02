@@ -136,6 +136,10 @@
   --color-forkana-tooltip-bg: #25292e;
   --color-forkana-tooltip-arrow: #1f2328;
   --color-forkana-tooltip-text: #ffffff;
+
+  /* #94, the change requests hub (Figma 7368:274515): its rows' first line and the
+     phone's Filter / Sort labels are #000 (a light text in the dark themes) */
+  --color-changes-hub-strong-text: #000000;
 }
 
 /* Colorblind diff colors — orange (removed) vs blue (added).
