@@ -454,10 +454,13 @@ func (repo *Repository) commitLink(ctx context.Context, commitID string) string 
 	if git.IsEmptyCommitID(commitID) {
 		return ""
 	}
+	// A repository without a subject has no article view, its repository route serves
+	// the commit (see Link).
+	if repo.SubjectID == 0 {
+		return repo.OperationsLink() + "/commit/" + url.PathEscape(commitID)
+	}
 	// The article view has no "/commit/{sha}" route: it selects a version through the
-	// "version" query parameter. The article path is built here rather than from
-	// Link(), because Link() sends a tombstone to its repository route, which does not
-	// resolve a version of this repository.
+	// "version" query parameter.
 	return repo.articleLink(ctx) + "?version=" + url.QueryEscape(commitID)
 }
 
@@ -702,12 +705,11 @@ func (repo *Repository) RepoPath() string {
 	return RepoPath(repo.OwnerName, repo.Name)
 }
 
-// Link returns the repository relative url for viewing articles.
-// A tombstone keeps its article url, /subject/{subject}/{owner}, so the deletion notice
-// is served where the article used to be. Only a tombstone that never had a subject
-// falls back to OperationsLink, since it has no place in the subject hierarchy. Any
-// other repository yields /subject/{subject}/{owner}, using the repository name in
-// place of the subject when none is assigned.
+// Link returns the repository relative url for viewing articles,
+// /subject/{subject}/{owner}. A tombstone keeps its article url, so the deletion notice
+// is served where the article used to be. A repository without a subject (e.g. created
+// through the API without one) has no place in the subject hierarchy, whose routes only
+// resolve subject names, so it links to its repository route, OperationsLink (#274).
 func (repo *Repository) Link() string {
 	return repo.LinkCtx(context.Background())
 }
@@ -718,27 +720,10 @@ func (repo *Repository) Link() string {
 // link. A path that has just written a repository must keep using Link, unless the
 // write dropped the owner's cached indexes.
 func (repo *Repository) LinkCtx(ctx context.Context) string {
-	if repo.IsTombstone() && repo.SubjectID == 0 {
-		return repo.OperationsLink()
-	}
-	return repo.articleLink(ctx)
-}
-
-// RoutableLink is Link for a repository with a subject, and OperationsLink for one
-// without (e.g. created through the API without a subject). The subject routes only
-// resolve subject names, so the repository name Link puts in place of the subject leads
-// nowhere: the forms and redirects of such a repository must stay on /{owner}/{repo},
-// which serves it (#274).
-func (repo *Repository) RoutableLink() string {
-	return repo.RoutableLinkCtx(context.Background())
-}
-
-// RoutableLinkCtx is RoutableLink resolved against ctx, see LinkCtx.
-func (repo *Repository) RoutableLinkCtx(ctx context.Context) string {
 	if repo.SubjectID == 0 {
 		return repo.OperationsLink()
 	}
-	return repo.LinkCtx(ctx)
+	return repo.articleLink(ctx)
 }
 
 // SubjectLink returns the url of the subject page, /subject/{subject}; an article's url
@@ -747,20 +732,17 @@ func SubjectLink(subjectName string) string {
 	return setting.AppSubURL + "/subject/" + url.PathEscape(subjectName)
 }
 
-// articleLink returns the article view url of this repository,
-// /subject/{subject}/{owner}, using the repository name in place of the subject when
-// none is assigned. When the owner holds several articles for the subject, the ones
-// past the first are addressed by appending their article index.
+// articleLink returns the article view url of this repository, which must have a
+// subject: /subject/{subject}/{owner}. When the owner holds several articles for the
+// subject, the ones past the first are addressed by appending their article index.
 func (repo *Repository) articleLink(ctx context.Context) string {
 	link := SubjectLink(repo.GetSubject(ctx)) + "/" + url.PathEscape(repo.OwnerName)
 	// The suffix follows the position alone. Archived and deleted articles are the
 	// usual ones to sit past the first position, but nothing stops an owner from
 	// holding several active articles for a subject, and two of them sharing this url
 	// would leave one of them unreachable.
-	if repo.SubjectID > 0 {
-		if index := repo.ArticleIndex(ctx); index > 1 {
-			link += "/" + strconv.Itoa(index)
-		}
+	if index := repo.ArticleIndex(ctx); index > 1 {
+		link += "/" + strconv.Itoa(index)
 	}
 	return link
 }

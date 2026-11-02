@@ -190,9 +190,9 @@ func PrepareCommitFormOptions(ctx *Context, doer *user_model.User, targetRepo *r
 		editorPathParamRemaining = util.PathEscapeSegments(targetRepo.DefaultBranch) + "/" + util.PathEscapeSegments(ctx.Repo.TreePath) + "?from_base_branch=" + url.QueryEscape(branchName)
 	}
 	if editorAction == "_cherrypick" {
-		opts.TargetFormAction = targetRepo.RoutableLink() + "/" + editorAction + "/" + ctx.PathParam("sha") + "/" + editorPathParamRemaining
+		opts.TargetFormAction = targetRepo.Link() + "/" + editorAction + "/" + ctx.PathParam("sha") + "/" + editorPathParamRemaining
 	} else {
-		opts.TargetFormAction = targetRepo.RoutableLink() + "/" + editorAction + "/" + editorPathParamRemaining
+		opts.TargetFormAction = targetRepo.Link() + "/" + editorAction + "/" + editorPathParamRemaining
 	}
 	if ctx.Req.URL.RawQuery != "" {
 		opts.TargetFormAction += util.Iif(strings.Contains(opts.TargetFormAction, "?"), "&", "?") + ctx.Req.URL.RawQuery
@@ -570,9 +570,8 @@ func RepoAssignment(ctx *Context) {
 	}
 
 	// the repository assignment runs before any handler writes, so the article index
-	// behind the link is resolved through the request cache. A repository without a
-	// subject keeps its links on this route, which is the only one serving it.
-	ctx.Repo.RepoLink = repo.RoutableLinkCtx(ctx)
+	// behind the link is resolved through the request cache
+	ctx.Repo.RepoLink = repo.LinkCtx(ctx)
 	ctx.Data["RepoLink"] = ctx.Repo.RepoLink
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
