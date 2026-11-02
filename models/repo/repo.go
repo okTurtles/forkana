@@ -724,6 +724,23 @@ func (repo *Repository) LinkCtx(ctx context.Context) string {
 	return repo.articleLink(ctx)
 }
 
+// RoutableLink is Link for a repository with a subject, and OperationsLink for one
+// without (e.g. created through the API without a subject). The subject routes only
+// resolve subject names, so the repository name Link puts in place of the subject leads
+// nowhere: the forms and redirects of such a repository must stay on /{owner}/{repo},
+// which serves it (#274).
+func (repo *Repository) RoutableLink() string {
+	return repo.RoutableLinkCtx(context.Background())
+}
+
+// RoutableLinkCtx is RoutableLink resolved against ctx, see LinkCtx.
+func (repo *Repository) RoutableLinkCtx(ctx context.Context) string {
+	if repo.SubjectID == 0 {
+		return repo.OperationsLink()
+	}
+	return repo.LinkCtx(ctx)
+}
+
 // SubjectLink returns the url of the subject page, /subject/{subject}; an article's url
 // (articleLink) extends it.
 func SubjectLink(subjectName string) string {

@@ -254,7 +254,7 @@ func redirectForCommitChoice[T any](ctx *context.Context, parsed *preparedEditor
 			redirectToPullRequest = true
 		}
 		if redirectToPullRequest {
-			ctx.JSONRedirect(repo.Link() + "/compare/" + util.PathEscapeSegments(baseBranch) + "..." + util.PathEscapeSegments(headBranch))
+			ctx.JSONRedirect(repo.RoutableLink() + "/compare/" + util.PathEscapeSegments(baseBranch) + "..." + util.PathEscapeSegments(headBranch))
 			return
 		}
 	}
@@ -486,7 +486,7 @@ func EditFilePost(ctx *context.Context) {
 
 		ctx.Repo.Repository = forkedRepo
 		ctx.Repo.Owner = ctx.Doer
-		ctx.Repo.RepoLink = forkedRepo.Link()
+		ctx.Repo.RepoLink = forkedRepo.RoutableLink()
 	}
 
 	defaultCommitMessage := util.Iif(isNewFile, ctx.Locale.TrString("repo.editor.add", parsed.form.TreePath), ctx.Locale.TrString("repo.editor.update", parsed.form.TreePath))
@@ -573,7 +573,7 @@ func EditFilePost(ctx *context.Context) {
 
 	// If we committed to a fork, redirect to the fork's article page
 	if parsed.form.ForkAndEdit && targetRepo != nil {
-		ctx.JSONRedirect(targetRepo.Link() + "?mode=read")
+		ctx.JSONRedirect(targetRepo.RoutableLink() + "?mode=read")
 		return
 	}
 

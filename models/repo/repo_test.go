@@ -62,6 +62,22 @@ func TestRepoAPIURL(t *testing.T) {
 	assert.Equal(t, "https://try.gitea.io/api/v1/repos/user12/repo10", repo.APIURL())
 }
 
+func TestRoutableLink(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	// an article keeps its subject url
+	article := unittest.AssertExistsAndLoadBean(t, &Repository{ID: 1})
+	require.NotZero(t, article.SubjectID)
+	assert.Equal(t, article.Link(), article.RoutableLink())
+	assert.Equal(t, setting.AppSubURL+"/subject/example-subject/user2", article.RoutableLink())
+
+	// a repository without a subject cannot be reached through a subject url (#274)
+	plain := unittest.AssertExistsAndLoadBean(t, &Repository{ID: 2})
+	require.Zero(t, plain.SubjectID)
+	assert.Equal(t, plain.OperationsLink(), plain.RoutableLink())
+	assert.Equal(t, plain.OperationsLink(), plain.RoutableLinkCtx(t.Context()))
+}
+
 func TestCommitLink(t *testing.T) {
 	const sha = "65f1bf27bc3bf70f64657658635e66094edbcb4d"
 
