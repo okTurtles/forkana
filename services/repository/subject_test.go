@@ -53,7 +53,7 @@ func TestPrepareSubjectAndRepoName(t *testing.T) {
 		{"   ", "", "", "", true},
 	}
 	for _, c := range cases {
-		subject, repoName, err := PrepareSubjectAndRepoName(ctx, c.subject, c.repoName)
+		subject, repoName, _, err := PrepareSubjectAndRepoName(ctx, c.subject, c.repoName)
 		if c.invalid {
 			assert.True(t, repo_model.IsErrSubjectNameInvalid(err), "PrepareSubjectAndRepoName(%q): %v", c.subject, err)
 			continue

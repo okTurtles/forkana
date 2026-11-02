@@ -265,18 +265,27 @@ func CreatePost(ctx *context.Context) {
 	}
 
 	if ctx.HasError() {
+		// a subject that predates the rule must stay acceptable on the form shown again
+		if _, existing, err := repo_model.ResolveSubject(ctx, form.Subject); err == nil && existing != nil {
+			ctx.Data["ExistingSubject"] = existing.Name
+		}
 		ctx.HTML(http.StatusOK, tplCreate)
 		return
 	}
 
 	// Resolve the subject (an existing one is used as-is, a new one must follow the subject
 	// title rule) and derive the repository name from it
-	subjectName, repoName, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.RepoName)
+	subjectName, repoName, existing, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.RepoName)
 	if err != nil {
 		handleCreateError(ctx, ctxUser, err, "CreatePost", tplCreate, &form)
 		return
 	}
 	form.Subject, form.RepoName = subjectName, repoName
+	if existing != nil {
+		// the form rendered again after any error below must still accept this subject,
+		// which may predate the subject title rule
+		ctx.Data["ExistingSubject"] = existing.Name
+	}
 
 	// Check global uniqueness for repository name and subject
 	if err := repo_model.CheckCreateRepositoryGlobalUnique(ctx, ctx.Doer, ctxUser, form.RepoName, form.Subject, false); err != nil {

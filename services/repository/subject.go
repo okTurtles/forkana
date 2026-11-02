@@ -21,14 +21,17 @@ import (
 // The repository name is generated from the resolved subject when it is empty or equals the
 // name generated from the submitted or the resolved subject (i.e. the user did not choose one).
 // The two can differ: "foo bar" gives "foobar", its resolved "Foo bar" gives "foo-bar".
-func PrepareSubjectAndRepoName(ctx context.Context, subject, repoName string) (string, string, error) {
+//
+// The existing subject the name resolved to is returned too (nil for a new subject), so that a
+// form rendered again after an error still lets a subject that predates the rule through.
+func PrepareSubjectAndRepoName(ctx context.Context, subject, repoName string) (string, string, *repo_model.Subject, error) {
 	if subject == "" {
-		return subject, repoName, nil
+		return subject, repoName, nil, nil
 	}
 
-	resolved, err := repo_model.ResolveSubjectName(ctx, subject)
+	resolved, existing, err := repo_model.ResolveSubject(ctx, subject)
 	if err != nil {
-		return subject, repoName, err
+		return subject, repoName, nil, err
 	}
 
 	if repoName == "" ||
@@ -36,5 +39,5 @@ func PrepareSubjectAndRepoName(ctx context.Context, subject, repoName string) (s
 		repo_model.IsGeneratedRepoName(repoName, resolved) {
 		repoName = repo_model.GenerateRepoNameFromSubject(resolved)
 	}
-	return resolved, repoName, nil
+	return resolved, repoName, existing, nil
 }

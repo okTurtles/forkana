@@ -101,12 +101,18 @@ func GenerateSlugFromName(name string) string {
 
 // hasNonLatinLetter reports whether the name has a letter that asciiSlug drops although it is
 // not an accented Latin letter: "Москва 1980", "東京 2004". Latin letters without an ASCII
-// base ("ß", "ø", "ł") are dropped too but keep the slug they always had.
+// base ("ß", "ø", "ł") are dropped too but keep the slug they always had, and so do the
+// modifier letters of no particular script, which Latin titles use as apostrophes ("Hawaiʻi",
+// "Hawaiiʼs" → "hawaii", "hawaiis", like "Zalg'o" → "zalgo").
 func hasNonLatinLetter(name string) bool {
 	for _, r := range removeAccents(name) {
-		if r > unicode.MaxASCII && unicode.IsLetter(r) && !unicode.Is(unicode.Latin, r) {
-			return true
+		if r <= unicode.MaxASCII || !unicode.IsLetter(r) || unicode.Is(unicode.Latin, r) {
+			continue
 		}
+		if unicode.Is(unicode.Lm, r) && unicode.Is(unicode.Common, r) {
+			continue
+		}
+		return true
 	}
 	return false
 }

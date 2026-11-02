@@ -229,6 +229,24 @@ func TestSubjectTitleRule(t *testing.T) {
 			assert.Equal(t, name, apiRepo.Subject, "an existing subject keeps its name")
 		}
 	})
+
+	t.Run("Create form shown again after an error still accepts a legacy subject", func(t *testing.T) {
+		const name = "Legacy #Hash Title"
+		require.NoError(t, db.Insert(t.Context(), &repo_model.Subject{Name: name, Slug: repo_model.GenerateSlugFromName(name)}))
+		// "repo1" is taken by user2, "bad name!" is not a valid repository name
+		for _, repoName := range []string{"repo1", "bad name!"} {
+			req := NewRequestWithValues(t, "POST", "/repo/create", map[string]string{
+				"_csrf":     GetUserCSRFToken(t, session),
+				"uid":       strconv.FormatInt(user2.ID, 10),
+				"subject":   name,
+				"repo_name": repoName,
+			})
+			htmlDoc := NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
+			assert.Equal(t, name, htmlDoc.Find("input#subject").AttrOr("value", ""), repoName)
+			assert.Equal(t, name, htmlDoc.Find("[data-subject-title-hint]").AttrOr("data-existing-subject", ""),
+				"%s: the form's script must let the legacy subject through", repoName)
+		}
+	})
 }
 
 // TestSubjectTitleURLs covers titles with characters that matter in URLs. The subject is a

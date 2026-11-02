@@ -338,6 +338,14 @@ func TestGenerateSlugFromName(t *testing.T) {
 	assert.Equal(t, repo_model.GenerateSlugFromName("Москва 1980"), repo_model.GenerateSlugFromName("москва  1980"))
 	// Latin letters keep the slug they always had, with or without an ASCII base
 	assert.Equal(t, "strae-1980", repo_model.GenerateSlugFromName("Straße 1980"))
+	// modifier letters used as apostrophes are dropped like the ASCII apostrophe
+	assert.Equal(t, "hawaii", repo_model.GenerateSlugFromName("Hawaiʻi"))        // U+02BB
+	assert.Equal(t, "hawaiis", repo_model.GenerateSlugFromName("Hawaiiʼs"))      // U+02BC
+	assert.Equal(t, "zalgo", repo_model.GenerateSlugFromName("Zalg'o"))          // ASCII
+	assert.Equal(t, "zalgo", repo_model.GenerateSlugFromName("Zalgʾo"))          // U+02BE
+	assert.Equal(t, "hawaii", repo_model.GenerateRepoNameFromSubject("Hawaiʻi")) // same repo name
+	assert.Regexp(t, `^subject-`, repo_model.GenerateSlugFromName("ʻʼʾ"))        // nothing left
+	assert.Regexp(t, `^subject-`, repo_model.GenerateSlugFromName("ラーメン 2"))     // katakana is not Latin
 	assert.Equal(t, "odz-2004", repo_model.GenerateSlugFromName("Łódź 2004"))
 }
 

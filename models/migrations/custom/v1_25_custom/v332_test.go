@@ -50,6 +50,8 @@ func Test_ResluggifySymbolSubjects(t *testing.T) {
 		{Name: "Москва 1980", Slug: "1980"},
 		{Name: "1980", Slug: "1980-2"},
 		{Name: "Ελλάδα 2004", Slug: "2004"},
+		// a modifier letter used as an apostrophe keeps its readable slug
+		{Name: "Hawaiʻi", Slug: "hawaii"},
 	}
 	for _, s := range legacy {
 		_, err := x.Insert(s)
@@ -76,6 +78,7 @@ func Test_ResluggifySymbolSubjects(t *testing.T) {
 		// "1980" was freed by "Москва 1980"
 		"1980":        "1980",
 		"Ελλάδα 2004": repo_model.GenerateSlugFromName("Ελλάδα 2004"),
+		"Hawaiʻi":     "hawaii",
 	}, slugs)
 	assert.NotEqual(t, "2004", slugs["Ελλάδα 2004"])
 	assert.NotEqual(t, slugs[sixteen], slugs["東京"])

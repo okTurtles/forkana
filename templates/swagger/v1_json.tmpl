@@ -23593,7 +23593,7 @@
           "x-go-name": "License"
         },
         "name": {
-          "description": "Name of the repository to create",
+          "description": "Name of the repository to create\n\nWhen a subject is given and the name is the one generated from it (the subject's slug), or\nthe placeholder the web form generates for a subject without any ASCII letter or digit\n(\"subject\") or with a non-Latin letter (its ASCII part, e.g. \"1980\" for \"Москва 1980\"),\nthe name is replaced by the subject's slug, which for such subjects is \"subject-\" followed\nby a hash of the title.",
           "type": "string",
           "uniqueItems": true,
           "x-go-name": "Name"
@@ -25472,6 +25472,7 @@
           "x-go-name": "Labels"
         },
         "name": {
+          "description": "Name of the repository to create\n\nWhen a subject is given and the name is the one generated from it (the subject's slug), or\nthe placeholder the web form generates for a subject without any ASCII letter or digit\n(\"subject\") or with a non-Latin letter (its ASCII part, e.g. \"1980\" for \"Москва 1980\"),\nthe name is replaced by the subject's slug, which for such subjects is \"subject-\" followed\nby a hash of the title.",
           "type": "string",
           "uniqueItems": true,
           "x-go-name": "Name"
@@ -26487,6 +26488,7 @@
           "x-go-name": "Releases"
         },
         "repo_name": {
+          "description": "Name of the repository to create\n\nWhen a subject is given and the name is the one generated from it (the subject's slug), or\nthe placeholder the web form generates for a subject without any ASCII letter or digit\n(\"subject\") or with a non-Latin letter (its ASCII part, e.g. \"1980\" for \"Москва 1980\"),\nthe name is replaced by the subject's slug, which for such subjects is \"subject-\" followed\nby a hash of the title.",
           "type": "string",
           "x-go-name": "RepoName"
         },
