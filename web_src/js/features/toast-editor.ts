@@ -4,6 +4,7 @@ import '@toast-ui/editor/dist/toastui-editor.css';
 import {createBase64WidgetRule, installBase64WidgetPatch} from './comp/base64ImageWidget.ts';
 import {installLosslessMarkdownTracker} from './comp/losslessMarkdown.ts';
 import {installRawHtmlGuard, rawInlineHtmlWidgetRule} from './comp/rawHtmlGuard.ts';
+import {installImageSrcResolver, resolveRelativeSrc} from './comp/editorImageSrc.ts';
 import {defaultToolbarItems} from './comp/toastEditorToolbar.ts';
 import {articleEditorMarkdownOptions} from './comp/toastEditorOptions.ts';
 import {showErrorToast} from '../modules/toast.ts';
@@ -32,20 +33,6 @@ export type ToastEditorOptions = {
 type ToastEditorContainer = HTMLElement & {_giteaToastEditor?: Editor};
 
 const toastEditorContainerSelector = '#toast-editor-container';
-
-// resolveRelativeSrc resolves a relative image path (e.g. "./img/a.png", "../b.png")
-// against the raw URL of the file being edited. The base URL is provided by the server
-// (data-raw-file-url), so it already accounts for appSubUrl and branch names containing
-// slashes; native URL resolution handles "./" and "../" segments correctly.
-function resolveRelativeSrc(src: string, baseFileUrl: string): string {
-  if (!baseFileUrl) return src;
-  try {
-    const base = new URL(baseFileUrl, window.location.origin);
-    return new URL(src, base).href;
-  } catch {
-    return src;
-  }
-}
 
 export async function createToastEditor(
   textarea: HTMLTextAreaElement,
@@ -165,10 +152,7 @@ export async function createToastEditor(
         const {skipChildren, getChildrenText} = context;
         skipChildren();
         const altText = getChildrenText(node);
-        let src = node.destination;
-        if (src && !src.startsWith('data:') && !src.startsWith('http:') && !src.startsWith('https:') && !src.startsWith('/') && !src.startsWith('#')) {
-          src = resolveRelativeSrc(src, rawFileUrl);
-        }
+        const src = resolveRelativeSrc(node.destination, rawFileUrl);
         return [
           {type: 'openTag', tagName: 'img', attributes: {src, alt: altText}},
           {type: 'closeTag', tagName: 'img'},
@@ -182,6 +166,8 @@ export async function createToastEditor(
   // `<div>`…) must still open in the Visual editor, and text typed there must not be saved as
   // such HTML (issue #446). Before the tracker below loads the content.
   installRawHtmlGuard(editor, widgetRules);
+  // `<img src="pic.png">` written as HTML, like a markdown image above (issue #167).
+  installImageSrcResolver(editor, rawFileUrl);
 
   // Intercept drop and paste events in the capture phase to block oversized files
   container.addEventListener('drop', (e: DragEvent) => {
