@@ -72,17 +72,16 @@ func changeRequestState(issue *issues_model.Issue) string {
 	}
 }
 
-// parseChangeRequestStates reads the comma-separated state filter. Unknown states are
-// dropped; no state, like every state, means no filter.
+// parseChangeRequestStates reads the comma-separated state filter, in the Filter menu's
+// order. Unknown states are dropped; no state, like every state, means no filter (the
+// list is kept as it is, so every ticked box stays ticked).
 func parseChangeRequestStates(s string) []string {
 	var states []string
+	parts := strings.Split(s, ",")
 	for _, state := range changeRequestStates {
-		if slices.Contains(strings.Split(s, ","), state) {
+		if slices.Contains(parts, state) {
 			states = append(states, state)
 		}
-	}
-	if len(states) == len(changeRequestStates) {
-		return nil
 	}
 	return states
 }
@@ -123,17 +122,25 @@ func searchChangeRequests(ctx *context.Context, keyword string, opts *issues_mod
 	if err != nil {
 		return nil, 0, err
 	}
-	candidates, err := issues_model.GetIssuesByIDs(ctx, ids, true)
+	// only the two flags, read in chunks: not the issues themselves in one IN (...)
+	mergedIDs, err := issues_model.GetMergedPullIssueIDs(ctx, ids)
 	if err != nil {
 		return nil, 0, err
 	}
-	if err := candidates.LoadPullRequests(ctx); err != nil {
+	closedIDs, err := issues_model.GetClosedIssueIDs(ctx, ids)
+	if err != nil {
 		return nil, 0, err
 	}
-	matching := make([]int64, 0, len(candidates))
-	for _, issue := range candidates {
-		if slices.Contains(states, changeRequestState(issue)) {
-			matching = append(matching, issue.ID)
+	matching := make([]int64, 0, len(ids))
+	for _, id := range ids { // in the search's order
+		state := ChangeRequestOpen
+		if mergedIDs.Contains(id) {
+			state = ChangeRequestMerged
+		} else if closedIDs.Contains(id) {
+			state = ChangeRequestClosed
+		}
+		if slices.Contains(states, state) {
+			matching = append(matching, id)
 		}
 	}
 	start := min((page-1)*pageSize, len(matching))
@@ -170,11 +177,13 @@ func ChangeRequests(ctx *context.Context) {
 	page := max(ctx.FormInt("page"), 1)
 	pageSize := setting.UI.IssuePagingNum
 
-	opts, err := common.ChangeRequestsOptions(ctx, ctx.Doer, tab)
+	// the articles the user owns or maintains, looked up once for the list and every counter
+	repoIDs, err := common.ChangeRequestsRepoIDs(ctx, ctx.Doer)
 	if err != nil {
-		ctx.ServerError("ChangeRequestsOptions", err)
+		ctx.ServerError("ChangeRequestsRepoIDs", err)
 		return
 	}
+	opts := common.ChangeRequestsOptions(ctx.Doer, repoIDs, tab)
 	opts.SortType = sortType
 	ids, total, err := searchChangeRequests(ctx, keyword, opts, states, page, pageSize)
 	if err != nil {
@@ -221,20 +230,26 @@ func ChangeRequests(ctx *context.Context) {
 		case common.ChangeRequestsSent:
 			row.Who = issue.Repo.Owner
 		case common.ChangeRequestsMentions:
-			text := issue.Content
+			// the latest comment, review or code comment that mentions the user; else the
+			// description, if it does; else (the mention was edited away) no quote
+			text := ""
 			row.When = issue.CreatedUnix
 			if c, ok := mentions[issue.ID]; ok {
 				row.Who, text, row.When = c.Poster, c.Content, c.CreatedUnix
+			} else if issues_model.MentionsUser(issue.Content, ctx.Doer.Name) {
+				text = issue.Content
 			}
-			stripped, _ := mdstripper.StripMarkdown([]byte(text))
-			row.Quote = util.EllipsisDisplayString(strings.Join(strings.Fields(stripped), " "), mentionQuoteLength)
+			if text != "" {
+				stripped, _ := mdstripper.StripMarkdown([]byte(text))
+				row.Quote = util.EllipsisDisplayString(strings.Join(strings.Fields(stripped), " "), mentionQuoteLength)
+			}
 		}
 		rows = append(rows, row)
 	}
 
 	counts := make(map[string]int64, len(common.ChangeRequestsTabs))
 	for _, t := range common.ChangeRequestsTabs {
-		if counts[t], err = common.CountOpenChangeRequests(ctx, ctx.Doer, t); err != nil {
+		if counts[t], err = common.CountOpenChangeRequests(ctx, common.ChangeRequestsOptions(ctx.Doer, repoIDs, t)); err != nil {
 			ctx.ServerError("CountOpenChangeRequests", err)
 			return
 		}
@@ -254,6 +269,8 @@ func ChangeRequests(ctx *context.Context) {
 	ctx.Data["TabParam"] = util.Iif(tab == common.ChangeRequestsReceived, "", tab)
 	ctx.Data["Tabs"] = common.ChangeRequestsTabs
 	ctx.Data["TabCounts"] = counts
+	// the navbar shows this count rather than counting it again
+	ctx.Data["ChangeRequestsHubReceivedCount"] = counts[common.ChangeRequestsReceived]
 	ctx.Data["SortType"] = sortType
 	ctx.Data["SortParam"] = util.Iif(sortType == changeRequestSorts[0], "", sortType)
 	ctx.Data["Sorts"] = changeRequestSorts

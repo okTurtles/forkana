@@ -27,7 +27,13 @@
 				{{/* #94: "Change request" opens the change requests hub, its counter the open
 				     change requests to the user's articles (Button 7368:274543 in the Changes
 				     hub frames, CounterLabel 6484:44075); the open page is underlined there */}}
-				{{$crCount := and .PageGlobalData (call .PageGlobalData.GetOpenReceivedChangeRequestCount)}}
+				{{/* (on the hub, the count its Received tab already made) */}}
+				{{$crCount := 0}}
+				{{if .PageIsChangeRequestsHub}}
+					{{$crCount = .ChangeRequestsHubReceivedCount}}
+				{{else if .PageGlobalData}}
+					{{$crCount = call .PageGlobalData.GetOpenReceivedChangeRequestCount}}
+				{{end}}
 				<a id="navbar-change-requests" class="item{{if or .PageIsPullList .PageIsChangeRequestsHub}} navbar-item-current{{end}}" href="{{AppSubUrl}}/pulls"{{if or .PageIsPullList .PageIsChangeRequestsHub}} aria-current="page"{{end}}>
 					<span class="navbar-item-label">{{ctx.Locale.Tr "change_requests_hub.nav"}}</span>
 					{{if $crCount}}<span class="navbar-counter" data-tooltip-content="{{ctx.Locale.Tr "change_requests_hub.nav_count" $crCount}}">{{CountFmt $crCount}}</span>{{end}}

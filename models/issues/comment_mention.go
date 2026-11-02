@@ -5,9 +5,11 @@ package issues
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"code.gitea.io/gitea/models/db"
+	"code.gitea.io/gitea/modules/container"
 	"code.gitea.io/gitea/modules/references"
 
 	"xorm.io/builder"
@@ -28,8 +30,9 @@ func MentionsUser(content, username string) bool {
 	return false
 }
 
-// GetLatestMentionComments returns, for each of the issues, its most recent comment
-// that @-mentions the user named username. Issues where only the description mentions
+// GetLatestMentionComments returns, for each of the issues, its most recent comment,
+// review or code comment that @-mentions the user named username; pending reviews,
+// private to their author, are left out. Issues where only the description mentions
 // the user (or nothing does any more, after an edit) are absent from the map. The
 // comments' posters are loaded.
 func GetLatestMentionComments(ctx context.Context, issueIDs []int64, username string) (map[int64]*Comment, error) {
@@ -41,7 +44,12 @@ func GetLatestMentionComments(ctx context.Context, issueIDs []int64, username st
 	comments := make(CommentList, 0, len(issueIDs))
 	if err := db.GetEngine(ctx).
 		Where(builder.In("issue_id", issueIDs)).
-		And(builder.Eq{"type": CommentTypeComment}).
+		// review bodies and code comments mention too (services/pull/review.go)
+		And(builder.In("type", CommentTypeComment, CommentTypeReview, CommentTypeCode)).
+		And(builder.Or(
+			builder.Eq{"review_id": 0},
+			builder.NotIn("review_id", builder.Select("id").From("review").Where(builder.Eq{"type": ReviewTypePending})),
+		)).
 		And(db.BuildCaseInsensitiveLike("content", "@"+username)).
 		OrderBy("created_unix DESC, id DESC").
 		Find(&comments); err != nil {
@@ -58,6 +66,32 @@ func GetLatestMentionComments(ctx context.Context, issueIDs []int64, username st
 	}
 	if err := latest.LoadPosters(ctx); err != nil {
 		return nil, err
+	}
+	return res, nil
+}
+
+// GetMergedPullIssueIDs returns which of the issues are merged pull requests, reading
+// only that flag, in chunks that stay under the databases' parameter limits.
+func GetMergedPullIssueIDs(ctx context.Context, issueIDs []int64) (container.Set[int64], error) {
+	return issueIDsWhere(ctx, "pull_request", "issue_id", issueIDs, builder.Eq{"has_merged": true})
+}
+
+// GetClosedIssueIDs returns which of the issues are closed, reading only that flag, in
+// chunks that stay under the databases' parameter limits.
+func GetClosedIssueIDs(ctx context.Context, issueIDs []int64) (container.Set[int64], error) {
+	return issueIDsWhere(ctx, "issue", "id", issueIDs, builder.Eq{"is_closed": true})
+}
+
+func issueIDsWhere(ctx context.Context, table, idCol string, issueIDs []int64, cond builder.Cond) (container.Set[int64], error) {
+	res := make(container.Set[int64], len(issueIDs))
+	for chunk := range slices.Chunk(issueIDs, db.DefaultMaxInSize) {
+		var got []int64
+		if err := db.GetEngine(ctx).Table(table).Cols(idCol).
+			Where(builder.In(idCol, chunk)).And(cond).
+			Find(&got); err != nil {
+			return nil, err
+		}
+		res.AddMultiple(got...)
 	}
 	return res, nil
 }

@@ -21,13 +21,16 @@ import (
 
 func TestParseChangeRequestStates(t *testing.T) {
 	assert.Nil(t, parseChangeRequestStates(""))
-	assert.Nil(t, parseChangeRequestStates("open,closed,merged"), "every state is no filter")
+	// every state ticked stays ticked (searchChangeRequests reads it as no filter)
+	assert.Equal(t, []string{"open", "merged", "closed"}, parseChangeRequestStates("closed,merged,open"))
 	assert.Equal(t, []string{"open", "closed"}, parseChangeRequestStates("closed,bogus,open"))
 	assert.Equal(t, []string{"merged"}, parseChangeRequestStates("merged"))
 
 	assert.Equal(t, "open,merged", toggleChangeRequestState([]string{"open"}, "merged"))
 	assert.Empty(t, toggleChangeRequestState([]string{"open"}, "open"))
 	assert.Equal(t, "closed", toggleChangeRequestState([]string{"merged", "closed"}, "merged"))
+	assert.Equal(t, "open,merged,closed", toggleChangeRequestState([]string{"open", "merged"}, "closed"))
+	assert.Equal(t, "open,closed", toggleChangeRequestState([]string{"open", "merged", "closed"}, "merged"))
 }
 
 func changeRequestsPage(t *testing.T, userID int64, form map[string]string) map[string]any {
@@ -88,13 +91,39 @@ func TestChangeRequestsHub(t *testing.T) {
 		require.NoError(t, db.Insert(t.Context(), &issues_model.Comment{
 			Type: issues_model.CommentTypeComment, IssueID: 3, PosterID: 1, Content: "@user2 **could you** check the dates?",
 		}))
+		// user5 mentions user2 in a code comment on change request 11
+		require.NoError(t, db.Insert(t.Context(), &issues_model.IssueUser{UID: 2, IssueID: 11, IsMentioned: true}))
+		require.NoError(t, db.Insert(t.Context(), &issues_model.Comment{
+			Type: issues_model.CommentTypeCode, IssueID: 11, PosterID: 5, Content: "@user2 is this line right?", TreePath: "README.md", Line: 1,
+		}))
+		// change request 12's description mentions user2; change request 2's mention was edited away
+		_, err := db.GetEngine(t.Context()).Exec("UPDATE issue SET content = ? WHERE id = ?", "cc @user2 for the dates", 12)
+		require.NoError(t, err)
+		require.NoError(t, db.Insert(t.Context(), &issues_model.IssueUser{UID: 2, IssueID: 12, IsMentioned: true}))
+		require.NoError(t, db.Insert(t.Context(), &issues_model.IssueUser{UID: 2, IssueID: 2, IsMentioned: true}))
+
 		data := changeRequestsPage(t, 2, map[string]string{"tab": "mentions"})
-		rows := data["Rows"].([]*ChangeRequestRow)
-		require.Len(t, rows, 1)
-		assert.EqualValues(t, 3, rows[0].Issue.ID)
-		assert.EqualValues(t, 1, rows[0].Who.ID)
-		assert.Equal(t, "@user2 could you check the dates?", rows[0].Quote)
-		assert.EqualValues(t, 1, data["TabCounts"].(map[string]int64)[common.ChangeRequestsMentions])
+		rows := map[int64]*ChangeRequestRow{}
+		for _, row := range data["Rows"].([]*ChangeRequestRow) {
+			rows[row.Issue.ID] = row
+		}
+		require.Len(t, rows, 4)
+		assert.EqualValues(t, 1, rows[3].Who.ID)
+		assert.Equal(t, "@user2 could you check the dates?", rows[3].Quote)
+		assert.EqualValues(t, 5, rows[11].Who.ID, "a code comment's author is the one who mentioned")
+		assert.Equal(t, "@user2 is this line right?", rows[11].Quote)
+		assert.Equal(t, rows[12].Issue.PosterID, rows[12].Who.ID, "the description's author")
+		assert.Equal(t, "cc @user2 for the dates", rows[12].Quote)
+		assert.Equal(t, rows[2].Issue.PosterID, rows[2].Who.ID)
+		assert.Empty(t, rows[2].Quote, "no quote when nothing mentions the user any more")
+		assert.EqualValues(t, 4, data["TabCounts"].(map[string]int64)[common.ChangeRequestsMentions])
+	})
+
+	t.Run("All states ticked", func(t *testing.T) {
+		all := changeRequestsPage(t, 2, map[string]string{"state": "open,merged,closed"})
+		assert.Equal(t, []string{"open", "merged", "closed"}, all["SelectedStates"])
+		assert.Equal(t, "open,merged,closed", all["StateFilter"])
+		assert.Equal(t, rowIssueIDs(changeRequestsPage(t, 2, nil)), rowIssueIDs(all))
 	})
 
 	t.Run("States", func(t *testing.T) {
@@ -154,9 +183,11 @@ func TestChangeRequestsHub(t *testing.T) {
 	t.Run("Navbar counter", func(t *testing.T) {
 		ctx, _ := contexttest.MockContext(t, "/")
 		contexttest.LoadUser(t, ctx, 2)
-		count, err := common.CountOpenChangeRequests(ctx, ctx.Doer, common.ChangeRequestsReceived)
+		count, err := common.CountOpenReceivedChangeRequests(ctx, ctx.Doer)
 		require.NoError(t, err)
-		assert.Equal(t, changeRequestsPage(t, 2, nil)["TabCounts"].(map[string]int64)[common.ChangeRequestsReceived], count)
+		data := changeRequestsPage(t, 2, nil)
+		assert.Equal(t, data["TabCounts"].(map[string]int64)[common.ChangeRequestsReceived], count)
+		assert.Equal(t, count, data["ChangeRequestsHubReceivedCount"])
 		assert.Positive(t, count)
 	})
 }

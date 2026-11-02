@@ -66,17 +66,17 @@ func notificationUnreadCount(ctx *context.Context) int64 {
 	return count
 }
 
-// openReceivedChangeRequestCount is the navbar's "Change request" counter (#94, the
-// CounterLabel Pam added to the navbar): the open change requests to the articles the
-// signed-in user owns or maintains, the hub's Received tab.
+// openReceivedChangeRequestCount is the navbar's "Change request" counter (#94,
+// CounterLabel 6484:44075 on Button 7368:274543): the open change requests to the
+// articles the signed-in user owns or maintains, the hub's Received tab.
 func openReceivedChangeRequestCount(ctx *context.Context) int64 {
 	if ctx.Doer == nil || unit.TypePullRequests.UnitGlobalDisabled() {
 		return 0
 	}
-	count, err := CountOpenChangeRequests(ctx, ctx.Doer, ChangeRequestsReceived)
+	count, err := CountOpenReceivedChangeRequests(ctx, ctx.Doer)
 	if err != nil {
 		if !errors.Is(err, goctx.Canceled) {
-			log.Error("Unable to count the open change requests received by user:%-v: %v", ctx.Doer, err)
+			log.Warn("Unable to count the open change requests received by user:%-v: %v", ctx.Doer, err)
 		}
 		return 0
 	}

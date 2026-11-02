@@ -13,6 +13,8 @@ import (
 	user_model "code.gitea.io/gitea/models/user"
 	issue_indexer "code.gitea.io/gitea/modules/indexer/issues"
 	"code.gitea.io/gitea/modules/optional"
+
+	"xorm.io/builder"
 )
 
 // The three tabs of the change requests hub (#94, Figma "09 · Changes hub" 7368:274515).
@@ -28,13 +30,11 @@ const (
 // ChangeRequestsTabs are the hub's tabs in the order they are shown.
 var ChangeRequestsTabs = []string{ChangeRequestsReceived, ChangeRequestsSent, ChangeRequestsMentions}
 
-// ChangeRequestsOptions returns the search options of one tab of the change requests
-// hub, in every state, built the way the dashboard's change request overview builds them
-// (routers/web/user/home.go buildIssueOverview): Received is its "In your repositories"
-// filter, Sent its "Created by you" and Mentions its "Mentioning you".
-func ChangeRequestsOptions(ctx context.Context, doer *user_model.User, tab string) (*issues_model.IssuesOptions, error) {
-	// The articles the user owns or maintains (collaborates on).
-	repoIDs, _, err := repo_model.SearchRepositoryIDs(ctx, repo_model.SearchRepoOptions{
+// changeRequestsRepoCond selects the articles the user owns or maintains (collaborates
+// on), the repositories of the dashboard's "In your repositories" filter
+// (routers/web/user/home.go buildIssueOverview).
+func changeRequestsRepoCond(doer *user_model.User) builder.Cond {
+	return repo_model.SearchRepositoryCondition(repo_model.SearchRepoOptions{
 		Actor:       doer,
 		OwnerID:     doer.ID,
 		Private:     true,
@@ -42,14 +42,28 @@ func ChangeRequestsOptions(ctx context.Context, doer *user_model.User, tab strin
 		UnitType:    unit.TypePullRequests,
 		Archived:    optional.Some(false),
 	})
+}
+
+// ChangeRequestsRepoIDs returns the IDs of the articles the user owns or maintains, to
+// look up once per request and pass to ChangeRequestsOptions for every tab.
+func ChangeRequestsRepoIDs(ctx context.Context, doer *user_model.User) ([]int64, error) {
+	ids, err := repo_model.SearchRepositoryIDsByCondition(ctx, changeRequestsRepoCond(doer))
 	if err != nil {
 		return nil, err
 	}
-	if len(repoIDs) == 0 {
+	if len(ids) == 0 {
 		// no repos found, don't let the indexer return all repos
-		repoIDs = []int64{0}
+		ids = []int64{0}
 	}
+	return ids, nil
+}
 
+// ChangeRequestsOptions returns the search options of one tab of the change requests
+// hub, in every state, built the way the dashboard's change request overview builds them
+// (routers/web/user/home.go buildIssueOverview): Received is its "In your repositories"
+// filter, Sent its "Created by you" and Mentions its "Mentioning you". repoIDs comes from
+// ChangeRequestsRepoIDs.
+func ChangeRequestsOptions(doer *user_model.User, repoIDs []int64, tab string) *issues_model.IssuesOptions {
 	opts := &issues_model.IssuesOptions{
 		IsPull:     optional.Some(true),
 		IsArchived: optional.Some(false),
@@ -65,15 +79,27 @@ func ChangeRequestsOptions(ctx context.Context, doer *user_model.User, tab strin
 		opts.AllPublic = true
 		opts.MentionedID = doer.ID
 	}
-	return opts, nil
+	return opts
 }
 
-// CountOpenChangeRequests counts the open change requests of one tab of the hub.
-func CountOpenChangeRequests(ctx context.Context, doer *user_model.User, tab string) (int64, error) {
-	opts, err := ChangeRequestsOptions(ctx, doer, tab)
-	if err != nil {
-		return 0, err
-	}
-	opts.IsClosed = optional.Some(false)
-	return issue_indexer.CountIssues(ctx, issue_indexer.ToSearchOptions("", opts))
+// CountOpenChangeRequests counts the open change requests matching the options of a tab.
+func CountOpenChangeRequests(ctx context.Context, opts *issues_model.IssuesOptions) (int64, error) {
+	open := *opts
+	open.IsClosed = optional.Some(false)
+	open.Paginator = nil
+	return issue_indexer.CountIssues(ctx, issue_indexer.ToSearchOptions("", &open))
+}
+
+// CountOpenReceivedChangeRequests counts the open change requests to the articles the
+// user owns or maintains (the hub's Received tab, open only) in a single query: the
+// navbar's counter, shown on every page, so the articles are a subquery rather than a
+// list of IDs looked up first.
+func CountOpenReceivedChangeRequests(ctx context.Context, doer *user_model.User) (int64, error) {
+	return issues_model.CountIssues(ctx, &issues_model.IssuesOptions{
+		IsPull:     optional.Some(true),
+		IsClosed:   optional.Some(false),
+		IsArchived: optional.Some(false),
+		Doer:       doer,
+		RepoCond:   builder.In("issue.repo_id", builder.Select("id").From("repository").Where(changeRequestsRepoCond(doer))),
+	})
 }
