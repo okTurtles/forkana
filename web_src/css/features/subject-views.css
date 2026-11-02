@@ -81,6 +81,9 @@
   background: var(--color-hover);
 }
 
+/* Figma's arrow-switch-24 (13.3x12, #1f2328) is Primer's arrow-switch turned a quarter:
+   up and down arrows. The change requests hub's Sort (arrow-switch-24 7368:274608, and
+   7368:275087 on a phone) uses the same icon, so it reuses this class. */
 .history-table-sort-icon {
   display: inline-flex;
   transform: rotate(90deg);

@@ -76,6 +76,14 @@ test.describe('Change requests hub (#94)', () => {
       expect(state).toBe('open');
     }
 
+    // Sort's arrows point up and down: Figma's arrow-switch-24 (7368:274608) is Primer's
+    // arrow-switch turned a quarter
+    const sortIcon = page.locator('#changes-hub-sort .history-table-sort-icon');
+    await expect(sortIcon.locator('svg.octicon-arrow-switch')).toBeVisible();
+    const matrix = await sortIcon.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform));
+    expect(Math.round(matrix.b)).toBe(1); // rotate(90deg): matrix(0, 1, -1, 0, 0, 0)
+    expect(Math.round(matrix.a)).toBe(0);
+
     // Sort: one choice at a time, highlighted
     await page.locator('#changes-hub-sort').click();
     const sortMenu = page.locator('#changes-hub-sort .menu');

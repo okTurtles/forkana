@@ -52,7 +52,7 @@
 					</div>
 				</div>
 				<div class="ui dropdown changes-hub-menu" id="changes-hub-sort">
-					<span class="changes-hub-menu-text">{{svg "octicon-arrow-switch" 16}}<span>{{ctx.Locale.Tr "change_requests_hub.sort"}}</span></span>
+					<span class="changes-hub-menu-text"><span class="history-table-sort-icon">{{svg "octicon-arrow-switch" 16}}</span><span>{{ctx.Locale.Tr "change_requests_hub.sort"}}</span></span>
 					{{svg "octicon-triangle-down" 16 "changes-hub-menu-caret"}}
 					<div class="left menu changes-hub-sort-menu">
 						{{range $s := .Sorts}}
