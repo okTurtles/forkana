@@ -7,6 +7,9 @@
 /* The 1080px column (Frame 1013, 7368:274556), 23px under the navbar (Back at y 88, the
    navbar ending at 65), with the page's 16px gutter once the window is narrower. */
 .changes-hub-container {
+  /* the hover tint of the tabs, menu entries and pages: #818b98 at 10% */
+  --color-changes-hub-hover: color-mix(in srgb, var(--color-button-text-disabled) 10%, transparent);
+
   display: flex;
   flex-direction: column;
   max-width: calc(1080px + 2 * 16px);
@@ -92,7 +95,7 @@
 }
 
 .changes-hub-tab:hover .changes-hub-tab-inner {
-  background: color-mix(in srgb, var(--color-button-text-disabled) 10%, transparent);
+  background: var(--color-changes-hub-hover);
 }
 
 .changes-hub-tab.active .changes-hub-tab-label {
@@ -241,7 +244,7 @@
 /* The highlighted entry (currentSelection, ActionList.Item 7368:275447): #818b98 at 10%. */
 .changes-hub-menu.ui.dropdown > .menu > .item:hover,
 .changes-hub-menu.ui.dropdown > .menu > .item.active {
-  background: color-mix(in srgb, var(--color-button-text-disabled) 10%, transparent) !important;
+  background: var(--color-changes-hub-hover) !important;
 }
 
 /* ActionList.Divider (7368:275395): 8px above and below a 1px #d1d9e0 70% rule. */
@@ -326,6 +329,7 @@
 .changes-hub-sub,
 .changes-hub-quote {
   padding-bottom: 2px;
+  overflow-wrap: anywhere; /* a long unbroken name must not push the page sideways */
 }
 
 .changes-hub-line {
@@ -339,7 +343,6 @@
 .changes-hub-sub,
 .changes-hub-quote {
   color: var(--color-muted-text);
-  overflow-wrap: anywhere;
 }
 
 /* "Has conflicts" (Group 89, 7368:274652): a 24px #59636e disc with a white alert. */
@@ -434,9 +437,9 @@
   color: var(--color-primary);
 }
 
-.changes-hub-page-direction:hover {
+a.changes-hub-page-direction:hover {
   color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-button-text-disabled) 10%, transparent);
+  background: var(--color-changes-hub-hover);
 }
 
 .changes-hub-page-direction.disabled {
@@ -462,9 +465,9 @@
   color: var(--color-text-primary);
 }
 
-.changes-hub-page:hover {
+a.changes-hub-page:hover {
   color: var(--color-text-primary);
-  background: color-mix(in srgb, var(--color-button-text-disabled) 10%, transparent);
+  background: var(--color-changes-hub-hover);
 }
 
 .changes-hub-page.current {
@@ -499,10 +502,12 @@
     padding: 0 16px;
   }
 
+  /* (_Header/Search 7368:275076 is 32px tall with 8px all round, i.e. a 16px content
+     box for the 16px icon: the box stays 32px, so the 8px only shows at the sides) */
   .changes-hub-search {
     flex: 1 1 auto;
     gap: 8px;
-    padding: 8px;
+    padding-inline: 8px;
     border-color: var(--color-border-light);
     border-radius: 6px;
     box-shadow: inset 0 1px 0 #1f23280a;
@@ -549,10 +554,6 @@
     align-items: flex-start;
     gap: 8px;
     padding: 8px 12px 4px 8px;
-  }
-
-  .changes-hub-row:first-child {
-    padding-top: 8px;
   }
 
   .changes-hub-text {

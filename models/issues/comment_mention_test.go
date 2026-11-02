@@ -76,6 +76,16 @@ func TestGetLatestMentionComments(t *testing.T) {
 	assert.NotContains(t, got, int64(3), "a pending review is private to its author")
 	assert.NotContains(t, got, int64(13))
 
+	// more issues than one IN (...) chunk give the same answer
+	many := make([]int64, 0, 120)
+	for id := int64(1); id <= 120; id++ {
+		many = append(many, id)
+	}
+	gotMany, err := issues_model.GetLatestMentionComments(t.Context(), many, "user2")
+	require.NoError(t, err)
+	require.Len(t, gotMany, 3)
+	assert.EqualValues(t, 9007, gotMany[11].ID)
+
 	got, err = issues_model.GetLatestMentionComments(t.Context(), nil, "user2")
 	require.NoError(t, err)
 	assert.Empty(t, got)

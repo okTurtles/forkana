@@ -1,12 +1,24 @@
-import {test, expect} from '@playwright/test';
+import {test, expect, request} from '@playwright/test';
+import {env} from 'node:process';
 import {login_user, load_logged_in_context} from './utils_e2e.ts';
-import type {Page} from '@playwright/test';
 
 // The change requests hub (#94, Figma "09 · Changes hub" 7368:274515).
 // Fixtures: user2 owns repo1 (subject "example-subject"), where user1 opened the change
 // requests issue2, issue3 and pull5; user2 opened change requests on other articles.
 
-const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 768;
+// user1 comments on user2's change request issue3 (/user2/repo1/pulls/3) through the API
+async function comment_as_user1(body: string) {
+  const api = await request.newContext({
+    baseURL: `${(env.GITEA_URL || 'http://localhost:3000').replace(/\/+$/, '')}/`,
+    extraHTTPHeaders: {Authorization: `Basic ${Buffer.from('user1:password').toString('base64')}`},
+  });
+  try {
+    const response = await api.post('api/v1/repos/user2/repo1/issues/3/comments', {data: {body}});
+    expect(response.status(), await response.text()).toBe(201);
+  } finally {
+    await api.dispose();
+  }
+}
 
 test.describe('Change requests hub (#94)', () => {
   test.beforeAll(async ({browser}, workerInfo) => {
@@ -23,6 +35,11 @@ test.describe('Change requests hub (#94)', () => {
     await expect(entry.locator('.navbar-item-label')).toHaveText('Change request');
     await expect(entry.locator('.navbar-counter')).toHaveText(/^[1-9]\d*$/);
     await expect(entry).not.toHaveClass(/navbar-item-current/);
+
+    // it counts what the hub's Received tab counts
+    const navCount = (await entry.locator('.navbar-counter').textContent()).trim();
+    await page.goto('/pulls');
+    await expect(page.locator('.changes-hub-tab[data-tab="received"] .changes-hub-counter')).toHaveText(navCount);
     await context.close();
   });
 
@@ -72,9 +89,9 @@ test.describe('Change requests hub (#94)', () => {
     await filterMenu.locator('.changes-hub-filter-item[data-state="open"]').click();
     await expect(page).toHaveURL(/tab=sent&state=open/);
     await expect(page.locator('.changes-hub-filter-item[data-state="open"]')).toHaveAttribute('aria-checked', 'true');
-    for (const state of await page.locator('.changes-hub-row').evaluateAll((els) => els.map((el) => el.getAttribute('data-state')))) {
-      expect(state).toBe('open');
-    }
+    const states = await page.locator('.changes-hub-row').evaluateAll((els) => els.map((el) => el.getAttribute('data-state')));
+    expect(states, 'rows after filtering to Open').not.toHaveLength(0);
+    expect(new Set(states)).toEqual(new Set(['open']));
 
     // Sort's arrows point up and down: Figma's arrow-switch-24 (7368:274608) is Primer's
     // arrow-switch turned a quarter
@@ -106,11 +123,11 @@ test.describe('Change requests hub (#94)', () => {
     await context.close();
   });
 
-  test('the desktop layout follows the frame', async ({browser}, workerInfo) => {
+  test('the desktop layout follows the frame', async ({browser, isMobile}, workerInfo) => {
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
     const page = await context.newPage();
     // eslint-disable-next-line playwright/no-skipped-test
-    test.skip(isPhone(page), 'the desktop frame');
+    test.skip(isMobile, 'the desktop frame');
     await page.goto('/pulls');
 
     const toolbar = await page.locator('.changes-hub-toolbar').boundingBox();
@@ -127,11 +144,11 @@ test.describe('Change requests hub (#94)', () => {
     await context.close();
   });
 
-  test('the phone layout follows the Mobile frame', async ({browser}, workerInfo) => {
+  test('the phone layout follows the Mobile frame', async ({browser, isMobile}, workerInfo) => {
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
     const page = await context.newPage();
     // eslint-disable-next-line playwright/no-skipped-test
-    test.skip(!isPhone(page), 'the Mobile frame');
+    test.skip(!isMobile, 'the Mobile frame');
     await page.goto('/pulls');
 
     // no Back; Search, Filter and Sort above the tabs; the state under the first line
@@ -145,6 +162,26 @@ test.describe('Change requests hub (#94)', () => {
     await expect(page.locator('.changes-hub-pages')).toBeHidden();
     // no sideways scroll
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await context.close();
+  });
+
+  test('Mentions shows who mentioned the user, and quotes it', async ({browser, isMobile}, workerInfo) => {
+    await comment_as_user1(`@user2 could you check the dates? (${workerInfo.project.name})`);
+    const context = await load_logged_in_context(browser, workerInfo, 'user2');
+    const page = await context.newPage();
+
+    // Gitea's dashboard link lands on the tab
+    await page.goto('/pulls?type=mentioned');
+    await expect(page.locator('.changes-hub-tab.active')).toHaveAttribute('data-tab', 'mentions');
+    await expect(page.locator('.changes-hub-tab.active .changes-hub-counter')).toHaveText(/^[1-9]\d*$/);
+
+    const row = page.locator('.changes-hub-row[href$="/pulls/3"]');
+    await expect(row.locator('.changes-hub-line')).toHaveText('user1 mentioned you on example-subject');
+    await expect(row.locator('.changes-hub-line strong')).toHaveText(['user1', 'example-subject']);
+    await expect(row.locator('.changes-hub-quote')).toContainText('"@user2 could you check the dates? (');
+    // on a phone, the last page ends with "That's all your mentions"
+    await expect(page.locator('.changes-hub-end')).toBeVisible({visible: isMobile});
+    await expect(page.locator('.changes-hub-end')).toHaveText('That\'s all your mentions');
     await context.close();
   });
 });

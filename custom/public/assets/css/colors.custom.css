@@ -90,9 +90,6 @@
   --color-overlay-backdrop: rgba(0, 0, 0, 0.5);
   --color-shadow-medium: rgba(0, 0, 0, 0.15);
 
-  /* Navbar pill */
-  --color-navbar-pill-bg: #818B9826;
-
   /* Info banner (purple-tinted) */
   --color-banner-bg: #f0ecff;
   --color-banner-border: #d8d0f0;

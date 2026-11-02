@@ -28,15 +28,23 @@ const tplChangeRequests templates.TplName = "user/dashboard/change_requests"
 
 // The states a change request can be filtered by (the Filter menu, Figma 7368:275387).
 const (
-	ChangeRequestOpen   = "open"
-	ChangeRequestMerged = "merged"
-	ChangeRequestClosed = "closed"
+	changeRequestOpen   = "open"
+	changeRequestMerged = "merged"
+	changeRequestClosed = "closed"
 )
 
-var changeRequestStates = []string{ChangeRequestOpen, ChangeRequestMerged, ChangeRequestClosed}
+// maxChangeRequestPage bounds the page asked for: past it the offsets would be absurd
+// (and `?page=9223372036854775807` would overflow them).
+const maxChangeRequestPage = 10_000
 
-// changeRequestSorts are the Sort menu's entries (Figma 7368:275446), in its order,
-// with the sort types of the issue search they map to.
+// maxFilteredChangeRequests bounds the search that tells merged from closed, which
+// gathers every candidate to filter them here: past it, the total says "N+".
+var maxFilteredChangeRequests = 5_000
+
+var changeRequestStates = []string{changeRequestOpen, changeRequestMerged, changeRequestClosed}
+
+// changeRequestSorts are the Sort menu's entries (Figma 7368:275446), in its order, as
+// the issue search's sort types; the first is the default.
 var changeRequestSorts = []string{"recentupdate", "leastupdate", "latest", "oldest", "mostcomment", "leastcomment", "nearduedate", "farduedate"}
 
 // mentionQuoteLength caps the excerpt of the comment that mentions the user.
@@ -64,11 +72,11 @@ type ChangeRequestRow struct {
 func changeRequestState(issue *issues_model.Issue) string {
 	switch {
 	case issue.PullRequest != nil && issue.PullRequest.HasMerged:
-		return ChangeRequestMerged
+		return changeRequestMerged
 	case issue.IsClosed:
-		return ChangeRequestClosed
+		return changeRequestClosed
 	default:
-		return ChangeRequestOpen
+		return changeRequestOpen
 	}
 }
 
@@ -98,13 +106,14 @@ func toggleChangeRequestState(states []string, state string) string {
 }
 
 // searchChangeRequests returns one page of the change requests matching opts and the
-// keyword in the given states, and how many there are in all. The issue search only
-// tells open from closed, so when merged and closed ones are told apart it searches
-// every candidate and filters them here.
-func searchChangeRequests(ctx *context.Context, keyword string, opts *issues_model.IssuesOptions, states []string, page, pageSize int) ([]int64, int64, error) {
-	open := slices.Contains(states, ChangeRequestOpen)
-	merged := slices.Contains(states, ChangeRequestMerged)
-	closed := slices.Contains(states, ChangeRequestClosed)
+// keyword in the given states, how many there are in all, and whether that total stopped
+// at maxFilteredChangeRequests. The issue search only tells open from closed, so when
+// merged and closed ones are told apart it gathers the first maxFilteredChangeRequests
+// candidates and filters them here.
+func searchChangeRequests(ctx *context.Context, keyword string, opts *issues_model.IssuesOptions, states []string, page, pageSize int) ([]int64, int64, bool, error) {
+	open := slices.Contains(states, changeRequestOpen)
+	merged := slices.Contains(states, changeRequestMerged)
+	closed := slices.Contains(states, changeRequestClosed)
 	if len(states) > 0 && !open {
 		opts.IsClosed = optional.Some(true)
 	} else if open && !merged && !closed {
@@ -113,31 +122,32 @@ func searchChangeRequests(ctx *context.Context, keyword string, opts *issues_mod
 
 	if merged == closed {
 		opts.Paginator = &db.ListOptions{Page: page, PageSize: pageSize}
-		return issue_indexer.SearchIssues(ctx, issue_indexer.ToSearchOptions(keyword, opts))
+		ids, total, err := issue_indexer.SearchIssues(ctx, issue_indexer.ToSearchOptions(keyword, opts))
+		return ids, total, false, err
 	}
 
-	// (a PageSize, because the database indexer reads a zero PageSize as "count only")
-	opts.Paginator = &db.ListOptions{ListAll: true, PageSize: pageSize}
+	opts.Paginator = &db.ListOptions{Page: 1, PageSize: maxFilteredChangeRequests}
 	ids, _, err := issue_indexer.SearchIssues(ctx, issue_indexer.ToSearchOptions(keyword, opts))
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
+	capped := len(ids) >= maxFilteredChangeRequests
 	// only the two flags, read in chunks: not the issues themselves in one IN (...)
 	mergedIDs, err := issues_model.GetMergedPullIssueIDs(ctx, ids)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
 	closedIDs, err := issues_model.GetClosedIssueIDs(ctx, ids)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
 	matching := make([]int64, 0, len(ids))
 	for _, id := range ids { // in the search's order
-		state := ChangeRequestOpen
+		state := changeRequestOpen
 		if mergedIDs.Contains(id) {
-			state = ChangeRequestMerged
+			state = changeRequestMerged
 		} else if closedIDs.Contains(id) {
-			state = ChangeRequestClosed
+			state = changeRequestClosed
 		}
 		if slices.Contains(states, state) {
 			matching = append(matching, id)
@@ -145,7 +155,7 @@ func searchChangeRequests(ctx *context.Context, keyword string, opts *issues_mod
 	}
 	start := min((page-1)*pageSize, len(matching))
 	end := min(start+pageSize, len(matching))
-	return matching[start:end], int64(len(matching)), nil
+	return matching[start:end], int64(len(matching)), capped, nil
 }
 
 // ChangeRequests renders the change requests hub (#94): the change requests to the
@@ -174,7 +184,7 @@ func ChangeRequests(ctx *context.Context) {
 	}
 	states := parseChangeRequestStates(ctx.FormString("state"))
 	keyword := strings.TrimSpace(ctx.FormString("q"))
-	page := max(ctx.FormInt("page"), 1)
+	page := min(max(ctx.FormInt("page"), 1), maxChangeRequestPage)
 	pageSize := setting.UI.IssuePagingNum
 
 	// the articles the user owns or maintains, looked up once for the list and every counter
@@ -185,7 +195,7 @@ func ChangeRequests(ctx *context.Context) {
 	}
 	opts := common.ChangeRequestsOptions(ctx.Doer, repoIDs, tab)
 	opts.SortType = sortType
-	ids, total, err := searchChangeRequests(ctx, keyword, opts, states, page, pageSize)
+	ids, total, totalCapped, err := searchChangeRequests(ctx, keyword, opts, states, page, pageSize)
 	if err != nil {
 		ctx.ServerError("searchChangeRequests", err)
 		return
@@ -225,7 +235,7 @@ func ChangeRequests(ctx *context.Context) {
 			Article: issue.Repo.GetSubject(ctx),
 			When:    issue.UpdatedUnix,
 		}
-		row.HasConflicts = row.State == ChangeRequestOpen && issue.PullRequest != nil && issue.PullRequest.Status == issues_model.PullRequestStatusConflict
+		row.HasConflicts = row.State == changeRequestOpen && issue.PullRequest != nil && issue.PullRequest.Status == issues_model.PullRequestStatusConflict
 		switch tab {
 		case common.ChangeRequestsSent:
 			row.Who = issue.Repo.Owner
@@ -261,7 +271,6 @@ func ChangeRequests(ctx *context.Context) {
 	}
 
 	pager := context.NewPagination(int(total), pageSize, page, 5)
-	pager.AddParamFromRequest(ctx.Req)
 
 	ctx.Data["Title"] = ctx.Tr("change_requests_hub.title")
 	ctx.Data["PageIsChangeRequestsHub"] = true
@@ -281,6 +290,7 @@ func ChangeRequests(ctx *context.Context) {
 	ctx.Data["Keyword"] = keyword
 	ctx.Data["Rows"] = rows
 	ctx.Data["Total"] = total
+	ctx.Data["TotalCapped"] = totalCapped
 	ctx.Data["ShownUpTo"] = (page-1)*pageSize + len(rows)
 	ctx.Data["Page"] = pager
 

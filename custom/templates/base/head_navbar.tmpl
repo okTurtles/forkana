@@ -34,7 +34,7 @@
 				{{else if .PageGlobalData}}
 					{{$crCount = call .PageGlobalData.GetOpenReceivedChangeRequestCount}}
 				{{end}}
-				<a id="navbar-change-requests" class="item{{if or .PageIsPullList .PageIsChangeRequestsHub}} navbar-item-current{{end}}" href="{{AppSubUrl}}/pulls"{{if or .PageIsPullList .PageIsChangeRequestsHub}} aria-current="page"{{end}}>
+				<a id="navbar-change-requests" class="item{{if or .PageIsPullList .PageIsPulls .PageIsChangeRequestsHub}} navbar-item-current{{end}}" href="{{AppSubUrl}}/pulls"{{if or .PageIsPullList .PageIsPulls .PageIsChangeRequestsHub}} aria-current="page"{{end}}>
 					<span class="navbar-item-label">{{ctx.Locale.Tr "change_requests_hub.nav"}}</span>
 					{{if $crCount}}<span class="navbar-counter" data-tooltip-content="{{ctx.Locale.Tr "change_requests_hub.nav_count" $crCount}}">{{CountFmt $crCount}}</span>{{end}}
 				</a>

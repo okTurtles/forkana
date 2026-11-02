@@ -17,7 +17,7 @@
 		<nav class="changes-hub-tabs" aria-label="{{ctx.Locale.Tr "change_requests_hub.tabs"}}">
 			{{range $t := .Tabs}}
 				{{$active := eq $t $.Tab}}
-				<a class="changes-hub-tab{{if $active}} active{{end}}" data-tab="{{$t}}" href="{{QueryBuild (print AppSubUrl "/pulls?") "tab" (Iif (eq $t "received") "" $t) "state" $.StateFilter "sort" $.SortParam "q" $.Keyword}}"{{if $active}} aria-current="page"{{end}}>
+				<a class="changes-hub-tab{{if $active}} active{{end}}" data-tab="{{$t}}" href="{{QueryBuild $base "tab" (Iif (eq $t (index $.Tabs 0)) "" $t)}}"{{if $active}} aria-current="page"{{end}}>
 					<span class="changes-hub-tab-inner">
 						{{if eq $t "received"}}{{svg "octicon-inbox" 16}}{{else if eq $t "sent"}}{{svg "octicon-paper-airplane" 16}}{{else}}{{svg "octicon-mention" 16}}{{end}}
 						<span class="changes-hub-tab-label">{{ctx.Locale.Tr (print "change_requests_hub.tab." $t)}}</span>
@@ -56,7 +56,7 @@
 					{{svg "octicon-triangle-down" 16 "changes-hub-menu-caret"}}
 					<div class="left menu changes-hub-sort-menu">
 						{{range $s := .Sorts}}
-							<a class="item{{if eq $s $.SortType}} active selected{{end}}" data-sort="{{$s}}" href="{{QueryBuild $base "sort" (Iif (eq $s "recentupdate") "" $s)}}">{{ctx.Locale.Tr (print "change_requests_hub.sort." $s)}}</a>
+							<a class="item{{if eq $s $.SortType}} active selected{{end}}" data-sort="{{$s}}" href="{{QueryBuild $base "sort" (Iif (eq $s (index $.Sorts 0)) "" $s)}}">{{ctx.Locale.Tr (print "change_requests_hub.sort." $s)}}</a>
 						{{end}}
 					</div>
 				</div>
@@ -107,7 +107,7 @@
 
 			{{if .Rows}}
 				<div class="changes-hub-footer">
-					<span class="changes-hub-shown">{{ctx.Locale.Tr "change_requests_hub.shown" .ShownUpTo .Total}}</span>
+					<span class="changes-hub-shown">{{if .TotalCapped}}{{ctx.Locale.Tr "change_requests_hub.shown_capped" .ShownUpTo .Total}}{{else}}{{ctx.Locale.Tr "change_requests_hub.shown" .ShownUpTo .Total}}{{end}}</span>
 					{{with .Page.Paginater}}
 						<nav class="changes-hub-pagination" aria-label="{{ctx.Locale.Tr "change_requests_hub.pagination"}}">
 							{{if .HasPrevious}}

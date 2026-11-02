@@ -106,9 +106,6 @@
   --color-overlay-backdrop: rgba(0, 0, 0, 0.75);
   --color-shadow-medium: rgba(0, 0, 0, 0.4);
 
-  /* Navbar pill */
-  --color-navbar-pill-bg: #ffffff1a;
-
   /* Info banner (dark purple-tinted) */
   --color-banner-bg: #1a1730;
   --color-banner-border: #312a5e;
@@ -232,9 +229,6 @@
     /* Overlay & shadow */
     --color-overlay-backdrop: rgba(0, 0, 0, 0.75);
     --color-shadow-medium: rgba(0, 0, 0, 0.4);
-
-    /* Navbar pill */
-    --color-navbar-pill-bg: #ffffff1a;
 
     /* Info banner (dark purple-tinted) */
     --color-banner-bg: #1a1730;

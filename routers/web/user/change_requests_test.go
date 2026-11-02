@@ -158,11 +158,11 @@ func TestChangeRequestsHub(t *testing.T) {
 		for _, row := range changeRequestsPage(t, 2, nil)["Rows"].([]*ChangeRequestRow) {
 			switch row.Issue.ID {
 			case 2:
-				assert.Equal(t, ChangeRequestMerged, row.State)
+				assert.Equal(t, changeRequestMerged, row.State)
 			case 11:
-				assert.Equal(t, ChangeRequestClosed, row.State)
+				assert.Equal(t, changeRequestClosed, row.State)
 			case 3:
-				assert.Equal(t, ChangeRequestOpen, row.State)
+				assert.Equal(t, changeRequestOpen, row.State)
 			}
 		}
 	})
@@ -178,6 +178,24 @@ func TestChangeRequestsHub(t *testing.T) {
 		assert.Len(t, second["Rows"], 1)
 		assert.Equal(t, 2, second["ShownUpTo"])
 		assert.NotEqual(t, rowIssueIDs(first), rowIssueIDs(second))
+		assert.Equal(t, false, first["TotalCapped"])
+	})
+
+	t.Run("Page out of range", func(t *testing.T) {
+		// an absurd page neither panics (overflowed offsets) nor reaches the database as a
+		// negative OFFSET, on the plain path and on the one that tells merged from closed
+		for _, state := range []string{"", "open", "merged", "open,merged", "closed"} {
+			data := changeRequestsPage(t, 2, map[string]string{"state": state, "page": "9223372036854775807"})
+			assert.Empty(t, data["Rows"], state)
+			assert.GreaterOrEqual(t, data["ShownUpTo"], 0, state)
+		}
+	})
+
+	t.Run("Capped total", func(t *testing.T) {
+		defer test.MockVariableValue(&maxFilteredChangeRequests, 2)()
+		data := changeRequestsPage(t, 2, map[string]string{"state": "open,merged"})
+		assert.Equal(t, true, data["TotalCapped"])
+		assert.LessOrEqual(t, data["Total"].(int64), int64(2))
 	})
 
 	t.Run("Navbar counter", func(t *testing.T) {
