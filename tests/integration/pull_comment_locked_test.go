@@ -79,10 +79,19 @@ func TestChangeRequestContentLocked(t *testing.T) {
 		commentURL := fmt.Sprintf("/api/v1/repos/user2/repo1/issues/comments/%d", comment.ID)
 		MakeRequest(t, NewRequestWithJSON(t, "PATCH", commentURL, &api.EditIssueCommentOption{Body: "edited"}).AddTokenAuth(token), http.StatusForbidden)
 		MakeRequest(t, NewRequest(t, "DELETE", commentURL).AddTokenAuth(token), http.StatusForbidden)
+
+		// the description can't be rewritten through the pull or the issue route either, and a
+		// rejected request doesn't change the other fields it carries
+		token = getUserToken(t, "user1", auth_model.AccessTokenScopeWriteIssue, auth_model.AccessTokenScopeWriteRepository)
+		body := "edited"
+		MakeRequest(t, NewRequestWithJSON(t, "PATCH", fmt.Sprintf("/api/v1/repos/user2/repo1/pulls/%d", pull.Index),
+			&api.EditPullRequestOption{Title: "edited title", Body: &body}).AddTokenAuth(token), http.StatusForbidden)
+		MakeRequest(t, NewRequestWithJSON(t, "PATCH", fmt.Sprintf("/api/v1/repos/user2/repo1/issues/%d", pull.Index),
+			&api.EditIssueOption{Title: "edited title", Body: &body}).AddTokenAuth(token), http.StatusForbidden)
 	})
 
 	unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{ID: comment.ID, Content: "a change request comment"})
-	unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: pull.ID, Content: pull.Content})
+	unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: pull.ID, Title: pull.Title, Content: pull.Content})
 }
 
 // TestIssueContentNotLocked makes sure #146 stays scoped to change requests: a plain issue's
