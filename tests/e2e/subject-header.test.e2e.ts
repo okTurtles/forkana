@@ -38,13 +38,15 @@ function boxOf(page: Page, selector: string): Promise<Box> {
   });
 }
 
+// (Compare is null in the Article view, which has none: #478, figma 7368:263253 and
+// 7368:264887)
 async function headerOf(page: Page) {
   await page.evaluate(() => document.fonts.ready);
   return {
     title: await boxOf(page, '.subject-header h1'),
     follow: await boxOf(page, '.repo-header-follow'),
     tabs: await boxOf(page, '#subject-view-tabs'),
-    compare: await boxOf(page, '#compare-mode-button'),
+    compare: await page.locator('#compare-mode-button').isVisible() ? await boxOf(page, '#compare-mode-button') : null,
   };
 }
 
@@ -69,9 +71,11 @@ async function settle(page: Page) {
 function expectSameHeader(actual: Awaited<ReturnType<typeof headerOf>>, expected: Awaited<ReturnType<typeof headerOf>>, label: string) {
   expect(actual.title, `${label}: title`).toEqual(expected.title);
   expect(actual.tabs, `${label}: view tabs`).toEqual(expected.tabs);
-  expect(actual.compare.y, `${label}: Compare`).toBe(expected.compare.y);
-  expect(actual.compare.height, `${label}: Compare`).toBe(expected.compare.height);
-  expect(actual.compare.x + actual.compare.width, `${label}: Compare`).toBeCloseTo(expected.compare.x + expected.compare.width, 0);
+  if (actual.compare && expected.compare) {
+    expect(actual.compare.y, `${label}: Compare`).toBe(expected.compare.y);
+    expect(actual.compare.height, `${label}: Compare`).toBe(expected.compare.height);
+    expect(actual.compare.x + actual.compare.width, `${label}: Compare`).toBeCloseTo(expected.compare.x + expected.compare.width, 0);
+  }
   expect(actual.follow.y, `${label}: Follow`).toBe(expected.follow.y);
   expect(actual.follow.height, `${label}: Follow`).toBe(expected.follow.height);
   expect(actual.follow.x + actual.follow.width / 2, `${label}: Follow`).toBeCloseTo(expected.follow.x + expected.follow.width / 2, 0);
@@ -157,7 +161,10 @@ for (const {width, column} of layouts) {
       const reference = await headerOf(page);
       for (const view of compared) {
         await open(page, view);
-        expectSameHeader(await headerOf(page), reference, view);
+        const header = await headerOf(page);
+        expectSameHeader(header, reference, view);
+        // Compare in the Bubble and Table views, not in the Article view (#478)
+        expect(header.compare === null, `${view}: no Compare`).toBe(view !== 'table');
         const content = await boxOf(page, '.history-view-section:not([hidden]) :is(.history-table, #article-view-root)');
         expect(content.width, `${view}: content column`).toBe(column);
       }
@@ -181,6 +188,9 @@ for (const {width, column} of layouts) {
 
     // Info bars stay in the flow on every width (Pierre's decision on #469): a bar sits
     // right under the navbar, above the header, and pushes the header down by its height.
+    // Its top rule lies on the navbar's bottom one (#478: figma's Announcements 7368:264940
+    // and 7368:260311 are at y 63 under the 64px Navbar), so it starts 1px up and pushes
+    // the header down by its height less that 1px.
     test('an info bar sits in the flow above the header and pushes it down by its height', async ({page}) => {
       await open(page, 'read');
       const reference = await headerOf(page);
@@ -191,11 +201,11 @@ for (const {width, column} of layouts) {
       await expect(page.locator('#article-signin-banner')).toBeVisible();
       await settle(page);
       const banner = await boxOf(page, '#article-signin-banner');
-      expect(banner.y).toBeCloseTo(navbar.y + navbar.height, 0);
+      expect(banner.y).toBeCloseTo(navbar.y + navbar.height - 1, 0);
       const pushed = await headerOf(page);
-      expect(pushed.title.y).toBeCloseTo(reference.title.y + banner.height, 0);
-      expect(pushed.follow.y).toBeCloseTo(reference.follow.y + banner.height, 0);
-      expect(pushed.tabs.y).toBeCloseTo(reference.tabs.y + banner.height, 0);
+      expect(pushed.title.y).toBeCloseTo(reference.title.y + banner.height - 1, 0);
+      expect(pushed.follow.y).toBeCloseTo(reference.follow.y + banner.height - 1, 0);
+      expect(pushed.tabs.y).toBeCloseTo(reference.tabs.y + banner.height - 1, 0);
 
       // the Bubble view's Compare banner
       await open(page, 'bubble');
@@ -203,8 +213,8 @@ for (const {width, column} of layouts) {
       await expect(page.locator('.compare-announcement')).toBeVisible();
       await settle(page);
       const compareBanner = await boxOf(page, '.compare-announcement');
-      expect(compareBanner.y).toBeCloseTo(navbar.y + navbar.height, 0);
-      expect((await headerOf(page)).tabs.y).toBeCloseTo(reference.tabs.y + compareBanner.height, 0);
+      expect(compareBanner.y).toBeCloseTo(navbar.y + navbar.height - 1, 0);
+      expect((await headerOf(page)).tabs.y).toBeCloseTo(reference.tabs.y + compareBanner.height - 1, 0);
     });
   });
 }

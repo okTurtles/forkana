@@ -15,6 +15,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"code.gitea.io/gitea/models/db"
 	git_model "code.gitea.io/gitea/models/git"
@@ -932,11 +933,13 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	ctx.Data["ReadmeContributorCount"] = articleContributorCount(ctx, gitRepo)
 
 	// Get last commit for the readme file
+	changeTimes := newArticleChangeTimes(ctx, ctx.Repo.Repository)
 	lastCommit, err := gitRepo.GetCommitByPath(readmeTreePath)
 	if err != nil {
 		log.Warn("Failed to get last commit: %v", err)
 	} else {
 		ctx.Data["ReadmeLastCommit"] = lastCommit
+		ctx.Data["ReadmeLastUpdated"] = changeTimes.of(lastCommit)
 	}
 
 	// Handle different modes
@@ -955,6 +958,21 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		if fileSize >= setting.UI.MaxDisplayFileSize {
 			ctx.Data["IsFileTooLarge"] = true
 			return
+		}
+
+		// (read once: the summary and the rendering both need it, and it is small)
+		raw, err := io.ReadAll(charset.ToUTF8WithFallbackReader(io.MultiReader(bytes.NewReader(buf), dataRc), charset.ConvertOpts{}))
+		if err != nil {
+			ctx.ServerError("ReadAll", err)
+			return
+		}
+
+		// The summary under the article's path (#433 item 7, #478; figma Text 7368:264726):
+		// its description, or else its first paragraph, the summary the Bubble and Table
+		// views show for an article without a description.
+		ctx.Data["ArticleSummary"] = ctx.Repo.Repository.Description
+		if ctx.Repo.Repository.Description == "" {
+			ctx.Data["ArticleSummary"] = articleSummary(util.UnsafeBytesToString(raw))
 		}
 
 		// Detect if this is markup
@@ -978,9 +996,8 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			metas["markdownRenderMetaAs"] = string(markup.RenderMetaAsNone)
 			rctx = rctx.WithMetas(metas)
 
-			rd := charset.ToUTF8WithFallbackReader(io.MultiReader(bytes.NewReader(buf), dataRc), charset.ConvertOpts{})
 			var escapeStatus *charset.EscapeStatus
-			escapeStatus, ctx.Data["FileContent"], err = markupRender(ctx, rctx, rd)
+			escapeStatus, ctx.Data["FileContent"], err = markupRender(ctx, rctx, bytes.NewReader(raw))
 			if err != nil {
 				log.Error("Render failed for %s in %-v: %v", readmeFile.Name(), ctx.Repo.Repository, err)
 				ctx.Data["IsMarkup"] = false
@@ -990,12 +1007,7 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 
 		if ctx.Data["IsMarkup"] != true {
 			ctx.Data["IsPlainText"] = true
-			rd := charset.ToUTF8WithFallbackReader(io.MultiReader(bytes.NewReader(buf), dataRc), charset.ConvertOpts{})
-			content, err := io.ReadAll(rd)
-			if err != nil {
-				log.Error("Read readme content failed: %v", err)
-			}
-			contentEscaped := template.HTMLEscapeString(util.UnsafeBytesToString(content))
+			contentEscaped := template.HTMLEscapeString(util.UnsafeBytesToString(raw))
 			ctx.Data["EscapeStatus"], ctx.Data["FileContent"] = charset.EscapeControlHTML(template.HTML(contentEscaped), ctx.Locale)
 		}
 
@@ -1071,6 +1083,11 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		}
 
 		ctx.Data["Commits"] = processedCommits
+		historyTimes := make(map[string]time.Time, len(processedCommits))
+		for _, c := range processedCommits {
+			historyTimes[c.ID.String()] = changeTimes.of(c.Commit)
+		}
+		ctx.Data["HistoryChangeTimes"] = historyTimes
 		ctx.Data["CommitsFromOtherArticles"] = commitsFromOtherArticles(ctx, processedCommits)
 		ctx.Data["CommitCount"] = commitsCount
 		ctx.Data["FileTreePath"] = readmeTreePath

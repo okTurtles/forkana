@@ -351,6 +351,17 @@ func ReqChangeRepoFileOptionsAndCheck(ctx *context.APIContext) {
 		ctx.APIError(http.StatusForbidden, "user should have a permission to write to the target branch")
 		return
 	}
+	// A request without "dates" commits at the time it is made. The defaults must be set
+	// before they are copied into the options: set after (#478), they were lost, and the
+	// commit was made with Go's zero time, "0001-01-01T00:00:00Z", which git reads as
+	// 2001-01-01T00:00:00Z. Every article imported by the first article-creator, which
+	// sent no dates, was created "26 years ago".
+	if commonOpts.Dates.Author.IsZero() {
+		commonOpts.Dates.Author = time.Now()
+	}
+	if commonOpts.Dates.Committer.IsZero() {
+		commonOpts.Dates.Committer = time.Now()
+	}
 	changeFileOpts := &files_service.ChangeRepoFilesOptions{
 		Message:   commonOpts.Message,
 		OldBranch: commonOpts.BranchName,
@@ -368,12 +379,6 @@ func ReqChangeRepoFileOptionsAndCheck(ctx *context.APIContext) {
 			Committer: commonOpts.Dates.Committer,
 		},
 		Signoff: commonOpts.Signoff,
-	}
-	if commonOpts.Dates.Author.IsZero() {
-		commonOpts.Dates.Author = time.Now()
-	}
-	if commonOpts.Dates.Committer.IsZero() {
-		commonOpts.Dates.Committer = time.Now()
 	}
 	ctx.Data["__APIChangeRepoFilesOptions"] = changeFileOpts
 }

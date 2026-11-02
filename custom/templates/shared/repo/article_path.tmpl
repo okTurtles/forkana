@@ -33,7 +33,7 @@
         {{$historyLink := QueryBuild .ArticleLink "view" "article" "mode" "history"}}
         <div class="ui dropdown article-sort-dropdown" data-role="article-history-sort">
             <span class="article-sort-button">
-                {{svg "octicon-arrow-switch" 16}}
+                <span class="article-sort-icon">{{svg "octicon-arrow-switch" 16}}</span>
                 <span>{{ctx.Locale.Tr "repo.article_history_sort"}}</span>
                 {{svg "octicon-triangle-down" 16 "article-sort-caret"}}
             </span>

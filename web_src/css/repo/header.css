@@ -181,6 +181,16 @@
   transition: background 0.1s ease, color 0.1s ease;
 }
 
+/* #478: none in the Article view. Its Read / Edit / History frames hide it (Button
+   I7368:263259;8549:12735 in "Article view / History" 7368:263253, the same in "Article
+   view / Logged out - Edit" 7368:264887); Compare stays one tab away, on the Bubble and
+   Table views (Bubble view 7368:260690, Table view 7368:260448). The views are switched
+   in the page (repo-history.ts), hence the :has(). The row keeps its margins, so the
+   view tabs do not move from one view to another. */
+.page-content:has(.history-view-section--article:not([hidden])) #compare-mode-button {
+  display: none;
+}
+
 overflow-menu:has(> #compare-mode-button) {
   position: relative;
 }

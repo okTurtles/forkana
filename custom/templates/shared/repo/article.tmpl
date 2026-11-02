@@ -29,10 +29,12 @@
                     {{svg "octicon-person" 16}}
                     <span>{{template "shared/repo/contributor_count" (dict "Count" .ReadmeContributorCount "Label" "title")}}</span>
                 </span>
+                {{/* (ReadmeLastUpdated is the commit's date, but for an import made without
+                     one, routers/web/explore/article_change_time.go) */}}
                 {{if and .ReadmeLastCommit .ReadmeLastCommit.Committer}}
                     <span class="article-token" data-role="article-last-updated">
                         {{svg "octicon-sync" 16}}
-                        <span>{{ctx.Locale.Tr "repo.article_last_updated" (DateUtils.TimeSince .ReadmeLastCommit.Committer.When)}}</span>
+                        <span>{{ctx.Locale.Tr "repo.article_last_updated" (DateUtils.TimeSince .ReadmeLastUpdated)}}</span>
                     </span>
                 {{end}}
             </div>
@@ -71,19 +73,37 @@
                     {{end}}
                 </div>
                 <div class="article-tabs-trailing">
-                    {{/* #408: no "..." menu in the Read and History modes. It held a
-                         "Something" placeholder; the only items the figma gives it (Watch and
-                         Report, node 662:98305) are the Watch button below and a report flow
-                         that does not exist yet. */}}
                     {{/* #433 item 3: Watch at the end of the tabs' row (figma View Tab
-                         641:65480, Action I7368:264703;24375:95729), in every tab. The subject
-                         header's Follow star, which toggles the same watch, stays above it
-                         (#469: the header is the same on every view). The hidden input is the article's id,
-                         which the star sends so that its answer can update this button. */}}
+                         641:65480, Action I7368:264703;24375:95729), in every tab but Edit
+                         (hidden by CSS there). The subject header's Follow star, which toggles
+                         the same watch, stays above it (#469: the header is the same on every
+                         view). The hidden input is the article's id, which the star sends so
+                         that its answer can update this button. On a phone it is an icon
+                         ("Watch (icon)" 7629:71522 in Mobile 7368:263684). */}}
                     {{if .RepoOperationsLink}}
                         <div class="article-watch">
                             {{if .IsSigned}}<input type="hidden" id="article-watch-sync" name="sync_button_repo" value="{{.Repository.ID}}">{{end}}
                             <div id="article-watch-slot">{{template "repo/watch_button" .}}</div>
+                        </div>
+                    {{end}}
+                    {{/* #478: the "…" button after Watch, at the end of the row, in every tab
+                         but Edit (Action 7368:264704 of "Article view / Logged out - Read only"
+                         7368:264676, 7368:263274 of "Article view / History" 7368:263253,
+                         7601:70817 of Mobile 7368:263684; the Edit frame 7368:264887 has Fork
+                         and Submit changes there instead). Its menu ("Profile" 7368:404268 in
+                         "Report" 7368:404084, the frame of the Report button) holds Report,
+                         which has no flow yet: shown, but unavailable. (The menu's Watch item,
+                         7368:404275, is hidden: Watch is the button before it.) */}}
+                    {{if not .IsArticleModeEdit}}
+                        <div class="ui dropdown jump article-more-dropdown" data-role="article-more">
+                            <button type="button" class="article-more-button" aria-haspopup="menu" aria-label="{{ctx.Locale.Tr "repo.article_more_actions"}}">
+                                {{svg "octicon-kebab-horizontal" 16}}
+                            </button>
+                            <div class="menu">
+                                <div class="item article-more-report" aria-disabled="true" data-tooltip-content="{{ctx.Locale.Tr "repo.article_report_unavailable"}}">
+                                    {{svg "forkana-flag-16" 16}}<span>{{ctx.Locale.Tr "repo.article_report"}}</span>
+                                </div>
+                            </div>
                         </div>
                     {{end}}
                     {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}

@@ -11,9 +11,9 @@ test.describe('Article view layout (signed out)', () => {
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
 
     // #433 items 5 and 9: no placeholder line, no back link. #469: the subject header is
-    // the one of every view, its Compare button and Follow star included
-    // (subject-header.test.e2e.ts)
-    await expect(page.locator('#compare-mode-button')).toBeVisible();
+    // the one of every view (subject-header.test.e2e.ts), but for Compare, which the
+    // Article view frames do not have (#478: 7368:263253, 7368:264887)
+    await expect(page.locator('#compare-mode-button')).toBeHidden();
     await expect(page.locator('[data-role="back-to-bubble"]')).toHaveCount(0);
     await expect(page.locator('#article-view-root')).not.toContainText('marked this article as correct');
 
@@ -28,6 +28,30 @@ test.describe('Article view layout (signed out)', () => {
     await expect(watch).toContainText('Watch');
     await expect(watch).toHaveAttribute('href', /\/user\/login\?redirect_to=/);
     await expect(page.locator('.repo-header-follow')).toBeVisible();
+
+    // #478: the "…" button after Watch, ending the 640px row (Action 7368:264704: 40×28,
+    // 9px after Watch), its menu holding Report, unavailable for now ("Profile"
+    // 7368:404268: 108×44, its right edge on the button's)
+    const more = page.locator('#article-tabs .article-more-button');
+    await expect(more).toBeVisible();
+    const row = await page.locator('#article-tabs').boundingBox();
+    const button = await more.boundingBox();
+    const watchBox = await watch.boundingBox();
+    expect([button.width, button.height]).toEqual([40, 28]);
+    expect(button.x + button.width).toBeCloseTo(row.x + row.width, 0);
+    // (side by side on a phone, where Watch is the 32×32 icon: Mobile 7368:263684)
+    const phone = page.viewportSize().width < 768;
+    expect(button.x - (watchBox.x + watchBox.width)).toBeCloseTo(phone ? 0 : 9, 0);
+    if (phone) expect([watchBox.width, watchBox.height]).toEqual([32, 32]);
+    await more.click();
+    const menu = page.locator('[data-role="article-more"] > .menu');
+    await expect(menu).toBeVisible();
+    const menuBox = await menu.boundingBox();
+    expect([menuBox.width, menuBox.height]).toEqual([108, 44]);
+    expect(menuBox.x + menuBox.width).toBeCloseTo(button.x + button.width, 0);
+    const report = menu.locator('.article-more-report');
+    await expect(report).toHaveText('Report');
+    await expect(report).toHaveAttribute('aria-disabled', 'true');
 
     // item 4: the path names the article by its subject, both parts are links
     const breadcrumb = page.locator('[data-role="article-breadcrumb"]');
@@ -80,6 +104,12 @@ test.describe('Article view layout (signed out)', () => {
     // #435 item 7: no CopyRef here, item 6: the Sort menu instead
     await expect(page.locator('.article-copy-ref')).toHaveCount(0);
     await expect(page.locator('[data-role="article-history-sort"]')).toBeVisible();
+    // #478: its arrows point up and down (arrow-switch-24 I7368:263516;30258:6005), as the
+    // Table view's Sort button draws them; Button 7368:263516 is 26px tall
+    const sortIcon = await page.locator('[data-role="article-history-sort"] .article-sort-icon svg').boundingBox();
+    expect(sortIcon.width).toBeCloseTo(16, 0);
+    await expect(page.locator('[data-role="article-history-sort"] .article-sort-icon')).toHaveCSS('transform', /^matrix\(\S+, 1, -1, \S+, 0, 0\)$/); // a quarter turn
+    expect((await page.locator('[data-role="article-history-sort"] .article-sort-button').boundingBox()).height).toBe(26);
 
     // items 8 and 10: rounded table frame, avatars with 6px corners
     const table = page.locator('[data-role="article-history"]');
