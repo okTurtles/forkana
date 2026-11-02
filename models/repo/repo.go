@@ -440,8 +440,9 @@ func (repo *Repository) HTMLURL(ctxs ...context.Context) string {
 	return httplib.MakeAbsoluteURL(ctx, repo.LinkCtx(ctx))
 }
 
-// CommitLink returns a link to the article view at the given commit ID.
-// It does not check whether the ID actually exists. Callers that have a ctx should
+// CommitLink returns a link to the given commit ID: the article view's "version" query
+// parameter for an article, the repository commit route for a repository without a
+// subject. It does not check whether the ID actually exists. Callers that have a ctx should
 // pass it, for the same reasons as LinkCtx.
 func (repo *Repository) CommitLink(commitID string, ctxs ...context.Context) string {
 	ctx := util.OptionalArg(ctxs, context.TODO())
@@ -464,7 +465,9 @@ func (repo *Repository) commitLink(ctx context.Context, commitID string) string 
 	return repo.articleLink(ctx) + "?version=" + url.QueryEscape(commitID)
 }
 
-// CommitHTMLURL returns the absolute URL of the article view at the given commit ID.
+// CommitHTMLURL returns the absolute URL of CommitLink: the article view at the given
+// commit ID for an article, the repository commit route for a repository without a
+// subject.
 // It does not check whether the ID actually exists.
 func (repo *Repository) CommitHTMLURL(commitID string, ctxs ...context.Context) string {
 	// FIXME: like HTMLURL, this is also used from mail templates, so the "ctx" is optional.
@@ -615,6 +618,11 @@ func (repo *Repository) composeCommonMetas(ctx context.Context) map[string]strin
 			"user":     repo.OwnerName,
 			"repo":     repo.GetSubject(ctx), // Use subject name for URL generation
 			"reponame": repo.Name,            // Actual repository name for cross-reference matching
+		}
+		// a repository without a subject has no article url (see LinkCtx), so the markup
+		// renderers link its own references to its repository route instead (#274)
+		if repo.SubjectID == 0 {
+			metas["nosubject"] = "true"
 		}
 
 		unitExternalTracker, err := repo.GetUnit(ctx, unit.TypeExternalTracker)

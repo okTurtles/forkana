@@ -78,6 +78,10 @@ func TestLinkWithoutSubject(t *testing.T) {
 	assert.Equal(t, setting.AppSubURL+"/user2/repo2", plain.Link())
 	assert.Equal(t, setting.AppSubURL+"/user2/repo2", plain.LinkCtx(t.Context()))
 	assert.Equal(t, setting.AppSubURL+"/user2/repo2/commit/"+sha, plain.CommitLink(sha))
+
+	// the markup renderers learn it from the metas, to link its own references alike
+	assert.Equal(t, "true", plain.ComposeCommentMetas(t.Context())["nosubject"])
+	assert.Empty(t, article.ComposeCommentMetas(t.Context())["nosubject"])
 }
 
 func TestCommitLink(t *testing.T) {
