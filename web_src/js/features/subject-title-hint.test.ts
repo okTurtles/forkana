@@ -56,7 +56,7 @@ test('initSubjectTitleHint blocks submitting an invalid title (#401)', () => {
   expect(input.validationMessage).toBe('No # here');
   expect(form.checkValidity()).toBe(false);
   // apostrophes, punctuation and other scripts are allowed
-  for (const title of [`'''`, `''''''''''''''''`, ';alskdjf', 'Test: Gaudí', '東京', 'iPhone']) {
+  for (const title of [`'''`, `''''''''''''''''`, `""""""""""""`, `"'"`, '“”', `""a""`, ';alskdjf', 'Test: Gaudí', '東京', 'iPhone']) {
     type(title);
     expect(input.validationMessage).toBe('');
     expect(form.checkValidity()).toBe(true);

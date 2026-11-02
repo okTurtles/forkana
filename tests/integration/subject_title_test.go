@@ -498,6 +498,42 @@ func TestSubjectTitleWithoutASCIILetters(t *testing.T) {
 		}
 	})
 
+	t.Run("Titles made of quotes are subjects of their own", func(t *testing.T) {
+		// reported on #401 after the apostrophes: a title made only of double quotes
+		const quotes = `""""""""""""`
+		ids := map[int64]string{long.ID: sixteen}
+		for i, subject := range []string{quotes, `"'"`, "“”", `""`} {
+			req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &api.CreateRepoOption{Name: fmt.Sprintf("quotes-%d", i), Subject: subject}).AddTokenAuth(token)
+			DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &apiRepo)
+			assert.Equal(t, subject, apiRepo.Subject, "stored as typed")
+			stored := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: subject})
+			assert.NotContains(t, ids, stored.ID, "%q resolved to %q", subject, ids[stored.ID])
+			ids[stored.ID] = subject
+		}
+
+		// the create form prefills the title as typed and marks it as existing
+		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/repo/create?subject="+url.QueryEscape(quotes)), http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+		assert.Equal(t, quotes, htmlDoc.Find("input#subject").AttrOr("value", ""))
+		assert.Equal(t, quotes, htmlDoc.Find("[data-subject-title-hint]").AttrOr("data-existing-subject", ""))
+
+		// another user joins it through the web form, with the script's placeholder name
+		user5 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+		session5 := loginUser(t, user5.Name)
+		req := NewRequestWithValues(t, "POST", "/repo/create", map[string]string{
+			"_csrf":     GetUserCSRFToken(t, session5),
+			"uid":       strconv.FormatInt(user5.ID, 10),
+			"subject":   quotes,
+			"repo_name": "subject",
+		})
+		session5.MakeRequest(t, req, http.StatusSeeOther)
+		subject := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: quotes})
+		unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user5.ID, SubjectID: subject.ID, Name: subject.Slug})
+
+		// a quoted ASCII word is that word, like "the moon!" is "The Moon"
+		assert.Equal(t, repo_model.GenerateSlugFromName("A"), repo_model.GenerateSlugFromName(`""a""`))
+	})
+
 	t.Run("A non-Latin letter next to a digit is not dropped", func(t *testing.T) {
 		// these used to share the slug of the bare number
 		ids := map[int64]string{}

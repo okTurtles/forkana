@@ -338,6 +338,17 @@ func TestGenerateSlugFromName(t *testing.T) {
 	assert.Equal(t, repo_model.GenerateSlugFromName("Москва 1980"), repo_model.GenerateSlugFromName("москва  1980"))
 	// Latin letters keep the slug they always had, with or without an ASCII base
 	assert.Equal(t, "strae-1980", repo_model.GenerateSlugFromName("Straße 1980"))
+	// titles made of quotes (reported on #401 after the apostrophes) are subjects of their own;
+	// curly quotes are punctuation, not letters
+	quoteSlugs := map[string]string{}
+	for _, name := range []string{`""""""""""""`, `"'"`, "“”", `''`, `""`, "'''"} {
+		slug := repo_model.GenerateSlugFromName(name)
+		assert.Regexp(t, `^subject-[0-9a-f]{16}$`, slug, name)
+		assert.NotContains(t, quoteSlugs, slug, "%q has the slug of %q", name, quoteSlugs[slug])
+		quoteSlugs[slug] = name
+	}
+	assert.Equal(t, "a", repo_model.GenerateSlugFromName(`""a""`))
+	assert.Equal(t, "a", repo_model.GenerateSlugFromName("“a”"))
 	// modifier letters used as apostrophes are dropped like the ASCII apostrophe
 	assert.Equal(t, "hawaii", repo_model.GenerateSlugFromName("Hawaiʻi"))        // U+02BB
 	assert.Equal(t, "hawaiis", repo_model.GenerateSlugFromName("Hawaiiʼs"))      // U+02BC
