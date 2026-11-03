@@ -387,10 +387,13 @@ test.describe('switching tabs does not move the page', () => {
 type BarSample = {height: number, gap: number};
 
 // Clicks `action` in the page, then samples every frame the height of a bar and how far
-// the title is below it: from the click until `settleMs` after the bar first changed (an
-// article tab is fetched first), or 8s.
-function sampleBar(page: Page, bar: string, action: string, settleMs = 400): Promise<BarSample[]> {
-  return page.evaluate(async ({bar, action, settleMs}) => {
+// the title is below it: from the click until both `settleMs` and `settleFrames` frames
+// have passed since the bar first changed (an article tab is fetched first), or 8s. The
+// frames count because a slide advances by at most 34ms a frame (info-bar-transition.ts):
+// it takes at least 6 frames plus the one that ends it, however slow they are (WebKit on
+// CI draws one every ~100ms), so 400ms alone can stop sampling mid-slide.
+function sampleBar(page: Page, bar: string, action: string, settleMs = 400, settleFrames = 10): Promise<BarSample[]> {
+  return page.evaluate(async ({bar, action, settleMs, settleFrames}) => {
     const measure = () => {
       const el = document.querySelector(bar);
       const rect = el?.getBoundingClientRect();
@@ -400,19 +403,21 @@ function sampleBar(page: Page, bar: string, action: string, settleMs = 400): Pro
     };
     const samples = [measure()];
     document.querySelector<HTMLElement>(action).click();
-    let end = performance.now() + 8000;
-    let changed = false;
-    while (performance.now() < end) {
+    const timeout = performance.now() + 8000;
+    let settleEnd = Infinity;
+    let framesLeft = Infinity;
+    while (performance.now() < timeout && (performance.now() < settleEnd || framesLeft > 0)) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const sample = measure();
       samples.push(sample);
-      if (!changed && Math.abs(sample.height - samples[0].height) > 0.5) {
-        changed = true;
-        end = performance.now() + settleMs;
+      framesLeft--;
+      if (settleEnd === Infinity && Math.abs(sample.height - samples[0].height) > 0.5) {
+        settleEnd = performance.now() + settleMs;
+        framesLeft = settleFrames;
       }
     }
     return samples;
-  }, {bar, action, settleMs});
+  }, {bar, action, settleMs, settleFrames});
 }
 
 // heights going from 0 to full (opening) or from full to 0 (closing), through frames in
