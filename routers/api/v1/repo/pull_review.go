@@ -259,6 +259,12 @@ func DeletePullReview(ctx *context.APIContext) {
 		ctx.APIError(http.StatusForbidden, nil)
 		return
 	}
+	// deleting a submitted review deletes its comments, which are locked on a change request
+	// (#146); a pending review is still a draft nobody else has seen
+	if review.Type != issues_model.ReviewTypePending {
+		ctx.APIError(http.StatusForbidden, "the comments of a change request can't be deleted")
+		return
+	}
 
 	if err := issues_model.DeleteReview(ctx, review); err != nil {
 		ctx.APIErrorInternal(fmt.Errorf("can not delete ReviewID: %d", review.ID))

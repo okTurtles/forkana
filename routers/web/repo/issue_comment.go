@@ -239,7 +239,7 @@ func UpdateCommentContent(ctx *context.Context) {
 		return
 	}
 
-	if !ctx.IsSigned || (ctx.Doer.ID != comment.PosterID && !ctx.Repo.CanWriteIssuesOrPulls(comment.Issue.IsPull)) {
+	if !canModifyIssueComment(ctx, comment) {
 		ctx.HTTPError(http.StatusForbidden)
 		return
 	}
@@ -334,7 +334,7 @@ func DeleteComment(ctx *context.Context) {
 		return
 	}
 
-	if !ctx.IsSigned || (ctx.Doer.ID != comment.PosterID && !ctx.Repo.CanWriteIssuesOrPulls(comment.Issue.IsPull)) {
+	if !canModifyIssueComment(ctx, comment) {
 		ctx.HTTPError(http.StatusForbidden)
 		return
 	} else if !comment.Type.HasContentSupport() {
@@ -493,4 +493,11 @@ func GetCommentAttachments(ctx *context.Context) {
 		attachments = append(attachments, convert.ToAttachment(ctx.Repo.Repository, comment.Attachments[i]))
 	}
 	ctx.JSON(http.StatusOK, attachments)
+}
+
+// canModifyIssueComment reports whether the signed-in user may edit or delete the comment: its
+// poster or an issue/pull writer, unless the content is locked (change requests, #146).
+func canModifyIssueComment(ctx *context.Context, comment *issues_model.Comment) bool {
+	return ctx.IsSigned && !issue_service.IsContentLocked(comment.Issue) &&
+		(ctx.Doer.ID == comment.PosterID || ctx.Repo.CanWriteIssuesOrPulls(comment.Issue.IsPull))
 }

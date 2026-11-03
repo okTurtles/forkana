@@ -57,7 +57,7 @@
 				{{end}}
 				<div class="ui attached segment comment-body" role="article">
 
-					<div class="render-content markup" {{if or $.Permission.IsAdmin $.HasIssuesOrPullsWritePermission (and $.IsSigned (eq $.SignedUserID $c.PosterID))}}data-can-edit="true"{{end}}>
+					<div class="render-content markup" {{if and (not $.Issue.IsPull) (or $.Permission.IsAdmin $.HasIssuesOrPullsWritePermission (and $.IsSigned (eq $.SignedUserID $c.PosterID)))}}data-can-edit="true"{{end}}>
 						{{if $c.RenderedContent}}
 							{{$c.RenderedContent}}
 						{{else}}
