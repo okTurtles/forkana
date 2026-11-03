@@ -1,9 +1,11 @@
-{{/* Non-blocking hint shown under a subject input while the typed title breaks the subject
-	title rule (modules/subjecttitle, Wikipedia's title restrictions), or when a new subject would
-	be saved under a normalized spelling ("iPhone" → "IPhone"). It never blocks submitting: a
-	title that breaks the rule is still accepted when it resolves to an existing subject, which
-	only the server knows. See web_src/js/features/subject-title-hint.ts. */}}
+{{/* Hint shown under a subject input while the typed title breaks the subject title rule
+	(modules/subjecttitle, Wikipedia's title restrictions), or when a new subject would be saved
+	under a normalized spelling ("iPhone" → "IPhone"). A title that breaks the rule also blocks
+	submitting (#401), unless it is data-existing-subject: the existing subject the prefilled
+	title resolved to, which may predate the rule. The server checks again either way. See
+	web_src/js/features/subject-title-hint.ts. */}}
 <span class="help text tw-hidden" data-subject-title-hint
+	{{if .ExistingSubject}}data-existing-subject="{{.ExistingSubject}}"{{end}}
 	data-msg-forbidden-char="{{ctx.Locale.Tr "repo.form.subject_title_forbidden_char"}}"
 	data-msg-percent-encoding="{{ctx.Locale.Tr "repo.form.subject_title_percent_encoding"}}"
 	data-msg-html-entity="{{ctx.Locale.Tr "repo.form.subject_title_html_entity"}}"

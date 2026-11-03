@@ -40,3 +40,39 @@ test('initSubjectTitleHint shows the normalized title literally', () => {
   type('Moon');
   expect(hint.classList.contains('tw-hidden')).toBe(true);
 });
+
+test('initSubjectTitleHint blocks submitting an invalid title (#401)', () => {
+  document.body.innerHTML = `<form><div class="field"><input name="subject">
+    <span class="tw-hidden" data-subject-title-hint data-msg-forbidden-char="No # here"
+      data-msg-normalized="Saved as “%s”."></span></div></form>`;
+  initSubjectTitleHint();
+  const form = document.querySelector('form');
+  const input = document.querySelector<HTMLInputElement>('input');
+  const type = (value: string) => {
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+  };
+  type('a#b');
+  expect(input.validationMessage).toBe('No # here');
+  expect(form.checkValidity()).toBe(false);
+  // apostrophes, punctuation and other scripts are allowed
+  for (const title of [`'''`, `''''''''''''''''`, `""""""""""""`, `"'"`, '“”', `""a""`, ';alskdjf', 'Test: Gaudí', '東京', 'iPhone']) {
+    type(title);
+    expect(input.validationMessage).toBe('');
+    expect(form.checkValidity()).toBe(true);
+  }
+});
+
+test('initSubjectTitleHint lets the prefilled existing subject through', () => {
+  document.body.innerHTML = `<form><div class="field"><input name="subject" value="Legacy #Gaudí">
+    <span class="tw-hidden" data-subject-title-hint data-existing-subject="Legacy #Gaudí"
+      data-msg-forbidden-char="No # here"></span></div></form>`;
+  initSubjectTitleHint();
+  const input = document.querySelector<HTMLInputElement>('input');
+  const hint = document.querySelector<HTMLElement>('[data-subject-title-hint]');
+  expect(input.validationMessage).toBe('');
+  expect(hint.classList.contains('tw-hidden')).toBe(true);
+  input.value = 'Legacy #Gaudí 2';
+  input.dispatchEvent(new Event('input'));
+  expect(input.validationMessage).toBe('No # here');
+});

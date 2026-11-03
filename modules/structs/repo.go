@@ -127,6 +127,12 @@ type Repository struct {
 type CreateRepoOption struct {
 	// Name of the repository to create
 	//
+	// When a subject is given and the name is the one generated from it (the subject's slug), or
+	// the placeholder the web form generates for a subject without any ASCII letter or digit
+	// ("subject") or with a non-Latin letter (its ASCII part, e.g. "1980" for "Москва 1980"),
+	// the name is replaced by the subject's slug, which for such subjects is "subject-" followed
+	// by a hash of the title.
+	//
 	// required: true
 	// unique: true
 	Name string `json:"name" binding:"Required;AlphaDashDot;MaxSize(100)"`
@@ -241,6 +247,14 @@ type GenerateRepoOption struct {
 	//
 	// required: true
 	Owner string `json:"owner"`
+	// Name of the repository to create
+	//
+	// When a subject is given and the name is the one generated from it (the subject's slug), or
+	// the placeholder the web form generates for a subject without any ASCII letter or digit
+	// ("subject") or with a non-Latin letter (its ASCII part, e.g. "1980" for "Москва 1980"),
+	// the name is replaced by the subject's slug, which for such subjects is "subject-" followed
+	// by a hash of the title.
+	//
 	// required: true
 	// unique: true
 	Name string `json:"name" binding:"Required;AlphaDashDot;MaxSize(100)"`
@@ -365,6 +379,14 @@ type MigrateRepoOptions struct {
 	RepoOwnerID int64 `json:"uid"`
 	// the organization's name or individual user's name who will own the migrated repository
 	RepoOwner string `json:"repo_owner"`
+	// Name of the repository to create
+	//
+	// When a subject is given and the name is the one generated from it (the subject's slug), or
+	// the placeholder the web form generates for a subject without any ASCII letter or digit
+	// ("subject") or with a non-Latin letter (its ASCII part, e.g. "1980" for "Москва 1980"),
+	// the name is replaced by the subject's slug, which for such subjects is "subject-" followed
+	// by a hash of the title.
+	//
 	// required: true
 	RepoName string `json:"repo_name" binding:"Required;AlphaDashDot;MaxSize(100)"`
 	// Subject of the repository to migrate

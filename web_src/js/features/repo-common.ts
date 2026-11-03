@@ -201,7 +201,10 @@ export function generateRepoNameFromSubject(subject: string): string {
   // Trim leading/trailing hyphens
   name = name.replace(/^-+/, '').replace(/-+$/, '');
 
-  // Ensure it's not empty and not too long
+  // Ensure it's not empty and not too long. A subject without any ASCII letter or digit ("'''",
+  // "東京"), or with a non-Latin letter ("Москва 1980"), gets "subject-" and a hash of its name
+  // on the server (GenerateSlugFromName, #401): the name generated here ("subject", "1980")
+  // stands for it and the server replaces it (IsGeneratedRepoName).
   if (!name) {
     name = 'subject';
   }

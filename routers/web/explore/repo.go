@@ -348,9 +348,9 @@ func Subjects(ctx *context.Context) {
 //
 // The lookup goes through the slug on purpose: it is UNIQUE and is exactly the collision rule
 // GetOrCreateSubject applies, so any keyword that would be swallowed by an existing subject is
-// caught here, including one that only differs by accents, punctuation or case. That also makes
-// GenerateSlugFromName's "subject" fallback for punctuation-only keywords harmless: creating
-// such a keyword really would land on a subject whose slug is "subject".
+// caught here, including one that only differs by accents, punctuation or case. A keyword
+// without any ASCII letter or digit (three apostrophes) only matches the subject with that very title
+// (GenerateSlugFromName gives it a slug of its own, #401).
 //
 // The key is only set when /subject/{name} can actually render the subject, i.e. when it has at
 // least one public repository - the same lookup RepoAssignmentBySubject performs - so the link

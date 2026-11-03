@@ -278,7 +278,33 @@ func TestGenerateSlugFromName(t *testing.T) {
 		{
 			name:     "Only special characters",
 			input:    "!!!???",
+			expected: "subject-6f5d923bb84f2a35",
+		},
+		{
+			name:     "Only spaces and underscores",
+			input:    " _ ",
 			expected: "subject",
+		},
+		{
+			// #401: every name without an ASCII letter or digit used to get "subject"
+			name:     "Only apostrophes",
+			input:    "'''",
+			expected: "subject-be24f5ee6f33a7ab",
+		},
+		{
+			name:     "More apostrophes",
+			input:    "''''''''''''''''",
+			expected: "subject-e160ec46a8f3e206",
+		},
+		{
+			name:     "Non-Latin script",
+			input:    "東京",
+			expected: "subject-130016b2599bf7e5",
+		},
+		{
+			name:     "Non-Latin script, title normalization and case ignored",
+			input:    "  東京 ",
+			expected: "subject-130016b2599bf7e5",
 		},
 		{
 			name:     "Mixed case with numbers",
@@ -298,6 +324,40 @@ func TestGenerateSlugFromName(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	// #401: a non-Latin letter used to be dropped, so these all had the slug "1980" or "2004"
+	slugs := map[string]string{}
+	for _, name := range []string{"1980", "Москва 1980", "東京 1980", "Ελλάδα 2004", "東京 2004", "2004"} {
+		slug := repo_model.GenerateSlugFromName(name)
+		assert.Regexp(t, `^[a-z0-9-]+$`, slug, name)
+		assert.NotContains(t, slugs, slug, "%q has the slug of %q", name, slugs[slug])
+		slugs[slug] = name
+	}
+	assert.Equal(t, "1980", repo_model.GenerateSlugFromName("1980"))
+	assert.Regexp(t, `^subject-[0-9a-f]{16}$`, repo_model.GenerateSlugFromName("Москва 1980"))
+	assert.Equal(t, repo_model.GenerateSlugFromName("Москва 1980"), repo_model.GenerateSlugFromName("москва  1980"))
+	// Latin letters keep the slug they always had, with or without an ASCII base
+	assert.Equal(t, "strae-1980", repo_model.GenerateSlugFromName("Straße 1980"))
+	// titles made of quotes (reported on #401 after the apostrophes) are subjects of their own;
+	// curly quotes are punctuation, not letters
+	quoteSlugs := map[string]string{}
+	for _, name := range []string{`""""""""""""`, `"'"`, "“”", `''`, `""`, "'''"} {
+		slug := repo_model.GenerateSlugFromName(name)
+		assert.Regexp(t, `^subject-[0-9a-f]{16}$`, slug, name)
+		assert.NotContains(t, quoteSlugs, slug, "%q has the slug of %q", name, quoteSlugs[slug])
+		quoteSlugs[slug] = name
+	}
+	assert.Equal(t, "a", repo_model.GenerateSlugFromName(`""a""`))
+	assert.Equal(t, "a", repo_model.GenerateSlugFromName("“a”"))
+	// modifier letters used as apostrophes are dropped like the ASCII apostrophe
+	assert.Equal(t, "hawaii", repo_model.GenerateSlugFromName("Hawaiʻi"))        // U+02BB
+	assert.Equal(t, "hawaiis", repo_model.GenerateSlugFromName("Hawaiiʼs"))      // U+02BC
+	assert.Equal(t, "zalgo", repo_model.GenerateSlugFromName("Zalg'o"))          // ASCII
+	assert.Equal(t, "zalgo", repo_model.GenerateSlugFromName("Zalgʾo"))          // U+02BE
+	assert.Equal(t, "hawaii", repo_model.GenerateRepoNameFromSubject("Hawaiʻi")) // same repo name
+	assert.Regexp(t, `^subject-`, repo_model.GenerateSlugFromName("ʻʼʾ"))        // nothing left
+	assert.Regexp(t, `^subject-`, repo_model.GenerateSlugFromName("ラーメン 2"))     // katakana is not Latin
+	assert.Equal(t, "odz-2004", repo_model.GenerateSlugFromName("Łódź 2004"))
 }
 
 // TestCreateSubject_UniqueSlug tests that CreateSubject enforces unique slugs

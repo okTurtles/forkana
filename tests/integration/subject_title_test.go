@@ -105,7 +105,7 @@ func TestSubjectTitleRule(t *testing.T) {
 		assert.Contains(t, NewHTMLParser(t, resp.Body).doc.Find(".ui.negative.message").Text(), "at most 255 bytes")
 	})
 
-	t.Run("Subject inputs get a non-blocking hint, not a blocking pattern", func(t *testing.T) {
+	t.Run("Subject inputs get a hint, not a pattern", func(t *testing.T) {
 		for _, link := range []string{
 			"/repo/create",
 			fmt.Sprintf("/repo/migrate?service_type=%d", api.PlainGitService),
@@ -227,6 +227,24 @@ func TestSubjectTitleRule(t *testing.T) {
 			require.NoError(t, db.Insert(t.Context(), legacy))
 			apiRepo := createAPIRepo(t, fmt.Sprintf("legacy-subject-%d", i), name, http.StatusCreated)
 			assert.Equal(t, name, apiRepo.Subject, "an existing subject keeps its name")
+		}
+	})
+
+	t.Run("Create form shown again after an error still accepts a legacy subject", func(t *testing.T) {
+		const name = "Legacy #Hash Title"
+		require.NoError(t, db.Insert(t.Context(), &repo_model.Subject{Name: name, Slug: repo_model.GenerateSlugFromName(name)}))
+		// "repo1" is taken by user2, "bad name!" is not a valid repository name
+		for _, repoName := range []string{"repo1", "bad name!"} {
+			req := NewRequestWithValues(t, "POST", "/repo/create", map[string]string{
+				"_csrf":     GetUserCSRFToken(t, session),
+				"uid":       strconv.FormatInt(user2.ID, 10),
+				"subject":   name,
+				"repo_name": repoName,
+			})
+			htmlDoc := NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
+			assert.Equal(t, name, htmlDoc.Find("input#subject").AttrOr("value", ""), repoName)
+			assert.Equal(t, name, htmlDoc.Find("[data-subject-title-hint]").AttrOr("data-existing-subject", ""),
+				"%s: the form's script must let the legacy subject through", repoName)
 		}
 	})
 }
@@ -388,4 +406,163 @@ func TestSubjectFirstLetterRedirect(t *testing.T) {
 	repo.SubjectID, repo.SubjectRelation = legacy.ID, nil
 	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "subject_id"))
 	session2.MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape("eBay legacy")), http.StatusOK)
+}
+
+// TestSubjectTitleWithoutASCIILetters covers the three-apostrophe report of #401. Every title
+// without an ASCII letter or digit used to get the slug "subject", so they were all one subject:
+// creating three apostrophes opened an existing title of sixteen, and the explore search then
+// said the three already existed. Each such title is now a subject of its own, on every path that creates one.
+func TestSubjectTitleWithoutASCIILetters(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	const sixteen, three = "''''''''''''''''", "'''"
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	session2 := loginUser(t, user2.Name)
+	token := getTokenForLoggedInUser(t, session2, auth_model.AccessTokenScopeWriteRepository, auth_model.AccessTokenScopeWriteUser)
+
+	// someone created the long one first
+	var apiRepo api.Repository
+	req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &api.CreateRepoOption{Name: "sixteen", Subject: sixteen}).AddTokenAuth(token)
+	DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &apiRepo)
+	require.Equal(t, sixteen, apiRepo.Subject)
+	long := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: sixteen})
+
+	searchOffer := func(t *testing.T, keyword string) (create, existing string) {
+		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q="+url.QueryEscape(keyword)), http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+		create = htmlDoc.Find(`a.ui.primary.button[href^="/repo/create?subject="]`).AttrOr("href", "")
+		existing = htmlDoc.Find(`a.ui.basic.button[href^="/subject/"]`).AttrOr("href", "")
+		return create, existing
+	}
+
+	t.Run("Explore search offers to create it", func(t *testing.T) {
+		create, existing := searchOffer(t, three)
+		assert.Equal(t, "/repo/create?subject="+url.QueryEscape(three), create)
+		assert.Empty(t, existing, "%q must not be reported as an existing subject", three)
+	})
+
+	t.Run("Create form keeps the title as typed", func(t *testing.T) {
+		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/repo/create?subject="+url.QueryEscape(three)), http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+		assert.Equal(t, three, htmlDoc.Find("input#subject").AttrOr("value", ""))
+		_, ok := htmlDoc.Find("[data-subject-title-hint]").Attr("data-existing-subject")
+		assert.False(t, ok, "a new subject is checked by the form's script")
+
+		// the long one exists: the form's script lets its title through
+		resp = session2.MakeRequest(t, NewRequest(t, "GET", "/repo/create?subject="+url.QueryEscape(sixteen)), http.StatusOK)
+		htmlDoc = NewHTMLParser(t, resp.Body)
+		assert.Equal(t, sixteen, htmlDoc.Find("input#subject").AttrOr("value", ""))
+		assert.Equal(t, sixteen, htmlDoc.Find("[data-subject-title-hint]").AttrOr("data-existing-subject", ""))
+	})
+
+	t.Run("Web create form creates a subject of its own", func(t *testing.T) {
+		user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		session4 := loginUser(t, user4.Name)
+		req := NewRequestWithValues(t, "POST", "/repo/create", map[string]string{
+			"_csrf":   GetUserCSRFToken(t, session4),
+			"uid":     strconv.FormatInt(user4.ID, 10),
+			"subject": three,
+			// what the form's script fills in for a title without ASCII letters or digits
+			"repo_name": "subject",
+		})
+		session4.MakeRequest(t, req, http.StatusSeeOther)
+
+		subject := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: three})
+		assert.NotEqual(t, long.ID, subject.ID)
+		assert.Equal(t, repo_model.GenerateSlugFromName(three), subject.Slug)
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user4.ID, SubjectID: subject.ID})
+		assert.Equal(t, subject.Slug, repo.Name, "the server generates the repo name")
+		unittest.AssertNotExistsBean(t, &repo_model.Repository{OwnerID: user4.ID, SubjectID: long.ID})
+
+		// now the search finds it under its own title
+		create, _ := searchOffer(t, three)
+		assert.Empty(t, create)
+		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q="+url.QueryEscape(three)), http.StatusOK)
+		assert.Contains(t, resp.Body.String(), "/subject/"+url.PathEscape(three))
+		session2.MakeRequest(t, NewRequest(t, "GET", "/subject/"+url.PathEscape(three)), http.StatusOK)
+	})
+
+	t.Run("Create first article joins the subject with that very title", func(t *testing.T) {
+		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/repo/create-first-article?subject="+url.QueryEscape(three)), http.StatusSeeOther)
+		assert.Contains(t, resp.Header().Get("Location"), "/_new/")
+		subject := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: three})
+		unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user2.ID, SubjectID: subject.ID})
+	})
+
+	t.Run("API creates non-Latin subjects of their own", func(t *testing.T) {
+		for i, subject := range []string{"東京", "Москва", "🙂"} {
+			req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &api.CreateRepoOption{Name: fmt.Sprintf("non-latin-%d", i), Subject: subject}).AddTokenAuth(token)
+			DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &apiRepo)
+			assert.Equal(t, subject, apiRepo.Subject)
+			unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: subject})
+		}
+	})
+
+	t.Run("Titles made of quotes are subjects of their own", func(t *testing.T) {
+		// reported on #401 after the apostrophes: a title made only of double quotes
+		const quotes = `""""""""""""`
+		ids := map[int64]string{long.ID: sixteen}
+		for i, subject := range []string{quotes, `"'"`, "“”", `""`} {
+			req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &api.CreateRepoOption{Name: fmt.Sprintf("quotes-%d", i), Subject: subject}).AddTokenAuth(token)
+			DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &apiRepo)
+			assert.Equal(t, subject, apiRepo.Subject, "stored as typed")
+			stored := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: subject})
+			assert.NotContains(t, ids, stored.ID, "%q resolved to %q", subject, ids[stored.ID])
+			ids[stored.ID] = subject
+		}
+
+		// the create form prefills the title as typed and marks it as existing
+		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/repo/create?subject="+url.QueryEscape(quotes)), http.StatusOK)
+		htmlDoc := NewHTMLParser(t, resp.Body)
+		assert.Equal(t, quotes, htmlDoc.Find("input#subject").AttrOr("value", ""))
+		assert.Equal(t, quotes, htmlDoc.Find("[data-subject-title-hint]").AttrOr("data-existing-subject", ""))
+
+		// another user joins it through the web form, with the script's placeholder name
+		user5 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 5})
+		session5 := loginUser(t, user5.Name)
+		req := NewRequestWithValues(t, "POST", "/repo/create", map[string]string{
+			"_csrf":     GetUserCSRFToken(t, session5),
+			"uid":       strconv.FormatInt(user5.ID, 10),
+			"subject":   quotes,
+			"repo_name": "subject",
+		})
+		session5.MakeRequest(t, req, http.StatusSeeOther)
+		subject := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: quotes})
+		unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user5.ID, SubjectID: subject.ID, Name: subject.Slug})
+
+		// a quoted ASCII word is that word, like "the moon!" is "The Moon"
+		assert.Equal(t, repo_model.GenerateSlugFromName("A"), repo_model.GenerateSlugFromName(`""a""`))
+	})
+
+	t.Run("A non-Latin letter next to a digit is not dropped", func(t *testing.T) {
+		// these used to share the slug of the bare number
+		ids := map[int64]string{}
+		for i, subject := range []string{"1980", "Москва 1980", "東京 2004", "Ελλάδα 2004"} {
+			req := NewRequestWithJSON(t, "POST", "/api/v1/user/repos", &api.CreateRepoOption{Name: fmt.Sprintf("mixed-script-%d", i), Subject: subject}).AddTokenAuth(token)
+			DecodeJSON(t, MakeRequest(t, req, http.StatusCreated), &apiRepo)
+			assert.Equal(t, subject, apiRepo.Subject)
+			stored := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: subject})
+			assert.NotContains(t, ids, stored.ID, "%q resolved to %q", subject, ids[stored.ID])
+			ids[stored.ID] = subject
+		}
+
+		// the web form's script sends "1980" as the repository name of "Москва 1980": the server
+		// generates the real one
+		user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4})
+		session4 := loginUser(t, user4.Name)
+		req := NewRequestWithValues(t, "POST", "/repo/create", map[string]string{
+			"_csrf":     GetUserCSRFToken(t, session4),
+			"uid":       strconv.FormatInt(user4.ID, 10),
+			"subject":   "Москва 1980",
+			"repo_name": "1980",
+		})
+		session4.MakeRequest(t, req, http.StatusSeeOther)
+		moscow := unittest.AssertExistsAndLoadBean(t, &repo_model.Subject{Name: "Москва 1980"})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user4.ID, SubjectID: moscow.ID})
+		assert.Equal(t, moscow.Slug, repo.Name)
+
+		// the search for the bare number does not report the Moscow subject as an exact match
+		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q=1980"), http.StatusOK)
+		assert.NotContains(t, NewHTMLParser(t, resp.Body).Find(`a.ui.basic.button[href^="/subject/"]`).AttrOr("href", ""), url.PathEscape("Москва"))
+	})
 }

@@ -64,7 +64,7 @@ func TestMigrationUsesApplicationSlugFunction(t *testing.T) {
 		{
 			name:     "Only special characters",
 			input:    "!!!???",
-			expected: "subject",
+			expected: "subject-6f5d923bb84f2a35",
 		},
 		{
 			name:     "Multiple hyphens",
