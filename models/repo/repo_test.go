@@ -62,6 +62,28 @@ func TestRepoAPIURL(t *testing.T) {
 	assert.Equal(t, "https://try.gitea.io/api/v1/repos/user12/repo10", repo.APIURL())
 }
 
+func TestLinkWithoutSubject(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	const sha = "65f1bf27bc3bf70f64657658635e66094edbcb4d"
+
+	// an article links to its subject url
+	article := unittest.AssertExistsAndLoadBean(t, &Repository{ID: 1})
+	require.NotZero(t, article.SubjectID)
+	assert.Equal(t, setting.AppSubURL+"/subject/example-subject/user2", article.Link())
+
+	// the subject routes only resolve subject names, so a repository without a subject
+	// links to its repository route (#274)
+	plain := unittest.AssertExistsAndLoadBean(t, &Repository{ID: 2})
+	require.Zero(t, plain.SubjectID)
+	assert.Equal(t, setting.AppSubURL+"/user2/repo2", plain.Link())
+	assert.Equal(t, setting.AppSubURL+"/user2/repo2", plain.LinkCtx(t.Context()))
+	assert.Equal(t, setting.AppSubURL+"/user2/repo2/commit/"+sha, plain.CommitLink(sha))
+
+	// the markup renderers learn it from the metas, to link its own references alike
+	assert.Equal(t, "true", plain.ComposeCommentMetas(t.Context())["nosubject"])
+	assert.Empty(t, article.ComposeCommentMetas(t.Context())["nosubject"])
+}
+
 func TestCommitLink(t *testing.T) {
 	const sha = "65f1bf27bc3bf70f64657658635e66094edbcb4d"
 
