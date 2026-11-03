@@ -223,12 +223,12 @@ Here are some links to the most important topics. You can find the full list of 
 <a href="http://localhost:3000/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/media/image.png" alt="Image"/></a></p>
 `, http.StatusOK)
 
-	testRenderMarkup(t, "gfm", false, "", input, `<p><a href="http://localhost:3000/subject/repo1/user2/src/test.md" rel="nofollow">Link</a>
-<a href="http://localhost:3000/subject/repo1/user2/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/subject/repo1/user2/media/image.png" alt="Image"/></a></p>
+	testRenderMarkup(t, "gfm", false, "", input, `<p><a href="http://localhost:3000/user2/repo1/src/test.md" rel="nofollow">Link</a>
+<a href="http://localhost:3000/user2/repo1/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/user2/repo1/media/image.png" alt="Image"/></a></p>
 `, http.StatusOK)
 
-	testRenderMarkup(t, "file", false, "path/new-file.md", input, `<p><a href="http://localhost:3000/subject/repo1/user2/src/test.md" rel="nofollow">Link</a>
-<a href="http://localhost:3000/subject/repo1/user2/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/subject/repo1/user2/media/image.png" alt="Image"/></a></p>
+	testRenderMarkup(t, "file", false, "path/new-file.md", input, `<p><a href="http://localhost:3000/user2/repo1/src/test.md" rel="nofollow">Link</a>
+<a href="http://localhost:3000/user2/repo1/src/image.png" target="_blank" rel="nofollow noopener"><img src="http://localhost:3000/user2/repo1/media/image.png" alt="Image"/></a></p>
 `, http.StatusOK)
 
 	testRenderMarkup(t, "file", false, "path/test.unknown", "## Test", "unsupported file to render: \"path/test.unknown\"\n", http.StatusUnprocessableEntity)
