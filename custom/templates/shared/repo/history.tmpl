@@ -110,7 +110,10 @@
                                 </div>
                             </details>
                         </td>
-                        <td class="col-date">{{DateUtils.TimeSince (or .Committer .Author).When}}</td>
+                        {{/* #478: when the change was made; an import made without a date
+                             (2001-01-01, "26 years ago") is dated by the article's creation
+                             (routers/web/explore/article_change_time.go) */}}
+                        <td class="col-date">{{DateUtils.TimeSince (index $.HistoryChangeTimes .ID.String)}}</td>
                         <td class="col-icon">
                             <a href="{{QueryBuild $.ArticleLink "version" .ID.String}}" data-tooltip-content="{{if $fromFork}}{{ctx.Locale.Tr "repo.article_history_from_fork"}}{{else}}{{ctx.Locale.Tr "repo.article_history_commit"}}{{end}}" aria-label="{{ctx.Locale.Tr "repo.commits.view_path"}}">
                                 {{if $fromFork}}{{svg "octicon-repo-forked" 16}}{{else}}{{svg "octicon-git-commit" 16}}{{end}}

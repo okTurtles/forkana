@@ -139,6 +139,7 @@
 
   --color-white: #FFFFFF;
   --color-red: #f85149;
+  --color-danger-icon: #f85149;
   --color-yellow: #e3b341;
   --color-purple: #bc8cff;
   --color-grey: #6e7681;
@@ -265,6 +266,7 @@
 
     --color-white: #FFFFFF;
     --color-red: #f85149;
+    --color-danger-icon: #f85149;
     --color-yellow: #e3b341;
     --color-purple: #bc8cff;
     --color-grey: #6e7681;

@@ -6,13 +6,41 @@ import {login_user, load_logged_in_context} from './utils_e2e.ts';
 const article = '/subject/example-subject/user2';
 
 test.describe('Article view layout (signed out)', () => {
+  // #478: Compare is in the Read tab's header and not in the Edit and History tabs'
+  // (their frames hide it: 7368:264887, 7368:263253), also when the tabs are switched in
+  // the page (pressing it: subject-header.test.e2e.ts, on a subject with two articles)
+  test('Compare: shown in Read, hidden in Edit and History', async ({page}) => {
+    await page.goto(`${article}?mode=read`);
+    const compare = page.locator('#compare-mode-button');
+    await expect(compare).toBeVisible();
+    await page.waitForFunction(() => window.history.state !== null);
+    for (const tab of ['history', 'edit', 'read']) {
+      await page.locator(`#article-tabs a[data-article-tab="${tab}"]`).click();
+      await expect(page.locator(`#article-view-root[data-article-mode="${tab}"]`)).toBeVisible({timeout: 10000});
+      await expect(compare).toBeVisible({visible: tab === 'read'});
+    }
+  });
+
+  // #478: Watch then "…": 9px apart on a desktop (Frame 5's gap in Read 7368:264676);
+  // side by side on a phone, Watch being the 32×32 icon (Mobile 7368:263684)
+  for (const {width, gap, watchSize} of [{width: 1440, gap: 9, watchSize: null}, {width: 375, gap: 0, watchSize: 32}]) {
+    test(`at ${width}px: Watch, then the "…" button`, async ({page}) => {
+      await page.setViewportSize({width, height: 900});
+      await page.goto(`${article}?mode=read`);
+      const watch = await page.locator('#article-tabs [data-role="article-watch"]').boundingBox();
+      const more = await page.locator('#article-tabs .article-more-button').boundingBox();
+      expect(more.x - (watch.x + watch.width)).toBeCloseTo(gap, 0);
+      expect(watchSize === null || (watch.width === watchSize && watch.height === watchSize)).toBe(true);
+    });
+  }
+
   test('Read tab: tokens, Watch, path, no placeholders', async ({page}) => {
     await page.goto(`${article}?mode=read`);
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();
 
     // #433 items 5 and 9: no placeholder line, no back link. #469: the subject header is
-    // the one of every view, its Compare button and Follow star included
-    // (subject-header.test.e2e.ts)
+    // the one of every view (subject-header.test.e2e.ts), Compare included in the Read
+    // tab (#478: "Article view / Logged out - Read only" 7368:264676)
     await expect(page.locator('#compare-mode-button')).toBeVisible();
     await expect(page.locator('[data-role="back-to-bubble"]')).toHaveCount(0);
     await expect(page.locator('#article-view-root')).not.toContainText('marked this article as correct');
@@ -28,6 +56,25 @@ test.describe('Article view layout (signed out)', () => {
     await expect(watch).toContainText('Watch');
     await expect(watch).toHaveAttribute('href', /\/user\/login\?redirect_to=/);
     await expect(page.locator('.repo-header-follow')).toBeVisible();
+
+    // #478: the "…" button after Watch, ending the 640px row (Action 7368:264704: 40×28,
+    // 9px after Watch), its menu holding Report, unavailable for now ("Profile"
+    // 7368:404268: 108×44, its right edge on the button's)
+    const more = page.locator('#article-tabs .article-more-button');
+    await expect(more).toBeVisible();
+    const row = await page.locator('#article-tabs').boundingBox();
+    const button = await more.boundingBox();
+    expect([button.width, button.height]).toEqual([40, 28]);
+    expect(button.x + button.width).toBeCloseTo(row.x + row.width, 0);
+    await more.click();
+    const menu = page.locator('[data-role="article-more"] > .menu');
+    await expect(menu).toBeVisible();
+    const menuBox = await menu.boundingBox();
+    expect([menuBox.width, menuBox.height]).toEqual([108, 44]);
+    expect(menuBox.x + menuBox.width).toBeCloseTo(button.x + button.width, 0);
+    const report = menu.locator('.article-more-report');
+    await expect(report).toHaveText('Report');
+    await expect(report).toHaveAttribute('aria-disabled', 'true');
 
     // item 4: the path names the article by its subject, both parts are links
     const breadcrumb = page.locator('[data-role="article-breadcrumb"]');
@@ -80,6 +127,12 @@ test.describe('Article view layout (signed out)', () => {
     // #435 item 7: no CopyRef here, item 6: the Sort menu instead
     await expect(page.locator('.article-copy-ref')).toHaveCount(0);
     await expect(page.locator('[data-role="article-history-sort"]')).toBeVisible();
+    // #478: its arrows point up and down (arrow-switch-24 I7368:263516;30258:6005), as the
+    // Table view's Sort button draws them; Button 7368:263516 is 26px tall
+    const sortIcon = await page.locator('[data-role="article-history-sort"] .article-sort-icon svg').boundingBox();
+    expect(sortIcon.width).toBeCloseTo(16, 0);
+    await expect(page.locator('[data-role="article-history-sort"] .article-sort-icon')).toHaveCSS('transform', /^matrix\(\S+, 1, -1, \S+, 0, 0\)$/); // a quarter turn
+    expect((await page.locator('[data-role="article-history-sort"] .article-sort-button').boundingBox()).height).toBe(26);
 
     // items 8 and 10: rounded table frame, avatars with 6px corners
     const table = page.locator('[data-role="article-history"]');

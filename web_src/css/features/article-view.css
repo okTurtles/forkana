@@ -195,6 +195,80 @@
   display: none;
 }
 
+/* ── The "…" button and its menu (#478) ──────────────────────────────────────
+   The button: Action 7368:264704 (Read 7368:264676; 7368:263274 in "Article view /
+   History" 7368:263253), 40×28, 6px 12px, 6px corners, no fill, a 16px
+   kebab-horizontal-24 #1f2328, 9px after Watch (Frame 5's gap), at the end of the 640px
+   row.
+   The menu: "Profile" 7368:404268 ("Report" 7368:404084), 108px wide, white, 12px
+   corners, 12px padding and three shadows, its right edge on the button's and its top
+   2.5px under it. Its one item (1st Checkbox 7368:404276): a 16px flag (Flag-16 434:36114,
+   #d1242f) 8px from an Inter 400 12/20 #cf222e "Report". Reporting has no flow yet, so
+   the item is marked unavailable and says so in its tooltip. */
+.ui.dropdown.article-more-dropdown {
+  display: flex;
+}
+
+.article-more-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 28px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.article-more-button:hover,
+.ui.dropdown.article-more-dropdown.active .article-more-button {
+  background: var(--color-button-hover);
+}
+
+/* (the ID outweighs Fomantic's .ui.dropdown .menu rules, so nothing needs !important) */
+#article-tabs .ui.dropdown.article-more-dropdown > .menu {
+  top: calc(100% + 2.5px);
+  right: 0;
+  left: auto;
+  width: 108px;
+  min-width: 108px;
+  margin: 0;
+  padding: 12px;
+  border: none;
+  border-radius: 12px;
+  background: var(--color-box-body);
+  /* figma's #25292e at 12% and 4%: --color-shadow, which stays dark in the dark theme
+     (as the Table view's Sort menu, subject-views.css) */
+  box-shadow: 0 6px 18px 0 var(--color-shadow),
+    0 6px 12px -3px color-mix(in srgb, var(--color-shadow) 30%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
+}
+
+#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-report {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  min-height: 0;
+  padding: 0 !important; /* (Fomantic's item padding is itself !important) */
+  border: none;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-red);
+  background: none;
+  cursor: not-allowed;
+}
+
+#article-tabs .article-more-report .svg {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--color-danger-icon);
+}
+
 /* The tabs are 0 16px (TabNav.Link I7368:264911;24375:95723): base.css gives every
    tabular menu item an important 11.55px 12px, to match Gitea's dashboard bar. (On a
    phone they keep 12px at the sides, below.) */
@@ -267,6 +341,12 @@
   font-size: 16px;
   line-height: 24px;
   color: var(--color-text-light-3);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .article-mode-body > .file-view.article-content {
@@ -341,8 +421,12 @@
 /* ── The sign-in banner (Announcement 641:65699) ─────────────────────────────
    Shown while the Article view shows the Edit tab to a signed-out reader. Its
    dismiss button adds tw-hidden, which wins over the display below. */
+/* #478: 1px up, so that its top rule lies on the navbar's bottom one, as the
+   figma draws it (Announcement 7368:264940 at y 63 under the 64px Navbar 7368:264939): one
+   line under the navbar, not two. */
 .article-signin-banner {
   display: none;
+  margin-top: -1px;
   align-items: center;
   gap: 8px;
   min-height: 48px;
@@ -404,14 +488,16 @@
   margin-bottom: -14px;
 }
 
+/* (Button 7368:263516 of "Article view / History" 7368:263253: 81×26, 4px 8px, an Inter
+   600 12/18 #25292e label) */
 .article-sort-button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 28px;
+  height: 26px;
   padding: 4px 8px;
   font-size: 12px;
-  line-height: 20px;
+  line-height: 18px;
   font-weight: var(--font-weight-semibold);
   color: var(--color-button-text);
   border-radius: 6px;
@@ -425,6 +511,15 @@
   color: var(--color-text-light-3);
 }
 
+/* #478: up and down arrows (arrow-switch-24 I7368:263516;30258:6005, whose glyph,
+   arrow-filter-16, is 13.3×12: Primer's arrow-switch turned a quarter), as the Table
+   view's Sort button draws them (subject-views.css, .history-table-sort-icon) */
+.article-sort-icon {
+  display: inline-flex;
+  transform: rotate(90deg);
+  color: var(--color-text-primary);
+}
+
 .ui.dropdown.article-sort-dropdown > .menu {
   left: auto;
   right: 0;
@@ -432,7 +527,7 @@
   padding: 8px;
   border: none;
   border-radius: 12px;
-  box-shadow: 0 6px 18px rgb(37 41 46 / 12%), 0 6px 12px -3px rgb(37 41 46 / 4%), 0 0 0 1px var(--color-border-light);
+  box-shadow: 0 6px 18px rgb(37 41 46 / 12%), 0 6px 12px -3px rgb(37 41 46 / 4%), 0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
 }
 
 /* ActionList.Item/SingleSelect (I641:64307;26998:14906 and ;14907): 32px tall, 6px 8px,
@@ -716,10 +811,11 @@ a.article-history-page-direction:hover {
     padding: 7px 16px;
   }
 
-  /* The buttons at the end of the row (Watch, the Edit tab's Fork and Submit changes)
-     get a row of their own ABOVE the tabs, rather than running past the screen's edge.
-     The tabs stay on one line (an owner has four) and scroll sideways if they must, so
-     the open tab keeps standing on the rule under them. */
+  /* The buttons at the end of the row (Watch and "…", the Edit tab's Fork and Submit
+     changes) get a row of their own ABOVE the tabs, rather than running past the
+     screen's edge, in every tab, so that the tabs do not move from one tab to another
+     (#469). The tabs stay on one line (an owner has four) and scroll sideways if they
+     must, so the open tab keeps standing on the rule under them. */
   #article-tabs {
     flex-direction: column;
     align-items: stretch;
@@ -739,6 +835,30 @@ a.article-history-page-direction:hover {
      would put the first buttons out of reach once they do not) */
   .article-tabs-trailing > :first-child {
     margin-left: auto;
+  }
+
+  /* #478: Watch and "…" side by side, Watch a 32×32 icon button with 8px around its eye
+     (Mobile 7368:263684: "Watch (icon)" 7629:71522 at 287, Action 7601:70817 at 319,
+     ending 16px from the screen's edge). The figma lays them at the end of the tabs' own
+     row; they keep the row above, as the Edit tab's buttons need it. */
+  #article-view-root:not([data-article-mode="edit"]) .article-tabs-trailing {
+    gap: 0;
+  }
+
+  .article-watch .article-action-button {
+    width: 32px;
+    height: 32px;
+    padding: 8px;
+  }
+
+  /* (out of sight, but still the button's name) */
+  .article-watch .article-action-button > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   #article-tabs .ui.tabular.menu {

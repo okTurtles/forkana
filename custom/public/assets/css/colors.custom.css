@@ -123,6 +123,7 @@
 
   --color-white: #FFFFFF;
   --color-red: #CF222E;
+  --color-danger-icon: #d1242f; /* Primer fgColor-danger as figma's Flag-16 434:36114 fills it */
   --color-yellow: #EBB400;
   --color-purple: #8250DF;
   --color-grey: #59636E;
