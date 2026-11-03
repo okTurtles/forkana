@@ -603,7 +603,9 @@ func registerWebRoutes(m *web.Router) {
 	}, reqSignIn)
 
 	m.Get("/feeds", reqSignIn, user.Feeds)
-	m.Get("/pulls", reqSignIn, user.Pulls)
+	// #94: the navbar's "Change request" entry opens the change requests hub
+	// (Received / Sent / Mentions) in place of Gitea's pull request dashboard
+	m.Get("/pulls", reqSignIn, user.ChangeRequests)
 	m.Get("/milestones", reqSignIn, reqMilestonesDashboardPageEnabled, user.Milestones)
 
 	// ***** START: User *****
