@@ -46,6 +46,18 @@ func TestSanitizeCredentialURLs(t *testing.T) {
 			"see https://" + userInfoPlaceholder + "@[::1]/x and https://" + userInfoPlaceholder + "@h2",
 		},
 		{
+			"https://user:pass@[fe80::1%25eth0]/x", // ipv6 zone ID (RFC 6874)
+			"https://" + userInfoPlaceholder + "@[fe80::1%25eth0]/x",
+		},
+		{
+			"git clone u:p@[fe80::1%eth0]:8080/x and https://u2:p2@h2", // unencoded zone ID, followed by another URL
+			"git clone " + userInfoPlaceholder + "@[fe80::1%eth0]:8080/x and https://" + userInfoPlaceholder + "@h2",
+		},
+		{
+			"https://user:secret@[invalid%25eth0]",
+			"https://user:secret@[invalid%25eth0]",
+		},
+		{
 			"https://user:secret@[unclosed-ipv6",
 			"https://user:secret@[unclosed-ipv6",
 		},

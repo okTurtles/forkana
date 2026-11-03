@@ -69,6 +69,7 @@ func SanitizeCredentialURLs(s string) string {
 
 		// right part is likely to be the host (domain name, ip address)
 		rightPos := sepAtPos + 1
+		inIPv6Zone := false
 	rightLoop:
 		for rightPos < len(bs) {
 			c := bs[rightPos]
@@ -87,8 +88,14 @@ func SanitizeCredentialURLs(s string) string {
 			default:
 				valid := 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
 				if bs[sepAtPos+1] == '[' {
-					// ipv6 host
-					valid = 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F' || '0' <= c && c <= '9' || c == ':'
+					if inIPv6Zone {
+						// ipv6 zone ID (RFC 6874, e.g. "[fe80::1%25eth0]"): unreserved or percent-encoded chars
+						valid = valid || c == '_' || c == '~' || c == '%'
+					} else {
+						// ipv6 host
+						inIPv6Zone = c == '%'
+						valid = 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F' || '0' <= c && c <= '9' || c == ':' || inIPv6Zone
+					}
 				}
 				if !valid {
 					break rightLoop
@@ -107,7 +114,12 @@ func SanitizeCredentialURLs(s string) string {
 		// TODO: can also do more checks for right part
 		// for example: ipv6 quick check
 		if needSanitize && rightPart[0] == '[' {
-			needSanitize = rightPart[len(rightPart)-1] == ']' && net.ParseIP(UnsafeBytesToString(rightPart[1:len(rightPart)-1])) != nil
+			needSanitize = rightPart[len(rightPart)-1] == ']'
+			if needSanitize {
+				// net.ParseIP rejects zone IDs, so validate only the address before the "%"
+				ipv6Host, _, _ := strings.Cut(UnsafeBytesToString(rightPart[1:len(rightPart)-1]), "%")
+				needSanitize = net.ParseIP(ipv6Host) != nil
+			}
 		}
 		if needSanitize {
 			res = append(res, leading...)
