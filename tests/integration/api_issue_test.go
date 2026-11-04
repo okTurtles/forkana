@@ -268,7 +268,7 @@ func TestAPIEditIssue(t *testing.T) {
 func TestAPIEditIssueAndCommentLongUTF8(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 
-	// ~27 KB of 3-byte runes, large enough to span several decoder buffer reads
+	// ~39.6 KB of 3-byte runes (22 runes x 600), large enough to span several decoder buffer reads
 	longBody := strings.Repeat("日本語の長い本文です。漢字とかなを含みます。", 600)
 
 	t.Run("Issue", func(t *testing.T) {
