@@ -6,7 +6,7 @@ on:
 
 env:
   # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
-  # .github/actions/fix-ubuntu-ca-roots/action.yml.
+  # https://github.com/okTurtles/libcheloniajs/blob/main/.github/actions/fix-ubuntu-ca-roots/action.yml
   NODE_OPTIONS: --use-openssl-ca
 
 jobs:
@@ -59,7 +59,8 @@ jobs:
       ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
 
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
+        id: ca-roots
 
       - name: Update comment with status
         env:
@@ -654,23 +655,30 @@ jobs:
             --repo "${{ github.repository }}" \
             --body-file /tmp/review_comment.txt
 
+      # Skipped when fix-ubuntu-ca-roots fails: the CA bundle can then still
+      # trust a removed root, and gh would send GH_TOKEN through it. That
+      # failure shows only in the Actions log. A later step can fail before
+      # "Get PR number" and "Extract review command" run, so this step takes
+      # the PR number from the event and gives REVIEW_COMMAND a default.
       - name: Post failure comment
-        if: failure() && steps.pr-info.outputs.number
+        if: failure() && steps.ca-roots.outcome == 'success'
         run: |
-          gh pr comment "${{ steps.pr-info.outputs.number }}" \
+          gh pr comment "${{ github.event.issue.number }}" \
             --repo "${{ github.repository }}" \
             --body "## Advanced AI Review
 
           - Type: Error
           - Model: ${REVIEW_MODEL}
 
-          The review workflow failed. Check the [workflow run](${RUN_URL}) for details. Comment \`${REVIEW_COMMAND}\` to re-run."
+          The review workflow failed. Check the [workflow run](${RUN_URL}) for details. Comment \`${REVIEW_COMMAND:-/review}\` to re-run."
 
       # Runs when the job is cancelled. The elapsed-time check distinguishes
       # the job timeout (timeout-minutes above) from a concurrency
-      # cancel-in-progress cancellation, which must NOT add the note.
+      # cancel-in-progress cancellation, which must NOT add the note. Skipped
+      # when fix-ubuntu-ca-roots did not succeed, for the reason given at
+      # "Post failure comment".
       - name: Report timeout on trigger comment
-        if: cancelled()
+        if: cancelled() && steps.ca-roots.outcome == 'success'
         env:
           COMMENT_ID: ${{ github.event.comment.id }}
           TIMEOUT_MINUTES: ${{ fromJSON(vars.REVIEW_TIMEOUT_MINUTES || '30') }}
@@ -682,7 +690,11 @@ jobs:
             exit 0
           fi
           ELAPSED=$(( $(date +%s) - JOB_STARTED_AT ))
-          if [ "$ELAPSED" -lt $(( TIMEOUT_SECONDS - 60 )) ]; then
+          # timeout-minutes counts from the job start, but JOB_STARTED_AT is set after
+          # "Set up job" and fix-ubuntu-ca-roots (apt-get update and upgrade), so the
+          # slack must cover both. Cost: a concurrency cancellation in the last
+          # 5 minutes is reported as a timeout.
+          if [ "$ELAPSED" -lt $(( TIMEOUT_SECONDS - 300 )) ]; then
             echo "Cancelled after ${ELAPSED}s (< timeout) — likely concurrency cancellation; skipping"
             exit 0
           fi

@@ -9,7 +9,7 @@ concurrency:
 
 env:
   # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
-  # .github/actions/fix-ubuntu-ca-roots/action.yml.
+  # https://github.com/okTurtles/libcheloniajs/blob/main/.github/actions/fix-ubuntu-ca-roots/action.yml
   NODE_OPTIONS: --use-openssl-ca
 
 jobs:
@@ -43,7 +43,7 @@ jobs:
         ports:
           - "9000:9000"
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -72,7 +72,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -131,7 +131,7 @@ jobs:
         ports:
           - 10000:10000
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -186,7 +186,7 @@ jobs:
           - "587:587"
           - "993:993"
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -228,7 +228,7 @@ jobs:
         ports:
           - 10000:10000
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:

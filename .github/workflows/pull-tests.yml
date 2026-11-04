@@ -13,7 +13,7 @@ concurrency:
 
 env:
   # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
-  # .github/actions/fix-ubuntu-ca-roots/action.yml.
+  # https://github.com/okTurtles/libcheloniajs/blob/main/.github/actions/fix-ubuntu-ca-roots/action.yml
   NODE_OPTIONS: --use-openssl-ca
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
 
       - name: Checkout repository
         uses: actions/checkout@v4

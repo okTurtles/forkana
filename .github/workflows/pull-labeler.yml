@@ -10,7 +10,7 @@ concurrency:
 
 env:
   # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
-  # .github/actions/fix-ubuntu-ca-roots/action.yml.
+  # https://github.com/okTurtles/libcheloniajs/blob/main/.github/actions/fix-ubuntu-ca-roots/action.yml
   NODE_OPTIONS: --use-openssl-ca
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/labeler@v5
         with:
           sync-labels: true
