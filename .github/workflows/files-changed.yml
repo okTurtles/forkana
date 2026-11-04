@@ -37,6 +37,7 @@ jobs:
       yaml: ${{ steps.changes.outputs.yaml }}
       e2e: ${{ steps.changes.outputs.e2e }}
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: changes

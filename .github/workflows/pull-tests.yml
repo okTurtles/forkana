@@ -20,6 +20,8 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -45,6 +47,8 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+
       - name: Checkout repository
         uses: actions/checkout@v4
 

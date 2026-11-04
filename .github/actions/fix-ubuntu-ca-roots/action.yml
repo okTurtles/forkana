@@ -1,0 +1,70 @@
+# Runner images can predate Ubuntu's ca-certificates fix for the eMudhra
+# compromise, and that fix drops only emSign ECC Root CA - G3. This action
+# upgrades the packages, also deselects emSign ECC Root CA - C3, emSign Root
+# CA - C1 and the Comodo AAA root, rebuilds the bundle, and fails if one of
+# them is still trusted.
+#
+# It must run first in every job, before checkout and any other HTTPS
+# request. So workflows call it as
+# okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main, not with a ./
+# path: the runner downloads remote actions in "Set up job", before the first
+# step, but a ./ path needs a checkout. This also keeps the
+# pull-review-crush workflow from loading it from an untrusted PR checkout.
+# https://emudhra.we-have-a-problem.com/#linux
+name: Fix Ubuntu runner CA root bundle
+description: Upgrade ca-certificates and libnss3, and remove the compromised eMudhra and Comodo AAA roots from the system CA bundle.
+inputs:
+  sync-nss-db:
+    description: Also trust the fixed system bundle and distrust the removed roots in the user's NSS database, which Chromium reads.
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Fix system CA bundle
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --only-upgrade ca-certificates 'libnss3*'
+        dpkg -l ca-certificates 'libnss3*' | grep ^ii
+        sudo sed -i \
+          -e 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' \
+          -e 's|^mozilla/emSign_ECC_Root_CA_-_C3\.crt$|!&|' \
+          -e 's|^mozilla/emSign_Root_CA_-_C1\.crt$|!&|' \
+          -e 's|^mozilla/Comodo_AAA_Services_root\.crt$|!&|' \
+          /etc/ca-certificates.conf
+        grep -E 'emSign|Comodo_AAA' /etc/ca-certificates.conf || true
+        sudo update-ca-certificates
+        if openssl crl2pkcs7 -nocrl -certfile /etc/ssl/certs/ca-certificates.crt |
+             openssl pkcs7 -print_certs -noout |
+             grep -E 'emSign ECC Root CA - (G3|C3)|emSign Root CA - C1|AAA Certificate Services'; then
+          echo "::error::/etc/ssl/certs/ca-certificates.crt still trusts a compromised root"
+          exit 1
+        fi
+    # Chromium ignores the system CA bundle. It trusts its built-in Chrome
+    # Root Store plus the user's NSS database, and Playwright's Chromium gets
+    # no CRLSet updates, so it still accepts the compromised eMudhra chains.
+    # Trust the fixed system bundle there (newer roots than the built-in
+    # store) and mark the removed roots as distrusted, which overrides the
+    # built-in store. The roots come from distrusted-ca-roots.pem because the
+    # fixed ca-certificates package deletes some of them.
+    # https://chromium.googlesource.com/chromium/src/+/main/net/data/ssl/chrome_root_store/faq.md
+    # https://chromium.googlesource.com/chromium/src/+/main/docs/linux/cert_management.md
+    - name: Sync NSS database with the system bundle
+      if: inputs.sync-nss-db == 'true'
+      shell: bash
+      run: |
+        sudo apt-get install -y -qq libnss3-tools
+        nssdb="sql:$HOME/.pki/nssdb"
+        mkdir -p "$HOME/.pki/nssdb"
+        [ -f "$HOME/.pki/nssdb/cert9.db" ] || certutil -d "$nssdb" -N --empty-password
+        nss_import() {
+          local trust=$1 prefix=$2 bundle=$3 certs
+          certs=$(mktemp -d)
+          awk -v dir="$certs" '/-----BEGIN CERTIFICATE-----/ { if (out) close(out); out = sprintf("%s/%03d.pem", dir, ++n) } out { print > out }' "$bundle"
+          for cert in "$certs"/*.pem; do
+            certutil -d "$nssdb" -A -t "$trust" -n "$prefix-$(basename "$cert" .pem)" -i "$cert"
+          done
+          echo "$prefix: $(certutil -d "$nssdb" -L | grep -c "^$prefix-") certificates"
+        }
+        nss_import C,, system-ca /etc/ssl/certs/ca-certificates.crt
+        nss_import p,p,p distrusted-ca "$GITHUB_ACTION_PATH/distrusted-ca-roots.pem"

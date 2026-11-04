@@ -38,6 +38,7 @@ jobs:
         ports:
           - "9000:9000"
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -66,6 +67,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -124,6 +126,7 @@ jobs:
         ports:
           - 10000:10000
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -178,6 +181,7 @@ jobs:
           - "587:587"
           - "993:993"
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -219,6 +223,7 @@ jobs:
         ports:
           - 10000:10000
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:

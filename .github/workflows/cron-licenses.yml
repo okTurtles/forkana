@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'go-gitea/gitea'
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:

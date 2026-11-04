@@ -54,6 +54,8 @@ jobs:
       ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
 
     steps:
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+
       - name: Update comment with status
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
