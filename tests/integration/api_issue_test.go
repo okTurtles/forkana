@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -260,6 +261,59 @@ func TestAPIEditIssue(t *testing.T) {
 	assert.Equal(t, int64(0), int64(issueAfter.DeadlineUnix))
 	assert.Equal(t, body, issueAfter.Content)
 	assert.Equal(t, title, issueAfter.Title)
+}
+
+// TestAPIEditIssueAndCommentLongUTF8 makes sure long multi-byte UTF-8 JSON bodies
+// are decoded unchanged (go-gitea/gitea#37211: goccy/go-json used to corrupt them).
+func TestAPIEditIssueAndCommentLongUTF8(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	// ~27 KB of 3-byte runes, large enough to span several decoder buffer reads
+	longBody := strings.Repeat("日本語の長い本文です。漢字とかなを含みます。", 600)
+
+	t.Run("Issue", func(t *testing.T) {
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 10})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: issue.RepoID})
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
+		token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
+
+		urlStr := fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d", owner.Name, repo.Name, issue.Index)
+		req := NewRequestWithJSON(t, "PATCH", urlStr, api.EditIssueOption{Body: &longBody}).AddTokenAuth(token)
+		resp := MakeRequest(t, req, http.StatusCreated)
+		var apiIssue api.Issue
+		DecodeJSON(t, resp, &apiIssue)
+		assert.Equal(t, longBody, apiIssue.Body)
+
+		req = NewRequest(t, "GET", urlStr).AddTokenAuth(token)
+		resp = MakeRequest(t, req, http.StatusOK)
+		apiIssue = api.Issue{}
+		DecodeJSON(t, resp, &apiIssue)
+		assert.Equal(t, longBody, apiIssue.Body)
+		assert.Equal(t, longBody, unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: issue.ID}).Content)
+	})
+
+	t.Run("Comment", func(t *testing.T) {
+		comment := unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{ID: 8},
+			unittest.Cond("type = ?", issues_model.CommentTypeComment))
+		issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: comment.IssueID})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: issue.RepoID})
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
+		token := getUserToken(t, owner.Name, auth_model.AccessTokenScopeWriteIssue)
+
+		urlStr := fmt.Sprintf("/api/v1/repos/%s/%s/issues/comments/%d", owner.Name, repo.Name, comment.ID)
+		req := NewRequestWithJSON(t, "PATCH", urlStr, api.EditIssueCommentOption{Body: longBody}).AddTokenAuth(token)
+		resp := MakeRequest(t, req, http.StatusOK)
+		var apiComment api.Comment
+		DecodeJSON(t, resp, &apiComment)
+		assert.Equal(t, longBody, apiComment.Body)
+
+		req = NewRequest(t, "GET", urlStr).AddTokenAuth(token)
+		resp = MakeRequest(t, req, http.StatusOK)
+		apiComment = api.Comment{}
+		DecodeJSON(t, resp, &apiComment)
+		assert.Equal(t, longBody, apiComment.Body)
+		assert.Equal(t, longBody, unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{ID: comment.ID}).Content)
+	})
 }
 
 func TestAPISearchIssues(t *testing.T) {

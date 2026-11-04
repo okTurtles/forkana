@@ -37,8 +37,8 @@ gitea.com/gitea/git-lfs-transfer v0.2.0 h1:baHaNoBSRaeq/xKayEXwiDQtlIjps4Ac/Ll4K
 gitea.com/gitea/git-lfs-transfer v0.2.0/go.mod h1:UrXUCm3xLQkq15fu7qlXHUMlrhdlXHoi13KH2Dfiits=
 gitea.com/gitea/go-xsd-duration v0.0.0-20220703122237-02e73435a078 h1:BAFmdZpRW7zMQZQDClaCWobRj9uL1MR3MzpCVJvc5s4=
 gitea.com/gitea/go-xsd-duration v0.0.0-20220703122237-02e73435a078/go.mod h1:g/V2Hjas6Z1UHUp4yIx6bATpNzJ7DYtD0FG3+xARWxs=
-gitea.com/go-chi/binding v0.0.0-20240430071103-39a851e106ed h1:EZZBtilMLSZNWtHHcgq2mt6NSGhJSZBuduAlinMEmso=
-gitea.com/go-chi/binding v0.0.0-20240430071103-39a851e106ed/go.mod h1:E3i3cgB04dDx0v3CytCgRTTn9Z/9x891aet3r456RVw=
+gitea.com/go-chi/binding v0.0.0-20260414111559-654cea7ac60a h1:JHoBrfuTSF9Ke9aNfSYj1XRPBHjKPgCApVprnt2Am0M=
+gitea.com/go-chi/binding v0.0.0-20260414111559-654cea7ac60a/go.mod h1:FOsLJIMdpiHzBp3Vby6Wfkdw2ppGscrjgU1IC7E4/zQ=
 gitea.com/go-chi/cache v0.2.1 h1:bfAPkvXlbcZxPCpcmDVCWoHgiBSBmZN/QosnZvEC0+g=
 gitea.com/go-chi/cache v0.2.1/go.mod h1:Qic0HZ8hOHW62ETGbonpwz8WYypj9NieU9659wFUJ8Q=
 gitea.com/go-chi/captcha v0.0.0-20240315150714-fb487f629098 h1:p2ki+WK0cIeNQuqjR98IP2KZQKRzJJiV7aTeMAFwaWo=
