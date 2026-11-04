@@ -7,6 +7,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
+  # .github/actions/fix-ubuntu-ca-roots/action.yml.
+  NODE_OPTIONS: --use-openssl-ca
+
 jobs:
   files-changed:
     uses: ./.github/workflows/files-changed.yml
@@ -15,13 +20,8 @@ jobs:
     if: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.frontend == 'true' || needs.files-changed.outputs.actions == 'true' || needs.files-changed.outputs.e2e == 'true'
     needs: files-changed
     runs-on: ubuntu-latest
-    env:
-      # Node 24.15.0's built-in CA list still trusts the compromised eMudhra
-      # chains. Make Node (pnpm and Playwright's installer, test runner and
-      # `request` fixture) trust only the system bundle fixed by the first step.
-      NODE_OPTIONS: --use-openssl-ca
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
         with:
           sync-nss-db: true
       - uses: actions/checkout@v4

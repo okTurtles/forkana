@@ -7,6 +7,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
+  # .github/actions/fix-ubuntu-ca-roots/action.yml.
+  NODE_OPTIONS: --use-openssl-ca
+
 jobs:
   files-changed:
     uses: ./.github/workflows/files-changed.yml
@@ -16,7 +21,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -33,7 +38,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv python install 3.12
@@ -52,7 +57,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv python install 3.12
@@ -64,7 +69,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
@@ -80,7 +85,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -93,7 +98,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -111,7 +116,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -127,7 +132,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -141,7 +146,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
@@ -160,7 +165,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -193,7 +198,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
@@ -209,7 +214,7 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:

@@ -11,13 +11,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
+  # .github/actions/fix-ubuntu-ca-roots/action.yml.
+  NODE_OPTIONS: --use-openssl-ca
+
 jobs:
   binary:
     runs-on: namespace-profile-gitea-release-binary
     permissions:
       packages: write # to publish to ghcr.io
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       # fetch all commits instead of only the last as some branches are long lived and could have many between versions
       # fetch all tags to ensure that "git describe" reports expected Gitea version, eg. v1.21.0-dev-1-g1234567
@@ -78,7 +83,7 @@ jobs:
     permissions:
       packages: write # to publish to ghcr.io
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       # fetch all commits instead of only the last as some branches are long lived and could have many between versions
       # fetch all tags to ensure that "git describe" reports expected Gitea version, eg. v1.21.0-dev-1-g1234567
@@ -122,7 +127,7 @@ jobs:
   docker-rootless:
     runs-on: namespace-profile-gitea-release-docker
     steps:
-      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main
+      - uses: okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master
       - uses: actions/checkout@v4
       # fetch all commits instead of only the last as some branches are long lived and could have many between versions
       # fetch all tags to ensure that "git describe" reports expected Gitea version, eg. v1.21.0-dev-1-g1234567

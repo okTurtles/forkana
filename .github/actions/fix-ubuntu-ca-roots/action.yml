@@ -1,18 +1,29 @@
-# Runner images can predate Ubuntu's ca-certificates fix for the eMudhra
-# compromise, and that fix drops only emSign ECC Root CA - G3. This action
-# upgrades the packages, also deselects emSign ECC Root CA - C3, emSign Root
-# CA - C1 and the Comodo AAA root, rebuilds the bundle, and fails if one of
-# them is still trusted.
+# The compromised eMudhra intermediates chain to emSign ECC Root CA - G3 and
+# to the Comodo AAA root (AAA Certificate Services). Ubuntu's fixed
+# ca-certificates package removes both roots, but runner images can predate
+# it. This action upgrades the packages and deselects both roots in case the
+# upgrade did not. It also deselects emSign ECC Root CA - C3 and emSign Root
+# CA - C1. These two are not part of the compromise, but the CA made the
+# compromised keys incorrectly, so its other keys can have the same fault,
+# and CI does not need an eMudhra root. Then the action rebuilds the bundle
+# and fails if one of the four roots is still trusted.
 #
 # It must run first in every job, before checkout and any other HTTPS
 # request. So workflows call it as
-# okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@main, not with a ./
+# okTurtles/forkana/.github/actions/fix-ubuntu-ca-roots@master, not with a ./
 # path: the runner downloads remote actions in "Set up job", before the first
 # step, but a ./ path needs a checkout. This also keeps the
 # pull-review-crush workflow from loading it from an untrusted PR checkout.
 # https://emudhra.we-have-a-problem.com/#linux
+#
+# Node does not read the system bundle. It uses its built-in CA list, and
+# unpatched Node releases, such as the runner's own Node for JavaScript
+# actions, still trust the bad chains. So every workflow sets
+# NODE_OPTIONS=--use-openssl-ca in its env. This action cannot set it for
+# the steps after it, because GitHub blocks NODE_OPTIONS in GITHUB_ENV.
+# https://github.blog/changelog/2023-10-05-github-actions-node_options-is-now-restricted-from-github_env/
 name: Fix Ubuntu runner CA root bundle
-description: Upgrade ca-certificates and libnss3, and remove the compromised eMudhra and Comodo AAA roots from the system CA bundle.
+description: Upgrade ca-certificates and libnss3, and remove emSign ECC Root CA - G3, emSign ECC Root CA - C3, emSign Root CA - C1 and Comodo AAA from the system CA bundle.
 inputs:
   sync-nss-db:
     description: Also trust the fixed system bundle and distrust the removed roots in the user's NSS database, which Chromium reads.
@@ -34,10 +45,10 @@ runs:
           /etc/ca-certificates.conf
         grep -E 'emSign|Comodo_AAA' /etc/ca-certificates.conf || true
         sudo update-ca-certificates
-        if openssl crl2pkcs7 -nocrl -certfile /etc/ssl/certs/ca-certificates.crt |
-             openssl pkcs7 -print_certs -noout |
-             grep -E 'emSign ECC Root CA - (G3|C3)|emSign Root CA - C1|AAA Certificate Services'; then
-          echo "::error::/etc/ssl/certs/ca-certificates.crt still trusts a compromised root"
+        subjects=$(openssl crl2pkcs7 -nocrl -certfile /etc/ssl/certs/ca-certificates.crt |
+          openssl pkcs7 -print_certs -noout)
+        if grep -E 'emSign ECC Root CA - (G3|C3)|emSign Root CA - C1|AAA Certificate Services' <<<"$subjects"; then
+          echo "::error::/etc/ssl/certs/ca-certificates.crt still trusts a root that this action removes"
           exit 1
         fi
     # Chromium ignores the system CA bundle. It trusts its built-in Chrome
