@@ -27,7 +27,7 @@ func isAnchorHrefFootnote(s string) bool {
 }
 
 func isHeadingTag(node *html.Node) bool {
-	return len(node.Data) == 2 && node.Data[0] == 'h' && node.Data[1] >= '1' && node.Data[1] <= '6'
+	return node.Type == html.ElementNode && len(node.Data) == 2 && node.Data[0] == 'h' && node.Data[1] >= '1' && node.Data[1] <= '6'
 }
 
 // getNodeText returns the text of the node and all its descendants
