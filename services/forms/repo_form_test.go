@@ -4,6 +4,8 @@
 package forms
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 
 	"code.gitea.io/gitea/modules/json"
@@ -84,4 +86,33 @@ func TestMergePullRequestForm(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(input), &m))
 		assert.Equal(t, expected, m)
 	})
+}
+
+// TestMergePullRequestFormUnmarshalCoversAllFields fails when a field is added to
+// MergePullRequestForm but not to the aux struct in its UnmarshalJSON.
+func TestMergePullRequestFormUnmarshalCoversAllFields(t *testing.T) {
+	formType := reflect.TypeFor[MergePullRequestForm]()
+	body := map[string]any{}
+	for i := range formType.NumField() {
+		field := formType.Field(i)
+		key, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		require.NotEmpty(t, key, "field %s has no json tag", field.Name)
+		switch field.Type.Kind() {
+		case reflect.Bool:
+			body[key] = true
+		case reflect.String:
+			body[key] = "x"
+		default:
+			t.Fatalf("field %s has unhandled kind %s; extend this test", field.Name, field.Type.Kind())
+		}
+	}
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	var f MergePullRequestForm
+	require.NoError(t, json.Unmarshal(raw, &f))
+	v := reflect.ValueOf(f)
+	for i := range formType.NumField() {
+		assert.False(t, v.Field(i).IsZero(), "field %s is not populated by UnmarshalJSON", formType.Field(i).Name)
+	}
 }
