@@ -53,6 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
+        id: ca-roots
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -78,9 +79,12 @@ jobs:
           TAGS: bindata
           CI: "" # Unset CI to skip tests requiring external services (Redis, Elasticsearch, Meilisearch, Azure Storage)
 
+      # Skipped when fix-ubuntu-ca-roots fails: the CA bundle can then still
+      # trust a removed root, and this step downloads the Codecov CLI and the
+      # key that verifies it through that bundle, then runs the CLI.
       - name: Upload coverage reports
         uses: codecov/codecov-action@v5
-        if: always()
+        if: always() && steps.ca-roots.outcome == 'success'
         with:
           files: ./coverage.out
           flags: unittests
