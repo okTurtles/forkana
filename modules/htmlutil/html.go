@@ -31,6 +31,11 @@ func ParseSizeAndClass(defaultSize int, defaultClass string, others ...any) (int
 	return size, class
 }
 
+// EscapeString escapes s so it can be safely embedded as HTML text
+func EscapeString(s string) template.HTML {
+	return template.HTML(template.HTMLEscapeString(s))
+}
+
 func HTMLFormat(s template.HTML, rawArgs ...any) template.HTML {
 	if !strings.Contains(string(s), "%") || len(rawArgs) == 0 {
 		panic("HTMLFormat requires one or more arguments")

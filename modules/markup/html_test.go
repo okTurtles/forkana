@@ -24,10 +24,18 @@ var (
 	localMetas        = map[string]string{"user": testRepoOwnerName, "repo": testRepoName}
 )
 
+func testRenderString(ctx *markup.RenderContext, content string) (string, error) {
+	var buf strings.Builder
+	if err := markup.Render(ctx, strings.NewReader(content), &buf); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
 func TestRender_Commits(t *testing.T) {
 	test := func(input, expected string) {
 		rctx := markup.NewTestRenderContext(markup.TestAppURL, localMetas).WithRelativePath("a.md")
-		buffer, err := markup.RenderString(rctx, input)
+		buffer, err := testRenderString(rctx, input)
 		assert.NoError(t, err)
 		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(buffer))
 	}
@@ -77,7 +85,7 @@ func TestRender_CommitCrossReference(t *testing.T) {
 	defer testModule.MockVariableValue(&markup.RenderBehaviorForTesting.DisableAdditionalAttributes, true)()
 	test := func(input, expected string) {
 		rctx := markup.NewTestRenderContext(markup.TestAppURL, localMetas).WithRelativePath("a.md")
-		buffer, err := markup.RenderString(rctx, input)
+		buffer, err := testRenderString(rctx, input)
 		assert.NoError(t, err)
 		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(buffer))
 	}
@@ -94,7 +102,7 @@ func TestRender_CommitCrossReference(t *testing.T) {
 	// subject name, the only name the article route resolves.
 	metas := map[string]string{"user": testRepoOwnerName, "repo": "test-subject", "reponame": testRepoName}
 	rctx := markup.NewTestRenderContext(markup.TestAppURL, metas).WithRelativePath("a.md")
-	buffer, err := markup.RenderString(rctx, testRepoOwnerName+"/"+testRepoName+"@"+sha)
+	buffer, err := testRenderString(rctx, testRepoOwnerName+"/"+testRepoName+"@"+sha)
 	assert.NoError(t, err)
 	assert.Equal(t,
 		`<p><a href="/subject/test-subject/`+testRepoOwnerName+`?version=`+sha+`" class="commit" rel="nofollow">`+testRepoOwnerName+`/`+testRepoName+`@65f1bf27bc</a></p>`,
@@ -105,7 +113,7 @@ func TestRender_CrossReferences(t *testing.T) {
 	defer testModule.MockVariableValue(&markup.RenderBehaviorForTesting.DisableAdditionalAttributes, true)()
 	test := func(input, expected string) {
 		rctx := markup.NewTestRenderContext(markup.TestAppURL, localMetas).WithRelativePath("a.md")
-		buffer, err := markup.RenderString(rctx, input)
+		buffer, err := testRenderString(rctx, input)
 		assert.NoError(t, err)
 		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(buffer))
 	}
@@ -139,7 +147,7 @@ func TestRender_links(t *testing.T) {
 	setting.AppURL = markup.TestAppURL
 	defer testModule.MockVariableValue(&markup.RenderBehaviorForTesting.DisableAdditionalAttributes, true)()
 	test := func(input, expected string) {
-		buffer, err := markup.RenderString(markup.NewTestRenderContext().WithRelativePath("a.md"), input)
+		buffer, err := testRenderString(markup.NewTestRenderContext().WithRelativePath("a.md"), input)
 		assert.NoError(t, err)
 		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(buffer))
 	}
@@ -254,7 +262,7 @@ func TestRender_email(t *testing.T) {
 	setting.AppURL = markup.TestAppURL
 	defer testModule.MockVariableValue(&markup.RenderBehaviorForTesting.DisableAdditionalAttributes, true)()
 	test := func(input, expected string) {
-		res, err := markup.RenderString(markup.NewTestRenderContext().WithRelativePath("a.md"), input)
+		res, err := testRenderString(markup.NewTestRenderContext().WithRelativePath("a.md"), input)
 		assert.NoError(t, err)
 		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(res), "input: %s", input)
 	}
@@ -341,7 +349,7 @@ func TestRender_emoji(t *testing.T) {
 
 	test := func(input, expected string) {
 		expected = strings.ReplaceAll(expected, "&", "&amp;")
-		buffer, err := markup.RenderString(markup.NewTestRenderContext().WithRelativePath("a.md"), input)
+		buffer, err := testRenderString(markup.NewTestRenderContext().WithRelativePath("a.md"), input)
 		assert.NoError(t, err)
 		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(buffer))
 	}

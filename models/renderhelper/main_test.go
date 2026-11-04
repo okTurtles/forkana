@@ -5,6 +5,7 @@ package renderhelper
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"code.gitea.io/gitea/models/unittest"
@@ -25,4 +26,12 @@ func TestMain(m *testing.M) {
 			return nil
 		},
 	})
+}
+
+func testRenderString(ctx *markup.RenderContext, content string) (string, error) {
+	var buf strings.Builder
+	if err := markup.Render(ctx, strings.NewReader(content), &buf); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
