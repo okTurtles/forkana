@@ -4,7 +4,10 @@
 package markup
 
 import (
+	"slices"
 	"strings"
+
+	"code.gitea.io/gitea/modules/markup/common"
 
 	"golang.org/x/net/html"
 )
@@ -23,15 +26,50 @@ func isAnchorHrefFootnote(s string) bool {
 	return strings.HasPrefix(s, "#fnref:user-content-") || strings.HasPrefix(s, "#fn:user-content-")
 }
 
-func processNodeAttrID(node *html.Node) {
+func isHeadingTag(node *html.Node) bool {
+	return len(node.Data) == 2 && node.Data[0] == 'h' && node.Data[1] >= '1' && node.Data[1] <= '6'
+}
+
+// getNodeText returns the text of the node and all its descendants
+func getNodeText(node *html.Node) string {
+	if node.Type == html.TextNode {
+		return node.Data
+	}
+	var sb strings.Builder
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		sb.WriteString(getNodeText(child))
+	}
+	return sb.String()
+}
+
+func processNodeAttrID(ctx *RenderContext, node *html.Node) {
 	// Add user-content- to IDs and "#" links if they don't already have them,
 	// and convert the link href to a relative link to the host root
+	hasID := false
 	for idx, attr := range node.Attr {
 		if attr.Key == "id" {
+			hasID = true
 			if !isAnchorIDUserContent(attr.Val) {
 				node.Attr[idx].Val = "user-content-" + attr.Val
 			}
 		}
+	}
+
+	if hasID || !ctx.RenderOptions.EnableHeadingIDGeneration || !isHeadingTag(node) {
+		return
+	}
+	// The footnotes "References" heading has nothing to link to, and an ID would clash with
+	// a "References" heading written by the user.
+	for _, attr := range node.Attr {
+		if attr.Key == "class" && slices.Contains(strings.Fields(attr.Val), "footnotes-heading") {
+			return
+		}
+	}
+	// Raw HTML headings (e.g. "<h2>History</h2>" in Wikipedia imports) get an ID from their text,
+	// like Markdown headings do, so they get a permalink. Like upstream, duplicates aren't
+	// deduplicated: the first heading wins when following a link.
+	if id := string(common.CleanValue([]byte(getNodeText(node)))); id != "" {
+		node.Attr = append(node.Attr, html.Attribute{Key: "id", Val: "user-content-" + id})
 	}
 }
 
