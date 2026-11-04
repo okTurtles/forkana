@@ -20,6 +20,7 @@ import (
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/git/attribute"
 	"code.gitea.io/gitea/modules/highlight"
+	"code.gitea.io/gitea/modules/htmlutil"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/markup"
 	"code.gitea.io/gitea/modules/setting"
@@ -86,12 +87,23 @@ func handleFileViewRenderMarkup(ctx *context.Context, filename string, sniffedTy
 		WithRelativePath(ctx.Repo.TreePath).
 		WithMetas(metas)
 
-	var err error
-	ctx.Data["EscapeStatus"], ctx.Data["FileContent"], err = markupRender(ctx, rctx, utf8Reader)
+	// Buffer the content (bounded by MaxDisplayFileSize, checked by the caller) so it can be shown
+	// as plain text if rendering fails: user-pushed content (e.g. HTML nested deeper than 512
+	// elements) must not turn the file view into a server error.
+	content, err := io.ReadAll(utf8Reader)
 	if err != nil {
-		ctx.ServerError("Render", err)
+		ctx.ServerError("ReadAll", err)
 		return true
 	}
+	ctx.Data["EscapeStatus"], ctx.Data["FileContent"], err = markupRender(ctx, rctx, bytes.NewReader(content))
+	if err != nil {
+		log.Error("Render failed for %s in %-v: %v Falling back to rendering source", filename, ctx.Repo.Repository, err)
+		delete(ctx.Data, "MarkupType")
+		ctx.Data["IsPlainText"] = true
+		ctx.Data["EscapeStatus"], ctx.Data["FileContent"] = charset.EscapeControlHTML(htmlutil.EscapeString(util.UnsafeBytesToString(content)), ctx.Locale)
+		return true
+	}
+	ctx.Data["IsMarkup"] = true
 	// to prevent iframe from loading third-party url
 	ctx.Resp.Header().Add("Content-Security-Policy", "frame-src 'self'")
 	return true
@@ -246,8 +258,7 @@ func prepareFileView(ctx *context.Context, entry *git.TreeEntry) {
 	case fInfo.fileSize >= setting.UI.MaxDisplayFileSize:
 		ctx.Data["IsFileTooLarge"] = true
 	case handleFileViewRenderMarkup(ctx, entry.Name(), fInfo.st, buf, utf8Reader):
-		// it also sets ctx.Data["FileContent"] and more
-		ctx.Data["IsMarkup"] = true
+		// it also sets ctx.Data["FileContent"], ctx.Data["IsMarkup"] (or ctx.Data["IsPlainText"] if rendering failed) and more
 	case handleFileViewRenderSource(ctx, entry.Name(), attrs, fInfo, utf8Reader):
 		// it also sets ctx.Data["FileContent"] and more
 		ctx.Data["IsDisplayingSource"] = true
