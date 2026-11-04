@@ -48,9 +48,15 @@ func (j jsonProvider) NewEncoder(writer io.Writer) binding.JSONEncoder {
 	return json.NewEncoder(writer)
 }
 
+// binding.JSONProvider has no default, so set it at package init rather than in
+// AddBindingRules: install mode serves routes that bind forms without calling
+// AddBindingRules, and a nil provider panics on any JSON request there.
+func init() {
+	binding.JSONProvider = jsonProvider{}
+}
+
 // AddBindingRules adds additional binding rules
 func AddBindingRules() {
-	binding.JSONProvider = jsonProvider{}
 	addGitRefNameBindingRule()
 	addValidURLListBindingRule()
 	addValidURLBindingRule()
