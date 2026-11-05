@@ -267,4 +267,3 @@ Rules for every workflow in `.github/workflows/`:
 - Every job that has `steps:` runs
   `okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main` as its first step. It removes distrusted CA roots from the runner. Jobs that run Playwright or Chromium set `sync-nss-db: true`.
 - Every workflow with such a job sets `NODE_OPTIONS: --use-openssl-ca` in its workflow-level `env:`. This includes reusable workflows such as `files-changed.yml`. A job that only calls a reusable workflow needs neither.
-- The header of that action's `action.yml` in okTurtles/libcheloniajs gives the reasons and the full rules for callers.
