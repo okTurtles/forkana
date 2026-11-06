@@ -568,3 +568,12 @@ func TestRenderMetaAs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(res), "<table>")
 }
+
+func TestRenderString_DeeplyNestedFallsBackToEscaped(t *testing.T) {
+	// html.Parse rejects input whose open element stack exceeds 512 nodes,
+	// RenderString must not fail but return the escaped content instead
+	input := strings.Repeat("<div>", 600)
+	rendered, err := markdown.RenderString(markup.NewTestRenderContext(), input)
+	require.NoError(t, err)
+	assert.Equal(t, template.HTML(strings.Repeat("&lt;div&gt;", 600)), rendered)
+}

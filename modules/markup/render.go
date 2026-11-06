@@ -158,15 +158,6 @@ func Render(ctx *RenderContext, input io.Reader, output io.Writer) error {
 	return render(ctx, renderer, input, output)
 }
 
-// RenderString renders Markup string to HTML with all specific handling stuff and return string
-func RenderString(ctx *RenderContext, content string) (string, error) {
-	var buf strings.Builder
-	if err := Render(ctx, strings.NewReader(content), &buf); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
 func renderIFrame(ctx *RenderContext, output io.Writer) error {
 	// set height="0" ahead, otherwise the scrollHeight would be max(150, realHeight)
 	// at the moment, only "allow-scripts" is allowed for sandbox mode.
