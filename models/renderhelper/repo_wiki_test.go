@@ -17,6 +17,14 @@ func TestRepoWiki(t *testing.T) {
 	unittest.PrepareTestEnv(t)
 	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 
+	t.Run("HTMLHeadingID", func(t *testing.T) {
+		// raw HTML headings get an id like Markdown headings, so they get a permalink
+		rctx := NewRenderContextRepoWiki(t.Context(), repo1).WithMarkupType(markdown.MarkupName)
+		rendered, err := markup.RenderString(rctx, "<h2>Early <em>History</em></h2>\n")
+		assert.NoError(t, err)
+		assert.Contains(t, rendered, `<h2 id="user-content-early-history">Early <em>History</em></h2>`)
+	})
+
 	t.Run("AutoLink", func(t *testing.T) {
 		rctx := NewRenderContextRepoWiki(t.Context(), repo1).WithMarkupType(markdown.MarkupName)
 		rendered, err := testRenderString(rctx, `

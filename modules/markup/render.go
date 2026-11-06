@@ -58,6 +58,11 @@ type RenderOptions struct {
 	// "community-notes", …) can be linked with a relative path (issue #399). Elsewhere only
 	// "subject/…" links are Forkana internal links.
 	ForkanaArticle bool
+
+	// EnableHeadingIDGeneration gives raw HTML headings (h1-h6) without an "id" one generated
+	// from their text, like Markdown headings get, so they can be linked to. Only enabled for
+	// repository files and wiki pages: comments etc. don't have heading permalinks.
+	EnableHeadingIDGeneration bool
 }
 
 // RenderContext represents a render context
@@ -123,6 +128,11 @@ func (ctx *RenderContext) WithInStandalonePage(v bool) *RenderContext {
 
 func (ctx *RenderContext) WithUseAbsoluteLink(v bool) *RenderContext {
 	ctx.RenderOptions.UseAbsoluteLink = v
+	return ctx
+}
+
+func (ctx *RenderContext) WithEnableHeadingIDGeneration(v bool) *RenderContext {
+	ctx.RenderOptions.EnableHeadingIDGeneration = v
 	return ctx
 }
 
