@@ -11,6 +11,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
+  # https://github.com/okTurtles/libcheloniajs/blob/main/.github/actions/fix-ubuntu-ca-roots/action.yml
+  NODE_OPTIONS: --use-openssl-ca
+
 jobs:
   files-changed:
     uses: ./.github/workflows/files-changed.yml
@@ -20,6 +25,8 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -45,6 +52,9 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
+        id: ca-roots
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -69,9 +79,12 @@ jobs:
           TAGS: bindata
           CI: "" # Unset CI to skip tests requiring external services (Redis, Elasticsearch, Meilisearch, Azure Storage)
 
+      # Skipped when fix-ubuntu-ca-roots fails: the CA bundle can then still
+      # trust a removed root, and this step downloads the Codecov CLI and the
+      # key that verifies it through that bundle, then runs the CLI.
       - name: Upload coverage reports
         uses: codecov/codecov-action@v5
-        if: always()
+        if: always() && steps.ca-roots.outcome == 'success'
         with:
           files: ./coverage.out
           flags: unittests

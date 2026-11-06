@@ -5,11 +5,17 @@ on:
     - cron: "7 0 * * *" # every day at 00:07 UTC
   workflow_dispatch:
 
+env:
+  # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
+  # https://github.com/okTurtles/libcheloniajs/blob/main/.github/actions/fix-ubuntu-ca-roots/action.yml
+  NODE_OPTIONS: --use-openssl-ca
+
 jobs:
   crowdin-pull:
     runs-on: ubuntu-latest
     if: github.repository == 'go-gitea/gitea'
     steps:
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
       - uses: crowdin/github-action@v1
         with:

@@ -7,6 +7,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
+  # https://github.com/okTurtles/libcheloniajs/blob/main/.github/actions/fix-ubuntu-ca-roots/action.yml
+  NODE_OPTIONS: --use-openssl-ca
+
 jobs:
   files-changed:
     uses: ./.github/workflows/files-changed.yml
@@ -16,6 +21,10 @@ jobs:
     needs: files-changed
     runs-on: ubuntu-latest
     steps:
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
+        id: ca-roots
+        with:
+          sync-nss-db: true
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
@@ -33,8 +42,10 @@ jobs:
         timeout-minutes: 40
         env:
           USE_REPO_TEST_DIR: 1
+      # Skipped when fix-ubuntu-ca-roots fails: the CA bundle can then still
+      # trust a removed root, and this step sends the runtime token through it.
       - uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.ca-roots.outcome == 'success' }}
         with:
           name: playwright-report-${{ github.run_id }}
           path: |
