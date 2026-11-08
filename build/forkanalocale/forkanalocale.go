@@ -7,9 +7,8 @@
 // options/locale one when it exists: the custom file replaces the embedded file
 // wholesale, keys are not merged. Forkana keeps its strings in a full copy of
 // en-US (custom/options/locale/locale_en-US.ini). Its "Forkana keys" are the keys
-// of that copy that upstream en-US doesn't have or has with other wording, and
-// the keys no upstream translation has (Forkana strings also added to
-// options/locale/locale_en-US.ini).
+// of that copy that upstream en-US (options/locale/locale_en-US.ini, kept as
+// upstream ships it) doesn't have or has with other wording.
 //
 // For every other language, custom/translations/locale_<lang>.ini holds the
 // translations of the Forkana keys only. Generate merges it into the upstream
@@ -128,22 +127,13 @@ type Forkana struct {
 }
 
 // NewForkana finds the Forkana keys: the custom en-US keys that upstream en-US
-// lacks or words differently, and those that no upstream translation has.
-// The latter are Forkana strings that were also added to options/locale/locale_en-US.ini
-// (every key upstream Gitea ships is in at least one of its translations).
-func NewForkana(upstreamEnglish, customEnglish *File, upstreamTranslations []*File) *Forkana {
+// lacks or words differently. options/locale/locale_en-US.ini must therefore
+// stay as upstream ships it: Forkana strings go to the custom en-US only.
+func NewForkana(upstreamEnglish, customEnglish *File) *Forkana {
 	fk := &Forkana{English: customEnglish, keySet: map[string]bool{}, Removed: map[string]bool{}}
-	translatedUpstream := func(fullKey string) bool {
-		for _, f := range upstreamTranslations {
-			if _, ok := f.Get(fullKey); ok {
-				return true
-			}
-		}
-		return false
-	}
 	for _, e := range customEnglish.Entries {
 		up, ok := upstreamEnglish.Get(e.FullKey())
-		if !ok || Unquote(up.Value) != Unquote(e.Value) || !translatedUpstream(e.FullKey()) {
+		if !ok || Unquote(up.Value) != Unquote(e.Value) {
 			fk.Keys = append(fk.Keys, e)
 			fk.keySet[e.FullKey()] = true
 		}
@@ -161,15 +151,16 @@ func (fk *Forkana) IsKey(fullKey string) bool { return fk.keySet[fullKey] }
 
 // Generate builds custom/options/locale/locale_<lang>.ini: the upstream file of
 // the language, without the keys Forkana deleted from en-US, with every Forkana
-// key set to its translation. A Forkana key without translation is left out, so
-// that Gitea shows its Forkana English instead of upstream wording.
+// key set to its translation. A Forkana key without a translation, or whose
+// translation no longer matches the English's placeholders, HTML tags or quotes,
+// is left out, so that Gitea shows its Forkana English instead.
 func Generate(fileName string, upstream []byte, fk *Forkana, translations *File) ([]byte, error) {
 	if _, err := Parse(upstream); err != nil {
 		return nil, fmt.Errorf("upstream %s: %w", fileName, err)
 	}
 	translated := map[string]string{}
 	for _, k := range fk.Keys {
-		if t, ok := translations.Get(k.FullKey()); ok && t.Value != "" {
+		if t, ok := translations.Get(k.FullKey()); ok && t.Value != "" && len(structuralProblems(k.Value, t.Value)) == 0 {
 			translated[k.FullKey()] = t.Value
 		}
 	}
@@ -356,41 +347,71 @@ func sortedMatches(re *regexp.Regexp, s string) []string {
 	return m
 }
 
-// Check returns the problems of a language: Forkana keys without translation,
-// stale translations, unknown keys, and translations whose placeholders, HTML
-// tags or quoting differ from the English.
-func Check(lang string, fk *Forkana, translations *File) []string {
-	var problems []string
-	add := func(format string, args ...any) {
-		problems = append(problems, lang+": "+fmt.Sprintf(format, args...))
+// Problems are the results of Check.
+type Problems struct {
+	// Errors break a language or the build: a translation whose placeholders,
+	// HTML tags or quotes differ from the English it was made from, a key that
+	// is not a Forkana key, a translation without its "# en:" line.
+	Errors []string
+	// Warnings are translation work left: missing translations, and stale ones
+	// (the English changed since). Gitea shows the Forkana English, or the stale
+	// translation if it still fits the English, until they are translated.
+	Warnings []string
+}
+
+// Check returns the problems of a language.
+func Check(lang string, fk *Forkana, translations *File) Problems {
+	var p Problems
+	errorf := func(format string, args ...any) {
+		p.Errors = append(p.Errors, lang+": "+fmt.Sprintf(format, args...))
+	}
+	warnf := func(format string, args ...any) {
+		p.Warnings = append(p.Warnings, lang+": "+fmt.Sprintf(format, args...))
 	}
 	for _, k := range fk.Keys {
 		t, ok := translations.Get(k.FullKey())
 		if !ok || t.Value == "" {
-			add("%s: missing translation", k.FullKey())
+			warnf("%s: missing translation", k.FullKey())
 			continue
 		}
-		if t.English == "" {
-			add("%s: no %q line above the translation: run `make generate-locale-forkana` to add it", k.FullKey(), strings.TrimSpace(EnglishComment))
-		} else if t.English != k.Value {
-			add("%s: stale translation, the English changed to %q", k.FullKey(), k.Value)
+		problems := structuralProblems(k.Value, t.Value)
+		switch {
+		case t.English == "":
+			errorf("%s: no %q line above the translation: run `make generate-locale-forkana` to add it", k.FullKey(), strings.TrimSpace(EnglishComment))
+		case t.English != k.Value:
+			if len(problems) > 0 {
+				warnf("%s: stale translation, the English changed to %q (left out until translated: %s)", k.FullKey(), k.Value, strings.Join(problems, "; "))
+			} else {
+				warnf("%s: stale translation, the English changed to %q", k.FullKey(), k.Value)
+			}
+			continue
 		}
-		if en, tr := Placeholders(k.Value), Placeholders(t.Value); !slices.Equal(en, tr) {
-			add("%s: placeholders %v, English has %v", k.FullKey(), tr, en)
-		}
-		if en, tr := Tags(k.Value), Tags(t.Value); !slices.Equal(en, tr) {
-			add("%s: HTML tags %v, English has %v", k.FullKey(), tr, en)
-		}
-		if q := quote(t.Value); q != quote(k.Value) {
-			add("%s: quoting %q differs from the English's %q", k.FullKey(), q, quote(k.Value))
-		} else if q != "" && strings.Contains(Unquote(t.Value), q) {
-			add("%s: the quote character %s appears inside the value it wraps", k.FullKey(), q)
+		for _, problem := range problems {
+			errorf("%s: %s", k.FullKey(), problem)
 		}
 	}
 	for _, t := range translations.Entries {
 		if !fk.IsKey(t.FullKey()) {
-			add("%s: not a Forkana key (any more): remove it", t.FullKey())
+			errorf("%s: not a Forkana key (any more): remove it", t.FullKey())
 		}
+	}
+	return p
+}
+
+// structuralProblems compares a translation with its English: placeholders,
+// HTML tags and wrapping quotes must be the same.
+func structuralProblems(english, translation string) []string {
+	var problems []string
+	if en, tr := Placeholders(english), Placeholders(translation); !slices.Equal(en, tr) {
+		problems = append(problems, fmt.Sprintf("placeholders %v, English has %v", tr, en))
+	}
+	if en, tr := Tags(english), Tags(translation); !slices.Equal(en, tr) {
+		problems = append(problems, fmt.Sprintf("HTML tags %v, English has %v", tr, en))
+	}
+	if q := quote(translation); q != quote(english) {
+		problems = append(problems, fmt.Sprintf("quoting %q differs from the English's %q", q, quote(english)))
+	} else if q != "" && strings.Contains(Unquote(translation), q) {
+		problems = append(problems, fmt.Sprintf("the quote character %s appears inside the value it wraps", q))
 	}
 	return problems
 }

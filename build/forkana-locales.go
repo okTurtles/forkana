@@ -7,7 +7,8 @@
 // build/forkanalocale and "Translations" in AGENTS.md.
 //
 //	go run build/forkana-locales.go generate        # write custom/options/locale/locale_<lang>.ini
-//	go run build/forkana-locales.go check           # fail on missing/stale/broken translations or outdated files
+//	go run build/forkana-locales.go check           # fail on broken translations or outdated files, warn on missing/stale ones
+//	go run build/forkana-locales.go check -strict   # fail on missing/stale translations too
 //	go run build/forkana-locales.go todo <dir>      # write <dir>/locale_<lang>.ini: the strings to translate
 //	go run build/forkana-locales.go merge <dir>     # merge translated <dir>/locale_<lang>.ini files, then generate
 package main
@@ -38,13 +39,17 @@ func main() {
 		usage()
 	}
 	langs := languages()
-	fk := loadForkana(langs)
+	fk := loadForkana()
 	var err error
 	switch os.Args[1] {
 	case "generate":
 		err = generate(fk, langs)
 	case "check":
-		err = check(fk, langs)
+		strict := len(os.Args) == 3 && os.Args[2] == "-strict"
+		if len(os.Args) > 3 || (len(os.Args) == 3 && !strict) {
+			usage()
+		}
+		err = check(fk, langs, strict)
 	case "todo":
 		if len(os.Args) != 3 {
 			usage()
@@ -67,7 +72,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: go run build/forkana-locales.go generate | check | todo <dir> | merge <dir>")
+	fmt.Fprintln(os.Stderr, "usage: go run build/forkana-locales.go generate | check [-strict] | todo <dir> | merge <dir>")
 	os.Exit(2)
 }
 
@@ -85,12 +90,8 @@ func mustParse(path string) *forkanalocale.File {
 	return f
 }
 
-func loadForkana(langs []string) *forkanalocale.Forkana {
-	upstreamTranslations := make([]*forkanalocale.File, 0, len(langs))
-	for _, lang := range langs {
-		upstreamTranslations = append(upstreamTranslations, mustParse(filepath.Join(upstreamDir, fileName(lang))))
-	}
-	return forkanalocale.NewForkana(mustParse(filepath.Join(upstreamDir, english)), mustParse(filepath.Join(customDir, english)), upstreamTranslations)
+func loadForkana() *forkanalocale.Forkana {
+	return forkanalocale.NewForkana(mustParse(filepath.Join(upstreamDir, english)), mustParse(filepath.Join(customDir, english)))
 }
 
 // languages lists the upstream languages other than en-US.
@@ -152,31 +153,73 @@ func generate(fk *forkanalocale.Forkana, langs []string) error {
 	return nil
 }
 
-func check(fk *forkanalocale.Forkana, langs []string) error {
-	var problems []string
+// check prints the errors and warnings of every language. Errors fail it;
+// warnings (missing or stale translations) only fail it when strict.
+func check(fk *forkanalocale.Forkana, langs []string, strict bool) error {
+	var errs, warnings []string
 	for _, lang := range langs {
-		problems = append(problems, forkanalocale.Check(lang, fk, loadTranslations(lang))...)
-		generated, _, err := build(fk, lang)
+		p := forkanalocale.Check(lang, fk, loadTranslations(lang))
+		errs = append(errs, p.Errors...)
+		warnings = append(warnings, p.Warnings...)
+		generated, translations, err := build(fk, lang)
 		if err != nil {
 			return err
 		}
-		onDisk, err := os.ReadFile(filepath.Join(customDir, fileName(lang)))
-		if err != nil || !bytes.Equal(onDisk, generated) {
-			problems = append(problems, fmt.Sprintf("%s: %s is out of date: run `make generate-locale-forkana`", lang, filepath.Join(customDir, fileName(lang))))
+		for path, want := range map[string][]byte{
+			filepath.Join(customDir, fileName(lang)):      generated,
+			filepath.Join(translationDir, fileName(lang)): translations,
+		} {
+			if onDisk, err := os.ReadFile(path); err != nil || !bytes.Equal(onDisk, want) {
+				errs = append(errs, fmt.Sprintf("%s: %s is out of date: run `make generate-locale-forkana`", lang, path))
+			}
 		}
 	}
 	// A custom locale file without upstream file would be missed by the loop above.
 	entries, _ := os.ReadDir(customDir)
 	for _, e := range entries {
 		if m := localeFileRe.FindStringSubmatch(e.Name()); m != nil && e.Name() != english && !slices.Contains(langs, m[1]) {
-			problems = append(problems, fmt.Sprintf("%s: no upstream %s/%s", e.Name(), upstreamDir, e.Name()))
+			errs = append(errs, fmt.Sprintf("%s: no upstream %s/%s", e.Name(), upstreamDir, e.Name()))
 		}
 	}
-	if len(problems) > 0 {
-		return fmt.Errorf("%s\n%d problem(s) with the Forkana translations; see \"Translations\" in AGENTS.md", strings.Join(problems, "\n"), len(problems))
+	slices.Sort(errs)
+
+	if len(warnings) > 0 {
+		for _, w := range groupByLanguage(warnings) {
+			fmt.Println("warning: " + w)
+		}
+		fmt.Printf("warning: %d translation(s) missing or stale; to translate them: go run build/forkana-locales.go todo <dir> (see \"Translations\" in AGENTS.md)\n", len(warnings))
 	}
-	fmt.Printf("%d languages translate all %d Forkana keys\n", len(langs), len(fk.Keys))
+	for _, e := range errs {
+		fmt.Fprintln(os.Stderr, "error: "+e)
+	}
+	switch {
+	case len(errs) > 0:
+		return fmt.Errorf("%d error(s) in the Forkana translations; see \"Translations\" in AGENTS.md", len(errs))
+	case strict && len(warnings) > 0:
+		return fmt.Errorf("-strict: %d translation(s) missing or stale", len(warnings))
+	case len(warnings) == 0:
+		fmt.Printf("%d languages translate all %d Forkana keys\n", len(langs), len(fk.Keys))
+	}
 	return nil
+}
+
+// groupByLanguage turns "lang: message" lines into "message (langs)" lines, so a
+// key missing in every language takes one line.
+func groupByLanguage(lines []string) []string {
+	langsOf := map[string][]string{}
+	var order []string
+	for _, l := range lines {
+		lang, msg, _ := strings.Cut(l, ": ")
+		if _, ok := langsOf[msg]; !ok {
+			order = append(order, msg)
+		}
+		langsOf[msg] = append(langsOf[msg], lang)
+	}
+	grouped := make([]string, 0, len(order))
+	for _, msg := range order {
+		grouped = append(grouped, fmt.Sprintf("%s (%d: %s)", msg, len(langsOf[msg]), strings.Join(langsOf[msg], " ")))
+	}
+	return grouped
 }
 
 func todo(fk *forkanalocale.Forkana, langs []string, dir string) error {

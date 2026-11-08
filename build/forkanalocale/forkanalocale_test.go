@@ -23,7 +23,6 @@ pulls = Pull Requests
 issues = Issues
 pulls.closed_at = ` + "`closed this pull request <a id=\"%[1]s\">%[2]s</a>`" + `
 pulls.title_desc = wants to merge %d commits
-follow_article = Follow
 
 # comment before a section
 [user]
@@ -83,7 +82,7 @@ func mustParse(t *testing.T, s string) *File {
 }
 
 func testForkana(t *testing.T) *Forkana {
-	return NewForkana(mustParse(t, upstreamEnglish), mustParse(t, customEnglish), []*File{mustParse(t, upstreamGerman)})
+	return NewForkana(mustParse(t, upstreamEnglish), mustParse(t, customEnglish))
 }
 
 func TestParse(t *testing.T) {
@@ -106,7 +105,7 @@ func TestNewForkana(t *testing.T) {
 	for _, k := range fk.Keys {
 		keys = append(keys, k.FullKey())
 	}
-	assert.Equal(t, []string{"new_repo", "repo.pulls", "repo.pulls.closed_at", "repo.fork_article", "repo.follow_article", "citation.references"}, keys, "repo.follow_article is in upstream en-US too, but in no upstream translation")
+	assert.Equal(t, []string{"new_repo", "repo.pulls", "repo.pulls.closed_at", "repo.fork_article", "repo.follow_article", "citation.references"}, keys)
 	assert.Equal(t, map[string]bool{"repo.pulls.title_desc": true}, fk.Removed)
 	assert.True(t, fk.IsKey("repo.pulls"))
 	assert.False(t, fk.IsKey("repo.issues"))
@@ -147,7 +146,7 @@ references=Belege
 
 func TestCheck(t *testing.T) {
 	fk := testForkana(t)
-	problems := Check("de-DE", fk, mustParse(t, germanTranslations+`
+	p := Check("de-DE", fk, mustParse(t, germanTranslations+`
 [repo]
 pulls.closed_at = "hat diese Änderungsanfrage <a id="%[1]s">geschlossen</a>"
 
@@ -162,17 +161,37 @@ gone = Weg
 		`de-DE: repo.pulls.closed_at: quoting "\"" differs from the English's "` + "`" + `"`,
 		`de-DE: citation.references` + noEnglish,
 		`de-DE: home.gone: not a Forkana key (any more): remove it`,
-	}, problems)
+	}, p.Errors)
+	assert.Empty(t, p.Warnings)
 
-	problems = Check("de-DE", fk, mustParse(t, "[repo]\n# en: Pull Requests\npulls = Änderungsanfragen\n"))
-	assert.Contains(t, problems, `de-DE: repo.pulls: stale translation, the English changed to "Change Requests"`)
+	// Translation work left is a warning, not an error.
+	p = Check("de-DE", fk, mustParse(t, "# en: New Subject\nnew_repo = Neues Thema\n[repo]\n# en: Pull Requests\npulls = Änderungsanfragen\n"))
+	assert.Empty(t, p.Errors)
+	assert.Equal(t, []string{
+		`de-DE: repo.pulls: stale translation, the English changed to "Change Requests"`,
+		`de-DE: repo.pulls.closed_at: missing translation`,
+		`de-DE: repo.fork_article: missing translation`,
+		`de-DE: repo.follow_article: missing translation`,
+		`de-DE: citation.references: missing translation`,
+	}, p.Warnings)
 
-	problems = Check("de-DE", fk, mustParse(t, "# en: New Subject\nnew_repo = Neues <b>Thema</b>\n"))
-	assert.Contains(t, problems, "de-DE: new_repo: HTML tags [</b <b], English has []")
-	assert.Contains(t, problems, "de-DE: repo.fork_article: missing translation")
+	// A stale translation that no longer fits the English is a warning too, and is left out.
+	stale := mustParse(t, "[repo]\n# en: Fork\nfork_article = Forken\n")
+	p = Check("de-DE", fk, stale)
+	assert.Empty(t, p.Errors)
+	assert.Contains(t, p.Warnings, `de-DE: repo.fork_article: stale translation, the English changed to "Fork %s" (left out until translated: placeholders [], English has [%s])`)
+	out, err := Generate("locale_de-DE.ini", []byte(upstreamGerman), fk, stale)
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "fork_article=")
 
-	problems = Check("de-DE", fk, mustParse(t, "[repo]\n# en: `closed this change request <a id=\"%[1]s\">%[2]s</a>`\npulls.closed_at = `hat `diese` <a id=\"%[1]s\">%[2]s</a>`\n"))
-	assert.Contains(t, problems, "de-DE: repo.pulls.closed_at: the quote character ` appears inside the value it wraps")
+	p = Check("de-DE", fk, mustParse(t, "# en: New Subject\nnew_repo = Neues <b>Thema</b>\n"))
+	assert.Equal(t, []string{"de-DE: new_repo: HTML tags [</b <b], English has []"}, p.Errors)
+	out, err = Generate("locale_de-DE.ini", []byte(upstreamGerman), fk, mustParse(t, "# en: New Subject\nnew_repo = Neues <b>Thema</b>\n"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "new_repo=", "a broken translation is left out")
+
+	p = Check("de-DE", fk, mustParse(t, "[repo]\n# en: `closed this change request <a id=\"%[1]s\">%[2]s</a>`\npulls.closed_at = `hat `diese` <a id=\"%[1]s\">%[2]s</a>`\n"))
+	assert.Contains(t, p.Errors, "de-DE: repo.pulls.closed_at: the quote character ` appears inside the value it wraps")
 }
 
 func TestTodoMergeFormat(t *testing.T) {
@@ -185,7 +204,9 @@ func TestTodoMergeFormat(t *testing.T) {
 	fragment := mustParse(t, "[repo]\npulls = Änderungsanfragen\npulls.closed_at = `hat diese Änderungsanfrage <a id=\"%[1]s\">%[2]s</a> geschlossen`\n")
 	merged := Merge(tr, fragment)
 	formatted := FormatTranslations("de-DE", fk, merged)
-	assert.Empty(t, Check("de-DE", fk, mustParse(t, string(formatted))))
+	p := Check("de-DE", fk, mustParse(t, string(formatted)))
+	assert.Empty(t, p.Errors)
+	assert.Empty(t, p.Warnings)
 	assert.True(t, strings.HasPrefix(string(formatted), "# Forkana strings in de-DE."))
 	assert.Contains(t, string(formatted), "\n[repo]\n# en: Change Requests\npulls = Änderungsanfragen\n")
 
@@ -211,15 +232,7 @@ func TestRepositoryLocales(t *testing.T) {
 		require.NoError(t, err, path)
 		return f
 	}
-	upstream, err := filepath.Glob(filepath.Join(root, "options/locale/locale_*.ini"))
-	require.NoError(t, err)
-	var upstreamTranslations []*File
-	for _, path := range upstream {
-		if name := filepath.Base(path); name != "locale_en-US.ini" {
-			upstreamTranslations = append(upstreamTranslations, parse(filepath.Join("options/locale", name)))
-		}
-	}
-	fk := NewForkana(parse("options/locale/locale_en-US.ini"), parse("custom/options/locale/locale_en-US.ini"), upstreamTranslations)
+	fk := NewForkana(parse("options/locale/locale_en-US.ini"), parse("custom/options/locale/locale_en-US.ini"))
 	generated, err := filepath.Glob(filepath.Join(root, "custom/options/locale/locale_*.ini"))
 	require.NoError(t, err)
 	for _, path := range generated {
@@ -234,8 +247,8 @@ func TestRepositoryLocales(t *testing.T) {
 		tr := parse(filepath.Join("custom/translations", name))
 		for _, k := range fk.Keys {
 			e, ok := tr.Get(k.FullKey())
-			if !ok {
-				continue // reported by `make lint-locale-forkana`
+			if !ok || e.English != k.Value {
+				continue // missing or stale: a warning of `make lint-locale-forkana`
 			}
 			section := k.Section
 			if section == "" {

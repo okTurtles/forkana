@@ -416,9 +416,14 @@ lint-editorconfig:
 	@$(GO) run $(EDITORCONFIG_CHECKER_PACKAGE) $(EDITORCONFIG_FILES)
 
 .PHONY: lint-locale-forkana
-lint-locale-forkana: ## check that every Forkana string is translated in custom/translations and the custom locale files are generated
+lint-locale-forkana: ## check the Forkana translations (placeholders, HTML, quotes) and that the custom locale files are generated; warn on missing or stale translations
 	@echo "Running Forkana locale check..."
 	@$(GO) run build/forkana-locales.go check
+
+.PHONY: lint-locale-forkana-strict
+lint-locale-forkana-strict: ## like lint-locale-forkana, but also fail on missing or stale translations
+	@echo "Running strict Forkana locale check..."
+	@$(GO) run build/forkana-locales.go check -strict
 
 .PHONY: lint-actions
 lint-actions: ## lint action workflow files
