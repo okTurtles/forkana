@@ -284,8 +284,10 @@ func DeleteSubject(ctx context.Context, id int64) error {
 		return ErrSubjectInUse{ID: id, RepoCount: count}
 	}
 
-	_, err = db.GetEngine(ctx).ID(id).Delete(new(Subject))
-	return err
+	if _, err = db.GetEngine(ctx).ID(id).Delete(new(Subject)); err != nil {
+		return err
+	}
+	return deleteSubjectFollows(ctx, id)
 }
 
 // DeleteSubjectIfOrphaned deletes the subject once no repository references it anymore
@@ -305,7 +307,10 @@ func DeleteSubjectIfOrphaned(ctx context.Context, id int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return affected > 0, nil
+	if affected == 0 {
+		return false, nil
+	}
+	return true, deleteSubjectFollows(ctx, id)
 }
 
 // FindSubjects finds subjects based on options

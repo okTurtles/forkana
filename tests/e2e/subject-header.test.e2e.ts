@@ -65,7 +65,7 @@ async function settle(page: Page) {
   await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running' || a.playState === 'paused').length)).toBe(0);
 }
 
-// The Follow label reads "Follow" or "Following", for the article each view stands for,
+// The Follow label reads "Follow" or "Following" (for the subject, #165),
 // and Compare's "Compare on" while compare mode is on: Follow's centre and Compare's
 // right edge are what must not move, with the rows they are on.
 function expectSameHeader(actual: Awaited<ReturnType<typeof headerOf>>, expected: Awaited<ReturnType<typeof headerOf>>, label: string) {
@@ -234,7 +234,7 @@ test('desktop: the header and the sign-in banner have figma text styles', async 
     return {weight: cs.fontWeight, size: cs.fontSize, lineHeight: cs.lineHeight, color: cs.color, decoration: cs.textDecorationLine};
   });
   expect(await style('.subject-header h1')).toMatchObject({weight: '500', size: '40px', lineHeight: '56px', color: 'rgb(31, 35, 40)'});
-  expect(await style('.follow-article-button')).toMatchObject({weight: '600', size: '14px', lineHeight: '20px', color: 'rgb(37, 41, 46)'});
+  expect(await style('.subject-follow-button')).toMatchObject({weight: '600', size: '14px', lineHeight: '20px', color: 'rgb(37, 41, 46)'});
   expect(await style('#subject-view-tabs > .item.active')).toMatchObject({weight: '600', size: '14px', color: 'rgb(31, 35, 40)'});
   expect(await style('#subject-view-tabs > .item:not(.active)')).toMatchObject({weight: '400', size: '14px', color: 'rgb(31, 35, 40)'});
 

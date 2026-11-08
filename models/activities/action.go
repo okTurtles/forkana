@@ -478,6 +478,36 @@ type GetFeedsOptions struct {
 	OpTypes            []ActionType // filter by specific action types
 	Keyword            string       // filter by repo (article) name, subject name, or actor name
 	FollowedByUserID   int64        // only actions performed by users this user ID follows
+	// IncludeFollowedSubjects adds, to RequestedUser's own feed, the activity on every
+	// article of the subjects they follow (#165; models/repo.SubjectFollow).
+	IncludeFollowedSubjects bool
+}
+
+// requestedUserCond selects the feed of RequestedUser: the actions inserted for them (theirs,
+// their organizations' and those of the articles they watch, see services/feed.NotifyWatchers)
+// and, with IncludeFollowedSubjects, the actions on the articles of the subjects they follow.
+// An action on such an article is taken from its actor's own copy (user_id = act_user_id),
+// which every action has, whether or not the user watched the article when it happened; the
+// copy the user may also have got as a watcher is left out, so that it is not listed twice.
+// The actor's copy was not checked against the user's permissions when it was inserted, so it
+// is only taken on an article the user can read.
+func (opts GetFeedsOptions) requestedUserCond() builder.Cond {
+	userID := opts.RequestedUser.ID
+	if !opts.IncludeFollowedSubjects {
+		return builder.Eq{"`action`.user_id": userID}
+	}
+	followedRepoIDs := repo_model.FollowedSubjectRepoIDsQuery(userID)
+	return builder.Or(
+		builder.Eq{"`action`.user_id": userID}.And(builder.Or(
+			builder.Eq{"`action`.act_user_id": userID},
+			builder.NotIn("`action`.repo_id", followedRepoIDs),
+		)),
+		builder.Expr("`action`.user_id = `action`.act_user_id").And(
+			builder.Neq{"`action`.act_user_id": userID},
+			builder.In("`action`.repo_id", followedRepoIDs),
+			builder.In("`action`.repo_id", repo_model.AccessibleRepoIDsQuery(opts.RequestedUser)),
+		),
+	)
 }
 
 func (opts GetFeedsOptions) shouldExcludeRepoOwner() bool {
@@ -622,7 +652,7 @@ func ActivityQueryCondition(ctx context.Context, opts GetFeedsOptions) (builder.
 	}
 
 	if opts.RequestedUser != nil {
-		cond = cond.And(builder.Eq{"user_id": opts.RequestedUser.ID})
+		cond = cond.And(opts.requestedUserCond())
 
 		if opts.OnlyPerformedBy {
 			cond = cond.And(builder.Eq{"act_user_id": opts.RequestedUser.ID})

@@ -1,0 +1,19 @@
+{{/* #165: the subject header's Follow, for the SUBJECT: following it puts the activity on
+     every article of the subject (new articles and forks included) in the reader's feed,
+     with no notification or email (those come from the Article view's Watch, for one
+     article). Figma "Action" 7368:415372 in "Bubble view" 7368:415365 (a star-24 and "Follow")
+     and 7368:416566 in Mobile 7368:416555 (a brand purple star-fill-24 and "Following"); its
+     counter is hidden there, so no follower count. A signed-out reader gets it disabled, with
+     a tooltip that asks them to sign in. Its answer (ActionSubjectFollow) is this template. */}}
+<form class="flex-text-inline" hx-boost="true" hx-target="this" hx-swap="outerHTML" method="post" action="{{$.SubjectFollowLink}}/{{if $.IsFollowingSubject}}unfollow{{else}}follow{{end}}"{{if not $.IsSigned}} data-tooltip-content="{{ctx.Locale.Tr "repo.follow_guest_user"}}"{{end}}>
+	{{$buttonText := ctx.Locale.Tr "repo.follow_subject"}}
+	{{if $.IsFollowingSubject}}{{$buttonText = ctx.Locale.Tr "repo.following_subject"}}{{end}}
+	<button type="submit" class="subject-follow-button"{{if not $.IsSigned}} disabled{{end}} aria-label="{{$buttonText}}">
+		{{if $.IsFollowingSubject}}
+			{{svg "octicon-star-fill" 16 "tw-text-primary"}}
+		{{else}}
+			{{svg "octicon-star" 16}}
+		{{end}}
+		<span aria-hidden="true">{{$buttonText}}</span>
+	</button>
+</form>

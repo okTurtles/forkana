@@ -145,14 +145,102 @@
 
 /* A borderless button (Action 6507:58668, the design system's tertiary button): an
    Inter 600 14/20 #25292e label 8px from its 16px icon, 6px radius; CopyRef has no side
-   padding (Button 641:65500). Watch's eye turns brand purple while the article is
-   watched (the button stays labelled "Watch" and is marked pressed). */
+   padding (Button 641:65500). While the article is watched, Watch reads "Unwatch" and its
+   eye is brand purple (#4e40fa, Button I7368:416282;24375:95729 in "Read full article"
+   7368:416259; #1f2328 and "Watch" in 7368:416141). */
 .article-action-button .svg {
   color: var(--color-text-primary);
 }
 
-.article-action-button[aria-pressed="true"] .svg {
+.article-action-button[data-watching="true"] .svg {
   color: var(--color-primary);
+}
+
+/* ── The Watch menu (#165, "Watch menu" 7368:416644) ─────────────────────────
+   Opened by Watch on a phone: a white sheet along the bottom of the screen, 8px 16px
+   inside; its title row (Frame 714, 36px: 6px above and below an Inter 600 16/24 #1f2328
+   "Watch", the 24px x-24 at its end) 22px above the choices, 8px apart, each 24px tall:
+   a 16px column with the check of the one in force, 9px from its Inter 400 14/20 label
+   (#000 in the figma; the text colour here, #1f2328, which dark mode can follow). (The figma's "Receive Dashboard Updates (feed)" is not offered: the feed comes
+   from following the subject.) */
+.article-watch-menu {
+  position: fixed;
+  inset: auto 0 0;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--color-box-body);
+  color: var(--color-text);
+}
+
+.article-watch-menu::backdrop {
+  background: transparent;
+}
+
+.article-watch-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 8px 16px 24px;
+}
+
+.article-watch-menu-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.article-watch-menu-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.article-watch-menu-close {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.article-watch-menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.article-watch-menu-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.article-watch-menu-check {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 16px;
+  color: var(--color-text);
 }
 
 .article-copy-ref.forkana-btn {

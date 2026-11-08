@@ -79,6 +79,7 @@ func deleteUser(ctx context.Context, u *user_model.User, purge, anonymize bool) 
 		&repo_model.ArticleCollaborator{UserID: u.ID},
 		&access_model.Access{UserID: u.ID},
 		&repo_model.Watch{UserID: u.ID},
+		&repo_model.SubjectFollow{UserID: u.ID},
 		&repo_model.Star{UID: u.ID},
 		&user_model.Follow{UserID: u.ID},
 		&user_model.Follow{FollowID: u.ID},

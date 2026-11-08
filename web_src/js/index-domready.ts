@@ -39,6 +39,7 @@ import {initRepoRelease, initRepoReleaseNew} from './features/repo-release.ts';
 import {initRepoEditor} from './features/repo-editor.ts';
 import {initArticleEditor} from './features/article-editor.ts';
 import {initArticleSettings} from './features/article-settings.ts';
+import {initArticleWatchMenu} from './features/article-watch-menu.ts';
 import {initCompSearchUserBox} from './features/comp/SearchUserBox.ts';
 import {initInstall} from './features/install.ts';
 import {initCompWebHookEditor} from './features/comp/WebHookEditor.ts';
@@ -141,6 +142,7 @@ const initPerformanceTracer = callInitFunctions([
   initRepoEditor,
   initArticleEditor,
   initArticleSettings,
+  initArticleWatchMenu,
   initRepoGraphGit,
   initRepoIssueContentHistory,
   initRepoIssueList,
