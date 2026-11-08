@@ -97,6 +97,11 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		AssertHTMLElement(t, htmlDoc, "#article-settings-collaborators", true)
 		AssertHTMLElement(t, htmlDoc, "#article-settings-general", false)
 		AssertHTMLElement(t, htmlDoc, "#article-transfer-modal", false)
+		// no General | Collaborators switch, and the page is named after its one section
+		AssertHTMLElement(t, htmlDoc, ".forkana-segmented", false)
+		AssertHTMLElement(t, htmlDoc, `[data-article-settings-panel="general"]`, false)
+		assert.Equal(t, "Collaborators", strings.TrimSpace(htmlDoc.Find(".article-settings-heading").Text()))
+		assert.Equal(t, "collaborators", htmlDoc.Find("#article-settings-root").AttrOr("data-section", ""))
 	})
 
 	t.Run("DelegateCannotGrantDelegation", func(t *testing.T) {
@@ -124,8 +129,13 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		AssertHTMLElement(t, htmlDoc, `[data-role="article-more"] .menu > .article-more-divider`, true)
 		AssertHTMLElement(t, htmlDoc, `[data-role="article-more"] .menu > .article-more-report`, true)
 
-		// the delegate manages the collaborators, so the menu offers them Settings too
-		AssertHTMLElement(t, articlePage(t, delegateSession, "read"), `.article-more-settings`, true)
+		assert.Equal(t, "Settings", strings.TrimSpace(htmlDoc.Find(".article-more-settings").Text()))
+
+		// the delegate manages the collaborators: their item is "Collaborators", leading to
+		// the same page, on that section
+		delegateItem := articlePage(t, delegateSession, "read").Find(`[data-role="article-more"] .menu > a.article-more-settings[data-article-tab="settings"]`)
+		require.Equal(t, 1, delegateItem.Length())
+		assert.Equal(t, "Collaborators", strings.TrimSpace(delegateItem.Text()))
 
 		// everyone else sees Report only, and asking for the settings shows the article
 		htmlDoc = articlePage(t, outsiderSession, "settings")

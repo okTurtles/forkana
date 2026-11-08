@@ -235,7 +235,8 @@
   top: calc(100% + 2.5px);
   right: 0;
   left: auto;
-  width: 108px;
+  /* (108px, wider only for a delegate's longer "Collaborators" item, #477) */
+  width: max-content;
   min-width: 108px;
   margin: 0;
   padding: 12px;

@@ -106,8 +106,14 @@
                             </button>
                             <div class="menu">
                                 {{if .CanManageArticleCollaborators}}
+                                    {{/* #477 (issuecomment-6727300520): a delegate only manages the
+                                         collaborators, so their item says so and opens that section */}}
                                     <a class="item article-more-settings" href="{{QueryBuild $articleLink "view" "article" "mode" "settings"}}" data-article-tab="settings">
-                                        {{svg "octicon-gear" 16}}<span>{{ctx.Locale.Tr "repo.settings"}}</span>
+                                        {{if .IsRepoOwner}}
+                                            {{svg "octicon-gear" 16}}<span>{{ctx.Locale.Tr "repo.settings"}}</span>
+                                        {{else}}
+                                            {{svg "octicon-people" 16}}<span>{{ctx.Locale.Tr "repo.article_more_collaborators"}}</span>
+                                        {{end}}
                                     </a>
                                     <div class="article-more-divider" role="separator"></div>
                                 {{end}}

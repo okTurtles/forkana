@@ -14,7 +14,8 @@
         <a class="article-settings-back" href="{{QueryBuild .ArticleLink "view" "article" "mode" "read"}}" data-article-tab="read">
             {{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "repo.settings.article_back"}}</span>
         </a>
-        <h2 class="article-settings-heading">{{ctx.Locale.Tr "repo.settings"}}</h2>
+        {{/* a delegate has only the Collaborators section, which the page is then named after */}}
+        <h2 class="article-settings-heading">{{if .IsRepoOwner}}{{ctx.Locale.Tr "repo.settings"}}{{else}}{{ctx.Locale.Tr "repo.article_more_collaborators"}}{{end}}</h2>
     </div>
     {{if .IsRepoOwner}}
         {{/* SegmentedControl 7581:68630 in place of the old left menu */}}

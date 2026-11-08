@@ -23,9 +23,47 @@ async function openPage(page: Page, url: string) {
   await page.waitForFunction(() => window.history.state !== null);
 }
 
+// the delegate each project makes, for the same reason
+const delegateByProject: Record<string, string> = {
+  'chromium': 'user13',
+  'webkit': 'user15',
+  'Mobile Chrome': 'user16',
+  'Mobile Safari': 'user18',
+};
+
 // the Invite button: in the box's header, or in the empty state when nobody is listed yet
 function inviteButton(page: Page) {
   return page.locator('#article-settings-collaborators [data-article-settings-modal="#article-collaborator-invite-modal"]').first();
+}
+
+// Removes the user from the collaborators shown on the owner's page, if listed (a retry
+// after a failure, or the end of a test), with the page's own form and CSRF token, then
+// reloads the collaborators.
+async function removeIfListed(page: Page, name: string) {
+  const listed = await page.evaluate((user) => {
+    const checkbox = document.querySelector<HTMLInputElement>(`[data-article-collaborator]:has(a[href$="/${user}"]) [data-article-collaborator-select]`);
+    const form = document.querySelector<HTMLFormElement>('#article-collaborators-remove-form');
+    return {
+      uid: checkbox?.value ?? '',
+      action: form?.action ?? '',
+      csrf: form?.querySelector<HTMLInputElement>('input[name="_csrf"]')?.value ?? '',
+    };
+  }, name);
+  await Promise.all(listed.uid ? [page.request.post(listed.action, {form: {_csrf: listed.csrf, uid: listed.uid}})] : []);
+  await openPage(page, `${settingsURL}&section=collaborators`);
+}
+
+async function invite(page: Page, name: string, delegate = false) {
+  await inviteButton(page).click();
+  const dialog = page.locator('#article-collaborator-invite-modal');
+  await dialog.locator('#article-collaborator-invitee').fill(name);
+  await dialog.locator(`.results .result:has(.description:text-is("@${name}"))`).click();
+  if (delegate) {
+    await dialog.locator('#article-collaborator-role').click();
+    await dialog.locator('#article-collaborator-role .item[data-value="2"]').click();
+  }
+  await dialog.locator('#article-collaborator-invite-submit').click();
+  await expect(page.locator('.flash-message.flash-success')).toContainText('has been invited to collaborate on this article.');
 }
 
 test.describe('Article settings', () => {
@@ -185,26 +223,9 @@ test.describe('Article settings', () => {
     const page = await context.newPage();
     await openPage(page, `${settingsURL}&section=collaborators`);
 
-    // a retry after a failure finds the invitee still listed: remove them first, with the
-    // page's own form (and its CSRF token), so that they can be invited again
-    const leftover = await page.evaluate((name) => {
-      const checkbox = document.querySelector<HTMLInputElement>(`[data-article-collaborator]:has(a[href$="/${name}"]) [data-article-collaborator-select]`);
-      const form = document.querySelector<HTMLFormElement>('#article-collaborators-remove-form');
-      return {
-        uid: checkbox?.value ?? '',
-        action: form?.action ?? '',
-        csrf: form?.querySelector<HTMLInputElement>('input[name="_csrf"]')?.value ?? '',
-      };
-    }, invitee);
-    await Promise.all(leftover.uid ? [page.request.post(leftover.action, {form: {_csrf: leftover.csrf, uid: leftover.uid}})] : []);
-    await openPage(page, `${settingsURL}&section=collaborators`);
-
-    await inviteButton(page).click();
-    const dialog = page.locator('#article-collaborator-invite-modal');
-    await dialog.locator('#article-collaborator-invitee').fill(invitee);
-    await dialog.locator(`.results .result:has(.description:text-is("@${invitee}"))`).click();
-    await dialog.locator('#article-collaborator-invite-submit').click();
-    await expect(page.locator('.flash-message.flash-success')).toContainText('has been invited to collaborate on this article.');
+    // a retry after a failure finds the invitee still listed: they go first
+    await removeIfListed(page, invitee);
+    await invite(page, invitee);
 
     const row = page.locator(`[data-article-collaborator]:has(a[href$="/${invitee}"])`);
     await expect(row.locator('.forkana-label-attention')).toHaveText('Waiting invite');
@@ -232,6 +253,43 @@ test.describe('Article settings', () => {
     await expect(page.locator('.flash-message.flash-success')).toContainText(/The invite for .+ has been canceled\./);
     await expect(page.locator(`[data-article-collaborator]:has(a[href$="/${invitee}"])`)).toHaveCount(0);
     await context.close();
+  });
+
+  // #477 (issuecomment-6727300520): a Maintainer delegate's "…" menu has "Collaborators"
+  // instead of Settings; it opens the Collaborators section alone, without the General |
+  // Collaborators switch or the General boxes
+  test('a delegate: "Collaborators" in the "…" menu, and that section alone', async ({browser}, workerInfo) => {
+    const delegate = delegateByProject[workerInfo.project.name] ?? 'user13';
+    await login_user(browser, workerInfo, delegate);
+    const ownerContext = await load_logged_in_context(browser, workerInfo, 'user2');
+    const owner = await ownerContext.newPage();
+    await openPage(owner, `${settingsURL}&section=collaborators`);
+    await removeIfListed(owner, delegate);
+    await invite(owner, delegate, true);
+
+    const delegateContext = await load_logged_in_context(browser, workerInfo, delegate);
+    const page = await delegateContext.newPage();
+    await openPage(page, `${articleURL}&mode=read`);
+    await page.locator('#article-collaborator-invite-notice form[action$="/accept"] button').click();
+    await expect(page.locator('.flash-message.flash-success')).toBeVisible();
+    await openPage(page, `${articleURL}&mode=read`);
+
+    await page.locator('#article-tabs .article-more-button').click();
+    const item = page.locator('[data-role="article-more"] > .menu > .article-more-settings');
+    await expect(item).toHaveText('Collaborators');
+    await item.click();
+    await expect(page.locator('#article-view-root[data-article-mode="settings"]')).toBeVisible({timeout: 10000});
+    await expect(page.locator('.article-settings-heading')).toHaveText('Collaborators');
+    await expect(page.locator('#article-settings-collaborators')).toBeVisible();
+    await expect(page.locator('.forkana-segmented')).toHaveCount(0);
+    await expect(page.locator('[data-article-settings-panel="general"]')).toHaveCount(0);
+    await delegateContext.close();
+
+    // so that the next run starts without them
+    await openPage(owner, `${settingsURL}&section=collaborators`);
+    await removeIfListed(owner, delegate);
+    await expect(owner.locator(`[data-article-collaborator]:has(a[href$="/${delegate}"])`)).toHaveCount(0);
+    await ownerContext.close();
   });
 });
 
