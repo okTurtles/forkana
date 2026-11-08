@@ -702,6 +702,12 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 		return nil
 	}
 
+	// #156: nobody reviews the change requests of a fork-only article, editing it forks it
+	if perms.ForkOnly {
+		ctx.JSONError(ctx.Tr("repo.editor.fork_only_no_change_requests", perms.ForkOnlyOwnerName))
+		return nil
+	}
+
 	// Verify user can actually submit change requests
 	if !perms.CanSubmitChangeRequest {
 		ctx.JSONError(ctx.Tr("repo.editor.no_change_request_permission"))

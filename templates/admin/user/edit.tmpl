@@ -128,6 +128,13 @@
 						<input name="restricted" type="checkbox" {{if .User.IsRestricted}}checked{{end}}>
 					</div>
 				</div>
+				{{/* Forkana #156: editing the articles of a fork-only user creates a fork, not a change request */}}
+				<div class="inline field">
+					<div class="ui checkbox" data-tooltip-content="{{ctx.Locale.Tr "admin.users.is_fork_only_tooltip"}}">
+						<label><strong>{{ctx.Locale.Tr "admin.users.is_fork_only"}}</strong></label>
+						<input name="fork_only" type="checkbox" {{if .User.IsForkOnly}}checked{{end}}>
+					</div>
+				</div>
 				<div class="inline field {{if .DisableGitHooks}}tw-hidden{{end}}">
 					<div class="ui checkbox" data-tooltip-content="{{ctx.Locale.Tr "admin.users.allow_git_hook_tooltip"}}">
 						<label><strong>{{ctx.Locale.Tr "admin.users.allow_git_hook"}}</strong></label>

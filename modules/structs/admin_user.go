@@ -29,6 +29,8 @@ type CreateUserOption struct {
 	SendNotify bool `json:"send_notify"`
 	// Whether the user has restricted access privileges
 	Restricted *bool `json:"restricted"`
+	// Whether the user does not accept change requests: editing their articles creates a fork (Forkana)
+	ForkOnly *bool `json:"fork_only"`
 	// User visibility level: public, limited, or private
 	Visibility string `json:"visibility" binding:"In(,public,limited,private)"`
 
@@ -78,6 +80,8 @@ type EditUserOption struct {
 	AllowCreateOrganization *bool `json:"allow_create_organization"`
 	// Whether the user has restricted access privileges
 	Restricted *bool `json:"restricted"`
+	// Whether the user does not accept change requests: editing their articles creates a fork (Forkana)
+	ForkOnly *bool `json:"fork_only"`
 	// User visibility level: public, limited, or private
 	Visibility string `json:"visibility" binding:"In(,public,limited,private)"`
 }

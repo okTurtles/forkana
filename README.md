@@ -105,7 +105,7 @@ Forkana includes tools to automatically populate your instance with content. For
 
 #### Configuration
 
-Prior to running this command, make sure you have created an API token for your user. See the [API token configuration guide](custom/services/article-creator/README.md#required-configuration) for instructions.
+Prior to running this command, create a dedicated import account marked **fork-only** and an API token for it: the articles are created as that user, and nobody reads the change requests sent to an import account, so editing its articles must create a new article (a fork) instead. Create it with `gitea admin user create --username wikipedia --email wikipedia@forkana.local --random-password --must-change-password=false --fork-only --access-token --access-token-scopes write:repository,write:user`, or mark an existing account in Site Administration → User Accounts → Edit → "Fork-only". See the [configuration guide](custom/services/article-creator/README.md#required-configuration) for details.
 
 The `make populate` command accepts the following environment variables:
 
