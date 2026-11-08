@@ -51,6 +51,7 @@
   --color-muted: #1f2428;
   --color-muted-text: #8d96a0;
   --color-text-light-3: #8d96a0;
+  --color-input-placeholder: #8d96a0;
   --color-muted-1: #ffffff0f;
 
   --color-warning-border: #bb9d0066;
@@ -176,6 +177,7 @@
     --color-muted: #1f2428;
     --color-muted-text: #8d96a0;
     --color-text-light-3: #8d96a0;
+    --color-input-placeholder: #8d96a0;
     --color-muted-1: #ffffff0f;
 
     --color-warning-border: #bb9d0066;

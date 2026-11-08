@@ -324,6 +324,17 @@ func Subjects(ctx *context.Context) {
 		count = totalCount
 	}
 
+	// The rows show the summary of each subject's original article and its latest update
+	// (#248), loaded for all the listed subjects at once.
+	listed := append(append([]*repo_model.Subject{}, allSubjects...), similarSubjects...)
+	if exactMatch != nil {
+		listed = append(listed, exactMatch)
+	}
+	if err := repo_model.LoadSubjectListings(ctx, listed, ctx.Doer); err != nil {
+		ctx.ServerError("LoadSubjectListings", err)
+		return
+	}
+
 	ctx.Data["Total"] = count
 	ctx.Data["Subjects"] = allSubjects
 	ctx.Data["ExactMatch"] = exactMatch

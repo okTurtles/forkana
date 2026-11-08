@@ -11,6 +11,7 @@ import (
 	"code.gitea.io/gitea/models/unit"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/structs"
+	"code.gitea.io/gitea/modules/timeutil"
 
 	"xorm.io/builder"
 )
@@ -114,4 +115,85 @@ func HasReadableArticle(ctx context.Context, subjectID int64, ownerName string, 
 			builder.Select("id").From("`user`").Where(builder.Eq{"lower_name": strings.ToLower(ownerName)})))
 	}
 	return db.GetEngine(ctx).Table("repository").Where(cond).Exist()
+}
+
+// SubjectListing is what a row of the subjects list shows besides the subject's name (#248):
+// the summary (description) of the subject's original article, and when an article of the
+// subject was last updated.
+type SubjectListing struct {
+	// Summary is the description of the subject's root article: the oldest non-fork article
+	// (as GetSubjectRootRepository picks it) among those the doer can open. It is empty when
+	// that article has no summary or the doer cannot open any non-fork article.
+	Summary string
+	// UpdatedUnix is the latest update of an article of the subject the doer can open.
+	UpdatedUnix timeutil.TimeStamp
+}
+
+// FindSubjectListings loads, for each of the subjects, its SubjectListing as the doer (nil when
+// signed out) sees it (see readableArticleCond), in two queries whatever the number of
+// subjects. Subjects without any article the doer can open are left out.
+func FindSubjectListings(ctx context.Context, subjectIDs []int64, doer *user_model.User) (map[int64]*SubjectListing, error) {
+	listings := make(map[int64]*SubjectListing, len(subjectIDs))
+	if len(subjectIDs) == 0 {
+		return listings, nil
+	}
+	readable := func() builder.Cond {
+		return builder.In("`repository`.subject_id", subjectIDs).And(readableArticleCond(doer))
+	}
+
+	var updated []struct {
+		SubjectID   int64
+		UpdatedUnix timeutil.TimeStamp
+	}
+	if err := db.GetEngine(ctx).Table("repository").
+		Select("`repository`.subject_id, MAX(`repository`.updated_unix) AS updated_unix").
+		Where(readable()).
+		GroupBy("`repository`.subject_id").
+		Find(&updated); err != nil {
+		return nil, err
+	}
+	for _, u := range updated {
+		listings[u.SubjectID] = &SubjectListing{UpdatedUnix: u.UpdatedUnix}
+	}
+
+	// The root articles: the readable non-fork articles of these subjects, oldest first, of
+	// which the first of each subject is kept. A subject has one such article, a few at most.
+	var roots []struct {
+		SubjectID   int64
+		Description string
+	}
+	if err := db.GetEngine(ctx).Table("repository").
+		Select("`repository`.subject_id, `repository`.description").
+		Where(readable().And(builder.Eq{"`repository`.is_fork": false})).
+		OrderBy("`repository`.subject_id ASC, `repository`.created_unix ASC, `repository`.id ASC").
+		Find(&roots); err != nil {
+		return nil, err
+	}
+	seen := make(map[int64]bool, len(roots))
+	for _, r := range roots {
+		if seen[r.SubjectID] {
+			continue
+		}
+		seen[r.SubjectID] = true
+		if l := listings[r.SubjectID]; l != nil {
+			l.Summary = strings.TrimSpace(r.Description)
+		}
+	}
+	return listings, nil
+}
+
+// LoadSubjectListings sets the Listing of each of the subjects (see FindSubjectListings).
+func LoadSubjectListings(ctx context.Context, subjects []*Subject, doer *user_model.User) error {
+	ids := make([]int64, 0, len(subjects))
+	for _, s := range subjects {
+		ids = append(ids, s.ID)
+	}
+	listings, err := FindSubjectListings(ctx, ids, doer)
+	if err != nil {
+		return err
+	}
+	for _, s := range subjects {
+		s.Listing = listings[s.ID]
+	}
+	return nil
 }

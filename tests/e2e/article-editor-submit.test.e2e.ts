@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {login_user, load_logged_in_context} from './utils_e2e.ts';
+import {login_user, load_logged_in_context, fill_article_summary} from './utils_e2e.ts';
 
 // Test users:
 // - user2: owns repo1 (public, has subject_id: 1 "example-subject")
@@ -16,6 +16,7 @@ test.describe('Article Editor Direct Submit', () => {
     const page = await context.newPage();
 
     await page.goto('/article/user2/example-subject?mode=edit');
+    await fill_article_summary(page);
     await page.waitForLoadState('domcontentloaded');
 
     const submitButton = page.locator('#submit-changes-button');

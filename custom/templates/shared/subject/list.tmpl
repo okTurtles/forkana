@@ -2,9 +2,9 @@
 	{{if .HasSearchKeyword}}
 		{{/* When searching, show exact match and similar results separately */}}
 		{{if .Keyword}}
-			<div class="tw-font-bold tw-text-14 tw-mb-4">
+			<h2 class="subject-list-heading" data-role="subject-search-heading">
 				{{ctx.Locale.Tr "explore.search_results_for" .Keyword}}
-			</div>
+			</h2>
 		{{end}}
 
 		{{/* No Exact Match - Show Create Button */}}
@@ -12,21 +12,23 @@
 			{{if .ExactSubject}}
 				{{/* The subject exists but this listing does not show it: link to it instead of
 				     inviting the user to create a duplicate. */}}
-				<div class="tw-mb-6">
-					<p class="tw-flex tw-items-center tw-gap-2 tw-italic tw-text-sm text muted tw-mb-3">
-						{{svg "octicon-filter" 16}} {{ctx.Locale.Tr "search.exact_page_exists_not_shown" .ExactSubject.Name}}
+				<div class="subject-no-exact">
+					<p class="subject-no-exact-message">
+						{{svg "octicon-filter" 16}} <span>{{ctx.Locale.Tr "search.exact_page_exists_not_shown" .ExactSubject.Name}}</span>
 					</p>
-					<a class="ui basic button" href="{{AppSubUrl}}/subject/{{PathEscape .ExactSubject.Name}}">
+					<a class="forkana-btn forkana-btn-secondary forkana-btn-sm" href="{{AppSubUrl}}/subject/{{PathEscape .ExactSubject.Name}}">
 						{{ctx.Locale.Tr "search.view_existing_subject"}}
 					</a>
 				</div>
 			{{else}}
-				<div class="tw-mb-6">
-					<p class="tw-flex tw-items-center tw-gap-2 tw-italic tw-text-sm text muted tw-mb-3">
-						{{svg "octicon-skip" 16}} {{ctx.Locale.Tr "search.no_exact_page_found" .Keyword}}
+				{{/* figma 7368:273128: the message (Frame 1018 7368:273143) and the small secondary
+				     "Create a new Subject" button (Button 7368:273149), not a primary one (#248 item 3) */}}
+				<div class="subject-no-exact">
+					<p class="subject-no-exact-message">
+						{{svg "octicon-skip" 16}} <span>{{ctx.Locale.Tr "search.no_exact_page_found" .Keyword}}</span>
 					</p>
 					{{if .NewSubjectTitle}}
-						<a class="ui primary button" href="{{AppSubUrl}}/repo/create?subject={{QueryEscape .NewSubjectTitle}}">
+						<a class="forkana-btn forkana-btn-secondary forkana-btn-sm" data-role="create-new-subject" href="{{AppSubUrl}}/repo/create?subject={{QueryEscape .NewSubjectTitle}}">
 							{{ctx.Locale.Tr "search.create_new_subject"}}
 						</a>
 					{{end}}
@@ -41,9 +43,9 @@
 
 		{{/* Similar Section */}}
 		{{if .SimilarSubjects}}
-			<div class="tw-font-semibold tw-text-14 tw-mt-6 tw-mb-3 text muted">
+			<h2 class="subject-list-heading subject-list-similar">
 				{{ctx.Locale.Tr "explore.subject.similar"}}
-			</div>
+			</h2>
 			{{range .SimilarSubjects}}
 				{{template "shared/subject/item" .}}
 			{{end}}

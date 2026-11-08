@@ -1,5 +1,5 @@
 import {expect, test, type Page} from '@playwright/test';
-import {create_first_article, delete_repo, disableGeneratedHooks, load_logged_in_context, login_user, normalizeSubjectTitle} from './utils_e2e.ts';
+import {create_first_article, delete_repo, disableGeneratedHooks, load_logged_in_context, login_user, normalizeSubjectTitle, fill_article_summary} from './utils_e2e.ts';
 
 const articleDiagram = `flowchart LR
   ArticleAlpha --> ArticleBeta`;
@@ -78,6 +78,7 @@ test.describe('Mermaid rendering', () => {
       // the commit button stays disabled until areYouSure sees the textarea change the
       // editor's textarea sync dispatches, which is also what enables it for a real user
       await expect(page.locator('#commit-button')).toBeEnabled({timeout: 10000});
+      await fill_article_summary(page);
       await page.locator('#commit-button').click();
       await page.waitForURL(`**/subject/${normalizeSubjectTitle(subject)}/user2**`, {timeout: 30000});
 

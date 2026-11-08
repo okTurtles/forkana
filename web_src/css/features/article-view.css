@@ -393,15 +393,23 @@
 }
 
 .article-summary-label {
+  margin: 0;
   font-size: 14px;
   line-height: 20px;
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }
 
+/* #475: an editable textarea, the figma's "content" frame (I7368:264938;30948:151240): 64px
+   with two 24px lines, the grip hidden (no resizing) */
 .article-summary-box {
+  display: block;
+  width: 100%;
+  height: 64px;
   min-height: 64px;
+  margin: 0;
   padding: 7px 15px;
+  font-family: inherit;
   font-size: 16px;
   line-height: 24px;
   color: var(--color-text-light-3);
@@ -410,6 +418,29 @@
   border-radius: 6px;
   box-shadow: inset 0 1px 0 rgb(31 35 40 / 4%);
   overflow-wrap: anywhere;
+  resize: none;
+  outline: none;
+}
+
+.article-summary-box:focus {
+  border-color: var(--color-primary);
+}
+
+/* the placeholder of the empty field (Text I7368:273784;30948:151685): #757575 */
+.article-summary-box::placeholder {
+  color: var(--color-input-placeholder);
+  opacity: 1;
+}
+
+/* a blank summary that was submitted (article-summary.ts) */
+.article-summary-box[aria-invalid="true"] {
+  border-color: var(--color-red);
+}
+
+/* the first-article editor (repo/editor/edit.tmpl): the summary across the editor's width,
+   24px above it, as on the Edit tab */
+.first-article-summary {
+  margin-bottom: 24px;
 }
 
 .article-summary-caption {
