@@ -1,0 +1,216 @@
+// Copyright 2026 The Forkana Authors. All rights reserved.
+// SPDX-License-Identifier: MIT
+
+//go:build ignore
+
+// forkana-locales builds and checks Forkana's translated locale files. See
+// build/forkanalocale and "Translations" in AGENTS.md.
+//
+//	go run build/forkana-locales.go generate        # write custom/options/locale/locale_<lang>.ini
+//	go run build/forkana-locales.go check           # fail on missing/stale/broken translations or outdated files
+//	go run build/forkana-locales.go todo <dir>      # write <dir>/locale_<lang>.ini: the strings to translate
+//	go run build/forkana-locales.go merge <dir>     # merge translated <dir>/locale_<lang>.ini files, then generate
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+
+	"code.gitea.io/gitea/build/forkanalocale"
+)
+
+const (
+	upstreamDir    = "options/locale"
+	customDir      = "custom/options/locale"
+	translationDir = "custom/translations"
+	english        = "locale_en-US.ini"
+)
+
+var localeFileRe = regexp.MustCompile(`^locale_([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)*)\.ini$`)
+
+func main() {
+	if len(os.Args) < 2 {
+		usage()
+	}
+	fk := loadForkana()
+	langs := languages()
+	var err error
+	switch os.Args[1] {
+	case "generate":
+		err = generate(fk, langs)
+	case "check":
+		err = check(fk, langs)
+	case "todo":
+		if len(os.Args) != 3 {
+			usage()
+		}
+		err = todo(fk, langs, os.Args[2])
+	case "merge":
+		if len(os.Args) != 3 {
+			usage()
+		}
+		if err = merge(fk, langs, os.Args[2]); err == nil {
+			err = generate(fk, langs)
+		}
+	default:
+		usage()
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func usage() {
+	fmt.Fprintln(os.Stderr, "usage: go run build/forkana-locales.go generate | check | todo <dir> | merge <dir>")
+	os.Exit(2)
+}
+
+func mustParse(path string) *forkanalocale.File {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	f, err := forkanalocale.Parse(data)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", path, err)
+		os.Exit(1)
+	}
+	return f
+}
+
+func loadForkana() *forkanalocale.Forkana {
+	return forkanalocale.NewForkana(mustParse(filepath.Join(upstreamDir, english)), mustParse(filepath.Join(customDir, english)))
+}
+
+// languages lists the upstream languages other than en-US.
+func languages() []string {
+	entries, err := os.ReadDir(upstreamDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	var langs []string
+	for _, e := range entries {
+		if m := localeFileRe.FindStringSubmatch(e.Name()); m != nil && e.Name() != english {
+			langs = append(langs, m[1])
+		}
+	}
+	return langs
+}
+
+func fileName(lang string) string { return "locale_" + lang + ".ini" }
+
+// loadTranslations reads custom/translations/locale_<lang>.ini, empty if absent.
+func loadTranslations(lang string) *forkanalocale.File {
+	path := filepath.Join(translationDir, fileName(lang))
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		f, _ := forkanalocale.Parse(nil)
+		return f
+	}
+	return mustParse(path)
+}
+
+func build(fk *forkanalocale.Forkana, lang string) (generated, translations []byte, err error) {
+	name := fileName(lang)
+	upstream, err := os.ReadFile(filepath.Join(upstreamDir, name))
+	if err != nil {
+		return nil, nil, err
+	}
+	tr := loadTranslations(lang)
+	generated, err = forkanalocale.Generate(name, upstream, fk, tr)
+	return generated, forkanalocale.FormatTranslations(lang, fk, tr), err
+}
+
+func generate(fk *forkanalocale.Forkana, langs []string) error {
+	if err := os.MkdirAll(translationDir, 0o755); err != nil {
+		return err
+	}
+	for _, lang := range langs {
+		generated, translations, err := build(fk, lang)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(customDir, fileName(lang)), generated, 0o644); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(translationDir, fileName(lang)), translations, 0o644); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("generated %d locale files from %d Forkana keys\n", len(langs), len(fk.Keys))
+	return nil
+}
+
+func check(fk *forkanalocale.Forkana, langs []string) error {
+	var problems []string
+	for _, lang := range langs {
+		problems = append(problems, forkanalocale.Check(lang, fk, loadTranslations(lang))...)
+		generated, _, err := build(fk, lang)
+		if err != nil {
+			return err
+		}
+		onDisk, err := os.ReadFile(filepath.Join(customDir, fileName(lang)))
+		if err != nil || !bytes.Equal(onDisk, generated) {
+			problems = append(problems, fmt.Sprintf("%s: %s is out of date: run `make generate-locale-forkana`", lang, filepath.Join(customDir, fileName(lang))))
+		}
+	}
+	// A custom locale file without upstream file would be missed by the loop above.
+	entries, _ := os.ReadDir(customDir)
+	for _, e := range entries {
+		if m := localeFileRe.FindStringSubmatch(e.Name()); m != nil && e.Name() != english && !slices.Contains(langs, m[1]) {
+			problems = append(problems, fmt.Sprintf("%s: no upstream %s/%s", e.Name(), upstreamDir, e.Name()))
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("%s\n%d problem(s) with the Forkana translations; see \"Translations\" in AGENTS.md", strings.Join(problems, "\n"), len(problems))
+	}
+	fmt.Printf("%d languages translate all %d Forkana keys\n", len(langs), len(fk.Keys))
+	return nil
+}
+
+func todo(fk *forkanalocale.Forkana, langs []string, dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	total := 0
+	for _, lang := range langs {
+		fragment, n := forkanalocale.Todo(fk, loadTranslations(lang))
+		path := filepath.Join(dir, fileName(lang))
+		if n == 0 {
+			_ = os.Remove(path)
+			continue
+		}
+		total += n
+		header := fmt.Sprintf("# Translate each value into %s, keeping the \"# en:\" lines. Then run: go run build/forkana-locales.go merge %s\n", lang, dir)
+		if err := os.WriteFile(path, append([]byte(header), fragment...), 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("%s: %d string(s) to translate\n", path, n)
+	}
+	if total == 0 {
+		fmt.Println("nothing to translate")
+	}
+	return nil
+}
+
+func merge(fk *forkanalocale.Forkana, langs []string, dir string) error {
+	for _, lang := range langs {
+		path := filepath.Join(dir, fileName(lang))
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			continue
+		}
+		merged := forkanalocale.Merge(loadTranslations(lang), mustParse(path))
+		if err := os.WriteFile(filepath.Join(translationDir, fileName(lang)), forkanalocale.FormatTranslations(lang, fk, merged), 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("merged %s\n", path)
+	}
+	return nil
+}

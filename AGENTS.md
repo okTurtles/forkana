@@ -212,6 +212,25 @@ Environment variables:
 - `CATEGORY` (optional) - Wikipedia category to fetch from
 - `PRIVATE` (optional) - Set "true" for private repos
 
+## Translations
+
+Gitea uses a locale file from `custom/options/locale/` *instead of* the embedded `options/locale/` one: the custom file replaces it wholesale, keys are not merged. So:
+
+- `custom/options/locale/locale_en-US.ini` is a full copy of upstream en-US with Forkana's wording. Its **Forkana keys** are the keys upstream en-US doesn't have, or has with other wording ("Pull Requests" → "Change Requests").
+- `custom/translations/locale_<lang>.ini` holds, for each of the 29 other upstream languages, only the translations of the Forkana keys. Each translation has a `# en:` line above it: the English it was translated from. Terms follow `custom/translations/GLOSSARY.md`.
+- `custom/options/locale/locale_<lang>.ini` is **generated** (`make generate-locale-forkana`, from `build/forkana-locales.go`): the upstream file of the language, with the Forkana keys set to their translations and the keys Forkana deleted from en-US left out. Never edit it by hand.
+- `make lint-locale-forkana` (part of `make lint-backend`) fails when a Forkana key has no translation in a language, a translation is stale (its `# en:` line differs from the current English), its placeholders (`%s`, `%[1]d`…), HTML tags or wrapping quotes differ from the English, a translation file has a key that isn't a Forkana key, or a generated file is out of date.
+
+To add or change a string:
+
+1. Add or change it in `custom/options/locale/locale_en-US.ini` (only there).
+2. `go run build/forkana-locales.go todo /tmp/forkana-todo` writes, per language, the strings to translate (missing or stale), with the English as value.
+3. Translate the values in those files (keep keys, placeholders, HTML and quotes; use the glossary).
+4. `go run build/forkana-locales.go merge /tmp/forkana-todo` merges them into `custom/translations/` and regenerates the locale files.
+5. `make lint-locale-forkana`.
+
+After merging upstream Gitea (new `options/locale/` files), run `make generate-locale-forkana` and `make lint-locale-forkana`. If upstream en-US changed, bring the changes into custom en-US first: a key whose upstream wording changed but custom en-US kept the old one counts as a Forkana key, and the check asks for its translation.
+
 ## Configuration
 
 ### Required Config File
