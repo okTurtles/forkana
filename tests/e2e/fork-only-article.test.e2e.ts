@@ -51,6 +51,8 @@ test('Edit tab of a fork-only article: the notice, and Submit changes forks it',
 
   // no change request modal: Submit changes commits to a new fork
   await expect(page.locator('#pre-submit-changes-button')).toHaveCount(0);
+  // Submit changes is the only action: no Fork button doing the same
+  await expect(page.locator('#fork-article-button')).toHaveCount(0);
   const submit = page.locator('#submit-changes-button');
   await expect(submit).toHaveText('Submit changes');
   await submit.click();

@@ -60,6 +60,7 @@ func testForkOnlyArticle(t *testing.T, _ *url.URL) {
 		assert.Equal(t, 0, doc.Find(`[data-role="article-fork-only-notice"]`).Length())
 		assert.Equal(t, 1, doc.Find("#pre-submit-changes-button").Length())
 		assert.Equal(t, 0, doc.Find("#submit-changes-button").Length())
+		assert.Equal(t, 1, doc.Find("#fork-article-button").Length())
 	})
 
 	setForkOnly(t, true)
@@ -73,8 +74,10 @@ func testForkOnlyArticle(t *testing.T, _ *url.URL) {
 			fmt.Sprintf("This will create a new article because the user %s doesn't accept change requests", owner.Name),
 			strings.Join(strings.Fields(notice.Text()), " "))
 
-		// Submit changes forks instead of opening the change request modal
+		// Submit changes forks instead of opening the change request modal, and is the
+		// only action: no Fork button doing the same
 		assert.Equal(t, 0, doc.Find("#pre-submit-changes-button").Length())
+		assert.Equal(t, 0, doc.Find("#fork-article-button").Length())
 		submit := doc.Find("#submit-changes-button")
 		require.Equal(t, 1, submit.Length())
 		assert.Equal(t, "true", submit.AttrOr("data-fork-and-edit", ""))
