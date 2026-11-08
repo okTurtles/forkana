@@ -532,7 +532,7 @@ func EditFilePost(ctx *context.Context) {
 		// A change request is a branch of the article, and the summary is not in git: a new
 		// summary is proposed in the change request's description for the owner to apply.
 		proposedSummary := ""
-		if hasSummary && summary != ctx.Repo.Repository.Description {
+		if hasSummary && summary != forms.NormalizeArticleSummary(ctx.Repo.Repository.Description) {
 			proposedSummary = summary
 		}
 		pr := handleSubmitChangeRequest(ctx, parsed.form, parsed, proposedSummary)
@@ -561,9 +561,15 @@ func EditFilePost(ctx *context.Context) {
 	subjectID := ctx.Repo.Repository.SubjectID
 	isNotFork := !ctx.Repo.Repository.IsFork
 
+	// #475: the summary is the article's, so it is saved only with a commit to the default branch
+	// of the article committed to, and only by who may change that article: a writer of its code
+	// in place (not a maintainer editing a contributor's branch), or the doer on their own fork.
+	savesSummary := hasSummary && parsed.NewBranchName == targetRepo.DefaultBranch &&
+		(parsed.form.ForkAndEdit || forkedForNeedFork || ctx.Repo.Permission.CanWrite(unit.TypeCode))
+
 	// #475: an edit of the summary alone, made in place, saves the summary without committing
 	// the article unchanged (which would add an empty "Update README.md" to its history).
-	if hasSummary && operation == "update" && !parsed.form.ForkAndEdit && !forkedForNeedFork &&
+	if savesSummary && operation == "update" && !parsed.form.ForkAndEdit && !forkedForNeedFork &&
 		parsed.NewBranchName == ctx.Repo.BranchName && parsed.form.TreePath == ctx.Repo.TreePath &&
 		articleContentUnchanged(ctx, parsed.form.Content.Value()) {
 		if !saveArticleSummary(ctx, targetRepo, summary) {
@@ -605,7 +611,7 @@ func EditFilePost(ctx *context.Context) {
 
 	// #475: the summary is saved on the article that was committed to: the article itself, or
 	// the doer's fork of it (the fork's own summary, which its change requests start from).
-	if hasSummary && !saveArticleSummary(ctx, targetRepo, summary) {
+	if savesSummary && !saveArticleSummary(ctx, targetRepo, summary) {
 		return
 	}
 
@@ -639,10 +645,11 @@ func articleContentUnchanged(ctx *context.Context, content string) bool {
 	return strings.ReplaceAll(content, "\r", "") == strings.ReplaceAll(current, "\r", "")
 }
 
-// saveArticleSummary sets the article's summary (its description) when it changed. It reports
-// false after it has written an error response.
+// saveArticleSummary sets the article's summary (its description) when it changed, the stored
+// one compared in its normalized form (forms.NormalizeArticleSummary). It reports false after it
+// has written an error response.
 func saveArticleSummary(ctx *context.Context, repo *repo_model.Repository, summary string) bool {
-	if repo.Description == summary {
+	if forms.NormalizeArticleSummary(repo.Description) == summary {
 		return true
 	}
 	repo.Description = summary

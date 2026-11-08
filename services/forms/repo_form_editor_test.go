@@ -38,4 +38,8 @@ func TestEditRepoFileForm_ArticleSummary(t *testing.T) {
 			assert.ErrorIs(t, err, c.wantErr)
 		})
 	}
+
+	// a stored description is compared in the same form
+	assert.Equal(t, "Line one line two", NormalizeArticleSummary("  Line one\r\n\tline  two "))
+	assert.Empty(t, NormalizeArticleSummary(" \n "))
 }

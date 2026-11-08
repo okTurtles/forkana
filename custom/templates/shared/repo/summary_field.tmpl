@@ -8,8 +8,8 @@
      An Inter 600 14/20 label (FormControl.Label: "(required)" is spelled out, never "*"), 4px
      above a 64px white box with a 1px #d1d9e0 border, 6px radius and 8px 16px padding around
      Inter 400 16/24 #59636e text, 4px above the Inter 400 12/18 #59636e caption. Sizes in
-     web_src/css/features/article-view.css. The data-* messages are the ones article-summary.ts
-     shows when the field is blank or too long. */}}
+     web_src/css/features/article-view.css. data-required-message is what article-summary.ts
+     shows when the field is blank (maxlength keeps it from being too long). */}}
 <div class="article-summary-field" data-role="article-summary">
     <label class="article-summary-label" for="article-summary-input">{{ctx.Locale.Tr "repo.article_summary"}} <span class="article-summary-required">{{ctx.Locale.Tr "repo.article_summary_required_marker"}}</span></label>
     <textarea id="article-summary-input" class="article-summary-box" name="summary" rows="2" required maxlength="200"

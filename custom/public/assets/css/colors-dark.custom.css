@@ -51,7 +51,6 @@
   --color-muted: #1f2428;
   --color-muted-text: #8d96a0;
   --color-text-light-3: #8d96a0;
-  --color-input-placeholder: #8d96a0;
   --color-muted-1: #ffffff0f;
 
   --color-warning-border: #bb9d0066;
@@ -177,7 +176,6 @@
     --color-muted: #1f2428;
     --color-muted-text: #8d96a0;
     --color-text-light-3: #8d96a0;
-    --color-input-placeholder: #8d96a0;
     --color-muted-1: #ffffff0f;
 
     --color-warning-border: #bb9d0066;
@@ -284,6 +282,21 @@
     --color-forkana-tooltip-arrow: #1f2328;
     --color-forkana-tooltip-text: #ffffff;
     --color-changes-hub-strong-text: var(--color-text-primary);
+  }
+}
+
+/* #475: the article Summary's placeholder (set to the figma's #757575 for the light themes in
+   web_src/css/features/article-view.css) is Primer's dark placeholder, a step dimmer than the
+   field's #8d96a0 text, so that an empty field does not read as filled in. */
+[data-theme="gitea-dark"] .article-summary-field > textarea.article-summary-box[name="summary"],
+[data-theme="gitea-dark-protanopia-deuteranopia"] .article-summary-field > textarea.article-summary-box[name="summary"] {
+  --color-placeholder-text: #6e7681;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="gitea-auto"] .article-summary-field > textarea.article-summary-box[name="summary"],
+  [data-theme="gitea-auto-protanopia-deuteranopia"] .article-summary-field > textarea.article-summary-box[name="summary"] {
+    --color-placeholder-text: #6e7681;
   }
 }
 

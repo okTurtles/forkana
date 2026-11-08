@@ -1,6 +1,6 @@
 import {test, expect} from '@playwright/test';
 import type {Locator, Page} from '@playwright/test';
-import {login_user, load_logged_in_context, create_article_via_api, normalizeSubjectTitle} from './utils_e2e.ts';
+import {login_user, load_logged_in_context, create_article_via_api, create_first_article, normalizeSubjectTitle} from './utils_e2e.ts';
 
 // #475: the article's Summary is edited on its Edit tab (figma Textarea 7368:264938) and is
 // required. #248: a subject row shows its original article's summary and "Updated …" (figma
@@ -37,6 +37,37 @@ async function box(locator: Locator) {
   return b;
 }
 
+// Textarea 7368:264938 (Edit tab) and 7368:273784 (first-article editor): a 64px box, 8/16
+// padding inside its 1px #d1d9e0 border, 6px corners, Inter 400 16/24 #59636e on white, the
+// same when hovered; the empty field's placeholder #757575; the label Inter 600 14/20 #1f2328.
+async function expectFigmaSummary(page: Page) {
+  const field = page.locator('#article-summary-input');
+  const label = page.locator('.article-summary-field .article-summary-label');
+  expect((await box(field)).height).toBe(64);
+  const figma = {
+    'padding-top': '7px', 'padding-left': '15px', 'border-top-width': '1px', 'border-top-left-radius': '6px',
+    'font-size': '16px', 'line-height': '24px', 'font-weight': '400', 'resize': 'none',
+  };
+  expect(await style(field, ...Object.keys(figma))).toEqual(figma);
+  expectColor(await rgb(field, 'color'), '#59636e');
+  expectColor(await rgb(field, 'border-top-color'), '#d1d9e0');
+  expectColor(await rgb(field, 'background-color'), '#ffffff');
+  // the placeholder's computed style is only exposed by Chromium
+  if (await field.inputValue() === '' && ['chromium', 'Mobile Chrome'].includes(test.info().project.name)) {
+    const placeholder = await field.evaluate((el) => {
+      const c = document.createElement('canvas').getContext('2d');
+      c.fillStyle = getComputedStyle(el, '::placeholder').color;
+      c.fillRect(0, 0, 1, 1);
+      return Array.from(c.getImageData(0, 0, 1, 1).data.slice(0, 3));
+    });
+    expectColor(placeholder, '#757575');
+  }
+  await field.hover();
+  expectColor(await rgb(field, 'border-top-color'), '#d1d9e0');
+  expect(await style(label, 'font-size', 'line-height', 'font-weight')).toEqual({'font-size': '14px', 'line-height': '20px', 'font-weight': '600'});
+  expectColor(await rgb(label, 'color'), '#1f2328');
+}
+
 // Answers the editor's POST here, so the fixture article is not modified; returns the bodies.
 async function captureEdits(page: Page): Promise<string[]> {
   const bodies: string[] = [];
@@ -66,17 +97,22 @@ test.describe('Article summary on the Edit tab (#475)', () => {
     await expect(field).toHaveAttribute('maxlength', '200');
     await expect(page.locator('.article-summary-caption')).toHaveText('Up to 200 characters.');
 
-    // Textarea 7368:264938: a 64px box, 8/16 padding inside its 1px #d1d9e0 border, 6px
-    // corners, Inter 400 16/24 #59636e; the label Inter 600 14/20 #1f2328
-    expect((await box(field)).height).toBe(64);
-    expect(await style(field, 'padding-top', 'padding-left', 'border-top-width', 'border-top-left-radius', 'font-size', 'line-height', 'font-weight')).toEqual({
-      'padding-top': '7px', 'padding-left': '15px', 'border-top-width': '1px', 'border-top-left-radius': '6px', 'font-size': '16px', 'line-height': '24px', 'font-weight': '400',
-    });
-    expectColor(await rgb(field, 'color'), '#59636e');
-    expectColor(await rgb(field, 'border-top-color'), '#d1d9e0');
-    expect(await style(label, 'font-size', 'line-height', 'font-weight')).toEqual({'font-size': '14px', 'line-height': '20px', 'font-weight': '600'});
-    expectColor(await rgb(label, 'color'), '#1f2328');
+    await expectFigmaSummary(page);
     await context.close();
+  });
+
+  test('the first version of an article is written with the same Summary', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user2');
+    const page = await context.newPage();
+    await page.setViewportSize(viewport);
+    try {
+      // the field sits in Gitea's ".ui.edit.form", whose textarea rules must not reach it
+      await create_first_article(page, 'user2', `E2e-summary-first-${workerInfo.workerIndex}-${Date.now()}`);
+      await expect(page.locator('#first-article-form .first-article-summary #article-summary-input')).toBeVisible();
+      await expectFigmaSummary(page);
+    } finally {
+      await context.close();
+    }
   });
 
   test('Submit changes asks for a summary first, then sends it with the article', async ({browser}, workerInfo) => {

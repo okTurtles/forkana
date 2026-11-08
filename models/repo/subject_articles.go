@@ -137,9 +137,7 @@ func FindSubjectListings(ctx context.Context, subjectIDs []int64, doer *user_mod
 	if len(subjectIDs) == 0 {
 		return listings, nil
 	}
-	readable := func() builder.Cond {
-		return builder.In("`repository`.subject_id", subjectIDs).And(readableArticleCond(doer))
-	}
+	readable := builder.In("`repository`.subject_id", subjectIDs).And(readableArticleCond(doer))
 
 	var updated []struct {
 		SubjectID   int64
@@ -147,7 +145,7 @@ func FindSubjectListings(ctx context.Context, subjectIDs []int64, doer *user_mod
 	}
 	if err := db.GetEngine(ctx).Table("repository").
 		Select("`repository`.subject_id, MAX(`repository`.updated_unix) AS updated_unix").
-		Where(readable()).
+		Where(readable).
 		GroupBy("`repository`.subject_id").
 		Find(&updated); err != nil {
 		return nil, err
@@ -164,7 +162,7 @@ func FindSubjectListings(ctx context.Context, subjectIDs []int64, doer *user_mod
 	}
 	if err := db.GetEngine(ctx).Table("repository").
 		Select("`repository`.subject_id, `repository`.description").
-		Where(readable().And(builder.Eq{"`repository`.is_fork": false})).
+		Where(readable.And(builder.Eq{"`repository`.is_fork": false})).
 		OrderBy("`repository`.subject_id ASC, `repository`.created_unix ASC, `repository`.id ASC").
 		Find(&roots); err != nil {
 		return nil, err

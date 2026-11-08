@@ -62,6 +62,13 @@ var (
 	ErrArticleSummaryTooLong  = errors.New("the article summary is too long")
 )
 
+// NormalizeArticleSummary trims a summary and makes its line breaks and runs of blanks single
+// spaces, as ArticleSummary does. A stored description is compared in this form, so that one
+// saved with line breaks (in the settings, or through the API) does not count as changed.
+func NormalizeArticleSummary(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
 // ArticleSummary returns the summary submitted with the article, its blanks trimmed and its
 // line breaks made spaces (it is shown as one paragraph). It is required whenever the form
 // comes from an article editor (required, or a Summary was sent) and then must be from 1 to
@@ -71,7 +78,7 @@ func (f *EditRepoFileForm) ArticleSummary(required bool) (summary string, ok boo
 	if !f.Summary.Has() && !required {
 		return "", false, nil
 	}
-	summary = strings.Join(strings.Fields(f.Summary.Value()), " ")
+	summary = NormalizeArticleSummary(f.Summary.Value())
 	if summary == "" {
 		return "", true, ErrArticleSummaryRequired
 	}

@@ -38,7 +38,7 @@ type Subject struct {
 	CreatedUnix timeutil.TimeStamp `xorm:"INDEX created"`
 	UpdatedUnix timeutil.TimeStamp `xorm:"INDEX updated"`
 
-	// Listing is what the subjects list shows under the name, loaded by FindSubjectListings
+	// Listing is what the subjects list shows under the name, set by LoadSubjectListings
 	// (nil until then, or when the doer can open no article of the subject).
 	Listing *SubjectListing `xorm:"-"`
 }

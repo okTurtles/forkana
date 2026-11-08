@@ -97,10 +97,50 @@ func TestArticleSummaryEdit(t *testing.T) {
 
 		t.Run("OtherEditorsNeedNoSummary", func(t *testing.T) {
 			// the stock file editor neither sends a summary nor redirects to the article
+			before := description(repo.ID)
 			form := articleForm(t, session, "", map[string]string{"content": "# Edited elsewhere\n"})
 			delete(form, "redirect_to_article")
 			session.MakeRequest(t, NewRequestWithValues(t, "POST", editURL, form), http.StatusOK)
-			assert.Equal(t, "Only the summary changed", description(repo.ID))
+			assert.Equal(t, before, description(repo.ID))
+		})
+
+		t.Run("CommitToAnotherBranchLeavesSummary", func(t *testing.T) {
+			// the article's summary goes with its default branch: a commit to a new branch
+			// (waiting for review) does not change it
+			before := description(repo.ID)
+			form := articleForm(t, session, "", map[string]string{
+				"content":         "# On a branch\n",
+				"summary":         "A summary for a branch",
+				"commit_choice":   "commit-to-new-branch",
+				"new_branch_name": "summary-branch",
+			})
+			session.MakeRequest(t, NewRequestWithValues(t, "POST", editURL, form), http.StatusOK)
+			assert.Equal(t, before, description(repo.ID))
+		})
+
+		t.Run("UntouchedMultilineSummaryIsUnchanged", func(t *testing.T) {
+			// a description saved elsewhere with line breaks is the same summary once its blanks
+			// are collapsed, as the field submits it
+			r := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
+			r.Description = "  Line one\n  line two "
+			require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), r, "description"))
+
+			contributor := loginUser(t, "user4")
+			form := articleForm(t, contributor, "?submit_change_request=true", map[string]string{
+				"content":                    "# Proposed, summary untouched\n",
+				"summary":                    "Line one line two",
+				"submit_change_request":      "true",
+				"change_request_title":       "Content only",
+				"change_request_description": "Just the text",
+			})
+			resp := contributor.MakeRequest(t, NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form), http.StatusOK)
+			pr := pullFromRedirect(t, repo.ID, test.RedirectURL(resp))
+			assert.Equal(t, "Just the text", pr.Issue.Content)
+
+			// nor does the owner's save rewrite it
+			form = articleForm(t, session, "", map[string]string{"content": "# Saved again\n", "summary": "Line one line two"})
+			session.MakeRequest(t, NewRequestWithValues(t, "POST", editURL, form), http.StatusOK)
+			assert.Equal(t, "  Line one\n  line two ", description(repo.ID))
 		})
 
 		t.Run("ChangeRequestProposesSummary", func(t *testing.T) {
@@ -112,21 +152,17 @@ func TestArticleSummaryEdit(t *testing.T) {
 				"change_request_title":       "Better summary",
 				"change_request_description": "Please",
 			})
+			before := description(repo.ID)
 			resp := contributor.MakeRequest(t, NewRequestWithValues(t, "POST", editURL+"?submit_change_request=true", form), http.StatusOK)
-			redirect := test.RedirectURL(resp)
-			require.Contains(t, redirect, "/pulls/")
-			index, err := strconv.ParseInt(strings.TrimSuffix(redirect[strings.LastIndex(redirect, "/")+1:], "/"), 10, 64)
-			require.NoError(t, err)
-			pr, err := issues_model.GetPullRequestByIndex(t.Context(), repo.ID, index)
-			require.NoError(t, err)
-			require.NoError(t, pr.LoadIssue(t.Context()))
+			pr := pullFromRedirect(t, repo.ID, test.RedirectURL(resp))
 			assert.Equal(t, "Please\n\n**Proposed summary:**\n\n> A proposed summary", pr.Issue.Content)
 			// the article's own summary is the owner's to change
-			assert.Equal(t, "Only the summary changed", description(repo.ID))
+			assert.Equal(t, before, description(repo.ID))
 		})
 
 		t.Run("ForkAndEditSavesSummaryOnFork", func(t *testing.T) {
 			contributor := loginUser(t, "user4")
+			before := description(repo.ID)
 			form := articleForm(t, contributor, "", map[string]string{
 				"content":       "# In my fork\n",
 				"summary":       "My fork's summary",
@@ -135,9 +171,20 @@ func TestArticleSummaryEdit(t *testing.T) {
 			contributor.MakeRequest(t, NewRequestWithValues(t, "POST", editURL, form), http.StatusOK)
 			fork := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: 4, ForkID: repo.ID})
 			assert.Equal(t, "My fork's summary", fork.Description)
-			assert.Equal(t, "Only the summary changed", description(repo.ID))
+			assert.Equal(t, before, description(repo.ID))
 		})
 	})
+}
+
+// pullFromRedirect loads the change request a submit redirected to, with its issue.
+func pullFromRedirect(t *testing.T, repoID int64, redirect string) *issues_model.PullRequest {
+	require.Contains(t, redirect, "/pulls/")
+	index, err := strconv.ParseInt(strings.TrimSuffix(redirect[strings.LastIndex(redirect, "/")+1:], "/"), 10, 64)
+	require.NoError(t, err)
+	pr, err := issues_model.GetPullRequestByIndex(t.Context(), repoID, index)
+	require.NoError(t, err)
+	require.NoError(t, pr.LoadIssue(t.Context()))
+	return pr
 }
 
 // TestArticleSummaryField covers the Summary field of #475 on the Edit tab and in the
