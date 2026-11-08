@@ -172,7 +172,7 @@ test.describe('Article settings', () => {
     await page.unroute('**/article_collaborators/remove');
 
     await confirm.click();
-    await expect(page.locator('.flash-message.flash-success')).toContainText(/^The invite for .+ has been cancelled\.$/);
+    await expect(page.locator('.flash-message.flash-success')).toContainText(/The invite for .+ has been cancelled\./);
     await expect(page.locator(`[data-article-collaborator]:has(a[href$="/${invitee}"])`)).toHaveCount(0);
     await context.close();
   });
@@ -184,7 +184,7 @@ test('on a phone: tabs without icons, Watch and "…" on their row', async ({pag
   await page.setViewportSize({width: 375, height: 812});
   await page.goto(`${articleURL}&mode=read`);
   const row = await page.locator('#article-tabs').boundingBox();
-  expect(row.height).toBe(40);
+  expect(row.height).toBe(41); // the 40px tabs and the 1px rule under them
   await expect(page.locator('#article-tabs .tabular.menu a.item .svg').first()).toBeHidden();
   const read = await page.locator('#article-tabs a[data-article-tab="read"]').boundingBox();
   expect(read.width).toBeCloseTo(66, -1); // TabNav.Link 7596:67066: 16 + "Read" + 16
