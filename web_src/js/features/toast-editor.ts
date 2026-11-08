@@ -6,6 +6,7 @@ import {installLosslessMarkdownTracker} from './comp/losslessMarkdown.ts';
 import {installRawHtmlGuard, rawInlineHtmlWidgetRule} from './comp/rawHtmlGuard.ts';
 import {defaultToolbarItems} from './comp/toastEditorToolbar.ts';
 import {articleEditorMarkdownOptions} from './comp/toastEditorOptions.ts';
+import {pastedCodeLanguagePlugin} from './comp/pastedCodeLanguage.ts';
 import {showErrorToast} from '../modules/toast.ts';
 import {ensureFilesWithinLimit, getMaxAttachmentSize, showFileTooLargeError} from './comp/editorFileLimit.ts';
 import {POST} from '../modules/fetch.ts';
@@ -176,6 +177,8 @@ export async function createToastEditor(
       },
     },
     widgetRules,
+    // A code block pasted as HTML keeps its language, so pasted mermaid renders (#373).
+    plugins: [pastedCodeLanguagePlugin],
   });
   editorRef.current = editor;
   // An article with raw HTML Toast UI cannot convert (`<!DOCTYPE html>`, `<?php`, an indented
