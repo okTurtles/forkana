@@ -7,7 +7,9 @@
 // options/locale one when it exists: the custom file replaces the embedded file
 // wholesale, keys are not merged. Forkana keeps its strings in a full copy of
 // en-US (custom/options/locale/locale_en-US.ini). Its "Forkana keys" are the keys
-// of that copy that upstream en-US doesn't have, or has with other wording.
+// of that copy that upstream en-US doesn't have or has with other wording, and
+// the keys no upstream translation has (Forkana strings also added to
+// options/locale/locale_en-US.ini).
 //
 // For every other language, custom/translations/locale_<lang>.ini holds the
 // translations of the Forkana keys only. Generate merges it into the upstream
@@ -126,12 +128,22 @@ type Forkana struct {
 }
 
 // NewForkana finds the Forkana keys: the custom en-US keys that upstream en-US
-// lacks or words differently.
-func NewForkana(upstreamEnglish, customEnglish *File) *Forkana {
+// lacks or words differently, and those that no upstream translation has.
+// The latter are Forkana strings that were also added to options/locale/locale_en-US.ini
+// (every key upstream Gitea ships is in at least one of its translations).
+func NewForkana(upstreamEnglish, customEnglish *File, upstreamTranslations []*File) *Forkana {
 	fk := &Forkana{English: customEnglish, keySet: map[string]bool{}, Removed: map[string]bool{}}
+	translatedUpstream := func(fullKey string) bool {
+		for _, f := range upstreamTranslations {
+			if _, ok := f.Get(fullKey); ok {
+				return true
+			}
+		}
+		return false
+	}
 	for _, e := range customEnglish.Entries {
 		up, ok := upstreamEnglish.Get(e.FullKey())
-		if !ok || Unquote(up.Value) != Unquote(e.Value) {
+		if !ok || Unquote(up.Value) != Unquote(e.Value) || !translatedUpstream(e.FullKey()) {
 			fk.Keys = append(fk.Keys, e)
 			fk.keySet[e.FullKey()] = true
 		}

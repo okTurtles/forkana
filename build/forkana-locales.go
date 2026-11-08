@@ -37,8 +37,8 @@ func main() {
 	if len(os.Args) < 2 {
 		usage()
 	}
-	fk := loadForkana()
 	langs := languages()
+	fk := loadForkana(langs)
 	var err error
 	switch os.Args[1] {
 	case "generate":
@@ -85,8 +85,12 @@ func mustParse(path string) *forkanalocale.File {
 	return f
 }
 
-func loadForkana() *forkanalocale.Forkana {
-	return forkanalocale.NewForkana(mustParse(filepath.Join(upstreamDir, english)), mustParse(filepath.Join(customDir, english)))
+func loadForkana(langs []string) *forkanalocale.Forkana {
+	upstreamTranslations := make([]*forkanalocale.File, 0, len(langs))
+	for _, lang := range langs {
+		upstreamTranslations = append(upstreamTranslations, mustParse(filepath.Join(upstreamDir, fileName(lang))))
+	}
+	return forkanalocale.NewForkana(mustParse(filepath.Join(upstreamDir, english)), mustParse(filepath.Join(customDir, english)), upstreamTranslations)
 }
 
 // languages lists the upstream languages other than en-US.

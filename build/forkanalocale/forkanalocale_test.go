@@ -23,6 +23,7 @@ pulls = Pull Requests
 issues = Issues
 pulls.closed_at = ` + "`closed this pull request <a id=\"%[1]s\">%[2]s</a>`" + `
 pulls.title_desc = wants to merge %d commits
+follow_article = Follow
 
 # comment before a section
 [user]
@@ -37,6 +38,7 @@ pulls = Change Requests
 issues = Issues
 pulls.closed_at = ` + "`closed this change request <a id=\"%[1]s\">%[2]s</a>`" + `
 fork_article = Fork %s
+follow_article = Follow
 
 [user]
 repositories = Repositories
@@ -66,6 +68,8 @@ new_repo = Neues Thema
 pulls = Änderungsanfragen
 # en: Fork %s
 fork_article = %s forken
+# en: Follow
+follow_article = Folgen
 
 [citation]
 references = Belege
@@ -79,7 +83,7 @@ func mustParse(t *testing.T, s string) *File {
 }
 
 func testForkana(t *testing.T) *Forkana {
-	return NewForkana(mustParse(t, upstreamEnglish), mustParse(t, customEnglish))
+	return NewForkana(mustParse(t, upstreamEnglish), mustParse(t, customEnglish), []*File{mustParse(t, upstreamGerman)})
 }
 
 func TestParse(t *testing.T) {
@@ -102,7 +106,7 @@ func TestNewForkana(t *testing.T) {
 	for _, k := range fk.Keys {
 		keys = append(keys, k.FullKey())
 	}
-	assert.Equal(t, []string{"new_repo", "repo.pulls", "repo.pulls.closed_at", "repo.fork_article", "citation.references"}, keys)
+	assert.Equal(t, []string{"new_repo", "repo.pulls", "repo.pulls.closed_at", "repo.fork_article", "repo.follow_article", "citation.references"}, keys, "repo.follow_article is in upstream en-US too, but in no upstream translation")
 	assert.Equal(t, map[string]bool{"repo.pulls.title_desc": true}, fk.Removed)
 	assert.True(t, fk.IsKey("repo.pulls"))
 	assert.False(t, fk.IsKey("repo.issues"))
@@ -121,6 +125,7 @@ new_repo=Neues Thema
 pulls=Änderungsanfragen
 issues=Issues
 fork_article=%s forken
+follow_article=Folgen
 
 # comment before a section
 [user]
@@ -206,7 +211,15 @@ func TestRepositoryLocales(t *testing.T) {
 		require.NoError(t, err, path)
 		return f
 	}
-	fk := NewForkana(parse("options/locale/locale_en-US.ini"), parse("custom/options/locale/locale_en-US.ini"))
+	upstream, err := filepath.Glob(filepath.Join(root, "options/locale/locale_*.ini"))
+	require.NoError(t, err)
+	var upstreamTranslations []*File
+	for _, path := range upstream {
+		if name := filepath.Base(path); name != "locale_en-US.ini" {
+			upstreamTranslations = append(upstreamTranslations, parse(filepath.Join("options/locale", name)))
+		}
+	}
+	fk := NewForkana(parse("options/locale/locale_en-US.ini"), parse("custom/options/locale/locale_en-US.ini"), upstreamTranslations)
 	generated, err := filepath.Glob(filepath.Join(root, "custom/options/locale/locale_*.ini"))
 	require.NoError(t, err)
 	for _, path := range generated {
