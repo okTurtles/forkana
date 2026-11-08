@@ -142,3 +142,59 @@ test('the Table view is paged 8 rows at a time (641:61303)', async ({page}) => {
   await prev.click();
   await expect(counter).toHaveText('8 of 9');
 });
+
+test('a click on empty space clears the selection, as in the Bubble view (#495)', async ({page}) => {
+  await page.goto(`/subject/${encodeURIComponent(subject)}?view=table`);
+  const rows = page.locator('#articles-table tr.article-row');
+  const first = rows.first();
+  const detail = page.locator('tr.article-detail-row:not(.tw-hidden)');
+  const selectedParam = () => new URL(page.url()).searchParams.get('selected');
+
+  // selected through the row's drop-down (its chevron), as in the issue
+  await first.locator('.row-toggle').click();
+  await expect(first).toHaveClass(/is-selected/);
+  await expect.poll(selectedParam).not.toBeNull();
+
+  // clicks on the row's summary, the Sort menu (and the click dismissing it) and the
+  // paging buttons leave it alone
+  await detail.locator('[data-role="summary"]').click();
+  await page.locator('.history-table-sort-button').click();
+  await expect(page.locator('.history-table-sort-menu')).toBeVisible();
+  await page.locator('.history-table-title').click(); // closes the menu only
+  await expect(page.locator('.history-table-sort-menu')).toBeHidden();
+  await page.locator('[data-role="table-next"]').click({force: true}); // aria-disabled: one page
+  await expect(first).toHaveClass(/is-selected/);
+  await expect(detail).toHaveCount(1);
+
+  // a text selection made by dragging over the page does not clear it either
+  const title = await page.locator('.history-table-title').boundingBox();
+  await page.mouse.move(title.x + 1, title.y + title.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(title.x + title.width - 1, title.y + title.height / 2, {steps: 5});
+  await page.mouse.up();
+  await expect(first).toHaveClass(/is-selected/);
+
+  // a click on empty space beside the table: figma's unselected table (641:61176), no row
+  // highlighted or open, and the url no longer names the article
+  const box = await page.locator('.history-table-box').boundingBox();
+  await page.mouse.click(box.x - 40, box.y + box.height / 2);
+  await expect(rows.locator('.is-selected')).toHaveCount(0);
+  await expect(first).not.toHaveClass(/is-selected/);
+  await expect(detail).toHaveCount(0);
+  await expect(first.locator('.row-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(selectedParam).toBeNull();
+
+  // the one selection of the page is cleared: the Article view has nothing to show
+  await page.locator('#subject-view-tabs a[data-view="article"]').click();
+  await expect(page.locator('.history-view-section [data-role="article-empty"]')).toBeVisible();
+});
+
+test('in compare mode a click on empty space keeps the picks (#495)', async ({page}) => {
+  await page.goto(`/subject/${encodeURIComponent(subject)}?view=table`);
+  const checks = page.locator('#articles-table .row-check');
+  await checks.nth(0).check();
+  const box = await page.locator('.history-table-box').boundingBox();
+  await page.mouse.click(box.x - 40, box.y + box.height / 2);
+  await expect(checks.nth(0)).toBeChecked();
+  await expect(page.locator('#articles-table tr.article-row').first()).toHaveClass(/is-selected/);
+});
