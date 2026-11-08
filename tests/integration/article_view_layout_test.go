@@ -302,8 +302,8 @@ func TestArticleViewLayout(t *testing.T) {
 		assert.Equal(t, 0, answer.Find(`[hx-swap-oob]`).Length())
 		// ...with the phone's Watch menu, its choice in force checked
 		watching := nextLabel == "Unwatch"
-		assert.Equal(t, strconv.FormatBool(watching), answer.Find(`[data-role="article-watch-notifications"]`).AttrOr("aria-checked", ""))
-		assert.Equal(t, strconv.FormatBool(!watching), answer.Find(`[data-role="article-watch-ignore"]`).AttrOr("aria-checked", ""))
+		assert.Equal(t, strconv.FormatBool(watching), answer.Find(`[data-role="article-watch-notifications"]`).AttrOr("aria-pressed", ""))
+		assert.Equal(t, strconv.FormatBool(!watching), answer.Find(`[data-role="article-watch-ignore"]`).AttrOr("aria-pressed", ""))
 	})
 }
 

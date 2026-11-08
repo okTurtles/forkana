@@ -208,8 +208,10 @@ func CompareReadme(ctx *context.Context) {
 	ctx.Data["Repository"] = repo1
 	ctx.Data["SubjectName"] = repo1.GetSubject(ctx)
 	// the header's Follow, for the subject (#165)
-	ctx.Data["RepoOperationsLink"] = repo1.OperationsLink()
-	context.SetSubjectFollowData(ctx, repo1.SubjectID)
+	if err := context.SetSubjectFollowData(ctx, repo1.SubjectID); err != nil {
+		ctx.ServerError("SetSubjectFollowData", err)
+		return
+	}
 	ctx.Data["IsBubbleView"] = false
 	ctx.Data["IsTableView"] = false
 	ctx.Data["IsArticleView"] = false

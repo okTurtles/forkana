@@ -7,6 +7,8 @@ import (
 	"context"
 
 	"code.gitea.io/gitea/models/db"
+	"code.gitea.io/gitea/models/unit"
+	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"xorm.io/builder"
@@ -33,43 +35,52 @@ func (s *SubjectFollow) TableName() string {
 }
 
 // IsFollowingSubject reports whether the user follows the subject.
-func IsFollowingSubject(ctx context.Context, userID, subjectID int64) bool {
+func IsFollowingSubject(ctx context.Context, userID, subjectID int64) (bool, error) {
 	if userID <= 0 || subjectID <= 0 {
-		return false
+		return false, nil
 	}
-	has, _ := db.GetEngine(ctx).Exist(&SubjectFollow{UserID: userID, SubjectID: subjectID})
-	return has
+	return db.GetEngine(ctx).Exist(&SubjectFollow{UserID: userID, SubjectID: subjectID})
 }
 
 // FollowSubject makes the user follow the subject (follow true) or stop following it.
-// Following a subject twice, or unfollowing one that is not followed, changes nothing.
+// Following a subject twice, or unfollowing one that is not followed, changes nothing; so
+// does a follow that loses a race with the same follow (a double click), which the unique
+// index rejects.
 func FollowSubject(ctx context.Context, userID, subjectID int64, follow bool) error {
-	return db.WithTx(ctx, func(ctx context.Context) error {
-		if !follow {
-			_, err := db.GetEngine(ctx).Delete(&SubjectFollow{UserID: userID, SubjectID: subjectID})
-			return err
-		}
-		if IsFollowingSubject(ctx, userID, subjectID) {
+	if !follow {
+		_, err := db.GetEngine(ctx).Delete(&SubjectFollow{UserID: userID, SubjectID: subjectID})
+		return err
+	}
+	has, err := IsFollowingSubject(ctx, userID, subjectID)
+	if err != nil || has {
+		return err
+	}
+	if err = db.Insert(ctx, &SubjectFollow{UserID: userID, SubjectID: subjectID}); err != nil {
+		// the same follow, inserted in the meantime
+		if has, _ = IsFollowingSubject(ctx, userID, subjectID); has {
 			return nil
 		}
-		return db.Insert(ctx, &SubjectFollow{UserID: userID, SubjectID: subjectID})
-	})
+		return err
+	}
+	return nil
 }
 
-// CountSubjectFollowers returns the number of users following the subject.
-func CountSubjectFollowers(ctx context.Context, subjectID int64) (int64, error) {
-	return db.GetEngine(ctx).Where("subject_id = ?", subjectID).Count(new(SubjectFollow))
+// FollowedSubjectReadableRepoCond selects, in the repository table, the articles (forks
+// included) of every subject the user follows that the user can read.
+func FollowedSubjectReadableRepoCond(user *user_model.User) builder.Cond {
+	return builder.In("`repository`.subject_id",
+		builder.Select("`subject_follow`.subject_id").From("`subject_follow`").
+			Where(builder.Eq{"`subject_follow`.user_id": user.ID}),
+	).And(AccessibleRepositoryCondition(user, unit.TypeInvalid))
 }
 
-// FollowedSubjectRepoIDsQuery selects the ids of the repositories (articles, forks
-// included) of every subject the user follows.
-func FollowedSubjectRepoIDsQuery(userID int64) *builder.Builder {
-	return builder.Select("`repository`.id").From("`repository`").Where(
-		builder.In("`repository`.subject_id",
-			builder.Select("`subject_follow`.subject_id").From("`subject_follow`").
-				Where(builder.Eq{"`subject_follow`.user_id": userID}),
-		),
-	)
+// FindFollowedSubjectReadableRepoIDs returns the ids of up to limit repositories of
+// FollowedSubjectReadableRepoCond.
+func FindFollowedSubjectReadableRepoIDs(ctx context.Context, user *user_model.User, limit int) ([]int64, error) {
+	ids := make([]int64, 0, limit)
+	err := db.GetEngine(ctx).Table("repository").Where(FollowedSubjectReadableRepoCond(user)).
+		Limit(limit).Cols("`repository`.id").Find(&ids)
+	return ids, err
 }
 
 // deleteSubjectFollows removes every follow of the subject, once it is deleted, so that a

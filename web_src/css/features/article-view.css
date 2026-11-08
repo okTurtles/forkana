@@ -161,8 +161,9 @@
    inside; its title row (Frame 714, 36px: 6px above and below an Inter 600 16/24 #1f2328
    "Watch", the 24px x-24 at its end) 22px above the choices, 8px apart, each 24px tall:
    a 16px column with the check of the one in force, 9px from its Inter 400 14/20 label
-   (#000 in the figma; the text colour here, #1f2328, which dark mode can follow). (The figma's "Receive Dashboard Updates (feed)" is not offered: the feed comes
-   from following the subject.) */
+   (#000 in the figma; the text colour here, #1f2328, which dark mode can follow). (The
+   figma's "Receive Dashboard Updates (feed)" is not offered: the feed comes from
+   following the subject.) */
 .article-watch-menu {
   position: fixed;
   inset: auto 0 0;

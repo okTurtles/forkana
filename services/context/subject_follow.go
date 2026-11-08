@@ -19,12 +19,17 @@ func SubjectFollowLink(subjectID int64) string {
 // SetSubjectFollowData gives the subject header's Follow button (repo/subject_follow,
 // #165) the subject it follows and whether the reader follows it. A repository without
 // a subject has no Follow.
-func SetSubjectFollowData(ctx *Context, subjectID int64) {
+func SetSubjectFollowData(ctx *Context, subjectID int64) error {
 	if subjectID <= 0 {
-		return
+		return nil
 	}
 	ctx.Data["SubjectFollowLink"] = SubjectFollowLink(subjectID)
 	if ctx.IsSigned {
-		ctx.Data["IsFollowingSubject"] = repo_model.IsFollowingSubject(ctx, ctx.Doer.ID, subjectID)
+		following, err := repo_model.IsFollowingSubject(ctx, ctx.Doer.ID, subjectID)
+		if err != nil {
+			return err
+		}
+		ctx.Data["IsFollowingSubject"] = following
 	}
+	return nil
 }

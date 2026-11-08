@@ -35,6 +35,12 @@ func TestSubjectFollowToggle(t *testing.T) {
 	require.False(t, repo_model.IsWatching(t.Context(), user5.ID, repo.ID))
 	session := loginUser(t, user5.Name)
 
+	isFollowing := func(t *testing.T) bool {
+		following, err := repo_model.IsFollowingSubject(t.Context(), user5.ID, repo.SubjectID)
+		require.NoError(t, err)
+		return following
+	}
+
 	followForm := func(t *testing.T) (action, label string) {
 		_, body := getSubjectPage(t, session, subjectName, "view=article")
 		doc := NewHTMLParser(t, bytes.NewBufferString(body))
@@ -55,7 +61,7 @@ func TestSubjectFollowToggle(t *testing.T) {
 	assert.Equal(t, "Following", answer.Find(".subject-follow-button").AttrOr("aria-label", ""))
 	assert.Equal(t, 1, answer.Find("form").Length())
 	assert.Equal(t, 0, answer.Find(`[hx-swap-oob]`).Length())
-	assert.True(t, repo_model.IsFollowingSubject(t.Context(), user5.ID, repo.SubjectID))
+	assert.True(t, isFollowing(t))
 	assert.False(t, repo_model.IsWatching(t.Context(), user5.ID, repo.ID), "following the subject does not watch the article")
 
 	action, label = followForm(t)
@@ -71,21 +77,29 @@ func TestSubjectFollowToggle(t *testing.T) {
 	req = NewRequestWithValues(t, "POST", watch.AttrOr("action", ""), map[string]string{"_csrf": GetUserCSRFToken(t, session)})
 	session.MakeRequest(t, req, http.StatusOK)
 	assert.True(t, repo_model.IsWatching(t.Context(), user5.ID, repo.ID))
-	assert.True(t, repo_model.IsFollowingSubject(t.Context(), user5.ID, repo.SubjectID))
+	assert.True(t, isFollowing(t))
 
 	req = NewRequestWithValues(t, "POST", followLink+"/unfollow", map[string]string{"_csrf": GetUserCSRFToken(t, session)})
 	answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
 	assert.Equal(t, "Follow", answer.Find(".subject-follow-button").AttrOr("aria-label", ""))
-	assert.False(t, repo_model.IsFollowingSubject(t.Context(), user5.ID, repo.SubjectID))
+	assert.False(t, isFollowing(t))
 	assert.True(t, repo_model.IsWatching(t.Context(), user5.ID, repo.ID), "unfollowing the subject does not unwatch the article")
 
-	// a subject that does not exist
-	req = NewRequestWithValues(t, "POST", "/-/subject/999999/follow", map[string]string{"_csrf": GetUserCSRFToken(t, session)})
-	session.MakeRequest(t, req, http.StatusNotFound)
+	// a subject that does not exist, no subject (xorm would take any subject for id 0), and
+	// a subject without an article the reader can read (subject 2 has none) are not found
+	for _, id := range []string{"999999", "0", "2"} {
+		req = NewRequestWithValues(t, "POST", "/-/subject/"+id+"/follow", map[string]string{"_csrf": GetUserCSRFToken(t, session)})
+		session.MakeRequest(t, req, http.StatusNotFound)
+	}
+	assert.Equal(t, 0, unittest.GetCount(t, &repo_model.SubjectFollow{UserID: user5.ID}))
 
-	// a signed-out reader is sent to sign in, and follows nothing
-	resp := MakeRequest(t, NewRequest(t, "POST", followLink+"/follow"), NoExpectedStatus)
-	assert.NotEqual(t, http.StatusOK, resp.Code)
+	// a signed-out reader (with the page's CSRF token) is sent to sign in, and follows
+	// nothing; without the token, the request is refused before that
+	guest := emptyTestSession(t)
+	req = NewRequestWithValues(t, "POST", followLink+"/follow", map[string]string{"_csrf": GetAnonymousCSRFToken(t, guest)})
+	resp := guest.MakeRequest(t, req, http.StatusSeeOther)
+	assert.Contains(t, resp.Header().Get("Location"), "/user/login")
+	MakeRequest(t, NewRequest(t, "POST", followLink+"/follow"), http.StatusBadRequest)
 	assert.Equal(t, 0, unittest.GetCount(t, &repo_model.SubjectFollow{SubjectID: repo.SubjectID}))
 }
 

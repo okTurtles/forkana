@@ -25,26 +25,27 @@
 	     Updates (feed)" is left out: the feed comes from following the subject.) */}}
 	<dialog class="article-watch-menu" data-role="article-watch-menu" aria-labelledby="article-watch-menu-title">
 		<div class="article-watch-menu-body">
-		<div class="article-watch-menu-header">
-			<h2 class="article-watch-menu-title" id="article-watch-menu-title">{{ctx.Locale.Tr "repo.watch"}}</h2>
-			<button type="button" class="article-watch-menu-close" data-global-click="onArticleWatchMenuClose" aria-label="{{ctx.Locale.Tr "repo.article_watch_menu_close"}}">
-				{{svg "octicon-x" 24}}
-			</button>
-		</div>
-		<div class="article-watch-menu-options" role="radiogroup" aria-labelledby="article-watch-menu-title">
-			<form hx-boost="true" hx-target="closest .article-watch-control" hx-swap="outerHTML" method="post" action="{{$watchLink}}">
-				<button type="submit" class="article-watch-menu-option" role="radio" aria-checked="{{if $.IsWatchingRepo}}true{{else}}false{{end}}" data-role="article-watch-notifications">
-					<span class="article-watch-menu-check">{{if $.IsWatchingRepo}}{{svg "octicon-check" 16}}{{end}}</span>
-					<span>{{ctx.Locale.Tr "repo.article_watch_receive_notifications"}}</span>
+			<div class="article-watch-menu-header">
+				<h2 class="article-watch-menu-title" id="article-watch-menu-title">{{ctx.Locale.Tr "repo.watch"}}</h2>
+				<button type="button" class="article-watch-menu-close" data-global-click="onArticleWatchMenuClose" aria-label="{{ctx.Locale.Tr "repo.article_watch_menu_close"}}">
+					{{svg "octicon-x" 24}}
 				</button>
-			</form>
-			<form hx-boost="true" hx-target="closest .article-watch-control" hx-swap="outerHTML" method="post" action="{{$unwatchLink}}">
-				<button type="submit" class="article-watch-menu-option" role="radio" aria-checked="{{if $.IsWatchingRepo}}false{{else}}true{{end}}" data-role="article-watch-ignore">
-					<span class="article-watch-menu-check">{{if not $.IsWatchingRepo}}{{svg "octicon-check" 16}}{{end}}</span>
-					<span>{{ctx.Locale.Tr "repo.article_watch_ignore"}}</span>
-				</button>
-			</form>
-		</div>
+			</div>
+			{{/* two actions, the one in force pressed */}}
+			<div class="article-watch-menu-options">
+				<form hx-boost="true" hx-target="closest .article-watch-control" hx-swap="outerHTML" method="post" action="{{$watchLink}}">
+					<button type="submit" class="article-watch-menu-option" aria-pressed="{{if $.IsWatchingRepo}}true{{else}}false{{end}}" data-role="article-watch-notifications">
+						<span class="article-watch-menu-check">{{if $.IsWatchingRepo}}{{svg "octicon-check" 16}}{{end}}</span>
+						<span>{{ctx.Locale.Tr "repo.article_watch_receive_notifications"}}</span>
+					</button>
+				</form>
+				<form hx-boost="true" hx-target="closest .article-watch-control" hx-swap="outerHTML" method="post" action="{{$unwatchLink}}">
+					<button type="submit" class="article-watch-menu-option" aria-pressed="{{if $.IsWatchingRepo}}false{{else}}true{{end}}" data-role="article-watch-ignore">
+						<span class="article-watch-menu-check">{{if not $.IsWatchingRepo}}{{svg "octicon-check" 16}}{{end}}</span>
+						<span>{{ctx.Locale.Tr "repo.article_watch_ignore"}}</span>
+					</button>
+				</form>
+			</div>
 		</div>
 	</dialog>
 </div>

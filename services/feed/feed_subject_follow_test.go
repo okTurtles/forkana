@@ -4,6 +4,7 @@
 package feed
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -88,4 +89,48 @@ func TestGetFeedsFollowedSubjects(t *testing.T) {
 
 	require.NoError(t, repo_model.FollowSubject(ctx, user5.ID, 1, false))
 	assert.Empty(t, feed(t, user5, user5, true))
+}
+
+// TestGetFeedsFollowedSubjectsManyArticles: past db.DefaultMaxInSize followed articles, the
+// feed takes them from a subquery rather than a list of ids, with the same result.
+func TestGetFeedsFollowedSubjectsManyArticles(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	user4 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 4}) // watches repo1
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+
+	var last *repo_model.Repository
+	for i := range db.DefaultMaxInSize {
+		name := fmt.Sprintf("follow-many-%d", i)
+		last = &repo_model.Repository{OwnerID: user2.ID, OwnerName: user2.Name, SubjectID: 1, Name: name, LowerName: name}
+		require.NoError(t, db.Insert(ctx, last))
+	}
+	require.NoError(t, repo_model.FollowSubject(ctx, user4.ID, 1, true))
+	ids, err := repo_model.FindFollowedSubjectReadableRepoIDs(ctx, user4, db.DefaultMaxInSize+1)
+	require.NoError(t, err)
+	require.Len(t, ids, db.DefaultMaxInSize+1, "more than an IN list takes")
+
+	since := time.Now().Unix() - 1
+	for _, repo := range []*repo_model.Repository{repo1, last} {
+		require.NoError(t, NotifyWatchers(ctx, &activities_model.Action{
+			ActUserID: user2.ID,
+			OpType:    activities_model.ActionCreatePullRequest,
+			RepoID:    repo.ID,
+			Content:   "1|subject follow",
+		}))
+	}
+	actions, _, err := GetFeeds(ctx, activities_model.GetFeedsOptions{
+		RequestedUser:           user4,
+		Actor:                   user4,
+		IncludePrivate:          true,
+		SinceUnix:               since,
+		IncludeFollowedSubjects: true,
+	})
+	require.NoError(t, err)
+	repoIDs := make([]int64, 0, len(actions))
+	for _, act := range actions {
+		repoIDs = append(repoIDs, act.RepoID)
+	}
+	assert.ElementsMatch(t, []int64{repo1.ID, last.ID}, repoIDs, "each once, repo1's watcher copy left out")
 }
