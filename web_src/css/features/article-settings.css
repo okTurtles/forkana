@@ -31,10 +31,6 @@
   gap: 24px;
 }
 
-.article-settings-panel.tw-hidden {
-  display: none;
-}
-
 .article-settings-title {
   display: flex;
   flex-direction: column;
@@ -182,10 +178,6 @@
   min-width: 0;
 }
 
-.forkana-field.tw-hidden {
-  display: none;
-}
-
 .forkana-field-label {
   font-size: 14px;
   line-height: 20px;
@@ -193,8 +185,10 @@
   color: var(--color-text-primary);
 }
 
-/* (the doubled class outweighs the Fomantic input rules of the dialogs' search) */
-.forkana-input.forkana-input {
+/* (the doubled class outweighs Fomantic's .ui.form input rules; the search fields are
+   in a .ui.input, whose `.ui.input > input` and `.ui.input input:hover|:focus` rules the
+   second selector outweighs) */
+:is(.forkana-input.forkana-input, .ui.input > input.forkana-input) {
   width: 100%;
   height: 32px;
   margin: 0;
@@ -209,23 +203,27 @@
   color: var(--color-text-primary);
 }
 
-.forkana-input.forkana-input::placeholder {
+:is(.forkana-input.forkana-input, .ui.input > input.forkana-input)::placeholder {
   color: var(--color-muted-text);
   opacity: 1;
 }
 
-.forkana-input.forkana-input:focus {
+:is(.forkana-input.forkana-input, .ui.input > input.forkana-input):hover {
+  border-color: var(--color-border-light);
+}
+
+:is(.forkana-input.forkana-input, .ui.input > input.forkana-input):focus {
   border-color: var(--color-primary);
   box-shadow: inset 0 0 0 1px var(--color-primary);
   outline: none;
 }
 
-.forkana-input.forkana-input[readonly] {
+:is(.forkana-input.forkana-input, .ui.input > input.forkana-input)[readonly] {
   background: var(--color-input-readonly-bg);
   box-shadow: none;
 }
 
-.forkana-input.forkana-input[readonly]:focus {
+:is(.forkana-input.forkana-input, .ui.input > input.forkana-input)[readonly]:focus {
   border-color: var(--color-border-light);
   box-shadow: none;
   outline: 2px solid var(--color-primary);
@@ -253,7 +251,7 @@
   pointer-events: none;
 }
 
-.forkana-input-search > .forkana-input.forkana-input {
+.forkana-input-search > :is(.forkana-input.forkana-input, .ui.input > input.forkana-input) {
   padding-left: 31px;
 }
 
@@ -282,8 +280,10 @@
 }
 
 :is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary:disabled,
-:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary:disabled:hover {
+:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary:disabled:hover,
+:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary:disabled:active {
   border-color: transparent;
+  box-shadow: none;
   background: var(--color-surface-muted);
   color: color-mix(in srgb, var(--color-button-text) 50%, transparent);
   cursor: default;
@@ -385,10 +385,6 @@
   accent-color: var(--color-primary);
 }
 
-.article-collaborators-filter.tw-hidden {
-  display: none !important; /* (Fomantic's .ui.dropdown display is itself !important) */
-}
-
 /* Search row: 8px 12px, a rule under it */
 .article-collaborators-search-row {
   padding: 8px 12px;
@@ -413,12 +409,9 @@
   border-bottom: 1px solid var(--color-border-light);
 }
 
-.article-collaborator-row:last-child {
+/* (the last row on screen: rows after it may be hidden by the search or the filter) */
+.article-collaborator-row:not(:has(~ .article-collaborator-row:not(.tw-hidden))) {
   border-bottom: 0;
-}
-
-.article-collaborator-row.tw-hidden {
-  display: none;
 }
 
 .article-collaborator-who,
@@ -455,7 +448,7 @@
   width: 20px;
   height: 20px;
   border-radius: 9999px;
-  box-shadow: 0 0 0 1px #1f232826;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-text-primary) 15%, transparent);
 }
 
 .article-collaborator-role-cell,
@@ -501,6 +494,12 @@
   background: var(--color-button-hover);
 }
 
+.ui.dropdown.article-collaborators-filter:focus-visible,
+.ui.dropdown.article-collaborator-role:focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: -2px;
+}
+
 .ui.dropdown.article-collaborator-role > .dropdown.icon {
   margin: 0;
 }
@@ -523,7 +522,7 @@
   border: 0;
   border-radius: 12px;
   background: var(--color-surface);
-  box-shadow: 0 8px 24px 0 color-mix(in srgb, var(--color-shadow) 75%, transparent),
+  box-shadow: 0 8px 24px 0 var(--color-menu-shadow),
     0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
 }
 
@@ -636,7 +635,7 @@
   align-items: flex-start;
   padding: 8px;
   background: var(--color-success-bg);
-  box-shadow: 0 1px 0 #0000000a;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-text-primary) 4%, transparent);
 }
 
 .forkana-banner-icon {
@@ -761,7 +760,7 @@
   overflow: hidden;
   border-radius: 12px;
   background: var(--color-surface);
-  box-shadow: 0 40px 80px 0 color-mix(in srgb, var(--color-shadow) 200%, transparent),
+  box-shadow: 0 40px 80px 0 var(--color-dialog-shadow),
     0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
 }
 
@@ -827,7 +826,8 @@
   z-index: -10000;
 }
 
-.ui.modal.forkana-dialog .content {
+.ui.modal.forkana-dialog > .content,
+.ui.modal.forkana-dialog > form > .content {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -839,15 +839,18 @@
   color: var(--color-text-primary);
 }
 
-.ui.modal.forkana-dialog .content p {
+.ui.modal.forkana-dialog > .content p,
+.ui.modal.forkana-dialog > form > .content p {
   margin: 0;
 }
 
-.ui.modal.forkana-dialog .content strong {
+.ui.modal.forkana-dialog > .content strong,
+.ui.modal.forkana-dialog > form > .content strong {
   font-weight: var(--font-weight-semibold);
 }
 
-.ui.modal.forkana-dialog .actions {
+.ui.modal.forkana-dialog > .actions,
+.ui.modal.forkana-dialog > form > .actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -858,7 +861,8 @@
   background: var(--color-surface-muted);
 }
 
-.ui.modal.forkana-dialog .actions > .forkana-btn {
+.ui.modal.forkana-dialog > .actions > .forkana-btn,
+.ui.modal.forkana-dialog > form > .actions > .forkana-btn {
   margin: 0;
 }
 
@@ -868,10 +872,6 @@
   font-size: 12px;
   line-height: 18px;
   color: var(--color-muted-text);
-}
-
-.forkana-dialog-footer-hint.tw-hidden {
-  display: none;
 }
 
 /* A Banner under the header: warning #fff8c5 with a #d4a72c 40% rule under it (the
@@ -918,10 +918,6 @@
   color: var(--color-danger-fg);
 }
 
-.forkana-dialog-banner.tw-hidden {
-  display: none;
-}
-
 /* ── The user search of the Invite and Transfer dialogs ──────────────────────
    Results (7619:68300): 12px under the field, a 1px #d1d9e0 frame with 6px corners and 4px
    inside; each person 36px, 8px around, 6px corners, #f6f8fa when active: a 20px avatar,
@@ -935,10 +931,6 @@
 
 .ui.search.article-user-search > .ui.input > .prompt.forkana-input {
   border-radius: 6px;
-}
-
-.ui.search.article-user-search > .ui.input.tw-hidden {
-  display: none;
 }
 
 .ui.search.article-user-search > .results {
@@ -1025,10 +1017,6 @@
   background: var(--color-surface-muted);
 }
 
-.article-user-search-selection.tw-hidden {
-  display: none;
-}
-
 .article-user-search-name {
   font-size: 14px;
   line-height: 20px;
@@ -1091,10 +1079,6 @@
   max-height: none;
   margin-top: 4px;
   border: 0;
-}
-
-.ui.selection.dropdown.forkana-select > .menu.forkana-menu > .item {
-  border-top: 0;
 }
 
 /* ── Phones ──────────────────────────────────────────────────────────────── */
@@ -1248,16 +1232,18 @@
   }
 
   /* the dialogs open as a bottom sheet (Dialog 7622:69567): full width, 16px top corners,
-     the footer a column, 16px around, its main action first, then Cancel */
+     the footer a column, 16px around, its main action first, then Cancel. The dimmer
+     centres a modal with important auto top and bottom margins (.ui.dimmer > .ui.modal in
+     modules/dimmer.css): the bottom one goes to 0, the top one stays auto, so a dialog
+     taller than the screen (or above the keyboard) still scrolls up to its header. */
   .ui.dimmer:has(> .ui.modal.forkana-dialog.visible) {
-    align-items: flex-end;
     padding: 0;
   }
 
-  .ui.modal.forkana-dialog {
+  .ui.dimmer > .ui.modal.forkana-dialog {
     width: 100%;
     max-width: 100%;
-    margin: 0 !important; /* (Fomantic positions a modal with inline margins) */
+    margin: auto 0 0 !important;
     border-radius: 16px 16px 0 0;
   }
 
@@ -1265,19 +1251,21 @@
     border-radius: 16px 16px 0 0;
   }
 
-  .ui.modal.forkana-dialog .actions {
+  .ui.modal.forkana-dialog > .actions,
+  .ui.modal.forkana-dialog > form > .actions {
     flex-direction: column;
     align-items: stretch;
     padding: 16px;
     border-radius: 0;
   }
 
-  .ui.modal.forkana-dialog .actions > [type="submit"],
-  .ui.modal.forkana-dialog .actions > #article-collaborators-remove-submit {
+  .ui.modal.forkana-dialog > .actions > .forkana-dialog-action,
+  .ui.modal.forkana-dialog > form > .actions > .forkana-dialog-action {
     order: -1;
   }
 
-  .ui.modal.forkana-dialog .actions > .forkana-dialog-footer-hint {
+  .ui.modal.forkana-dialog > .actions > .forkana-dialog-footer-hint,
+  .ui.modal.forkana-dialog > form > .actions > .forkana-dialog-footer-hint {
     order: -2;
   }
 }

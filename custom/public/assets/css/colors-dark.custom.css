@@ -144,6 +144,8 @@
   --color-input-readonly-bg: #21262d;
   --color-segmented-bg: #21262d;
   --color-dialog-backdrop: #010409a6;
+  --color-dialog-shadow: #010409cc;
+  --color-menu-shadow: #01040999;
   --color-yellow: #e3b341;
   --color-purple: #bc8cff;
   --color-grey: #6e7681;
@@ -276,6 +278,8 @@
     --color-input-readonly-bg: #21262d;
     --color-segmented-bg: #21262d;
     --color-dialog-backdrop: #010409a6;
+    --color-dialog-shadow: #010409cc;
+    --color-menu-shadow: #01040999;
     --color-yellow: #e3b341;
     --color-purple: #bc8cff;
     --color-grey: #6e7681;

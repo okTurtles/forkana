@@ -191,7 +191,7 @@
      action, a secondary button with the red label. */}}
 <div class="actions">
     <button type="button" class="cancel forkana-btn forkana-btn-secondary">{{ctx.Locale.Tr "settings.cancel"}}</button>
-    <button type="{{.Type}}" id="{{.ID}}" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text"{{if .Disabled}} disabled{{end}}{{if .RequiresOwner}} data-requires-owner-selection="true"{{end}}>{{.Label}}</button>
+    <button type="{{.Type}}" id="{{.ID}}" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text forkana-dialog-action"{{if .Disabled}} disabled{{end}}{{if .RequiresOwner}} data-requires-owner-selection="true"{{end}}>{{.Label}}</button>
 </div>
 {{end}}
 

@@ -116,6 +116,31 @@ test.describe('Article settings', () => {
     await context.close();
   });
 
+  // #477: on a phone the dialogs are bottom sheets (Dialog 7622:69567): full width, their
+  // bottom edge on the screen's, 16px top corners
+  test('on a phone: the dialogs open as bottom sheets', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user2');
+    const page = await context.newPage();
+    await page.setViewportSize({width: 375, height: 812});
+    await openPage(page, settingsURL);
+    await page.locator('[data-article-settings-modal="#article-delete-modal"]').click();
+    const dialog = page.locator('#article-delete-modal');
+    await expect(dialog).toBeVisible();
+    // (once the dimmer's opening animation is over)
+    await expect.poll(async () => {
+      const box = await dialog.boundingBox();
+      return [Math.round(box.x), Math.round(box.width), Math.round(box.y + box.height)];
+    }).toEqual([0, 375, 812]);
+    await expect(dialog).toHaveCSS('border-top-left-radius', '16px');
+    await expect(dialog).toHaveCSS('border-bottom-left-radius', '0px');
+    // the main action first, Cancel under it
+    const action = await dialog.locator('#article-delete-submit').boundingBox();
+    const cancel = await dialog.locator('.actions .cancel').boundingBox();
+    expect(action.y).toBeLessThan(cancel.y);
+    expect(action.width).toBeCloseTo(343, 0);
+    await context.close();
+  });
+
   // #461: "Invite" stays unavailable until someone is picked, the footer says why; then
   // the picked person is a chip, the access level shows and the button reads
   // "Invite {username}"

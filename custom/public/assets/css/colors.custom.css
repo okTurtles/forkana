@@ -128,6 +128,8 @@
   --color-input-readonly-bg: #eff2f5; /* the read-only TextInput of the settings (7581:68933) */
   --color-segmented-bg: #e6eaef; /* the SegmentedControl track (7581:68630) */
   --color-dialog-backdrop: #c8d1da66; /* the dialogs' Backdrop (7619:68299) */
+  --color-dialog-shadow: #25292e3d; /* Dialog 7619:68568: #25292e 24% */
+  --color-menu-shadow: #1a1f262e; /* Overlay 7645:75728: #1a1f26 18% */
   --color-yellow: #EBB400;
   --color-purple: #8250DF;
   --color-grey: #59636E;
