@@ -1182,6 +1182,12 @@ func handleSettingsPostArchive(ctx *context.Context) {
 	redirectURL := ctx.Repo.RepoLink + "/settings"
 	if fromArticle {
 		redirectURL = articleSettingsURL(ctx)
+		// the archive dialog asks for "<owner> / <subject>", like Transfer and Delete
+		if !articleNameConfirmed(ctx, web.GetForm(ctx).(*forms.RepoSettingForm).ArticleName) {
+			ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
+			ctx.Redirect(redirectURL)
+			return
+		}
 	}
 
 	if repo.IsMirror {

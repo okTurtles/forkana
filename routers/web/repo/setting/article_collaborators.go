@@ -261,7 +261,7 @@ func ArticleCollaboratorsRemove(ctx *context.Context) {
 	case removedUser != nil:
 		ctx.Flash.Success(ctx.Tr("repo.settings.article_collaborators_remove_success", removedUser.DisplayName()))
 	case len(userIDs) > 0:
-		ctx.Flash.Success(ctx.Tr("repo.settings.article_collaborators_remove_success_n", len(userIDs)))
+		ctx.Flash.Success(ctx.Locale.TrN(len(userIDs), "repo.settings.article_collaborators_remove_success_count_1", "repo.settings.article_collaborators_remove_success_n", len(userIDs)))
 	}
 	if wantsJSON {
 		ctx.JSONRedirect(redirectURL)

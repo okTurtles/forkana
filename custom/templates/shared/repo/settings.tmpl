@@ -93,8 +93,8 @@
 {{if .IsRepoOwner}}
 {{if not .Repository.IsArchived}}
 {{/* "477 · Transfer – dialog" 7626:70961 and "– pick new owner" 7626:71053 */}}
-<div class="ui modal forkana-dialog" id="article-transfer-modal">
-    {{template "shared/repo/settings_dialog_header" (dict "Title" (ctx.Locale.Tr "repo.settings.article_transfer_modal_header"))}}
+<div class="ui modal forkana-dialog" id="article-transfer-modal" role="dialog" aria-modal="true" aria-labelledby="article-transfer-modal-title">
+    {{template "shared/repo/settings_dialog_header" (dict "ID" "article-transfer-modal" "Title" (ctx.Locale.Tr "repo.settings.article_transfer_modal_header"))}}
     <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/settings" method="post">
         {{/* Chrome ignores autocomplete="off" for name-like fields; the invisible dummy
         inputs in "base/disable_form_autofill" absorb the browser's autofill so the
@@ -103,16 +103,12 @@
         {{.CsrfTokenHtml}}
         {{template "shared/repo/settings_dialog_banner" (dict "Kind" "warning" "Message" (ctx.Locale.Tr "repo.settings.article_transfer_notice"))}}
         <div class="content">
-            <input type="hidden" name="action" value="transfer">
-            <input type="hidden" name="redirect_to_article" value="true">
-            <p>{{ctx.Locale.Tr "repo.settings.article_transfer_modal_confirm_desc" (HTMLFormat "<strong>%s</strong>" $articleName)}}</p>
-            <div class="forkana-field">
-                <label for="article-transfer-confirm-name" class="forkana-field-label">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm_label"}}</label>
-                <input id="article-transfer-confirm-name" class="forkana-input" name="article_name" required maxlength="255"
-                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                    data-article-confirm-value="{{$articleName}}"
-                    data-article-confirm-target="#article-transfer-submit">
-            </div>
+            {{template "shared/repo/settings_confirm_field" (dict
+                "Action" "transfer"
+                "ID" "article-transfer"
+                "Prompt" (ctx.Locale.Tr "repo.settings.article_transfer_modal_confirm_desc" (HTMLFormat "<strong>%s</strong>" $articleName))
+                "Label" (ctx.Locale.Tr "repo.settings.article_transfer_confirm_label")
+                "Value" $articleName)}}
             <div class="forkana-field">
                 <label for="article-transfer-new-owner" class="forkana-field-label">{{ctx.Locale.Tr "repo.settings.article_transfer_recipient"}}</label>
                 {{template "shared/repo/settings_user_search" (dict
@@ -124,44 +120,33 @@
                     "Clear" (ctx.Locale.Tr "repo.settings.article_transfer_recipient_clear"))}}
             </div>
         </div>
-        <div class="actions">
-            <button type="button" class="cancel forkana-btn forkana-btn-secondary">{{ctx.Locale.Tr "settings.cancel"}}</button>
-            <button type="submit" id="article-transfer-submit" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text" disabled
-                data-requires-owner-selection="true">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm"}}</button>
-        </div>
+        {{template "shared/repo/settings_dialog_footer" (dict "ID" "article-transfer-submit" "Type" "submit" "Label" (ctx.Locale.Tr "repo.settings.article_transfer_confirm") "Disabled" true "RequiresOwner" true)}}
     </form>
 </div>
 
 {{/* "477 · Archive – dialog" 7626:71162 */}}
-<div class="ui modal forkana-dialog" id="article-archive-modal">
-    {{template "shared/repo/settings_dialog_header" (dict "Title" (ctx.Locale.Tr "repo.settings.article_archive_modal_header"))}}
+<div class="ui modal forkana-dialog" id="article-archive-modal" role="dialog" aria-modal="true" aria-labelledby="article-archive-modal-title">
+    {{template "shared/repo/settings_dialog_header" (dict "ID" "article-archive-modal" "Title" (ctx.Locale.Tr "repo.settings.article_archive_modal_header"))}}
     <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/settings" method="post">
         {{template "base/disable_form_autofill"}}
         {{.CsrfTokenHtml}}
         {{template "shared/repo/settings_dialog_banner" (dict "Kind" "warning" "Message" (ctx.Locale.Tr "repo.settings.article_archive_notice"))}}
         <div class="content">
-            <input type="hidden" name="action" value="archive">
-            <input type="hidden" name="redirect_to_article" value="true">
-            <p>{{ctx.Locale.Tr "repo.settings.article_archive_modal_desc" (HTMLFormat "<strong>%s</strong>" $articleName)}}</p>
-            <div class="forkana-field">
-                <label for="article-archive-confirm-name" class="forkana-field-label">{{ctx.Locale.Tr "repo.settings.article_archive_confirm_label"}}</label>
-                <input id="article-archive-confirm-name" class="forkana-input" name="article_name" required maxlength="255"
-                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                    data-article-confirm-value="{{$articleName}}"
-                    data-article-confirm-target="#article-archive-submit">
-            </div>
+            {{template "shared/repo/settings_confirm_field" (dict
+                "Action" "archive"
+                "ID" "article-archive"
+                "Prompt" (ctx.Locale.Tr "repo.settings.article_archive_modal_desc" (HTMLFormat "<strong>%s</strong>" $articleName))
+                "Label" (ctx.Locale.Tr "repo.settings.article_archive_confirm_label")
+                "Value" $articleName)}}
         </div>
-        <div class="actions">
-            <button type="button" class="cancel forkana-btn forkana-btn-secondary">{{ctx.Locale.Tr "settings.cancel"}}</button>
-            <button type="submit" id="article-archive-submit" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text" disabled>{{ctx.Locale.Tr "repo.settings.article_archive_confirm"}}</button>
-        </div>
+        {{template "shared/repo/settings_dialog_footer" (dict "ID" "article-archive-submit" "Type" "submit" "Label" (ctx.Locale.Tr "repo.settings.article_archive_confirm") "Disabled" true)}}
     </form>
 </div>
 {{end}}
 
 {{/* "477 · Delete – dialog" 7626:71252 */}}
-<div class="ui modal forkana-dialog" id="article-delete-modal">
-    {{template "shared/repo/settings_dialog_header" (dict "Title" (ctx.Locale.Tr "repo.settings.article_delete_modal_header"))}}
+<div class="ui modal forkana-dialog" id="article-delete-modal" role="dialog" aria-modal="true" aria-labelledby="article-delete-modal-title">
+    {{template "shared/repo/settings_dialog_header" (dict "ID" "article-delete-modal" "Title" (ctx.Locale.Tr "repo.settings.article_delete_modal_header"))}}
     <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/settings" method="post">
         {{template "base/disable_form_autofill"}}
         {{.CsrfTokenHtml}}
@@ -171,25 +156,43 @@
             {{template "shared/repo/settings_dialog_banner" (dict "Kind" "warning" "Message" (ctx.Locale.Tr "repo.settings.article_delete_notice" $articleName))}}
         {{end}}
         <div class="content">
-            <input type="hidden" name="action" value="delete">
-            <input type="hidden" name="redirect_to_article" value="true">
-            <p>{{ctx.Locale.Tr "repo.settings.article_delete_modal_desc" (HTMLFormat "<strong>%s</strong>" $articleName)}}</p>
-            <div class="forkana-field">
-                <label for="article-delete-confirm-name" class="forkana-field-label">{{ctx.Locale.Tr "repo.settings.article_delete_confirm_label"}}</label>
-                <input id="article-delete-confirm-name" class="forkana-input" name="article_name" required maxlength="255"
-                    autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                    data-article-confirm-value="{{$articleName}}"
-                    data-article-confirm-target="#article-delete-submit">
-            </div>
+            {{template "shared/repo/settings_confirm_field" (dict
+                "Action" "delete"
+                "ID" "article-delete"
+                "Prompt" (ctx.Locale.Tr "repo.settings.article_delete_modal_desc" (HTMLFormat "<strong>%s</strong>" $articleName))
+                "Label" (ctx.Locale.Tr "repo.settings.article_delete_confirm_label")
+                "Value" $articleName)}}
         </div>
-        <div class="actions">
-            <button type="button" class="cancel forkana-btn forkana-btn-secondary">{{ctx.Locale.Tr "settings.cancel"}}</button>
-            <button type="submit" id="article-delete-submit" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text" disabled>{{ctx.Locale.Tr "repo.settings.article_delete_confirm"}}</button>
-        </div>
+        {{template "shared/repo/settings_dialog_footer" (dict "ID" "article-delete-submit" "Type" "submit" "Label" (ctx.Locale.Tr "repo.settings.article_delete_confirm") "Disabled" true)}}
     </form>
 </div>
 {{end}}
 {{end}}
+{{end}}
+
+{{define "shared/repo/settings_confirm_field"}}
+{{/* The confirmation of the Transfer, Archive and Delete dialogs (Body of 7626:70961): the
+     settings action it posts, the prompt naming the article, and the field to type it in,
+     which enables the dialog's button ("<ID>-submit") once it names the article. */}}
+<input type="hidden" name="action" value="{{.Action}}">
+<input type="hidden" name="redirect_to_article" value="true">
+<p>{{.Prompt}}</p>
+<div class="forkana-field">
+    <label for="{{.ID}}-confirm-name" class="forkana-field-label">{{.Label}}</label>
+    <input id="{{.ID}}-confirm-name" class="forkana-input" name="article_name" required maxlength="255"
+        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+        data-article-confirm-value="{{.Value}}"
+        data-article-confirm-target="#{{.ID}}-submit">
+</div>
+{{end}}
+
+{{define "shared/repo/settings_dialog_footer"}}
+{{/* The footer of the confirmation dialogs (Footer of 7619:68568): Cancel, then the
+     action, a secondary button with the red label. */}}
+<div class="actions">
+    <button type="button" class="cancel forkana-btn forkana-btn-secondary">{{ctx.Locale.Tr "settings.cancel"}}</button>
+    <button type="{{.Type}}" id="{{.ID}}" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text"{{if .Disabled}} disabled{{end}}{{if .RequiresOwner}} data-requires-owner-selection="true"{{end}}>{{.Label}}</button>
+</div>
 {{end}}
 
 {{define "shared/repo/settings_dialog_header"}}
@@ -198,7 +201,7 @@
      the close button on the right. */}}
 <div class="header forkana-dialog-header">
     {{if .Icon}}{{svg .Icon 20 "forkana-dialog-icon"}}{{end}}
-    <span class="forkana-dialog-title" data-role="dialog-title">{{.Title}}</span>
+    <span class="forkana-dialog-title" id="{{.ID}}-title" data-role="dialog-title">{{.Title}}</span>
     <button type="button" class="forkana-dialog-close" data-dialog-close aria-label="{{ctx.Locale.Tr "repo.settings.article_dialog_close"}}">{{svg "octicon-x" 16}}</button>
 </div>
 {{end}}
@@ -216,7 +219,7 @@
 {{/* A user field searched by username or name (Invite and Transfer, 7619:68300 and
      7626:71053): the results list under the field, then the picked person as a chip with
      their avatar, name, @username and a clear button (7619:68440). */}}
-<div id="{{.ID}}" class="ui fluid search article-user-search" data-search-url="{{.SearchURL}}"{{if .ConfirmTarget}} data-confirm-target="{{.ConfirmTarget}}"{{end}}>
+<div id="{{.ID}}" class="ui fluid search article-user-search" data-search-url="{{.SearchURL}}">
     <div class="ui fluid input forkana-input-search">
         {{svg "octicon-search" 16 "forkana-input-icon"}}
         <input id="{{.InputID}}" class="prompt forkana-input" name="{{.InputName}}" required maxlength="255"

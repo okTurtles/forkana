@@ -99,9 +99,11 @@
   border-bottom: none;
 }
 
+/* (0 16px on a phone too, #477 TabNav.Link 7596:67066; important, as base.css gives every
+   tabular menu item an important 11.55px 12px to match Gitea's dashboard bar) */
 #article-tabs .ui.tabular.menu > a.item {
   height: 40px;
-  padding: 0 16px;
+  padding: 0 16px !important;
   gap: 8px;
   font-size: 14px;
   line-height: 20px;
@@ -297,8 +299,16 @@
   background: none;
 }
 
-#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-settings:hover {
+#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-settings:hover,
+#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-settings.selected {
   text-decoration: underline;
+}
+
+/* (the keyboard's item: Fomantic marks it .selected; a tab focus gets the ring) */
+#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-settings:focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 #article-tabs .article-more-settings .svg {
@@ -310,15 +320,6 @@
 #article-tabs .article-more-divider {
   height: 1px;
   background: var(--color-border-light);
-}
-
-/* The tabs are 0 16px (TabNav.Link I7368:264911;24375:95723): base.css gives every
-   tabular menu item an important 11.55px 12px, to match Gitea's dashboard bar. (On a
-   phone they keep 12px at the sides, below.) */
-@media (min-width: 768px) {
-  #article-tabs .ui.tabular.menu > a.item {
-    padding: 0 16px !important;
-  }
 }
 
 /* ── The article's path (Frame 566 641:65486) ───────────────────────────────── */
@@ -926,7 +927,6 @@ a.article-history-page-direction:hover {
 
   #article-tabs .ui.tabular.menu > a.item {
     flex-shrink: 0;
-    padding: 0 16px !important; /* (base.css's tabular items are !important) */
   }
 
   #article-tabs .ui.tabular.menu > a.item .svg {

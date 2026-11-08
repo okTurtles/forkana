@@ -271,33 +271,37 @@
 /* ── Buttons ─────────────────────────────────────────────────────────────────
    Transfer article, Archive article, Delete article (Button 7581:68971): the secondary
    button with an Inter 600 #d1242f label. Unavailable in a dialog (Button of the Transfer
-   dialog's footer): #f6f8fa without a border, the label at 50%. */
+   dialog's footer): #f6f8fa without a border, the label at 50%. These unavailable states
+   are the figma's for the settings and their dialogs only, so they are scoped to them: the
+   design system's own disabled state (modules/button.css) stays as it is everywhere else
+   (the New subject page's Create button, for one). The dialogs are moved out of the
+   settings into Fomantic's dimmer when they open, hence the second root. */
 .forkana-btn.forkana-btn-danger-text,
 .forkana-btn.forkana-btn-danger-text:hover {
   color: var(--color-danger-fg);
 }
 
-.forkana-btn.forkana-btn-secondary:disabled,
-.forkana-btn.forkana-btn-secondary:disabled:hover {
+:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary:disabled,
+:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary:disabled:hover {
   border-color: transparent;
   background: var(--color-surface-muted);
   color: color-mix(in srgb, var(--color-button-text) 50%, transparent);
   cursor: default;
 }
 
-.forkana-btn.forkana-btn-secondary.forkana-btn-danger-text:disabled {
+:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary.forkana-btn-danger-text:disabled {
   color: color-mix(in srgb, var(--color-danger-fg) 50%, transparent);
 }
 
 /* the unavailable primary one (Invite 7619:68300): #dad5ff, a white 80% label */
-.forkana-btn.forkana-btn-primary:disabled {
+:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-primary:disabled {
   opacity: 1;
   border-color: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
   background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
   color: rgb(255 255 255 / 80%);
 }
 
-.forkana-btn .svg {
+:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn .svg {
   flex-shrink: 0;
 }
 

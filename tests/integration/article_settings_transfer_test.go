@@ -90,8 +90,11 @@ func TestArticleSettingsTransfer(t *testing.T) {
 	})
 
 	t.Run("Start", func(t *testing.T) {
-		// the recipient is resolved by username, which the modal submits
-		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name))
+		// the recipient is resolved by username, which the modal submits; the confirmation
+		// is typed as the dialog shows it, "<owner> / <subject>"
+		form := transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name)
+		form["article_name"] = owner.Name + " / " + subjectName
+		post(t, form)
 
 		assert.Contains(t, flashText(t), "Waiting for @"+recipient.Name+" to accept.")
 

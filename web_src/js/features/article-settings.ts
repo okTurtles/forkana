@@ -20,12 +20,22 @@ function fillMessage(template: string | null, values: {name?: string, count?: nu
     .replace('{count}', () => String(values.count ?? ''));
 }
 
-// Enables the target button only when the typed value matches the expected one
-// exactly, the comparison is case-sensitive on purpose.
+// "owner / subject" with the spaces around the first slash trimmed, as the server compares
+// it (articleNameConfirmed in routers/web/repo/setting/setting.go): "owner/subject" and
+// "owner / subject" are the same confirmation.
+export function normalizeArticleName(value: string): string {
+  const slash = value.indexOf('/');
+  if (slash < 0) return value.trim();
+  return `${value.slice(0, slash).trim()}/${value.slice(slash + 1).trim()}`;
+}
+
+// Enables the target button only when the typed value names the article, the comparison
+// is case-sensitive on purpose.
 function syncConfirmInput(input: HTMLInputElement): void {
   const target = document.querySelector<HTMLButtonElement>(input.getAttribute('data-article-confirm-target'));
   if (!target) return;
-  let enabled = input.value.trim() === input.getAttribute('data-article-confirm-value');
+  let enabled = input.value.trim() !== '' &&
+    normalizeArticleName(input.value) === normalizeArticleName(input.getAttribute('data-article-confirm-value') ?? '');
   if (enabled && target.getAttribute('data-requires-owner-selection') === 'true') enabled = transferOwnerSelected;
   target.disabled = !enabled;
 }
@@ -300,6 +310,8 @@ function openRemoveCollaboratorsModal({rows}: RemovalTarget): void {
     submit.textContent = confirm;
     for (const el of modal.querySelectorAll<HTMLButtonElement>('.actions .cancel, [data-dialog-close]')) el.disabled = false;
     $modal.modal('setting', 'closable', true);
+    // the disabled button lost the focus to the page: it goes back to the dialog
+    submit.focus();
   }, {signal: removeListener.signal});
   $modal.modal('show');
 }

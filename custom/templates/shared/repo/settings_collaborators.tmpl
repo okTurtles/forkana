@@ -188,8 +188,8 @@
 {{if not .Repository.IsArchived}}
 {{/* "Invite – search" 7619:68300 and "– choose role" 7619:68440; a bottom sheet on a
      phone (7622:69567) */}}
-<div class="ui modal forkana-dialog" id="article-collaborator-invite-modal">
-    {{template "shared/repo/settings_dialog_header" (dict "Title" (ctx.Locale.Tr "repo.settings.article_collaborators_invite_modal_header") "Icon" "octicon-person-add")}}
+<div class="ui modal forkana-dialog" id="article-collaborator-invite-modal" role="dialog" aria-modal="true" aria-labelledby="article-collaborator-invite-modal-title">
+    {{template "shared/repo/settings_dialog_header" (dict "ID" "article-collaborator-invite-modal" "Title" (ctx.Locale.Tr "repo.settings.article_collaborators_invite_modal_header") "Icon" "octicon-person-add")}}
     <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/article_collaborators/invite" method="post">
         {{/* see the transfer dialog: the dummy inputs absorb the browser's autofill so the
         invitee is always picked through the backend-validated search dropdown */}}
@@ -234,7 +234,8 @@
 {{/* "Remove collaborator – confirm" 7619:68568 and its states ("Remove – states"
      7675:74699): the title and the text name who is removed, a waiting invite is
      cancelled instead; "Removing…" while it is sent, an error banner if it fails. */}}
-<div class="ui modal forkana-dialog" id="article-collaborators-remove-modal"
+<div class="ui modal forkana-dialog" id="article-collaborators-remove-modal" role="dialog" aria-modal="true"
+    aria-labelledby="article-collaborators-remove-modal-title" aria-describedby="article-collaborators-remove-desc"
     data-title-one="{{ctx.Locale.TrString "repo.settings.article_collaborators_remove_modal_header_1"}}"
     data-title-many="{{ctx.Locale.TrString "repo.settings.article_collaborators_remove_modal_header_n" "{count}"}}"
     data-title-invite="{{ctx.Locale.TrString "repo.settings.article_collaborators_cancel_invite_modal_header" "{name}"}}"
@@ -246,12 +247,9 @@
     data-removing="{{ctx.Locale.TrString "repo.settings.article_collaborators_removing"}}"
     data-failed-one="{{ctx.Locale.TrString "repo.settings.article_collaborators_remove_failed" "{name}"}}"
     data-failed-many="{{ctx.Locale.TrString "repo.settings.article_collaborators_remove_failed_n" "{count}"}}">
-    {{template "shared/repo/settings_dialog_header" (dict "Title" (ctx.Locale.Tr "repo.settings.article_collaborators_remove_modal_header_1"))}}
+    {{template "shared/repo/settings_dialog_header" (dict "ID" "article-collaborators-remove-modal" "Title" (ctx.Locale.Tr "repo.settings.article_collaborators_remove_modal_header_1"))}}
     {{template "shared/repo/settings_dialog_banner" (dict "Kind" "danger" "Message" "" "Hidden" true "Role" "remove-error")}}
-    <div class="content"><p data-role="remove-desc"></p></div>
-    <div class="actions">
-        <button type="button" class="cancel forkana-btn forkana-btn-secondary">{{ctx.Locale.Tr "settings.cancel"}}</button>
-        <button type="button" id="article-collaborators-remove-submit" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text">{{ctx.Locale.Tr "repo.settings.article_collaborators_remove_confirm"}}</button>
-    </div>
+    <div class="content"><p id="article-collaborators-remove-desc" data-role="remove-desc"></p></div>
+    {{template "shared/repo/settings_dialog_footer" (dict "ID" "article-collaborators-remove-submit" "Type" "button" "Label" (ctx.Locale.Tr "repo.settings.article_collaborators_remove_confirm"))}}
 </div>
 {{end}}

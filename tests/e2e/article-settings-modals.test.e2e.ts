@@ -85,8 +85,26 @@ test.describe('Article settings', () => {
     const cancel = transfer.locator('.actions .cancel');
     await expect(cancel).toHaveText('Cancel');
     await expect(cancel.locator('svg')).toHaveCount(0);
+    // a dialog, named by its title
+    await expect(transfer).toHaveAttribute('role', 'dialog');
+    await expect(page.getByRole('dialog', {name: 'Transfer ownership'})).toBeVisible();
     await transfer.locator('[data-dialog-close]').click();
     await expect(transfer).toBeHidden();
+
+    // the confirmation is the article as shown, "user2 / example-subject", the spaces
+    // around the slash being optional, as on the server
+    await page.locator('[data-article-settings-modal="#article-archive-modal"]').click();
+    const archive = page.locator('#article-archive-modal');
+    const archiveSubmit = archive.locator('#article-archive-submit');
+    await expect(archiveSubmit).toBeDisabled();
+    for (const typed of ['user2 / example-subject', 'user2/example-subject']) {
+      await archive.locator('#article-archive-confirm-name').fill(typed);
+      await expect(archiveSubmit).toBeEnabled();
+    }
+    await archive.locator('#article-archive-confirm-name').fill('user2 / example');
+    await expect(archiveSubmit).toBeDisabled();
+    await archive.locator('.actions .cancel').click();
+    await expect(archive).toBeHidden();
 
     // user2 owns the unarchived repo1, so all five dialogs are rendered: transfer, archive,
     // delete, invite collaborator and remove collaborator
@@ -142,6 +160,20 @@ test.describe('Article settings', () => {
     const page = await context.newPage();
     await openPage(page, `${settingsURL}&section=collaborators`);
 
+    // a retry after a failure finds the invitee still listed: remove them first, with the
+    // page's own form (and its CSRF token), so that they can be invited again
+    const leftover = await page.evaluate((name) => {
+      const checkbox = document.querySelector<HTMLInputElement>(`[data-article-collaborator]:has(a[href$="/${name}"]) [data-article-collaborator-select]`);
+      const form = document.querySelector<HTMLFormElement>('#article-collaborators-remove-form');
+      return {
+        uid: checkbox?.value ?? '',
+        action: form?.action ?? '',
+        csrf: form?.querySelector<HTMLInputElement>('input[name="_csrf"]')?.value ?? '',
+      };
+    }, invitee);
+    await Promise.all(leftover.uid ? [page.request.post(leftover.action, {form: {_csrf: leftover.csrf, uid: leftover.uid}})] : []);
+    await openPage(page, `${settingsURL}&section=collaborators`);
+
     await inviteButton(page).click();
     const dialog = page.locator('#article-collaborator-invite-modal');
     await dialog.locator('#article-collaborator-invitee').fill(invitee);
@@ -172,7 +204,7 @@ test.describe('Article settings', () => {
     await page.unroute('**/article_collaborators/remove');
 
     await confirm.click();
-    await expect(page.locator('.flash-message.flash-success')).toContainText(/The invite for .+ has been cancelled\./);
+    await expect(page.locator('.flash-message.flash-success')).toContainText(/The invite for .+ has been canceled\./);
     await expect(page.locator(`[data-article-collaborator]:has(a[href$="/${invitee}"])`)).toHaveCount(0);
     await context.close();
   });
