@@ -46,7 +46,7 @@
 								type="text" 
 								name="user_name" 
 								value="{{.user_name}}" 
-								placeholder="Type your username"
+								placeholder="{{ctx.Locale.Tr "auth.username_placeholder"}}"
 								autofocus 
 								required 
 								tabindex="1"
@@ -64,7 +64,7 @@
 								name="email" 
 								type="email" 
 								value="{{.email}}" 
-								placeholder="Type your email address"
+								placeholder="{{ctx.Locale.Tr "auth.email_placeholder"}}"
 								required 
 								tabindex="2"
 								class="tw-bg-white tw-border tw-border-[#d1d9e0] tw-border-solid tw-rounded-[6px] tw-px-[8px] tw-h-[32px] tw-text-[14px] tw-text-[#59636e] tw-leading-[20px] tw-w-full focus:tw-outline-none focus:tw-border-[#4e40fa]"
@@ -82,7 +82,7 @@
 								name="password" 
 								type="password" 
 								value="{{.password}}" 
-								placeholder="Type your password"
+								placeholder="{{ctx.Locale.Tr "auth.password_placeholder"}}"
 								autocomplete="new-password" 
 								required 
 								tabindex="3"
@@ -100,7 +100,7 @@
 								name="retype" 
 								type="password" 
 								value="{{.retype}}" 
-								placeholder="Re-type your password"
+								placeholder="{{ctx.Locale.Tr "auth.retype_password_placeholder"}}"
 								autocomplete="new-password" 
 								required 
 								tabindex="4"

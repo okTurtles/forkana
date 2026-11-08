@@ -17,7 +17,7 @@
 				{{if .LinkAccountMode}}
 					{{ctx.Locale.Tr "auth.oauth_signin_title"}}
 				{{else}}
-					Sign in to Forkana
+					{{ctx.Locale.Tr "auth.sign_in_to_forkana"}}
 				{{end}}
 			</div>
 
@@ -38,7 +38,7 @@
 								type="text" 
 								name="user_name" 
 								value="{{.user_name}}" 
-								placeholder="Type your username or email address"
+								placeholder="{{ctx.Locale.Tr "auth.username_or_email_placeholder"}}"
 								autofocus 
 								required 
 								tabindex="1"
@@ -64,7 +64,7 @@
 								name="password" 
 								type="password" 
 								value="{{.password}}" 
-								placeholder="Type your password"
+								placeholder="{{ctx.Locale.Tr "auth.password_placeholder"}}"
 								autocomplete="current-password" 
 								required 
 								tabindex="2"

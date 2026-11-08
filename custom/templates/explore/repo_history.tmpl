@@ -26,7 +26,7 @@
                         {{end}}
 
                         <a class="ui large text" href="{{AppSubUrl}}/subject/{{PathEscape ($node.Repository.GetSubject ctx)}}">
-                            <strong>{{if $node.Repository.Owner}}{{$node.Repository.Owner.Name}}{{else}}unknown{{end}}/{{$node.Repository.Name}}</strong>
+                            <strong>{{if $node.Repository.Owner}}{{$node.Repository.Owner.Name}}{{else}}{{ctx.Locale.Tr "unknown"}}{{end}}/{{$node.Repository.Name}}</strong>
                         </a>
 
                         <span class="ui small labels">

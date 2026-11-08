@@ -33,13 +33,13 @@
 		<overflow-menu class="ui secondary pointing menu">
 			<div class="overflow-menu-items tw-justify-center" id="subject-view-tabs" data-owner="{{.Repository.Owner.Name}}" data-subject="{{.SubjectName}}">
 				<a class="{{if .IsBubbleView}}active {{end}}item" href="{{$bubbleUrl}}" data-view="bubble">
-					{{svg "bubble"}} Bubble<span class="not-mobile tw-ml-1">view</span>
+					{{svg "bubble"}} {{ctx.Locale.Tr "repo.subject_view_bubble"}}
 				</a>
 				<a class="{{if .IsTableView}}active {{end}}item" href="{{QueryBuild $subjectUrl "view" "table" "selected" .SubjectSelected}}" data-view="table">
-					{{svg "octicon-table"}} Table<span class="not-mobile tw-ml-1">view</span>
+					{{svg "octicon-table"}} {{ctx.Locale.Tr "repo.subject_view_table"}}
 				</a>
 				<a class="{{if .IsArticleView}}active {{end}}item" href="{{QueryBuild $subjectUrl "view" "article" "selected" .SubjectSelected}}" data-view="article" id="article-view-link">
-					{{svg "octicon-file"}} Article<span class="not-mobile tw-ml-1">view</span>
+					{{svg "octicon-file"}} {{ctx.Locale.Tr "repo.subject_view_article"}}
 				</a>
 			</div>
 			{{/* Its label and state follow Compare mode (#421 item 1): web_src/js/features/copycontent.ts

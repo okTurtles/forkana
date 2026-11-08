@@ -50,19 +50,19 @@
                     <a class="{{if .IsArticleModeRead}}active {{end}}item"
                         href="{{QueryBuild $articleLink "view" "article" "mode" "read"}}"
                         data-article-tab="read">
-                        {{svg "octicon-book" 16}} Read
+                        {{svg "octicon-book" 16}} {{ctx.Locale.Tr "repo.article_tab_read"}}
                     </a>
                     {{if not .Repository.IsArchived}}
                         <a class="{{if .IsArticleModeEdit}}active {{end}}item"
                             href="{{QueryBuild $articleLink "view" "article" "mode" "edit"}}"
                             data-article-tab="edit">
-                            {{svg "octicon-pencil" 16}} Edit
+                            {{svg "octicon-pencil" 16}} {{ctx.Locale.Tr "edit"}}
                         </a>
                     {{end}}
                     <a class="{{if .IsArticleModeHistory}}active {{end}}item"
                         href="{{QueryBuild $articleLink "view" "article" "mode" "history"}}"
                         data-article-tab="history">
-                        {{svg "octicon-history" 16}} History
+                        {{svg "octicon-history" 16}} {{ctx.Locale.Tr "repo.file_history"}}
                     </a>
                     {{if .CanManageArticleCollaborators}}
                         <a class="{{if .IsArticleModeSettings}}active {{end}}item"
