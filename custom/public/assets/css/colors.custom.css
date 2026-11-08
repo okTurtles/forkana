@@ -121,6 +121,13 @@
   --color-white: #FFFFFF;
   --color-red: #CF222E;
   --color-danger-icon: #d1242f; /* Primer fgColor-danger as figma's Flag-16 434:36114 fills it */
+  --color-danger-fg: #d1242f; /* Primer fgColor-danger: the red labels of the settings' buttons (#477) */
+  --color-danger-bg: #ffebe9; /* Primer bgColor-danger-muted: the error Banner of a dialog */
+  --color-danger-border: #ff818266; /* Primer borderColor-danger-muted */
+  --color-attention-fg: #9a6700; /* Primer fgColor-attention: the "Waiting invite" Label */
+  --color-input-readonly-bg: #eff2f5; /* the read-only TextInput of the settings (7581:68933) */
+  --color-segmented-bg: #e6eaef; /* the SegmentedControl track (7581:68630) */
+  --color-dialog-backdrop: #c8d1da66; /* the dialogs' Backdrop (7619:68299) */
   --color-yellow: #EBB400;
   --color-purple: #8250DF;
   --color-grey: #59636E;

@@ -5,6 +5,7 @@ package setting
 
 import (
 	"errors"
+	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
@@ -79,30 +80,39 @@ func ArticleCollaboratorCandidates(ctx *context.Context) {
 // flashArticleCollaboratorError reports a refused collaborator action through a flash
 // message. It returns false when the error is unexpected and the response was written.
 func flashArticleCollaboratorError(ctx *context.Context, err error) bool {
+	message := articleCollaboratorErrorMessage(ctx, err)
+	if message == "" {
+		ctx.ServerError("ArticleCollaborator", err)
+		return false
+	}
+	ctx.Flash.Error(message)
+	return true
+}
+
+// articleCollaboratorErrorMessage words a refused collaborator action for the doer, or
+// returns "" when the error is unexpected.
+func articleCollaboratorErrorMessage(ctx *context.Context, err error) template.HTML {
 	switch {
 	case errors.Is(err, repo_service.ErrArticleArchived):
 		repo := ctx.Repo.Repository
 		archivedAt := util.Iif(repo.ArchivedUnix.IsZero(), repo.UpdatedUnix, repo.ArchivedUnix)
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_archived_notice", archivedAt.FormatDate()))
+		return ctx.Tr("repo.settings.article_archived_notice", archivedAt.FormatDate())
 	case errors.Is(err, repo_service.ErrArticleCollaboratorExists):
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_already_listed"))
+		return ctx.Tr("repo.settings.article_collaborators_already_listed")
 	case errors.Is(err, repo_service.ErrArticleCollaboratorOwnsSubject):
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_owns_subject"))
+		return ctx.Tr("repo.settings.article_collaborators_owns_subject")
 	case errors.Is(err, repo_service.ErrArticleCollaboratorInvalidRole):
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_invalid_role"))
+		return ctx.Tr("repo.settings.article_collaborators_invalid_role")
 	case errors.Is(err, repo_service.ErrArticleCollaboratorNotEligible), errors.Is(err, user_model.ErrBlockedUser):
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_not_eligible"))
+		return ctx.Tr("repo.settings.article_collaborators_not_eligible")
 	case errors.Is(err, repo_service.ErrArticleCollaboratorNoInvite):
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_no_invite"))
+		return ctx.Tr("repo.settings.article_collaborators_no_invite")
 	case errors.Is(err, util.ErrPermissionDenied):
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_no_permission"))
+		return ctx.Tr("repo.settings.article_collaborators_no_permission")
 	case errors.Is(err, util.ErrNotExist), errors.Is(err, util.ErrInvalidArgument):
-		ctx.Flash.Error(ctx.Tr("repo.settings.article_collaborators_user_not_found"))
-	default:
-		ctx.ServerError("ArticleCollaborator", err)
-		return false
+		return ctx.Tr("repo.settings.article_collaborators_user_not_found")
 	}
-	return true
+	return ""
 }
 
 // resolveArticleCollaboratorInvitee finds the invitee by the username the invite modal
@@ -194,12 +204,16 @@ func ArticleCollaboratorChangeRole(ctx *context.Context) {
 }
 
 // ArticleCollaboratorsRemove removes the selected collaborators, one from a row's button
-// or several from the "Remove selected" action.
+// or several from the "Remove selected" action. The confirmation dialog posts with fetch
+// and asks for JSON, so that it can show "Removing…" and a refusal in place (#461, figma
+// "Remove – states" 7675:74699): it is answered with the page to load next, or the error.
+// A plain form post is answered with a redirect.
 func ArticleCollaboratorsRemove(ctx *context.Context) {
 	if !requireArticleCollaboratorManager(ctx) {
 		return
 	}
 	redirectURL := articleCollaboratorsURL(ctx)
+	wantsJSON := strings.Contains(ctx.Req.Header.Get("Accept"), "application/json")
 
 	values := ctx.FormStrings("uid")
 	userIDs := make([]int64, 0, len(values))
@@ -209,14 +223,49 @@ func ArticleCollaboratorsRemove(ctx *context.Context) {
 		}
 	}
 
+	// the success banner names the one person removed, so they are looked up first
+	var removed *repo_model.ArticleCollaborator
+	var removedUser *user_model.User
+	if len(userIDs) == 1 {
+		var err error
+		if removed, err = repo_model.GetArticleCollaborator(ctx, ctx.Repo.Repository.ID, userIDs[0]); err != nil {
+			ctx.ServerError("GetArticleCollaborator", err)
+			return
+		}
+		if removed != nil {
+			if removedUser, err = user_model.GetPossibleUserByID(ctx, removed.UserID); err != nil && !user_model.IsErrUserNotExist(err) {
+				ctx.ServerError("GetPossibleUserByID", err)
+				return
+			}
+		}
+	}
+
 	if err := repo_service.RemoveArticleCollaborators(ctx, ctx.Doer, ctx.Repo.Repository, userIDs); err != nil {
-		if flashArticleCollaboratorError(ctx, err) {
-			ctx.Redirect(redirectURL)
+		if !wantsJSON {
+			if flashArticleCollaboratorError(ctx, err) {
+				ctx.Redirect(redirectURL)
+			}
+			return
+		}
+		if message := articleCollaboratorErrorMessage(ctx, err); message != "" {
+			ctx.JSONError(message)
+		} else {
+			ctx.ServerError("RemoveArticleCollaborators", err)
 		}
 		return
 	}
-	if len(userIDs) > 0 {
-		ctx.Flash.Success(ctx.Tr("repo.settings.article_collaborators_remove_success"))
+
+	switch {
+	case removedUser != nil && removed.IsPending():
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_collaborators_cancel_invite_success", removedUser.DisplayName()))
+	case removedUser != nil:
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_collaborators_remove_success", removedUser.DisplayName()))
+	case len(userIDs) > 0:
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_collaborators_remove_success_n", len(userIDs)))
+	}
+	if wantsJSON {
+		ctx.JSONRedirect(redirectURL)
+		return
 	}
 	ctx.Redirect(redirectURL)
 }

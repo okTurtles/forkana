@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"strings"
 	"testing"
 
 	issues_model "code.gitea.io/gitea/models/issues"
@@ -111,8 +112,47 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		assert.True(t, c.IsAccepted())
 		assert.Equal(t, repo_model.ArticleCollaboratorRoleMaintainer, c.Role)
 
-		// a plain maintainer has no settings tab
+		// a plain maintainer has no Settings, in the "…" menu or anywhere else
 		AssertHTMLElement(t, articlePage(t, maintainerSession, "read"), `[data-article-tab="settings"]`, false)
+	})
+
+	// #477: Settings is no tab any more, the "…" menu holds it, above a divider and Report
+	t.Run("SettingsInMoreMenu", func(t *testing.T) {
+		htmlDoc := articlePage(t, ownerSession, "read")
+		AssertHTMLElement(t, htmlDoc, `#article-tabs .tabular.menu [data-article-tab="settings"]`, false)
+		AssertHTMLElement(t, htmlDoc, `[data-role="article-more"] .menu > a.article-more-settings[data-article-tab="settings"]`, true)
+		AssertHTMLElement(t, htmlDoc, `[data-role="article-more"] .menu > .article-more-divider`, true)
+		AssertHTMLElement(t, htmlDoc, `[data-role="article-more"] .menu > .article-more-report`, true)
+
+		// the delegate manages the collaborators, so the menu offers them Settings too
+		AssertHTMLElement(t, articlePage(t, delegateSession, "read"), `.article-more-settings`, true)
+
+		// everyone else sees Report only, and asking for the settings shows the article
+		htmlDoc = articlePage(t, outsiderSession, "settings")
+		AssertHTMLElement(t, htmlDoc, `.article-more-settings`, false)
+		AssertHTMLElement(t, htmlDoc, `.article-more-divider`, false)
+		AssertHTMLElement(t, htmlDoc, `.article-more-report`, true)
+		AssertHTMLElement(t, htmlDoc, "#article-settings-root", false)
+		assert.Equal(t, "read", htmlDoc.Find("#article-view-root").AttrOr("data-article-mode", ""))
+	})
+
+	// #461: the owner first, then a line counting who can edit the article
+	t.Run("ListShowsOwnerAndCounts", func(t *testing.T) {
+		htmlDoc := articlePage(t, ownerSession, "settings")
+		// the settings page has no row of tabs: "Back" leads to the Read tab
+		AssertHTMLElement(t, htmlDoc, "#article-tabs", false)
+		AssertHTMLElement(t, htmlDoc, `.article-settings-back[data-article-tab="read"]`, true)
+		AssertHTMLElement(t, htmlDoc, `[data-article-settings-section="general"].active`, true)
+
+		ownerRow := htmlDoc.Find("[data-article-collaborator-owner]")
+		require.Equal(t, 1, ownerRow.Length())
+		assert.Contains(t, ownerRow.Text(), owner.DisplayName()+" (you)")
+		assert.Contains(t, ownerRow.Text(), "Owner")
+		assert.Equal(t, 0, ownerRow.Find("input[type=checkbox]").Length(), "the owner cannot be selected")
+		assert.Equal(t, 0, ownerRow.Find("[data-article-collaborator-remove]").Length(), "nor removed")
+
+		assert.Equal(t, "3 people can edit this article and approve change requests: you and 2 collaborators.",
+			strings.TrimSpace(htmlDoc.Find(`[data-role="collaborators-summary"]`).Text()))
 	})
 
 	t.Run("OwnerChangesRole", func(t *testing.T) {
@@ -199,7 +239,13 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 	})
 
 	t.Run("RemoveRevokesAccess", func(t *testing.T) {
-		post(t, ownerSession, "remove", map[string]string{"uid": strconv.FormatInt(maintainer.ID, 10)})
+		// the confirmation dialog asks for JSON, so that it can show a refusal in place
+		values := map[string]string{"_csrf": GetUserCSRFToken(t, ownerSession), "uid": strconv.FormatInt(maintainer.ID, 10)}
+		req := NewRequestWithValues(t, "POST", collaboratorsURL+"/remove", values).SetHeader("Accept", "application/json")
+		data := map[string]any{}
+		DecodeJSON(t, ownerSession.MakeRequest(t, req, http.StatusOK), &data)
+		assert.Contains(t, data["redirect"], "section=collaborators")
+		assert.Equal(t, maintainer.DisplayName()+" has been removed from this article.", ownerSession.GetCookieFlashMessage().SuccessMsg)
 		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
 
 		isCollaborator, err := repo_model.IsCollaborator(t.Context(), repo.ID, maintainer.ID)

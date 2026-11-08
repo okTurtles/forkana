@@ -1,263 +1,234 @@
 {{define "shared/repo/settings"}}
-{{/* The owner gets every section, a delegate only the collaborators one. */}}
-{{if and .IsArticleModeSettings .CanManageArticleCollaborators}}
+{{/* The article settings (#477, figma section "08 · Settings and Collaborators flow"
+     7570:71939): opened from the "…" menu, in the 640px column of the article view. The
+     owner gets every section, a delegate only the collaborators one. Values are in
+     web_src/css/features/article-settings.css, with the figma node each comes from. */}}
+{{if .CanManageArticleCollaborators}}
 {{$subjectName := .Repository.GetSubject ctx}}
 {{$section := .ArticleSettingsSection}}
-<div class="ui bottom attached" id="article-settings-root">
-    {{template "base/alert" .}}
-    <div class="tw-flex tw-flex-col md:tw-flex-row tw-gap-[10%]">
-        <div class="md:tw-w-[20%]">
-            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden">
-                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.sidebar_header"}}</h4>
-                <div class="ui vertical fluid secondary menu tw-mt-0 tw-pt-0">
-                    {{if .IsRepoOwner}}
-                        <a class="{{if eq $section "general"}}active {{end}}item" href="#article-settings-general" data-article-settings-section="general">{{svg "octicon-gear" 16}}{{ctx.Locale.Tr "repo.settings.article_general"}}</a>
-                    {{end}}
-                    <a class="{{if eq $section "collaborators"}}active {{end}}item" href="#article-settings-collaborators" data-article-settings-section="collaborators">{{svg "octicon-people" 16}}{{ctx.Locale.Tr "repo.settings.article_collaborators"}}</a>
-                </div>
-            </div>
+{{$articleName := printf "%s / %s" .Repository.OwnerName $subjectName}}
+<div class="article-settings" id="article-settings-root" data-section="{{$section}}">
+    {{/* "Settings title" 7621:69346: "‹ Back" (the Change requests page's link) to the Read
+         tab, then the title. */}}
+    <div class="article-settings-title">
+        <a class="article-settings-back" href="{{QueryBuild .ArticleLink "view" "article" "mode" "read"}}" data-article-tab="read">
+            {{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "repo.settings.article_back"}}</span>
+        </a>
+        <h2 class="article-settings-heading">{{ctx.Locale.Tr "repo.settings"}}</h2>
+    </div>
+    {{if .IsRepoOwner}}
+        {{/* SegmentedControl 7581:68630 in place of the old left menu */}}
+        <div class="forkana-segmented" role="group" aria-label="{{ctx.Locale.Tr "repo.settings.article_sections"}}">
+            <button type="button" class="forkana-segmented-item{{if eq $section "general"}} active{{end}}" data-article-settings-section="general" aria-pressed="{{if eq $section "general"}}true{{else}}false{{end}}">{{ctx.Locale.Tr "repo.settings.article_general"}}</button>
+            <button type="button" class="forkana-segmented-item{{if eq $section "collaborators"}} active{{end}}" data-article-settings-section="collaborators" aria-pressed="{{if eq $section "collaborators"}}true{{else}}false{{end}}">{{ctx.Locale.Tr "repo.settings.article_collaborators"}}</button>
         </div>
-        <div class="md:tw-w-[70%]">
-            {{if .IsRepoOwner}}
-            <div class="tw-flex tw-flex-col tw-gap-4{{if ne $section "general"}} tw-hidden{{end}}" data-article-settings-panel="general">
-            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-general">
-                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_general"}}</h4>
-                <div class="ui form tw-flex tw-flex-col tw-gap-4 tw-p-4">
-                    <div class="field">
-                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.settings.collaboration.owner"}}</label>
-                        <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
-                            <div class="tw-flex tw-items-center tw-gap-2">
-                                {{ctx.AvatarUtils.Avatar .Repository.Owner 20}}
-                                <span class="tw-font-bold">{{.Repository.Owner.Name}}</span>
-                            </div>
-                        </div>
+
+        <div class="article-settings-panel{{if ne $section "general"}} tw-hidden{{end}}" data-article-settings-panel="general">
+            {{/* "Box / General" 7581:68929: today's fields, in the read-only input style */}}
+            <section class="forkana-box" id="article-settings-general">
+                <h3 class="forkana-box-header">{{ctx.Locale.Tr "repo.settings.article_general"}}</h3>
+                <div class="forkana-box-body article-settings-fields">
+                    <div class="forkana-field">
+                        <label class="forkana-field-label" for="article-settings-owner">{{ctx.Locale.Tr "repo.settings.collaboration.owner"}}</label>
+                        <input class="forkana-input" id="article-settings-owner" type="text" readonly value="{{.Repository.Owner.Name}}">
                     </div>
-                    <div class="field">
-                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.settings.article_source"}}</label>
-                        <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
-                            {{if and .Repository.IsFork .Repository.BaseRepo}}
-                                <span>{{.Repository.BaseRepo.OwnerName}} / {{$subjectName}}</span>
-                            {{else}}
-                                <span class="tw-text-gray-600">-</span>
-                            {{end}}
-                        </div>
+                    <div class="forkana-field">
+                        <label class="forkana-field-label" for="article-settings-source">{{ctx.Locale.Tr "repo.settings.article_source"}}</label>
+                        <input class="forkana-input" id="article-settings-source" type="text" readonly value="{{if and .Repository.IsFork .Repository.BaseRepo}}{{.Repository.BaseRepo.OwnerName}} / {{$subjectName}}{{else}}-{{end}}">
                     </div>
-                    <div class="field">
-                        <label class="tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-text-left">{{ctx.Locale.Tr "repo.settings.article_subject_name"}}</label>
-                        <div class="ui disabled input tw-flex md:tw-w-[60%] tw-w-full tw-mx-auto tw-items-center tw-justify-start tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded tw-text-left">
-                            <span>{{$subjectName}}</span>
-                        </div>
+                    <div class="forkana-field">
+                        <label class="forkana-field-label" for="article-settings-subject">{{ctx.Locale.Tr "repo.settings.article_subject_name"}}</label>
+                        <input class="forkana-input" id="article-settings-subject" type="text" readonly value="{{$subjectName}}">
                     </div>
                 </div>
-            </div>
+            </section>
             {{if not .Repository.IsArchived}}
-                <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-transfer">
-                    <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</h4>
-                    <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
+                {{/* "Box / Transfer ownership" 7581:68966; while a transfer waits for the new
+                     owner, "Cancel transfer" (7626:71342) */}}
+                <section class="forkana-box" id="article-settings-transfer">
+                    <h3 class="forkana-box-header">{{ctx.Locale.Tr "repo.settings.article_transfer"}}</h3>
+                    <div class="forkana-box-body article-settings-action">
                         {{if .ArticleTransferRecipient}}
-                            <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_pending" (HTMLFormat "%s" .ArticleTransferRecipient.DisplayName)}}</p>
-                            <form class="tw-m-0" action="{{.RepoOperationsLink}}/settings" method="post">
+                            <p>{{ctx.Locale.Tr "repo.settings.article_transfer_pending" (printf "@%s" .ArticleTransferRecipient.Name)}}</p>
+                            <form action="{{.RepoOperationsLink}}/settings" method="post">
                                 {{.CsrfTokenHtml}}
                                 <input type="hidden" name="action" value="cancel_transfer">
                                 <input type="hidden" name="redirect_to_article" value="true">
-                                <button type="submit" id="article-transfer-cancel" class="ui button tw-m-0 tw-text-red tw-font-bold tw-whitespace-nowrap">{{ctx.Locale.Tr "repo.settings.article_transfer_cancel"}}</button>
+                                <button type="submit" id="article-transfer-cancel" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text">{{ctx.Locale.Tr "repo.settings.article_transfer_cancel"}}</button>
                             </form>
                         {{else}}
-                            <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_transfer_desc"}}</p>
-                            <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold tw-whitespace-nowrap" data-article-settings-modal="#article-transfer-modal">{{ctx.Locale.Tr "repo.settings.article_transfer_button"}}</button>
+                            <p>{{ctx.Locale.Tr "repo.settings.article_transfer_desc"}}</p>
+                            <button type="button" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text" data-article-settings-modal="#article-transfer-modal">{{ctx.Locale.Tr "repo.settings.article_transfer_button"}}</button>
                         {{end}}
                     </div>
-                </div>
-                <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-archive">
-                    <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_archive"}}</h4>
-                    <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
-                        <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_archive_desc"}}</p>
-                        <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold" data-article-settings-modal="#article-archive-modal">{{ctx.Locale.Tr "repo.settings.article_archive_button"}}</button>
+                </section>
+                {{/* "Box / Archive" 7581:68977 (an archived article keeps only General and
+                     Delete, 7626:72428) */}}
+                <section class="forkana-box" id="article-settings-archive">
+                    <h3 class="forkana-box-header">{{ctx.Locale.Tr "repo.settings.article_archive"}}</h3>
+                    <div class="forkana-box-body article-settings-action">
+                        <p>{{ctx.Locale.Tr "repo.settings.article_archive_desc"}}</p>
+                        <button type="button" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text" data-article-settings-modal="#article-archive-modal">{{ctx.Locale.Tr "repo.settings.article_archive_button"}}</button>
                     </div>
-                </div>
+                </section>
             {{end}}
-            <div class="ui segment tw-m-0 tw-p-0 tw-overflow-hidden" id="article-settings-delete">
-                <h4 class="ui header tw-m-0 tw-p-3 tw-bg-secondary-bg tw-border-b tw-border-secondary">{{ctx.Locale.Tr "repo.settings.article_delete"}}</h4>
-                <div class="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-p-4">
-                    <p class="tw-m-0">{{ctx.Locale.Tr "repo.settings.article_delete_desc"}}</p>
-                    <button type="button" class="ui button tw-m-0 tw-text-red tw-font-bold" data-article-settings-modal="#article-delete-modal">{{ctx.Locale.Tr "repo.settings.article_delete_button"}}</button>
+            {{/* "Box / Delete" 7581:68988 */}}
+            <section class="forkana-box" id="article-settings-delete">
+                <h3 class="forkana-box-header">{{ctx.Locale.Tr "repo.settings.article_delete"}}</h3>
+                <div class="forkana-box-body article-settings-action">
+                    <p>{{ctx.Locale.Tr "repo.settings.article_delete_desc"}}</p>
+                    <button type="button" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text" data-article-settings-modal="#article-delete-modal">{{ctx.Locale.Tr "repo.settings.article_delete_button"}}</button>
                 </div>
-            </div>
-            </div>
-            {{end}}
-            <div class="{{if ne $section "collaborators"}}tw-hidden{{end}}" data-article-settings-panel="collaborators">
-                {{template "shared/repo/settings_collaborators" .}}
-            </div>
+            </section>
         </div>
+    {{end}}
+    <div class="article-settings-panel{{if ne $section "collaborators"}} tw-hidden{{end}}" data-article-settings-panel="collaborators">
+        {{template "shared/repo/settings_collaborators" .}}
     </div>
 </div>
 
-{{if not .Repository.IsArchived}}
-<style>
-/* give the user search results room to breathe, without the fomantic separators;
-   the .ui.search prefix lets these rules outrank fomantic's own result styles */
-.ui.search.article-user-search > .results .result {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border: none !important;
-}
-.ui.search.article-user-search > .results .result .image,
-.ui.search.article-user-search > .results .result .image img,
-.ui.search.article-user-search > .results .result > img {
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    object-fit: cover;
-}
-.ui.search.article-user-search > .results .result .content {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    overflow: hidden;
-    margin: 0;
-}
-.ui.search.article-user-search > .results .result .title {
-    margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-</style>
-{{end}}
-{{/* the remove modal is needed on an archived article too, the template leaves out the invite one */}}
+{{/* the remove dialog is needed on an archived article too, the template leaves out the invite one */}}
 {{template "shared/repo/settings_collaborators_modals" .}}
 
 {{if .IsRepoOwner}}
 {{if not .Repository.IsArchived}}
-<div class="ui small modal" id="article-transfer-modal">
-    <div class="header">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_header"}}</div>
-    <div class="content">
-        <div class="ui warning message tw-flex tw-items-start tw-gap-2">
-            {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
-            <span>{{ctx.Locale.Tr "repo.settings.article_transfer_notice"}}</span>
-        </div>
-        <p class="tw-mt-8">{{ctx.Locale.Tr "repo.settings.article_transfer_modal_desc"}}</p>
-        <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
-            {{/* Chrome ignores autocomplete="off" for name-like fields; the invisible dummy
-            inputs in "base/disable_form_autofill" absorb the browser's autofill so the
-            new-owner value is always picked through the backend-validated search dropdown. */}}
-            {{template "base/disable_form_autofill"}}
-            {{.CsrfTokenHtml}}
+{{/* "477 · Transfer – dialog" 7626:70961 and "– pick new owner" 7626:71053 */}}
+<div class="ui modal forkana-dialog" id="article-transfer-modal">
+    {{template "shared/repo/settings_dialog_header" (dict "Title" (ctx.Locale.Tr "repo.settings.article_transfer_modal_header"))}}
+    <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/settings" method="post">
+        {{/* Chrome ignores autocomplete="off" for name-like fields; the invisible dummy
+        inputs in "base/disable_form_autofill" absorb the browser's autofill so the
+        new-owner value is always picked through the backend-validated search dropdown. */}}
+        {{template "base/disable_form_autofill"}}
+        {{.CsrfTokenHtml}}
+        {{template "shared/repo/settings_dialog_banner" (dict "Kind" "warning" "Message" (ctx.Locale.Tr "repo.settings.article_transfer_notice"))}}
+        <div class="content">
             <input type="hidden" name="action" value="transfer">
             <input type="hidden" name="redirect_to_article" value="true">
-            <div class="required field">
-                <label for="article-transfer-new-owner" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_recipient"}}</label>
-                <div id="article-transfer-owner-search" class="ui fluid search article-user-search"
-                    data-search-url="{{.RepoLink}}/settings/transfer_candidates"
-                    data-confirm-target="#article-transfer-submit">
-                    <div class="ui fluid input">
-                        <input id="article-transfer-new-owner" class="prompt" name="new_owner_name" required maxlength="255"
-                            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                            placeholder="{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_placeholder"}}">
-                    </div>
-                    <div id="article-transfer-owner-selection" class="article-user-search-selection tw-hidden tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-3 tw-bg-secondary-bg tw-border tw-border-secondary tw-rounded">
-                        <div class="tw-flex tw-items-center tw-gap-2">
-                            <img id="article-transfer-owner-avatar" class="article-user-search-avatar ui avatar image" width="20" height="20" src="" alt aria-hidden="true">
-                            <span id="article-transfer-owner-name" class="article-user-search-name tw-font-bold"></span>
-                        </div>
-                        <button type="button" id="article-transfer-owner-clear" class="article-user-search-clear btn interact-fg"
-                            data-tooltip-content="{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_clear"}}"
-                            aria-label="{{ctx.Locale.Tr "repo.settings.article_transfer_recipient_clear"}}">{{svg "octicon-x" 16}}</button>
-                    </div>
-                </div>
-            </div>
-            <p class="tw-mt-5 tw-mb-5">
-                {{ctx.Locale.Tr "repo.settings.article_transfer_modal_confirm_desc"}}
-                <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
-            </p>
-            <div class="required field">
-                <label for="article-transfer-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm_label"}}</label>
-                <input id="article-transfer-confirm-name" name="article_name" required maxlength="255"
+            <p>{{ctx.Locale.Tr "repo.settings.article_transfer_modal_confirm_desc" (HTMLFormat "<strong>%s</strong>" $articleName)}}</p>
+            <div class="forkana-field">
+                <label for="article-transfer-confirm-name" class="forkana-field-label">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm_label"}}</label>
+                <input id="article-transfer-confirm-name" class="forkana-input" name="article_name" required maxlength="255"
                     autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                    data-article-confirm-value="{{.Repository.OwnerName}}/{{$subjectName}}"
+                    data-article-confirm-value="{{$articleName}}"
                     data-article-confirm-target="#article-transfer-submit">
             </div>
-            <div class="actions">
-                <button type="button" class="ui cancel button">{{ctx.Locale.Tr "settings.cancel"}}</button>
-                <button type="submit" id="article-transfer-submit" class="ui red button disabled" disabled
-                    data-requires-owner-selection="true">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm"}}</button>
+            <div class="forkana-field">
+                <label for="article-transfer-new-owner" class="forkana-field-label">{{ctx.Locale.Tr "repo.settings.article_transfer_recipient"}}</label>
+                {{template "shared/repo/settings_user_search" (dict
+                    "ID" "article-transfer-owner-search"
+                    "InputID" "article-transfer-new-owner"
+                    "InputName" "new_owner_name"
+                    "SearchURL" (printf "%s/settings/transfer_candidates" .RepoLink)
+                    "Placeholder" (ctx.Locale.Tr "repo.settings.article_transfer_recipient_placeholder")
+                    "Clear" (ctx.Locale.Tr "repo.settings.article_transfer_recipient_clear"))}}
             </div>
-        </form>
-    </div>
+        </div>
+        <div class="actions">
+            <button type="button" class="cancel forkana-btn forkana-btn-secondary">{{ctx.Locale.Tr "settings.cancel"}}</button>
+            <button type="submit" id="article-transfer-submit" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text" disabled
+                data-requires-owner-selection="true">{{ctx.Locale.Tr "repo.settings.article_transfer_confirm"}}</button>
+        </div>
+    </form>
 </div>
 
-<div class="ui small modal" id="article-archive-modal">
-    <div class="header">{{ctx.Locale.Tr "repo.settings.article_archive_modal_header"}}</div>
-    <div class="content">
-        <div class="ui warning message tw-flex tw-items-start tw-gap-2">
-            {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
-            <span>{{ctx.Locale.Tr "repo.settings.article_archive_notice"}}</span>
-        </div>
-        <p class="tw-mt-8 tw-mb-5">
-            {{ctx.Locale.Tr "repo.settings.article_archive_modal_desc"}}
-            <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
-        </p>
-        <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
-            {{template "base/disable_form_autofill"}}
-            {{.CsrfTokenHtml}}
+{{/* "477 · Archive – dialog" 7626:71162 */}}
+<div class="ui modal forkana-dialog" id="article-archive-modal">
+    {{template "shared/repo/settings_dialog_header" (dict "Title" (ctx.Locale.Tr "repo.settings.article_archive_modal_header"))}}
+    <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/settings" method="post">
+        {{template "base/disable_form_autofill"}}
+        {{.CsrfTokenHtml}}
+        {{template "shared/repo/settings_dialog_banner" (dict "Kind" "warning" "Message" (ctx.Locale.Tr "repo.settings.article_archive_notice"))}}
+        <div class="content">
             <input type="hidden" name="action" value="archive">
             <input type="hidden" name="redirect_to_article" value="true">
-            <div class="required field">
-                <label for="article-archive-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_archive_confirm_label"}}</label>
-                <input id="article-archive-confirm-name" name="article_name" required maxlength="255"
+            <p>{{ctx.Locale.Tr "repo.settings.article_archive_modal_desc" (HTMLFormat "<strong>%s</strong>" $articleName)}}</p>
+            <div class="forkana-field">
+                <label for="article-archive-confirm-name" class="forkana-field-label">{{ctx.Locale.Tr "repo.settings.article_archive_confirm_label"}}</label>
+                <input id="article-archive-confirm-name" class="forkana-input" name="article_name" required maxlength="255"
                     autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                    data-article-confirm-value="{{.Repository.OwnerName}}/{{$subjectName}}"
+                    data-article-confirm-value="{{$articleName}}"
                     data-article-confirm-target="#article-archive-submit">
             </div>
-            <div class="actions">
-                <button type="button" class="ui cancel button">{{ctx.Locale.Tr "settings.cancel"}}</button>
-                <button type="submit" id="article-archive-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_archive_confirm"}}</button>
-            </div>
-        </form>
-    </div>
+        </div>
+        <div class="actions">
+            <button type="button" class="cancel forkana-btn forkana-btn-secondary">{{ctx.Locale.Tr "settings.cancel"}}</button>
+            <button type="submit" id="article-archive-submit" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text" disabled>{{ctx.Locale.Tr "repo.settings.article_archive_confirm"}}</button>
+        </div>
+    </form>
 </div>
 {{end}}
 
-<div class="ui small modal" id="article-delete-modal">
-    <div class="header">{{ctx.Locale.Tr "repo.settings.article_delete_modal_header"}}</div>
-    <div class="content">
-        <div class="ui warning message tw-flex tw-items-start tw-gap-2">
-            {{svg "octicon-alert" 16 "tw-mt-1 tw-flex-shrink-0"}}
-            <ul class="tw-m-0 tw-pl-4">
-                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_1"}}</li>
-                {{if .RepoWillBeTombstoned}}
-                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_tombstone"}}</li>
-                {{else}}
-                <li>{{ctx.Locale.Tr "repo.settings.article_delete_notices_2" (printf "%s/%s" .Repository.OwnerName (HTMLFormat "%s" $subjectName))}}</li>
-                {{end}}
-            </ul>
-        </div>
-        <p class="tw-mt-8 tw-mb-5">
-            {{ctx.Locale.Tr "repo.settings.article_delete_modal_desc"}}
-            <span class="text tw-font-bold">{{.Repository.OwnerName}}/{{$subjectName}}</span>
-        </p>
-        <form class="ui form" action="{{.RepoOperationsLink}}/settings" method="post">
-            {{template "base/disable_form_autofill"}}
-            {{.CsrfTokenHtml}}
+{{/* "477 · Delete – dialog" 7626:71252 */}}
+<div class="ui modal forkana-dialog" id="article-delete-modal">
+    {{template "shared/repo/settings_dialog_header" (dict "Title" (ctx.Locale.Tr "repo.settings.article_delete_modal_header"))}}
+    <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/settings" method="post">
+        {{template "base/disable_form_autofill"}}
+        {{.CsrfTokenHtml}}
+        {{if .RepoWillBeTombstoned}}
+            {{template "shared/repo/settings_dialog_banner" (dict "Kind" "warning" "Message" (ctx.Locale.Tr "repo.settings.article_delete_notice_tombstone"))}}
+        {{else}}
+            {{template "shared/repo/settings_dialog_banner" (dict "Kind" "warning" "Message" (ctx.Locale.Tr "repo.settings.article_delete_notice" $articleName))}}
+        {{end}}
+        <div class="content">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="redirect_to_article" value="true">
-            <div class="required field">
-                <label for="article-delete-confirm-name" class="text tw-font-bold">{{ctx.Locale.Tr "repo.settings.article_delete_confirm_label"}}</label>
-                <input id="article-delete-confirm-name" name="article_name" required maxlength="255"
+            <p>{{ctx.Locale.Tr "repo.settings.article_delete_modal_desc" (HTMLFormat "<strong>%s</strong>" $articleName)}}</p>
+            <div class="forkana-field">
+                <label for="article-delete-confirm-name" class="forkana-field-label">{{ctx.Locale.Tr "repo.settings.article_delete_confirm_label"}}</label>
+                <input id="article-delete-confirm-name" class="forkana-input" name="article_name" required maxlength="255"
                     autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
-                    data-article-confirm-value="{{.Repository.OwnerName}}/{{$subjectName}}"
+                    data-article-confirm-value="{{$articleName}}"
                     data-article-confirm-target="#article-delete-submit">
             </div>
-            <div class="actions">
-                <button type="button" class="ui cancel button">{{ctx.Locale.Tr "settings.cancel"}}</button>
-                <button type="submit" id="article-delete-submit" class="ui red button disabled" disabled>{{ctx.Locale.Tr "repo.settings.article_delete_confirm"}}</button>
-            </div>
-        </form>
-    </div>
+        </div>
+        <div class="actions">
+            <button type="button" class="cancel forkana-btn forkana-btn-secondary">{{ctx.Locale.Tr "settings.cancel"}}</button>
+            <button type="submit" id="article-delete-submit" class="forkana-btn forkana-btn-secondary forkana-btn-danger-text" disabled>{{ctx.Locale.Tr "repo.settings.article_delete_confirm"}}</button>
+        </div>
+    </form>
 </div>
 {{end}}
 {{end}}
+{{end}}
+
+{{define "shared/repo/settings_dialog_header"}}
+{{/* The dialogs' header (Header of "Remove – states" 7675:74699, as the moderator dialogs):
+     grey, the title on the left, an optional 20px person-add icon before it (Invite), and
+     the close button on the right. */}}
+<div class="header forkana-dialog-header">
+    {{if .Icon}}{{svg .Icon 20 "forkana-dialog-icon"}}{{end}}
+    <span class="forkana-dialog-title" data-role="dialog-title">{{.Title}}</span>
+    <button type="button" class="forkana-dialog-close" data-dialog-close aria-label="{{ctx.Locale.Tr "repo.settings.article_dialog_close"}}">{{svg "octicon-x" 16}}</button>
+</div>
+{{end}}
+
+{{define "shared/repo/settings_dialog_banner"}}
+{{/* A Banner under the dialog's header (Banner I7626:70961 of the Transfer dialog: warning,
+     #fff8c5 with a #d4a72c 40% rule under it; the error one of "Remove – states"). */}}
+<div class="forkana-dialog-banner forkana-dialog-banner-{{.Kind}}{{if .Hidden}} tw-hidden{{end}}" role="{{if eq .Kind "danger"}}alert{{else}}note{{end}}"{{if .Role}} data-role="{{.Role}}"{{end}}>
+    {{if eq .Kind "danger"}}{{svg "octicon-stop" 16}}{{else}}{{svg "octicon-alert" 16}}{{end}}
+    <span data-role="dialog-banner-text">{{.Message}}</span>
+</div>
+{{end}}
+
+{{define "shared/repo/settings_user_search"}}
+{{/* A user field searched by username or name (Invite and Transfer, 7619:68300 and
+     7626:71053): the results list under the field, then the picked person as a chip with
+     their avatar, name, @username and a clear button (7619:68440). */}}
+<div id="{{.ID}}" class="ui fluid search article-user-search" data-search-url="{{.SearchURL}}"{{if .ConfirmTarget}} data-confirm-target="{{.ConfirmTarget}}"{{end}}>
+    <div class="ui fluid input forkana-input-search">
+        {{svg "octicon-search" 16 "forkana-input-icon"}}
+        <input id="{{.InputID}}" class="prompt forkana-input" name="{{.InputName}}" required maxlength="255"
+            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+            placeholder="{{.Placeholder}}">
+    </div>
+    <div class="article-user-search-selection tw-hidden">
+        <img class="article-user-search-avatar" width="20" height="20" src="" alt aria-hidden="true">
+        <span class="article-user-search-name"></span>
+        <span class="article-user-search-login"></span>
+        <button type="button" class="article-user-search-clear forkana-dialog-close"
+            data-tooltip-content="{{.Clear}}" aria-label="{{.Clear}}">{{svg "octicon-x" 16}}</button>
+    </div>
+</div>
 {{end}}

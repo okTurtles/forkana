@@ -93,7 +93,7 @@ func TestArticleSettingsTransfer(t *testing.T) {
 		// the recipient is resolved by username, which the modal submits
 		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, recipient.Name))
 
-		assert.Contains(t, flashText(t), "awaits confirmation from "+recipient.DisplayName())
+		assert.Contains(t, flashText(t), "Waiting for @"+recipient.Name+" to accept.")
 
 		pending := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
 		assert.Equal(t, repo_model.RepositoryPendingTransfer, pending.Status)
@@ -108,7 +108,7 @@ func TestArticleSettingsTransfer(t *testing.T) {
 		AssertHTMLElement(t, htmlDoc, `[data-article-settings-modal="#article-transfer-modal"]`, false)
 		AssertHTMLElement(t, htmlDoc, "#article-transfer-cancel", true)
 		assert.Contains(t, htmlDoc.Find("#article-settings-transfer").Text(),
-			"awaiting confirmation from "+recipient.DisplayName())
+			"Waiting for @"+recipient.Name+" to accept. You stay the owner until they do.")
 	})
 
 	t.Run("RecipientSeesBanner", func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestArticleSettingsTransfer(t *testing.T) {
 		htmlDoc := NewHTMLParser(t, recipientSession.MakeRequest(t, NewRequest(t, "GET", articleURL), http.StatusOK).Body)
 		AssertHTMLElement(t, htmlDoc, "#article-transfer-notice", true)
 		assert.Contains(t, htmlDoc.Find("#article-transfer-notice").Text(),
-			fmt.Sprintf("%s wants to transfer the article %s to you.", owner.DisplayName(), subjectName))
+			fmt.Sprintf("@%s wants to transfer the article %s / %s to you.", owner.Name, owner.Name, subjectName))
 	})
 
 	t.Run("RejectNotifiesInitiator", func(t *testing.T) {
@@ -184,7 +184,7 @@ func TestArticleSettingsTransfer(t *testing.T) {
 		require.Empty(t, strings.TrimSpace(byUsername.FullName))
 		post(t, transferForm(GetUserCSRFToken(t, session), owner.Name, subjectName, byUsername.Name))
 
-		assert.Contains(t, flashText(t), "awaits confirmation from "+byUsername.DisplayName())
+		assert.Contains(t, flashText(t), "Waiting for @"+byUsername.Name+" to accept.")
 		unittest.AssertExistsAndLoadBean(t, &repo_model.RepoTransfer{RepoID: repo.ID, RecipientID: byUsername.ID})
 	})
 
@@ -247,7 +247,7 @@ func TestArticleSettingsTransferRecipientHasArchivedArticleOnSubject(t *testing.
 
 	flash := NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, "GET", articleSettingsURL), http.StatusOK).Body).Find(".flash-message")
 	require.Equal(t, 1, flash.Length())
-	assert.Contains(t, flash.Text(), "awaits confirmation from "+recipient.DisplayName())
+	assert.Contains(t, flash.Text(), "Waiting for @"+recipient.Name+" to accept.")
 
 	pending := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
 	assert.Equal(t, repo_model.RepositoryPendingTransfer, pending.Status)

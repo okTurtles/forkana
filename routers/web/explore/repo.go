@@ -878,13 +878,21 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	// is only a line of the page, so a failed lookup is logged and the line left out.
 	loadArticleBaseRepo(ctx)
 
-	// The Settings tab is only rendered for the article owner and the delegates managing
-	// its collaborators, so both must be known in every mode (edit mode refines ownership
-	// via prepareArticleForkOnEditData).
+	// The "…" menu only offers Settings to the article owner and the delegates managing
+	// its collaborators (#477), so both must be known in every mode (edit mode refines
+	// ownership via prepareArticleForkOnEditData).
 	isRepoOwner := ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
 	ctx.Data["IsRepoOwner"] = isRepoOwner
 	if !prepareArticleCollaboratorsData(ctx, isRepoOwner, mode) {
 		return
+	}
+	// Settings has no tab to fall back on (#477): someone who may not manage the article
+	// is shown the article to read instead of an empty page.
+	if canManage, _ := ctx.Data["CanManageArticleCollaborators"].(bool); mode == "settings" && !canManage {
+		mode = "read"
+		ctx.Data["ArticleMode"] = mode
+		ctx.Data["IsArticleModeRead"] = true
+		ctx.Data["IsArticleModeSettings"] = false
 	}
 
 	// The settings tab swaps the Transfer section for a "Cancel transfer" one while a
@@ -1278,6 +1286,19 @@ func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mod
 		return false
 	}
 	ctx.Data["ArticleCollaborators"] = collaborators
+
+	// the line above the list counts them: "3 people can edit this article and approve
+	// change requests: you, 1 collaborator and 1 waiting invite." (#461, figma
+	// "Collaborators – list" 7618:67561)
+	pending := 0
+	for _, c := range collaborators {
+		if c.IsPending() {
+			pending++
+		}
+	}
+	ctx.Data["ArticleCollaboratorsPending"] = pending
+	ctx.Data["ArticleCollaboratorsAccepted"] = len(collaborators) - pending
+	ctx.Data["ArticleCollaboratorsPeople"] = len(collaborators) + 1
 
 	// a delegate only has the collaborators section, the owner lands on it when coming
 	// back from a collaborator action

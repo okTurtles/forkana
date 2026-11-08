@@ -1,0 +1,1279 @@
+/* The article settings (#477) and its Collaborators section (#461), with their dialogs.
+   Values are the figma section "08 · Settings and Collaborators flow" (7570:71939),
+   converted from Figma px (Figma draws strokes inside the box, so a CSS padding next to a
+   1px border is the Figma padding minus 1px):
+   - Settings – General (desktop) 7581:68601, (mobile) 7620:69185
+   - Collaborators – list (desktop) 7618:67561, (mobile) 7622:69172; – empty 7618:68143;
+     – 1 selected 7618:67929
+   - Invite – search 7619:68215, – choose role 7619:68355, – access type options
+     7645:75728, – choose role (mobile) 7622:69448
+   - Remove collaborator – confirm 7619:68483, Remove – states 7675:74699
+   - Transfer – dialog 7626:70961, – pick new owner 7626:71053, Archive – dialog
+     7626:71162, Delete – dialog 7626:71252 */
+
+/* ── The page ────────────────────────────────────────────────────────────────
+   Frame 953 7581:68612: 20px from the tokens to the settings (its gap), then "Settings
+   content" 7581:68629, a column with 24px gaps: the title block (Back, 20px, the title),
+   the SegmentedControl and the boxes. */
+#article-view-root[data-article-mode="settings"] [data-role="article-content"] {
+  gap: 20px;
+}
+
+.article-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.article-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.article-settings-panel.tw-hidden {
+  display: none;
+}
+
+.article-settings-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+/* "Back" (Frame 7638:73737): a 16px chevron-left 4px from an Inter 400 14/20 #4e40fa label */
+.article-settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-primary);
+}
+
+.article-settings-back:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+/* "Settings" 7621:69348: Inter 600 16/24 #1f2328 */
+.article-settings-heading {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* ── SegmentedControl (7581:68630) ───────────────────────────────────────────
+   A 32px #e6eaef track with a 1px #d1d9e0 border and 6px corners; each segment 6px 12px,
+   Inter 400 14/20 #1f2328. The selected one is white with a 1px #4e40fa border and an
+   Inter 600 #4e40fa label (#477: "updated in the library"). The borders are drawn as
+   inset shadows, as figma draws them inside the box, so the segments fill the track. */
+.forkana-segmented {
+  display: inline-flex;
+  align-self: flex-start;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--color-segmented-bg);
+  box-shadow: inset 0 0 0 1px var(--color-border-light);
+}
+
+.forkana-segmented-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.forkana-segmented-item.active {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+}
+
+.forkana-segmented-item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* ── Boxes ("Box / General" 7581:68929 and the others) ───────────────────────
+   A 1px #d1d9e0 border with 6px corners; the header #f6f8fa, 8px 16px, a rule under it,
+   its title Inter 600 14/20; the body 16px, its items 16px apart. */
+.forkana-box {
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+.forkana-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-border-light);
+  border-radius: 5px 5px 0 0;
+  background: var(--color-surface-muted);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.forkana-box-header > h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+}
+
+.forkana-box-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+/* Transfer, Archive and Delete: the text and the button side by side, 24px apart, in a
+   body 100px tall ("Box body" 7581:68969, 638×100, its items centred) */
+.article-settings-action {
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+  min-height: 100px;
+}
+
+.article-settings-action > p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.article-settings-action > form {
+  margin: 0;
+}
+
+/* ── Fields (TextInput 7581:68933, and the dialogs' 7626:70961) ──────────────
+   The label Inter 600 14/20 4px above a 32px input: 1px #d1d9e0, 6px corners, 0 8px, Inter
+   400 14/20 #1f2328, a 1px #1f2328 4% inner shadow. Read-only, it is #eff2f5 without the
+   shadow (still readable, not greyed out). Focused, a 2px #4e40fa border. */
+.forkana-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.forkana-field.tw-hidden {
+  display: none;
+}
+
+.forkana-field-label {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* (the doubled class outweighs the Fomantic input rules of the dialogs' search) */
+.forkana-input.forkana-input {
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  padding: 0 7px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: inset 0 1px 0 #1f23280a;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.forkana-input.forkana-input::placeholder {
+  color: var(--color-muted-text);
+  opacity: 1;
+}
+
+.forkana-input.forkana-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+  outline: none;
+}
+
+.forkana-input.forkana-input[readonly] {
+  background: var(--color-input-readonly-bg);
+  box-shadow: none;
+}
+
+.forkana-input.forkana-input[readonly]:focus {
+  border-color: var(--color-border-light);
+  box-shadow: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* the search row's 28px input (Search row 7618:67561) */
+.forkana-input.forkana-input-sm {
+  height: 28px;
+}
+
+/* a 16px search icon 8px into the field, 8px from the text */
+.forkana-input-search {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+
+.forkana-input-search > .forkana-input-icon {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+  color: var(--color-muted-text);
+  pointer-events: none;
+}
+
+.forkana-input-search > .forkana-input.forkana-input {
+  padding-left: 31px;
+}
+
+.forkana-field-caption {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-muted-text);
+}
+
+.article-settings-fields {
+  gap: 16px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────────
+   Transfer article, Archive article, Delete article (Button 7581:68971): the secondary
+   button with an Inter 600 #d1242f label. Unavailable in a dialog (Button of the Transfer
+   dialog's footer): #f6f8fa without a border, the label at 50%. */
+.forkana-btn.forkana-btn-danger-text,
+.forkana-btn.forkana-btn-danger-text:hover {
+  color: var(--color-danger-fg);
+}
+
+.forkana-btn.forkana-btn-secondary:disabled,
+.forkana-btn.forkana-btn-secondary:disabled:hover {
+  border-color: transparent;
+  background: var(--color-surface-muted);
+  color: color-mix(in srgb, var(--color-button-text) 50%, transparent);
+  cursor: default;
+}
+
+.forkana-btn.forkana-btn-secondary.forkana-btn-danger-text:disabled {
+  color: color-mix(in srgb, var(--color-danger-fg) 50%, transparent);
+}
+
+/* the unavailable primary one (Invite 7619:68300): #dad5ff, a white 80% label */
+.forkana-btn.forkana-btn-primary:disabled {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+  color: rgb(255 255 255 / 80%);
+}
+
+.forkana-btn .svg {
+  flex-shrink: 0;
+}
+
+/* ── Labels (Label of the Owner and "Waiting invite" rows) ───────────────────
+   20px, 1px 7px, a 1px border, 100px corners, Inter 600 12/18: #d1d9e0 and #1f2328, or the
+   attention #9a6700 for both. */
+.forkana-label {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 100px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.forkana-label.forkana-label-attention {
+  border-color: var(--color-attention-fg);
+  color: var(--color-attention-fg);
+}
+
+/* ── Collaborators (Box / Collaborators 7618:67561) ──────────────────────────
+   The header 8px 12px 8px 16px with the small "Invite a collaborator" button; the body
+   starts with an Inter 400 14/20 #59636e line. */
+.article-collaborators-header {
+  padding: 8px 12px 8px 16px;
+  min-height: 43px;
+}
+
+.article-collaborators-invite-short {
+  display: none;
+}
+
+.article-collaborators-summary {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted-text);
+}
+
+/* Table 7618:67561: a 1px #d1d9e0 frame, 6px corners */
+.article-collaborators-table {
+  margin: 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+}
+
+/* Header row: #f6f8fa, 8px 12px, a rule under it; "Select all" (Inter 600 14/20, 8px from
+   its 16px checkbox) on the left, the Role filter or "Remove selected" on the right */
+.article-collaborators-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 43px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-light);
+  border-radius: 5px 5px 0 0;
+  background: var(--color-surface-muted);
+}
+
+.article-collaborators-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.article-collaborators-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.article-collaborators-filter.tw-hidden {
+  display: none !important; /* (Fomantic's .ui.dropdown display is itself !important) */
+}
+
+/* Search row: 8px 12px, a rule under it */
+.article-collaborators-search-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.article-collaborators-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A row (Row / Patrick Booth): 8px 12px, 12px between the checkbox, the person, the role
+   (160px), the status (112px) and the action, a rule under every row but the last */
+.article-collaborator-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 160px 112px 83px;
+  align-items: center;
+  column-gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.article-collaborator-row:last-child {
+  border-bottom: 0;
+}
+
+.article-collaborator-row.tw-hidden {
+  display: none;
+}
+
+.article-collaborator-who,
+.article-collaborator-details {
+  display: contents;
+}
+
+.article-collaborator-select {
+  display: flex;
+  width: 16px;
+}
+
+/* the person: a 20px round avatar 8px from an Inter 400 14/20 #4e40fa name */
+.article-collaborator-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-primary);
+}
+
+.article-collaborator-person > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.article-collaborator-person .avatar,
+.article-user-search-avatar,
+.ui.search.article-user-search > .results .result .image img {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1px #1f232826;
+}
+
+.article-collaborator-role-cell,
+.article-collaborator-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.article-collaborator-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.article-collaborator-role-text {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-button-text);
+}
+
+/* The Role filter and a person's role (Button 7618:67561): the small invisible button,
+   26px, 4px 8px, an Inter 600 12/18 #25292e label 4px from its triangle-down. */
+.ui.dropdown.article-collaborators-filter,
+.ui.dropdown.article-collaborator-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-button-text);
+  white-space: nowrap;
+}
+
+.ui.dropdown.article-collaborators-filter:hover,
+.ui.dropdown.article-collaborators-filter.active,
+.ui.dropdown.article-collaborator-role:hover,
+.ui.dropdown.article-collaborator-role.active {
+  background: var(--color-button-hover);
+}
+
+.ui.dropdown.article-collaborator-role > .dropdown.icon {
+  margin: 0;
+}
+
+.article-collaborators-no-match {
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  color: var(--color-muted-text);
+}
+
+/* ── Menus (Overlay / Access type 7645:75728) ────────────────────────────────
+   White, 12px corners, 8px around, a 0 8px 24px #1a1f26 18% shadow; each item 10px 8px,
+   6px corners, its 16px tick (on the current one) 8px from an Inter 400 14/20 label with
+   an Inter 400 12/18 #59636e description 4px under it. */
+.ui.dropdown > .menu.forkana-menu {
+  min-width: 240px;
+  margin-top: 4px;
+  padding: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px 0 color-mix(in srgb, var(--color-shadow) 75%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
+}
+
+.ui.dropdown > .menu.forkana-menu > .item {
+  display: flex !important; /* (Fomantic's item display is itself !important) */
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 8px !important;
+  border: 0 !important;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-primary);
+  white-space: normal;
+}
+
+.ui.dropdown > .menu.forkana-menu > .item:hover {
+  background: var(--color-button-hover);
+}
+
+.ui.dropdown > .menu.forkana-menu > .item.active,
+.ui.dropdown > .menu.forkana-menu > .item.selected {
+  font-weight: var(--font-weight-normal);
+  background: transparent;
+}
+
+.ui.dropdown > .menu.forkana-menu > .item.active:hover,
+.ui.dropdown > .menu.forkana-menu > .item.selected:hover {
+  background: var(--color-button-hover);
+}
+
+.forkana-menu-check {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 16px;
+  height: 20px;
+  visibility: hidden;
+}
+
+.forkana-menu > .item.active > .forkana-menu-check {
+  visibility: visible;
+}
+
+.forkana-menu-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.forkana-menu-description {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-muted-text);
+}
+
+/* the role menus open to the left of the row's end, the filter's under its button */
+.ui.dropdown.article-collaborators-filter > .menu.forkana-menu {
+  right: 0;
+  left: auto;
+  min-width: 200px;
+}
+
+/* ── Blankslate (7618:68143) ─────────────────────────────────────────────────
+   32px around, centred: the person-add icon, an Inter 700 20/32 title and an Inter 400
+   16/24 #59636e line 4px under it, then the medium primary button 16px under that. */
+.forkana-blankslate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 32px;
+  border-radius: 6px;
+  background: var(--color-surface);
+  text-align: center;
+}
+
+.forkana-blankslate-icon {
+  margin-bottom: 8px;
+  color: var(--color-muted-text);
+}
+
+.forkana-blankslate-heading {
+  margin: 0;
+  font-size: 20px;
+  line-height: 32px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.forkana-blankslate-description {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--color-muted-text);
+}
+
+.forkana-blankslate-action {
+  padding-top: 16px;
+}
+
+/* ── Banner (Banner 7646:74305, under the navbar) ────────────────────────────
+   Full width, 8px around: the 16px icon in a 32px square, the Inter 400 14/20 message
+   (6px 8px 6px 0) and a 32px dismiss button. Success #dafbe1 and its #1a7f37 icon;
+   error, warning and info in their colours. */
+.forkana-banner {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px;
+  background: var(--color-success-bg);
+  box-shadow: 0 1px 0 #0000000a;
+}
+
+.forkana-banner-icon {
+  flex-shrink: 0;
+  box-sizing: content-box;
+  width: 16px;
+  padding: 8px;
+  color: var(--color-green-dark-1);
+}
+
+.forkana-banner-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px 6px 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.forkana-banner-dismiss {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.forkana-banner-dismiss:hover {
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+}
+
+.forkana-banner-error {
+  background: var(--color-danger-bg);
+}
+
+.forkana-banner-error .forkana-banner-icon {
+  color: var(--color-danger-fg);
+}
+
+.forkana-banner-warning {
+  background: var(--color-warning-bg);
+}
+
+.forkana-banner-warning .forkana-banner-icon {
+  color: var(--color-attention-fg);
+}
+
+.forkana-banner-info {
+  background: var(--color-banner-bg);
+}
+
+.forkana-banner-info .forkana-banner-icon {
+  color: var(--color-primary);
+}
+
+/* ── Announcement (7619:69436, "Invited person – Accept / Decline") ──────────
+   An invite or a transfer to answer, full width under the navbar: #dad5ff with a #4e40fa
+   40% rule above and below, 8px 48px (8px 16px on a phone, 7622:69790); the 16px icon in
+   a 24px column, the Inter 400 14/20 message (6px 8px 6px 0), then Decline and Accept,
+   4px apart. */
+.forkana-announcement {
+  display: flex;
+  align-items: flex-start;
+  padding: 7px 48px;
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.forkana-announcement-message {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.forkana-announcement-message > .svg {
+  flex-shrink: 0;
+  box-sizing: content-box;
+  width: 16px;
+  padding: 8px 8px 8px 0;
+}
+
+.forkana-announcement-message > span {
+  padding: 6px 8px 6px 0;
+}
+
+.forkana-announcement-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.forkana-announcement-actions > form {
+  margin: 0;
+}
+
+/* ── Dialogs (Dialog 7619:68568 and the others, the moderator dialogs' layout) ─
+   560px, white, 12px corners, a 0 40px 80px #25292e 24% shadow and a 1px #d1d9e0 50% ring,
+   over a #c8d1da 40% backdrop. The header #f6f8fa, 12px 12px 12px 16px, a #d1d9e0 70%
+   rule under it, the title Inter 600 14/20 and a 28px close button; the body 16px 20px,
+   its items 12px apart; the footer #f6f8fa, 12px 20px, a rule above it, its buttons at
+   the end, 8px apart, an optional Inter 400 12/18 #59636e line at its start. */
+.ui.dimmer:has(> .ui.modal.forkana-dialog.visible) {
+  background: var(--color-dialog-backdrop);
+}
+
+.ui.modal.forkana-dialog {
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: 0 40px 80px 0 color-mix(in srgb, var(--color-shadow) 200%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
+}
+
+.ui.modal.forkana-dialog > .header.forkana-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border-light) 70%, transparent);
+  border-radius: 12px 12px 0 0;
+  background: var(--color-surface-muted);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.forkana-dialog-icon {
+  flex-shrink: 0;
+  color: var(--color-text-primary);
+}
+
+.forkana-dialog-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.forkana-dialog-close {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-muted-text);
+  cursor: pointer;
+}
+
+.forkana-dialog-close:hover {
+  background: var(--color-button-hover);
+  color: var(--color-text-primary);
+}
+
+.forkana-dialog-close:focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: -2px;
+}
+
+.forkana-dialog-form {
+  margin: 0;
+}
+
+/* (out of the layout, as form.css does for .ui .form: base/disable_form_autofill) */
+.forkana-dialog-form > .autofill-dummy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: -10000;
+}
+
+.ui.modal.forkana-dialog .content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  border-radius: 0;
+  background: var(--color-surface);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.ui.modal.forkana-dialog .content p {
+  margin: 0;
+}
+
+.ui.modal.forkana-dialog .content strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.ui.modal.forkana-dialog .actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid color-mix(in srgb, var(--color-border-light) 70%, transparent);
+  border-radius: 0 0 12px 12px;
+  background: var(--color-surface-muted);
+}
+
+.ui.modal.forkana-dialog .actions > .forkana-btn {
+  margin: 0;
+}
+
+.forkana-dialog-footer-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-muted-text);
+}
+
+.forkana-dialog-footer-hint.tw-hidden {
+  display: none;
+}
+
+/* A Banner under the header: warning #fff8c5 with a #d4a72c 40% rule under it (the
+   Transfer, Archive and Delete dialogs), error #ffebe9 with a #ff8182 40% border
+   ("Remove – states"); 8px 12px 8px 16px, the 16px icon in a 32px column. */
+.forkana-dialog-banner {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 12px 8px 16px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.forkana-dialog-banner > .svg {
+  flex-shrink: 0;
+  box-sizing: content-box;
+  width: 16px;
+  padding: 8px;
+  margin-left: -8px;
+}
+
+.forkana-dialog-banner > span {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px 6px 0;
+}
+
+.forkana-dialog-banner-warning {
+  border-bottom: 1px solid var(--color-warning-border);
+  background: var(--color-warning-bg);
+}
+
+.forkana-dialog-banner-warning > .svg {
+  color: var(--color-attention-fg);
+}
+
+.forkana-dialog-banner-danger {
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-bg);
+}
+
+.forkana-dialog-banner-danger > .svg {
+  color: var(--color-danger-fg);
+}
+
+.forkana-dialog-banner.tw-hidden {
+  display: none;
+}
+
+/* ── The user search of the Invite and Transfer dialogs ──────────────────────
+   Results (7619:68300): 12px under the field, a 1px #d1d9e0 frame with 6px corners and 4px
+   inside; each person 36px, 8px around, 6px corners, #f6f8fa when active: a 20px avatar,
+   the name in Inter 600 14/20 and the @username in Inter 400 12/18 #59636e, 8px apart.
+   The picked person (7619:68440): 38px, #f6f8fa, a 1px #d1d9e0 border, 6px corners,
+   4px 4px 4px 8px, the same three and a 28px clear button. */
+.ui.search.article-user-search {
+  display: flex;
+  flex-direction: column;
+}
+
+.ui.search.article-user-search > .ui.input > .prompt.forkana-input {
+  border-radius: 6px;
+}
+
+.ui.search.article-user-search > .ui.input.tw-hidden {
+  display: none;
+}
+
+.ui.search.article-user-search > .results {
+  position: static;
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: none;
+  transform: none;
+}
+
+.ui.search.article-user-search > .results .result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 8px;
+  border: 0 !important; /* (Fomantic's result separators) */
+  border-radius: 6px;
+  background: transparent;
+}
+
+.ui.search.article-user-search > .results .result:hover,
+.ui.search.article-user-search > .results .result.active {
+  background: var(--color-surface-muted);
+}
+
+.ui.search.article-user-search > .results .result .image {
+  display: flex; /* (no room for the space Fomantic writes before the img) */
+  float: none;
+  order: -1;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.ui.search.article-user-search > .results .result > .content,
+.ui.search.article-user-search > .results .result > .image + .content {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.ui.search.article-user-search > .results .result > .image {
+  background: transparent;
+}
+
+.ui.search.article-user-search > .results .result .title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.ui.search.article-user-search > .results .result .description {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-muted-text);
+  white-space: nowrap;
+}
+
+.article-user-search-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 3px 3px 3px 7px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+}
+
+.article-user-search-selection.tw-hidden {
+  display: none;
+}
+
+.article-user-search-name {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.article-user-search-login {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-muted-text);
+  white-space: nowrap;
+}
+
+/* The Access level (Button 7619:68440): the full-width secondary button, 32px, 6px 12px,
+   its Inter 600 14/20 label at the start and the triangle at the end. */
+.ui.selection.dropdown.forkana-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  padding: 5px 11px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  box-shadow: 0 1px 0 #1f23280a;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-button-text);
+}
+
+.ui.selection.dropdown.forkana-select:hover {
+  background: var(--color-button-secondary-hover-bg);
+}
+
+.ui.selection.dropdown.forkana-select > .text {
+  font-weight: inherit;
+  color: inherit;
+}
+
+.ui.selection.dropdown.forkana-select > .dropdown.icon {
+  position: static;
+  margin: 0;
+  padding: 0;
+  opacity: 1;
+}
+
+.ui.selection.dropdown.forkana-select > .menu.forkana-menu {
+  width: 100%;
+  max-height: none;
+  margin-top: 4px;
+  border: 0;
+}
+
+.ui.selection.dropdown.forkana-select > .menu.forkana-menu > .item {
+  border-top: 0;
+}
+
+/* ── Phones ──────────────────────────────────────────────────────────────── */
+@media (max-width: 767.98px) {
+  /* "Settings content (mobile)" 7620:69364: one column, 16px gaps; the
+     SegmentedControl full width, its two segments halves of it */
+  .article-settings,
+  .article-settings-panel {
+    gap: 16px;
+  }
+
+  .article-settings-title {
+    gap: 16px;
+  }
+
+  #article-view-root[data-article-mode="settings"] [data-role="article-content"] {
+    gap: 24px;
+  }
+
+  .forkana-segmented {
+    align-self: stretch;
+  }
+
+  .forkana-segmented-item {
+    flex: 1;
+  }
+
+  /* the boxes 8px 12px and 12px, the buttons under their text (12px), so labels never wrap */
+  .forkana-box-header {
+    padding: 8px 12px;
+  }
+
+  .forkana-box-body {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .article-settings-action {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  /* Collaborators (7622:69251): no box; a "Collaborators" row with the small "Invite"
+     button, an Inter 400 12/18 line, then the list, 16px apart */
+  .forkana-box.article-collaborators {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .article-collaborators-header {
+    min-height: 26px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .article-collaborators .forkana-box-body {
+    gap: 16px;
+    padding: 0;
+  }
+
+  .article-collaborators-invite-long {
+    display: none;
+  }
+
+  .article-collaborators-invite-short {
+    display: inline;
+  }
+
+  .article-collaborators-summary {
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .article-collaborators-toolbar {
+    padding: 8px 8px 8px 12px;
+  }
+
+  /* each person on two lines (Row / Patrick Booth 7622:69251): the checkbox, avatar and
+     name, then the role, status and Remove 24px in; 10px 8px 10px 12px, 6px apart */
+  .article-collaborator-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-height: 0;
+    padding: 10px 8px 10px 12px;
+  }
+
+  .article-collaborator-who {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .article-collaborator-person {
+    flex: 1;
+  }
+
+  .article-collaborator-details {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 24px;
+  }
+
+  .article-collaborator-action {
+    margin-left: auto;
+  }
+
+  .article-collaborator-status:empty {
+    display: none;
+  }
+
+  /* the owner on one line, its label at the end (Row / JaneZ (you)) */
+  .article-collaborator-row.is-owner {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .article-collaborator-row.is-owner .article-collaborator-who {
+    flex: 1;
+  }
+
+  .article-collaborator-row.is-owner .article-collaborator-details {
+    padding-left: 0;
+  }
+
+  .article-collaborator-row.is-owner .article-collaborator-action {
+    display: none;
+  }
+
+  /* the Announcement 8px 16px, its buttons 8px under the message and 6px above its
+     padding (Content 6px 8px 6px 0 of 7622:69790) */
+  .forkana-announcement {
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px 16px 13px;
+  }
+
+  .forkana-announcement-actions {
+    padding-left: 24px;
+  }
+
+  /* the dialogs open as a bottom sheet (Dialog 7622:69567): full width, 16px top corners,
+     the footer a column, 16px around, its main action first, then Cancel */
+  .ui.dimmer:has(> .ui.modal.forkana-dialog.visible) {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .ui.modal.forkana-dialog {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 !important; /* (Fomantic positions a modal with inline margins) */
+    border-radius: 16px 16px 0 0;
+  }
+
+  .ui.modal.forkana-dialog > .header.forkana-dialog-header {
+    border-radius: 16px 16px 0 0;
+  }
+
+  .ui.modal.forkana-dialog .actions {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+    border-radius: 0;
+  }
+
+  .ui.modal.forkana-dialog .actions > [type="submit"],
+  .ui.modal.forkana-dialog .actions > #article-collaborators-remove-submit {
+    order: -1;
+  }
+
+  .ui.modal.forkana-dialog .actions > .forkana-dialog-footer-hint {
+    order: -2;
+  }
+}
