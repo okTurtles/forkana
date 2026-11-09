@@ -162,7 +162,7 @@ test('a click on empty space clears the selection, as in the Bubble view (#495)'
   await expect(page.locator('.history-table-sort-menu')).toBeVisible();
   await page.locator('.history-table-title').click(); // closes the menu only
   await expect(page.locator('.history-table-sort-menu')).toBeHidden();
-  await page.locator('[data-role="table-next"]').click({force: true}); // aria-disabled: one page
+  await page.locator('[data-role="table-next"]').dispatchEvent('click'); // aria-disabled (one page), so not clickable
   await expect(first).toHaveClass(/is-selected/);
   await expect(detail).toHaveCount(1);
 
