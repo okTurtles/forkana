@@ -15,6 +15,7 @@ const inviteeByProject: Record<string, string> = {
   'Mobile Chrome': 'user8',
   'Mobile Safari': 'user10',
 };
+const inviteeFor = (project: string) => inviteeByProject[project] ?? 'user4';
 
 async function openPage(page: Page, url: string) {
   await page.goto(url);
@@ -30,6 +31,7 @@ const delegateByProject: Record<string, string> = {
   'Mobile Chrome': 'user16',
   'Mobile Safari': 'user18',
 };
+const delegateFor = (project: string) => delegateByProject[project] ?? 'user13';
 
 // the Invite button: in the box's header, or in the empty state when nobody is listed yet
 function inviteButton(page: Page) {
@@ -183,7 +185,7 @@ test.describe('Article settings', () => {
   // the picked person is a chip, the access level shows and the button reads
   // "Invite {username}"
   test('invite: the button waits for a person, then names them', async ({browser}, workerInfo) => {
-    const invitee = inviteeByProject[workerInfo.project.name] ?? 'user4';
+    const invitee = inviteeFor(workerInfo.project.name);
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
     const page = await context.newPage();
     await openPage(page, `${settingsURL}&section=collaborators`);
@@ -218,7 +220,7 @@ test.describe('Article settings', () => {
   // #461: the invited person shows "Waiting invite"; Remove asks first, shows a refusal in
   // the dialog ("Remove – states" 7675:74699), and once removed the banner says so
   test('remove: confirmation, error state, then success banner', async ({browser}, workerInfo) => {
-    const invitee = inviteeByProject[workerInfo.project.name] ?? 'user4';
+    const invitee = inviteeFor(workerInfo.project.name);
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
     const page = await context.newPage();
     await openPage(page, `${settingsURL}&section=collaborators`);
@@ -259,7 +261,7 @@ test.describe('Article settings', () => {
   // instead of Settings; it opens the Collaborators section alone, without the General |
   // Collaborators switch or the General boxes
   test('a delegate: "Collaborators" in the "…" menu, and that section alone', async ({browser}, workerInfo) => {
-    const delegate = delegateByProject[workerInfo.project.name] ?? 'user13';
+    const delegate = delegateFor(workerInfo.project.name);
     await login_user(browser, workerInfo, delegate);
     const ownerContext = await load_logged_in_context(browser, workerInfo, 'user2');
     const owner = await ownerContext.newPage();
