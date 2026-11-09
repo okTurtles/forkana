@@ -16,7 +16,7 @@
 					<p class="subject-no-exact-message">
 						{{svg "octicon-filter" 16}} <span>{{ctx.Locale.Tr "search.exact_page_exists_not_shown" .ExactSubject.Name}}</span>
 					</p>
-					<a class="forkana-btn forkana-btn-secondary forkana-btn-sm" href="{{AppSubUrl}}/subject/{{PathEscape .ExactSubject.Name}}">
+					<a class="forkana-btn forkana-btn-secondary forkana-btn-sm" data-role="view-existing-subject" href="{{AppSubUrl}}/subject/{{PathEscape .ExactSubject.Name}}">
 						{{ctx.Locale.Tr "search.view_existing_subject"}}
 					</a>
 				</div>
