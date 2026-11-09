@@ -6,6 +6,8 @@ package repo
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"slices"
@@ -46,40 +48,89 @@ func (s *Subject) TableName() string {
 	return "subject"
 }
 
-// GenerateSlugFromName creates a URL-safe slug from a subject display name
-// Examples:
+var (
+	slugInvalidCharsRe = regexp.MustCompile(`[^a-z0-9-]+`)
+	slugHyphensRe      = regexp.MustCompile(`-{2,}`)
+)
+
+// slugFallback is the slug of an empty name. A name that is not empty but has no ASCII letter
+// or digit gets a slug of its own (see GenerateSlugFromName).
+const slugFallback = "subject"
+
+// symbolSlugHashLength is the number of hexadecimal digits of the hash in the slug of a name
+// without any ASCII letter or digit ("subject-" followed by them).
+const symbolSlugHashLength = 16
+
+// removeAccents decomposes the name and drops the combining marks: "Camiño" → "Camino".
+func removeAccents(name string) string {
+	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+	normalized, _, _ := transform.String(t, name)
+	return normalized
+}
+
+// GenerateSlugFromName creates a URL-safe slug from a subject display name. Two names with the
+// same slug are the same subject (the slug is UNIQUE), so for a name in the Latin script the
+// slug ignores case, accents, spaces and punctuation:
 //
 //	"The Moon" → "the-moon"
 //	"the moon!" → "the-moon"
 //	"El Camiño?" → "el-camino"
+//
+// The slug only keeps ASCII letters and digits, so it used to drop every other letter: a name
+// with nothing left (only punctuation, symbols, emoji or non-Latin letters: apostrophes,
+// "東京", "Москва") got the slug "subject", and "Москва 1980" got the slug of "1980". Such
+// names were one and the same subject: typing three apostrophes opened an existing title of
+// sixteen (#401). A name with nothing left or with a letter outside the Latin script now gets
+// a slug of its own, "subject-" followed by a hash of the name that ignores only case, accents
+// and what the title normalization ignores (underscores, extra spaces, directional marks). An
+// empty name still gets "subject".
+//
+// The slug is also the repository name generated for a new article (see
+// GenerateRepoNameFromSubject), so it only uses a-z, 0-9 and hyphens.
 func GenerateSlugFromName(name string) string {
-	// Normalize Unicode (NFD = decompose accents)
-	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
-	normalized, _, _ := transform.String(t, name)
+	if slug := asciiSlug(name); slug != "" && !hasNonLatinLetter(name) {
+		return slug
+	}
+	canonical := strings.ToLower(removeAccents(subjecttitle.Normalize(name)))
+	if canonical == "" {
+		return slugFallback
+	}
+	sum := sha256.Sum256([]byte(canonical))
+	return slugFallback + "-" + hex.EncodeToString(sum[:])[:symbolSlugHashLength]
+}
 
-	// Convert to lowercase
-	slug := strings.ToLower(normalized)
+// hasNonLatinLetter reports whether the name has a letter that asciiSlug drops although it is
+// not an accented Latin letter: "Москва 1980", "東京 2004". Latin letters without an ASCII
+// base ("ß", "ø", "ł") are dropped too but keep the slug they always had, and so do the
+// modifier letters of no particular script, which Latin titles use as apostrophes ("Hawaiʻi",
+// "Hawaiiʼs" → "hawaii", "hawaiis", like "Zalg'o" → "zalgo").
+func hasNonLatinLetter(name string) bool {
+	for _, r := range removeAccents(name) {
+		if r <= unicode.MaxASCII || !unicode.IsLetter(r) || unicode.Is(unicode.Latin, r) {
+			continue
+		}
+		if unicode.Is(unicode.Lm, r) && unicode.Is(unicode.Common, r) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// asciiSlug keeps the ASCII letters and digits of the name, lowercased and without accents,
+// with single hyphens between words. It is empty when the name has no ASCII letter or digit.
+func asciiSlug(name string) string {
+	slug := strings.ToLower(removeAccents(name))
 
 	// Replace spaces and underscores with hyphens
 	slug = strings.ReplaceAll(slug, " ", "-")
 	slug = strings.ReplaceAll(slug, "_", "-")
 
-	// Remove all characters except alphanumeric and hyphens
-	reg := regexp.MustCompile(`[^a-z0-9-]+`)
-	slug = reg.ReplaceAllString(slug, "")
-
-	// Collapse multiple consecutive hyphens
-	for strings.Contains(slug, "--") {
-		slug = strings.ReplaceAll(slug, "--", "-")
-	}
-
-	// Trim leading/trailing hyphens
+	// Remove all characters except alphanumeric and hyphens, collapse runs of hyphens and trim
+	// leading and trailing ones
+	slug = slugInvalidCharsRe.ReplaceAllString(slug, "")
+	slug = slugHyphensRe.ReplaceAllString(slug, "-")
 	slug = strings.Trim(slug, "-")
-
-	// Ensure slug is not empty
-	if slug == "" {
-		slug = "subject"
-	}
 
 	// Limit length
 	const maxSlugLength = 100

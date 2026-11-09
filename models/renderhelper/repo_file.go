@@ -66,7 +66,10 @@ func NewRenderContextRepoFile(ctx context.Context, repo *repo_model.Repository, 
 	rctx := markup.NewRenderContext(ctx)
 	helper.ctx = rctx
 	if repo != nil {
-		helper.repoLink = repo.LinkCtx(ctx)
+		// Files are served by the repository routes ("/{owner}/{repo}/src|raw|media/..."):
+		// the article url, "/subject/{subject}/{owner}[/{n}]", has none of them, so a relative
+		// image or file link resolved against it 404s in the article view (#167).
+		helper.repoLink = repo.OperationsLink()
 		helper.commitChecker = newCommitChecker(ctx, repo)
 		rctx = rctx.WithMetas(repo.ComposeRepoFileMetas(ctx))
 	} else {
@@ -77,7 +80,7 @@ func NewRenderContextRepoFile(ctx context.Context, repo *repo_model.Repository, 
 			"repo": helper.opts.DeprecatedRepoName,
 		})
 	}
-	rctx = rctx.WithHelper(helper)
+	rctx = rctx.WithHelper(helper).WithEnableHeadingIDGeneration(true)
 	// repository files are Forkana articles: show which links leave Forkana (issue #399)
 	rctx.RenderOptions.ForkanaArticle = true
 	return rctx

@@ -34,3 +34,10 @@ func ChangeContent(ctx context.Context, issue *issues_model.Issue, doer *user_mo
 
 	return nil
 }
+
+// IsContentLocked reports whether the description and comments of the issue are locked: nobody,
+// administrators included, may edit or delete them through the web UI or the API. Forkana locks
+// them on change requests (pull requests), whose discussion is kept as written (#146).
+func IsContentLocked(issue *issues_model.Issue) bool {
+	return issue.IsPull
+}

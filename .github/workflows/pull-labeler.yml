@@ -8,6 +8,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
+  # https://github.com/okTurtles/libcheloniajs/blob/main/.github/actions/fix-ubuntu-ca-roots/action.yml
+  NODE_OPTIONS: --use-openssl-ca
+
 jobs:
   labeler:
     runs-on: ubuntu-latest
@@ -15,6 +20,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/labeler@v5
         with:
           sync-labels: true

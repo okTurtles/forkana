@@ -8,7 +8,6 @@ import (
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
-	"code.gitea.io/gitea/modules/markup"
 	"code.gitea.io/gitea/modules/markup/markdown"
 
 	"github.com/stretchr/testify/assert"
@@ -18,9 +17,17 @@ func TestRepoWiki(t *testing.T) {
 	unittest.PrepareTestEnv(t)
 	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 
+	t.Run("HTMLHeadingID", func(t *testing.T) {
+		// raw HTML headings get an id like Markdown headings, so they get a permalink
+		rctx := NewRenderContextRepoWiki(t.Context(), repo1).WithMarkupType(markdown.MarkupName)
+		rendered, err := testRenderString(rctx, "<h2>Early <em>History</em></h2>\n")
+		assert.NoError(t, err)
+		assert.Contains(t, rendered, `<h2 id="user-content-early-history">Early <em>History</em></h2>`)
+	})
+
 	t.Run("AutoLink", func(t *testing.T) {
 		rctx := NewRenderContextRepoWiki(t.Context(), repo1).WithMarkupType(markdown.MarkupName)
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 65f1bf27bc3bf70f64657658635e66094edbcb4d
 #1
 @user2
@@ -36,7 +43,7 @@ func TestRepoWiki(t *testing.T) {
 
 	t.Run("AbsoluteAndRelative", func(t *testing.T) {
 		rctx := NewRenderContextRepoWiki(t.Context(), repo1).WithMarkupType(markdown.MarkupName)
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 [/test](/test)
 [./test](./test)
 ![/image](/image)
@@ -54,7 +61,7 @@ func TestRepoWiki(t *testing.T) {
 
 	t.Run("PathInTag", func(t *testing.T) {
 		rctx := NewRenderContextRepoWiki(t.Context(), repo1).WithMarkupType(markdown.MarkupName)
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 <img src="LINK">
 <video src="LINK">
 `)

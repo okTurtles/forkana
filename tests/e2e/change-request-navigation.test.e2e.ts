@@ -32,14 +32,32 @@ test.describe('Change request navigation (#326)', () => {
   });
 });
 
-test.describe('Article view tabs (#408)', () => {
+// #408 removed the "..." menu's "Something" placeholder; #478 brings the "…" menu back
+// after Watch in Read and History (figma Action 7368:264704), holding only Report, not
+// available yet. The Edit tab has none (Fork and Submit changes end its row).
+test.describe('Article view tabs (#408, #478)', () => {
   for (const mode of ['read', 'history']) {
-    test(`no placeholder "..." menu in ${mode} mode`, async ({page}) => {
+    test(`the "…" menu after Watch, with no placeholder, in ${mode} mode`, async ({page}) => {
       await page.goto(`/subject/example-subject/user2?mode=${mode}`);
       const tabs = page.locator('#article-tabs');
       await expect(tabs).toBeVisible();
-      await expect(tabs.locator('.dropdown')).toHaveCount(0);
       await expect(tabs).not.toContainText('Something');
+      const more = tabs.locator('[data-role="article-more"]');
+      await expect(more).toHaveCount(1);
+      // after Watch, in the row's trailing part
+      await expect(tabs.locator('.article-tabs-trailing > .article-watch + [data-role="article-more"]')).toHaveCount(1);
+      const items = more.locator('.menu > .item');
+      await expect(items).toHaveCount(1);
+      await expect(items).toHaveText('Report');
+      await expect(items).toHaveAttribute('aria-disabled', 'true');
     });
   }
+
+  test('no "…" menu in edit mode', async ({page}) => {
+    await page.goto('/subject/example-subject/user2?mode=edit');
+    const tabs = page.locator('#article-tabs');
+    await expect(tabs).toBeVisible();
+    await expect(tabs.locator('[data-role="article-more"]')).toHaveCount(0);
+    await expect(tabs).not.toContainText('Something');
+  });
 });

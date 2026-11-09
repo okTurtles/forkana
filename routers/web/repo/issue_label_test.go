@@ -47,8 +47,8 @@ func testInitializeLabels(t *testing.T) {
 		Name:   "enhancement",
 		Color:  "#84b6eb",
 	})
-	// Repository 2 doesn't have a subject_id, so it falls back to repo name
-	assert.Equal(t, "/subject/repo2/user2/labels", test.RedirectURL(ctx.Resp))
+	// Repository 2 has no subject, so it is served by its repository route (#274)
+	assert.Equal(t, "/user2/repo2/labels", test.RedirectURL(ctx.Resp))
 }
 
 func testRetrieveLabels(t *testing.T) {

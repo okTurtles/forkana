@@ -15,6 +15,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"code.gitea.io/gitea/models/db"
 	git_model "code.gitea.io/gitea/models/git"
@@ -347,9 +348,9 @@ func Subjects(ctx *context.Context) {
 //
 // The lookup goes through the slug on purpose: it is UNIQUE and is exactly the collision rule
 // GetOrCreateSubject applies, so any keyword that would be swallowed by an existing subject is
-// caught here, including one that only differs by accents, punctuation or case. That also makes
-// GenerateSlugFromName's "subject" fallback for punctuation-only keywords harmless: creating
-// such a keyword really would land on a subject whose slug is "subject".
+// caught here, including one that only differs by accents, punctuation or case. A keyword
+// without any ASCII letter or digit (three apostrophes) only matches the subject with that very title
+// (GenerateSlugFromName gives it a slug of its own, #401).
 //
 // The key is only set when /subject/{name} can actually render the subject, i.e. when it has at
 // least one public repository - the same lookup RepoAssignmentBySubject performs - so the link
@@ -932,11 +933,13 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	ctx.Data["ReadmeContributorCount"] = articleContributorCount(ctx, gitRepo)
 
 	// Get last commit for the readme file
+	changeTimes := newArticleChangeTimes(ctx, ctx.Repo.Repository)
 	lastCommit, err := gitRepo.GetCommitByPath(readmeTreePath)
 	if err != nil {
 		log.Warn("Failed to get last commit: %v", err)
 	} else {
 		ctx.Data["ReadmeLastCommit"] = lastCommit
+		ctx.Data["ReadmeLastUpdated"] = changeTimes.of(lastCommit)
 	}
 
 	// Handle different modes
@@ -954,6 +957,13 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		fileSize := blob.Size()
 		if fileSize >= setting.UI.MaxDisplayFileSize {
 			ctx.Data["IsFileTooLarge"] = true
+			return
+		}
+
+		// (read once, for whichever of the two renderings below is used; it is small)
+		raw, err := io.ReadAll(charset.ToUTF8WithFallbackReader(io.MultiReader(bytes.NewReader(buf), dataRc), charset.ConvertOpts{}))
+		if err != nil {
+			ctx.ServerError("ReadAll", err)
 			return
 		}
 
@@ -978,9 +988,8 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 			metas["markdownRenderMetaAs"] = string(markup.RenderMetaAsNone)
 			rctx = rctx.WithMetas(metas)
 
-			rd := charset.ToUTF8WithFallbackReader(io.MultiReader(bytes.NewReader(buf), dataRc), charset.ConvertOpts{})
 			var escapeStatus *charset.EscapeStatus
-			escapeStatus, ctx.Data["FileContent"], err = markupRender(ctx, rctx, rd)
+			escapeStatus, ctx.Data["FileContent"], err = markupRender(ctx, rctx, bytes.NewReader(raw))
 			if err != nil {
 				log.Error("Render failed for %s in %-v: %v", readmeFile.Name(), ctx.Repo.Repository, err)
 				ctx.Data["IsMarkup"] = false
@@ -990,12 +999,7 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 
 		if ctx.Data["IsMarkup"] != true {
 			ctx.Data["IsPlainText"] = true
-			rd := charset.ToUTF8WithFallbackReader(io.MultiReader(bytes.NewReader(buf), dataRc), charset.ConvertOpts{})
-			content, err := io.ReadAll(rd)
-			if err != nil {
-				log.Error("Read readme content failed: %v", err)
-			}
-			contentEscaped := template.HTMLEscapeString(util.UnsafeBytesToString(content))
+			contentEscaped := template.HTMLEscapeString(util.UnsafeBytesToString(raw))
 			ctx.Data["EscapeStatus"], ctx.Data["FileContent"] = charset.EscapeControlHTML(template.HTML(contentEscaped), ctx.Locale)
 		}
 
@@ -1071,6 +1075,11 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 		}
 
 		ctx.Data["Commits"] = processedCommits
+		historyTimes := make(map[string]time.Time, len(processedCommits))
+		for _, c := range processedCommits {
+			historyTimes[c.ID.String()] = changeTimes.of(c.Commit)
+		}
+		ctx.Data["HistoryChangeTimes"] = historyTimes
 		ctx.Data["CommitsFromOtherArticles"] = commitsFromOtherArticles(ctx, processedCommits)
 		ctx.Data["CommitCount"] = commitsCount
 		ctx.Data["FileTreePath"] = readmeTreePath

@@ -64,6 +64,16 @@ func TestArticleViewLayout(t *testing.T) {
 		require.Equal(t, 1, watch.Length())
 		assert.Contains(t, watch.AttrOr("href", ""), "/user/login?redirect_to=")
 
+		// #478: the "…" menu after it (figma Action 7368:264704), holding Report, marked
+		// unavailable (no report flow yet)
+		more := section.Find(`#article-tabs [data-role="article-more"]`)
+		require.Equal(t, 1, more.Length())
+		assert.NotEmpty(t, more.Find("button.article-more-button").AttrOr("aria-label", ""))
+		report := more.Find(".menu .article-more-report")
+		require.Equal(t, 1, report.Length())
+		assert.Equal(t, "true", report.AttrOr("aria-disabled", ""))
+		assert.Equal(t, "Report", strings.TrimSpace(report.Text()))
+
 		// item 4: the path names the article by its subject's name, both parts linked
 		crumbs := section.Find(`[data-role="article-breadcrumb"] a`)
 		require.Equal(t, 2, crumbs.Length())
@@ -85,6 +95,30 @@ func TestArticleViewLayout(t *testing.T) {
 
 		doc := get(t, nil, "mode=read")
 		assert.Equal(t, "The summary of this article", strings.TrimSpace(doc.Find(`p[data-role="article-summary"]`).Text()))
+	})
+
+	// #478: without a description there is no summary: the first paragraph, which the
+	// Bubble and Table views fall back to, is right below in the Read tab
+	t.Run("ReadNoSummaryWithoutDescription", func(t *testing.T) {
+		original := repo.Description
+		repo.Description = ""
+		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "description"))
+		defer func() {
+			repo.Description = original
+			_ = repo_model.UpdateRepositoryColsNoAutoTime(t.Context(), repo, "description")
+		}()
+
+		doc := get(t, nil, "mode=read")
+		assert.Equal(t, 0, doc.Find(`[data-role="article-summary"]`).Length())
+	})
+
+	// #478: the "…" menu ends the row in Read and History; Edit has Fork and Submit
+	// changes there instead (figma 7368:264887)
+	t.Run("MoreMenuButInEdit", func(t *testing.T) {
+		for mode, want := range map[string]int{"read": 1, "history": 1, "edit": 0} {
+			doc := get(t, nil, "mode="+mode)
+			assert.Equal(t, want, doc.Find(`#article-tabs [data-role="article-more"]`).Length(), mode)
+		}
 	})
 
 	t.Run("WatchInEveryTab", func(t *testing.T) {
@@ -126,11 +160,11 @@ func TestArticleViewLayout(t *testing.T) {
 		// items 5 and 12: the summary block and the contribution tip
 		assert.Equal(t, 1, doc.Find(`.article-summary-field[data-role="article-summary"]`).Length())
 		assert.Equal(t, "Up to 200 characters.", strings.TrimSpace(doc.Find(".article-summary-field .article-summary-caption").Text()))
-		// Fork and its count are one control, the count split off (ButtonGroup I6961:75221)
-		fork := tabs.Find("a#signed-out-fork-button.forkana-btn-group")
+		// Fork is one unavailable button, its count in a CounterLabel and no icon (Button 7368:264913)
+		fork := tabs.Find("a#signed-out-fork-button.forkana-btn.forkana-btn-unavailable")
 		require.Equal(t, 1, fork.Length())
-		assert.Equal(t, 2, fork.Find(".forkana-btn-group-item").Length())
-		assert.Equal(t, strconv.Itoa(repo.NumForks), strings.TrimSpace(fork.Find(`[data-role="article-fork-count"]`).Text()))
+		assert.Equal(t, 0, fork.Find("svg").Length())
+		assert.Equal(t, strconv.Itoa(repo.NumForks), strings.TrimSpace(fork.Find(`.article-fork-count[data-role="article-fork-count"]`).Text()))
 		tip := strings.Join(strings.Fields(doc.Find(`[data-role="article-contribution-tip"]`).Text()), " ")
 		assert.Equal(t, "Remember, contributions to this article should follow its contributing guidelines and code of conduct.", tip)
 	})

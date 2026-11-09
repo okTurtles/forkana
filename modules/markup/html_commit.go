@@ -25,6 +25,23 @@ func articleCommitLink(owner, subject, commitID string) string {
 	return LinkTypeRoot + "/subject/" + url.PathEscape(subject) + "/" + url.PathEscape(owner) + "?version=" + url.QueryEscape(commitID)
 }
 
+// renderedRepoHasNoSubject reports whether the repository being rendered has no subject,
+// so no article url: its own references link to its repository route, /{owner}/{repo},
+// like Repository.Link (#274).
+func renderedRepoHasNoSubject(ctx *RenderContext) bool {
+	return ctx.RenderOptions.Metas["nosubject"] == "true"
+}
+
+// renderedRepoCommitLink links a commit of the repository being rendered: its article
+// version, or its repository commit route when it has no subject.
+func renderedRepoCommitLink(ctx *RenderContext, commitID string) string {
+	metas := ctx.RenderOptions.Metas
+	if renderedRepoHasNoSubject(ctx) {
+		return LinkTypeRoot + "/" + url.PathEscape(metas["user"]) + "/" + url.PathEscape(metas["reponame"]) + "/commit/" + url.PathEscape(commitID)
+	}
+	return articleCommitLink(metas["user"], metas["repo"], commitID)
+}
+
 type anyHashPatternResult struct {
 	PosStart  int
 	PosEnd    int
@@ -198,7 +215,7 @@ func hashCurrentPatternProcessor(ctx *RenderContext, node *html.Node) {
 			continue
 		}
 
-		link := articleCommitLink(ctx.RenderOptions.Metas["user"], ctx.RenderOptions.Metas["repo"], hash)
+		link := renderedRepoCommitLink(ctx, hash)
 		replaceContent(node, m[2], m[3], createCodeLink(link, base.ShortSha(hash), "commit"))
 		start = 0
 		node = node.NextSibling.NextSibling
@@ -217,11 +234,12 @@ func commitCrossReferencePatternProcessor(ctx *RenderContext, node *html.Node) {
 		refText := ref.Owner + "/" + ref.Name + "@" + base.ShortSha(ref.CommitSha)
 		// If the cross-reference names the current repository by its repository name,
 		// the link must use the subject name, which is what the article route resolves.
-		refName := ref.Name
+		var linkHref string
 		if ref.Owner == ctx.RenderOptions.Metas["user"] && ref.Name == ctx.RenderOptions.Metas["reponame"] {
-			refName = ctx.RenderOptions.Metas["repo"]
+			linkHref = renderedRepoCommitLink(ctx, ref.CommitSha)
+		} else {
+			linkHref = articleCommitLink(ref.Owner, ref.Name, ref.CommitSha)
 		}
-		linkHref := articleCommitLink(ref.Owner, refName, ref.CommitSha)
 		link := createLink(ctx, linkHref, refText, "commit")
 
 		replaceContent(node, ref.RefLocation.Start, ref.RefLocation.End, link)

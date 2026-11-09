@@ -645,6 +645,11 @@ func EditPullRequest(ctx *context.APIContext) {
 		return
 	}
 
+	// refused before any other field is applied, so the request doesn't partly apply
+	if refuseLockedBodyEdit(ctx, issue, form.Body) {
+		return
+	}
+
 	if len(form.Title) > 0 {
 		err = issue_service.ChangeTitle(ctx, issue, ctx.Doer, form.Title)
 		if err != nil {

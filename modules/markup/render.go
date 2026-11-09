@@ -58,6 +58,11 @@ type RenderOptions struct {
 	// "community-notes", …) can be linked with a relative path (issue #399). Elsewhere only
 	// "subject/…" links are Forkana internal links.
 	ForkanaArticle bool
+
+	// EnableHeadingIDGeneration gives raw HTML headings (h1-h6) without an "id" one generated
+	// from their text, like Markdown headings get, so they can be linked to. Only enabled for
+	// repository files and wiki pages: comments etc. don't have heading permalinks.
+	EnableHeadingIDGeneration bool
 }
 
 // RenderContext represents a render context
@@ -126,6 +131,11 @@ func (ctx *RenderContext) WithUseAbsoluteLink(v bool) *RenderContext {
 	return ctx
 }
 
+func (ctx *RenderContext) WithEnableHeadingIDGeneration(v bool) *RenderContext {
+	ctx.RenderOptions.EnableHeadingIDGeneration = v
+	return ctx
+}
+
 func (ctx *RenderContext) WithHelper(helper RenderHelper) *RenderContext {
 	ctx.RenderHelper = helper
 	return ctx
@@ -156,15 +166,6 @@ func Render(ctx *RenderContext, input io.Reader, output io.Writer) error {
 	}
 
 	return render(ctx, renderer, input, output)
-}
-
-// RenderString renders Markup string to HTML with all specific handling stuff and return string
-func RenderString(ctx *RenderContext, content string) (string, error) {
-	var buf strings.Builder
-	if err := Render(ctx, strings.NewReader(content), &buf); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 func renderIFrame(ctx *RenderContext, output io.Writer) error {

@@ -260,7 +260,7 @@ func CreateUserRepo(ctx *context.APIContext, owner *user_model.User, opt api.Cre
 
 	// Resolve the subject (an existing one is used as-is, a new one must follow the subject
 	// title rule) and derive the repository name from it
-	subjectName, repoName, err := repo_service.PrepareSubjectAndRepoName(ctx, opt.Subject, opt.Name)
+	subjectName, repoName, _, err := repo_service.PrepareSubjectAndRepoName(ctx, opt.Subject, opt.Name)
 	if err != nil {
 		handleSubjectNameError(ctx, err)
 		return
@@ -386,7 +386,7 @@ func Generate(ctx *context.APIContext) {
 
 	// Resolve the subject (an existing one is used as-is, a new one must follow the subject
 	// title rule) and derive the repository name from it
-	subjectName, repoName, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.Name)
+	subjectName, repoName, _, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.Name)
 	if err != nil {
 		handleSubjectNameError(ctx, err)
 		return

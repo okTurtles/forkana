@@ -366,6 +366,11 @@ func getIssueAttachmentSafeRead(ctx *context.APIContext, issue *issues_model.Iss
 }
 
 func canUserWriteIssueAttachment(ctx *context.APIContext, issue *issues_model.Issue) bool {
+	// adding, renaming or removing an asset edits the content (#146)
+	if issue_service.IsContentLocked(issue) {
+		ctx.APIError(http.StatusForbidden, "the description of a change request can't be edited")
+		return false
+	}
 	canEditIssue := ctx.IsSigned && (ctx.Doer.ID == issue.PosterID || ctx.IsUserRepoAdmin() || ctx.IsUserSiteAdmin() || ctx.Repo.CanWriteIssuesOrPulls(issue.IsPull))
 	if !canEditIssue {
 		ctx.APIError(http.StatusForbidden, "user should have permission to write issue")

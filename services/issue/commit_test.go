@@ -178,6 +178,58 @@ func TestUpdateIssuesCommit_Issue5957(t *testing.T) {
 	unittest.CheckConsistencyFor(t, &activities_model.Action{})
 }
 
+// TestUpdateIssuesCommit_SelfReference checks that a PR's own merge commit, whose
+// default message contains "(#N)", doesn't add a commit reference to PR #N.
+func TestUpdateIssuesCommit_SelfReference(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	repo.Owner = user
+
+	// PR #2 (issue ID 2) was merged in commit 1a8823cd… (see models/fixtures/pull_request.yml)
+	const mergeMessage = "Merge pull request 'issue2' (#2) from branch1 into master"
+
+	cases := []struct {
+		name         string
+		sha          string
+		expectRefCmt bool
+	}{
+		{name: "MergeCommitOfThePR", sha: "1a8823cd1a9549fde083f992f6b9b87a7ab74fb3", expectRefCmt: false},
+		{name: "OtherCommit", sha: "abcdef9", expectRefCmt: true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			pushCommits := []*repository.PushCommit{
+				{
+					Sha1:           c.sha,
+					CommitterEmail: "user2@example.com",
+					CommitterName:  "User Two",
+					AuthorEmail:    "user2@example.com",
+					AuthorName:     "User Two",
+					Message:        mergeMessage,
+				},
+			}
+			commentBean := &issues_model.Comment{
+				Type:      issues_model.CommentTypeCommitRef,
+				CommitSHA: c.sha,
+				PosterID:  user.ID,
+				IssueID:   2,
+			}
+
+			unittest.AssertNotExistsBean(t, commentBean)
+			assert.NoError(t, UpdateIssuesCommit(t.Context(), user, repo, pushCommits, repo.DefaultBranch))
+			if c.expectRefCmt {
+				unittest.AssertExistsAndLoadBean(t, commentBean)
+			} else {
+				unittest.AssertNotExistsBean(t, commentBean)
+			}
+		})
+	}
+	unittest.CheckConsistencyFor(t, &activities_model.Action{})
+}
+
 func TestUpdateIssuesCommit_AnotherRepo(t *testing.T) {
 	assert.NoError(t, unittest.PrepareTestDatabase())
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})

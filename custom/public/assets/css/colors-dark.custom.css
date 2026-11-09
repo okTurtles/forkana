@@ -106,9 +106,6 @@
   --color-overlay-backdrop: rgba(0, 0, 0, 0.75);
   --color-shadow-medium: rgba(0, 0, 0, 0.4);
 
-  /* Navbar pill */
-  --color-navbar-pill-bg: #ffffff1a;
-
   /* Info banner (dark purple-tinted) */
   --color-banner-bg: #1a1730;
   --color-banner-border: #312a5e;
@@ -139,6 +136,7 @@
 
   --color-white: #FFFFFF;
   --color-red: #f85149;
+  --color-danger-icon: #f85149;
   --color-yellow: #e3b341;
   --color-purple: #bc8cff;
   --color-grey: #6e7681;
@@ -158,6 +156,7 @@
   --color-forkana-tooltip-bg: #25292e;
   --color-forkana-tooltip-arrow: #1f2328;
   --color-forkana-tooltip-text: #ffffff;
+  --color-changes-hub-strong-text: var(--color-text-primary);
 }
 
 /* "gitea-auto" keeps data-theme="gitea-auto" on <html>, so the selectors above never match it.
@@ -232,9 +231,6 @@
     --color-overlay-backdrop: rgba(0, 0, 0, 0.75);
     --color-shadow-medium: rgba(0, 0, 0, 0.4);
 
-    /* Navbar pill */
-    --color-navbar-pill-bg: #ffffff1a;
-
     /* Info banner (dark purple-tinted) */
     --color-banner-bg: #1a1730;
     --color-banner-border: #312a5e;
@@ -265,6 +261,7 @@
 
     --color-white: #FFFFFF;
     --color-red: #f85149;
+    --color-danger-icon: #f85149;
     --color-yellow: #e3b341;
     --color-purple: #bc8cff;
     --color-grey: #6e7681;
@@ -284,6 +281,7 @@
     --color-forkana-tooltip-bg: #25292e;
     --color-forkana-tooltip-arrow: #1f2328;
     --color-forkana-tooltip-text: #ffffff;
+    --color-changes-hub-strong-text: var(--color-text-primary);
   }
 }
 

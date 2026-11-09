@@ -375,6 +375,11 @@ func getIssueCommentAttachmentSafeWrite(ctx *context.APIContext) *repo_model.Att
 }
 
 func canUserWriteIssueCommentAttachment(ctx *context.APIContext, comment *issues_model.Comment) bool {
+	// adding, renaming or removing an asset edits the comment (#146)
+	if issue_service.IsContentLocked(comment.Issue) {
+		ctx.APIError(http.StatusForbidden, "the comments of a change request can't be edited")
+		return false
+	}
 	canEditComment := ctx.IsSigned && (ctx.Doer.ID == comment.PosterID || ctx.IsUserRepoAdmin() || ctx.IsUserSiteAdmin()) && ctx.Repo.CanWriteIssuesOrPulls(comment.Issue.IsPull)
 	if !canEditComment {
 		ctx.APIError(http.StatusForbidden, "user should have permission to edit comment")

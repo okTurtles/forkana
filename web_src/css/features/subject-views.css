@@ -81,6 +81,9 @@
   background: var(--color-hover);
 }
 
+/* Figma's arrow-switch-24 (13.3x12, #1f2328) is Primer's arrow-switch turned a quarter:
+   up and down arrows. The change requests hub's Sort (arrow-switch-24 7368:274608, and
+   7368:275087 on a phone) uses the same icon, so it reuses this class. */
 .history-table-sort-icon {
   display: inline-flex;
   transform: rotate(90deg);
@@ -458,6 +461,13 @@
 #article-signin-banner.is-info-bar-leaving,
 #article-archived-notice.is-info-bar-leaving {
   display: flex !important;
+}
+
+/* #478: the Compare banners are 1px up, so that their top rule lies on the navbar's
+   bottom one (Announcement 7368:260311 at y 63 under the 64px Navbar 7368:260310): one
+   line, not two. On the wrapper, which clips the banner while it slides. */
+.info-bar-slide {
+  margin-top: -1px;
 }
 
 /* The Compare banners slide in a wrapper (FishboneGraph.vue, repo-history-table.ts). On

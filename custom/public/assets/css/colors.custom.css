@@ -90,9 +90,6 @@
   --color-overlay-backdrop: rgba(0, 0, 0, 0.5);
   --color-shadow-medium: rgba(0, 0, 0, 0.15);
 
-  /* Navbar pill */
-  --color-navbar-pill-bg: #818B9826;
-
   /* Info banner (purple-tinted) */
   --color-banner-bg: #f0ecff;
   --color-banner-border: #d8d0f0;
@@ -123,6 +120,7 @@
 
   --color-white: #FFFFFF;
   --color-red: #CF222E;
+  --color-danger-icon: #d1242f; /* Primer fgColor-danger as figma's Flag-16 434:36114 fills it */
   --color-yellow: #EBB400;
   --color-purple: #8250DF;
   --color-grey: #59636E;
@@ -136,6 +134,10 @@
   --color-forkana-tooltip-bg: #25292e;
   --color-forkana-tooltip-arrow: #1f2328;
   --color-forkana-tooltip-text: #ffffff;
+
+  /* #94, the change requests hub (Figma 7368:274515): its rows' first line and the
+     phone's Filter / Sort labels are #000 (a light text in the dark themes) */
+  --color-changes-hub-strong-text: #000000;
 }
 
 /* Colorblind diff colors — orange (removed) vs blue (added).

@@ -431,11 +431,20 @@ func TestAPIEditPull(t *testing.T) {
 	assert.Equal(t, "master", apiPull.Base.Name)
 
 	newTitle := "edit a this pr"
+	// Forkana (#146): a change request's description can't be edited, and the refused request
+	// applies none of its other fields either
 	newBody := "edited body"
 	req = NewRequestWithJSON(t, http.MethodPatch, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", owner10.Name, repo10.Name, apiPull.Index), &api.EditPullRequestOption{
 		Base:  "feature/1",
 		Title: newTitle,
 		Body:  &newBody,
+	}).AddTokenAuth(token)
+	MakeRequest(t, req, http.StatusForbidden)
+	unittest.AssertNotExistsBean(t, &issues_model.Comment{OldTitle: title, NewTitle: newTitle})
+
+	req = NewRequestWithJSON(t, http.MethodPatch, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", owner10.Name, repo10.Name, apiPull.Index), &api.EditPullRequestOption{
+		Base:  "feature/1",
+		Title: newTitle,
 	}).AddTokenAuth(token)
 	resp = MakeRequest(t, req, http.StatusCreated)
 	DecodeJSON(t, resp, apiPull)
@@ -445,7 +454,7 @@ func TestAPIEditPull(t *testing.T) {
 	err := pull.LoadIssue(t.Context())
 	assert.NoError(t, err)
 	unittest.AssertExistsAndLoadBean(t, &issues_model.Comment{IssueID: pull.Issue.ID, OldTitle: title, NewTitle: newTitle})
-	unittest.AssertExistsAndLoadBean(t, &issues_model.ContentHistory{IssueID: pull.Issue.ID, ContentText: newBody, IsFirstCreated: false})
+	unittest.AssertNotExistsBean(t, &issues_model.ContentHistory{IssueID: pull.Issue.ID, ContentText: newBody})
 
 	req = NewRequestWithJSON(t, http.MethodPatch, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", owner10.Name, repo10.Name, pull.Index), &api.EditPullRequestOption{
 		Base: "not-exist",

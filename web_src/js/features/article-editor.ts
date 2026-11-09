@@ -72,7 +72,12 @@ export function initArticleEditor() {
   // Initialize Toast UI Editor
   (async () => {
     const editor = await createToastEditor(textarea, {
-      height: '500px',
+      // #478: the editor is 1008px with the box's 1px top border ("Comment box" 7368:264944
+      // in "Article view / Logged out - Edit" 7368:264887, and 7368:265054 in the phone frame
+      // 7368:265013): the toolbar's 56px and a writing area that scrolls inside the rest,
+      // as Form/Textarea 7368:264946 runs past the box there. The tip (Tip 7368:265012)
+      // is under it, outside.
+      height: '1007px',
       initialEditType: 'wysiwyg',
       // #469 (figma "Notes – Width system" 7368:275653): the Source editor is the 640px
       // column like the Visual one, with Write / Preview tabs instead of two panes

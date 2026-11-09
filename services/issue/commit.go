@@ -101,6 +101,22 @@ func getIssueFromRef(ctx context.Context, repo *repo_model.Repository, index int
 	return issue, nil
 }
 
+// isSelfReference reports whether commitSHA is the merge commit of the pull request
+// issue, so a merge message like "Merge pull request '…' (#N)" doesn't reference
+// PR #N from its own merge commit.
+func isSelfReference(ctx context.Context, issue *issues_model.Issue, commitSHA string) bool {
+	if !issue.IsPull {
+		return false
+	}
+	if err := issue.LoadPullRequest(ctx); err != nil {
+		if !issues_model.IsErrPullRequestNotExist(err) {
+			log.Error("LoadPullRequest for issue %d: %v", issue.ID, err)
+		}
+		return false
+	}
+	return issue.PullRequest != nil && issue.PullRequest.MergedCommitID == commitSHA
+}
+
 // UpdateIssuesCommit checks if issues are manipulated by commit message.
 func UpdateIssuesCommit(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, commits []*repository.PushCommit, branchName string) error {
 	// Commits are appended in the reverse order.
@@ -135,6 +151,9 @@ func UpdateIssuesCommit(ctx context.Context, doer *user_model.User, repo *repo_m
 				return err
 			}
 			if refIssue == nil {
+				continue
+			}
+			if isSelfReference(ctx, refIssue, c.Sha1) {
 				continue
 			}
 

@@ -141,7 +141,7 @@ func Migrate(ctx *context.APIContext) {
 
 	// Resolve the subject (an existing one is used as-is, a new one must follow the subject
 	// title rule) and derive the repository name from it
-	subjectName, repoName, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.RepoName)
+	subjectName, repoName, _, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.RepoName)
 	if err != nil {
 		handleSubjectNameError(ctx, err)
 		return

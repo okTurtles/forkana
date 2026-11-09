@@ -552,24 +552,26 @@
   color: var(--color-purple);
 }
 
-/* ─── Toolbar icons (#434 item 11) ──────────────────────────────────────────
-   The figma's markdown toolbar (_Markdown toolbar 641:65763 in "Article view / Logged
-   out - Edit" 641:65657) draws GitHub's octicons, 16px #59636e in 24×24 buttons with
-   4px between them and 16px between the groups, no dividers. Toast UI paints its own
-   icons from a sprite on each button's background; the octicons replace them as masks
-   (the same files the app's svg helper serves), so they take the text colour. Both
-   Toast editors share the toolbar (comp/toastEditorToolbar.ts), so this is not scoped. */
+/* ─── Toolbar icons (#434 item 11, #478) ────────────────────────────────────
+   The figma's toolbar ("Editor tools (compact)" 7601:68855 in "Article view / Logged
+   out - Edit" 7368:264887) draws GitHub's octicons, 16px #59636e in 24×24 buttons side
+   by side, the groups 9px apart around a 1×16 #d1d9e0 separator ("Sep" 7601:68869:
+   0 4px around the 1px rectangle 7601:68868). Toast UI paints its own icons from a
+   sprite on each button's background; the octicons replace them as masks (the same
+   files the app's svg helper serves), so they take the text colour. Both Toast editors
+   share the toolbar (comp/toastEditorToolbar.ts), so this is not scoped. */
 [data-theme] .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-divider {
-  display: none;
+  display: block;
+  flex-shrink: 0;
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background-color: var(--color-border-light);
 }
 
 [data-theme] .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-group {
-  gap: 4px;
+  gap: 0;
   align-items: center;
-}
-
-[data-theme] .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-group:not(:first-child) {
-  margin-left: 16px;
 }
 
 [data-theme] .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons {
@@ -645,8 +647,10 @@
   border-radius: 6px 6px 0 0;
 }
 
+/* The band is 47px with its rule (Toolbar background 7368:265000: 640×47; the Tabnav's
+   border-bottom I7368:265001;1716:12 at y 48 of the box, its outer border included) */
 [data-theme] .article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar {
-  min-height: 48px;
+  min-height: 47px;
   background: var(--color-surface-muted);
   border-bottom: 1px solid var(--color-border-light);
   border-radius: 6px 6px 0 0;
@@ -655,22 +659,25 @@
 /* The toolbar spans the band (the tabs are laid over its left end), so that Toast UI,
    which folds into its "more" menu whatever does not fit the toolbar's own width, sees
    the room there is: shrunk to its content, it used to fold the last three buttons.
-   Its buttons end 8px from the band's right edge and start 13px from its top ("Frame
-   386" 7368:265002 in "Article view / Logged out - Edit": 24px tall at y 13, ending at
-   632 of 640). */
+   Its buttons end 8px from the box's right edge and start 13px from its top ("Editor
+   tools (compact)" 7601:68855 in "Article view / Logged out - Edit": 24px tall at y 13,
+   ending at 632 of 640; the figma's strokes are inside, so the box's 1px border is
+   part of those 8 and 13px). */
 [data-theme] .article-editor-box .toastui-editor-defaultUI-toolbar {
   flex: 1;
   justify-content: flex-end;
-  height: 47px;
+  height: 46px;
   align-items: flex-start;
-  padding: 13px 8px 0 260px;
+  padding: 12px 7px 0 260px;
   background: transparent;
   border: none;
 }
 
+/* (the tabs are 8px from the box's outer edge, TabNav.Link I7368:265001;18248:75407 at
+   8,8: 7px inside its border) */
 [data-theme] .article-editor-box #toast-editor-container .toastui-editor-mode-switch {
-  top: 8px;
-  left: 8px;
+  top: 7px;
+  left: 7px;
   gap: 4px;
   min-height: 40px;
   height: 40px;
@@ -691,8 +698,10 @@
   border-radius: 6px 6px 0 0;
 }
 
+/* #478 (#434 item 3): 40px, so that its sides stop on the band's rule, which its white
+   covers; at 41px they ran 1px past it, into the writing area. */
 [data-theme] .article-editor-box #toast-editor-container .toastui-editor-mode-switch .tab-item.active {
-  height: 41px;
+  height: 40px;
   color: var(--color-text-primary);
   background: var(--color-surface);
   border-color: var(--color-border-light);
@@ -700,11 +709,33 @@
 
 /* (Toast UI positions the writing area absolutely in .toastui-editor-main, so the 8px
    inset is set on it rather than as the main area's padding) */
+/* (Form/Textarea 7368:264946: 624px wide at 8,56 of the box, its outer border included:
+   7px inside it at the sides) */
 [data-theme] .article-editor-box .toastui-editor-main > .toastui-editor-main-container {
   top: 8px;
-  left: 8px;
-  width: calc(100% - 16px);
+  left: 7px;
+  width: calc(100% - 14px);
   height: calc(100% - 16px);
+}
+
+/* #478 (#434 item 5): a heading of the article (Frame 219 7368:264958 and 7368:264975 in
+   Form/Textarea 7368:264946): Inter 700 20/32 black over a single 1px #d1d9e0 70% rule
+   8px under the text, then 24px to what follows; a section starts 32px under the one
+   before it (Frame 303's gap). Toast UI drew its h1 over a 3px double rule (the "double
+   line"), and both at 22-24px. */
+[data-theme] .article-editor-box .toastui-editor-contents h1,
+[data-theme] .article-editor-box .toastui-editor-contents h2 {
+  margin: 32px 0 24px;
+  padding: 0 0 8px;
+  font-size: 20px;
+  line-height: 32px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-dark);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border-light) 70%, transparent);
+}
+
+[data-theme] .article-editor-box .toastui-editor-contents > :is(h1, h2):first-child {
+  margin-top: 0;
 }
 
 [data-theme] .article-editor-box .toastui-editor-main .toastui-editor-ww-container,
@@ -759,8 +790,8 @@
    and the buttons start at the left and wrap. From 624px, which the 640px column has
    (figma "Article view / Logged out - Edit" 7368:264887, Toolbar 7368:264999), the tabs
    and the buttons share one row: the 260px the tabs take, the article editor's buttons
-   (four groups of 80, 80, 80 and 68px, 16px apart, which Toast UI does not count when
-   it decides what to fold into "more": 356px) and the 8px after them. A container
+   (four groups of 72, 72, 72 and 64px around three 9px separators: 307px) and the 7px
+   after them. A container
    query, as the editor's width, not the window's, is what matters. (The ID-qualified
    rule near the top of this file outweighed the generic phone rule there.) */
 @container article-editor (max-width: 623.98px) {

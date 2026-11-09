@@ -102,7 +102,8 @@ test.describe('Article Edit tab against figma 7368:264887', () => {
     expect((await style(count, 'background-color'))['background-color']).toMatch(/0\.12\)$/);
 
     // TabNav 7368:264911: Read / Edit / History, 0 16px, 4px apart; its Trailing (Watch)
-    // is hidden in this frame, so the Edit tab has no Watch; Read keeps it
+    // is hidden in this frame, so the Edit tab has no Watch; Read keeps it. #478: nor the
+    // "…" menu, which Read has (7368:264704)
     const tabs = page.locator('#article-tabs .ui.tabular.menu > a.item');
     await expect(tabs).toHaveText(['Read', 'Edit', 'History']);
     expect(await style(tabs.first(), 'padding-left', 'padding-right')).toEqual({'padding-left': '16px', 'padding-right': '16px'});
@@ -111,16 +112,19 @@ test.describe('Article Edit tab against figma 7368:264887', () => {
     const t1 = await box(tabs.nth(1));
     expect(Math.round(t1.x - (t0.x + t0.width))).toBe(4);
     await expect(page.locator('#article-tabs .article-watch')).toBeHidden();
+    await expect(page.locator('#article-tabs [data-role="article-more"]')).toHaveCount(0);
     await page.locator('#article-tabs a[data-article-tab="read"]').click();
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible({timeout: 10000});
     await expect(page.locator('#article-tabs .article-watch')).toBeVisible();
+    await expect(page.locator('#article-tabs [data-role="article-more"]')).toBeVisible();
   });
 
   test('editor toolbar: the figma\'s button set on the tabs\' row, and the Insert menu', async ({page}) => {
     await openEdit(page);
-    // _Markdown toolbar 7368:265005: H B I | quote code link | lists | (mention,
+    // "Editor tools (compact)" 7601:68855: H B I | quote code link | lists | (mention,
     // cross-reference) and a 40px button with a dropdown: here Cite, with the
-    // cross-reference icon, and the menu of the code block, image and table
+    // cross-reference icon, and the menu of the code block, image and table. Each group
+    // ends with its 9px separator but the last: 72 + 9, 72 + 9, 72 + 9 and 24 + 40.
     const toolbar = page.locator('.article-editor-box .toastui-editor-defaultUI-toolbar');
     const names = await toolbar.locator('button.toastui-editor-toolbar-icons:visible').evaluateAll((els) => els.map((el) => Array.from(el.classList).find((c) => !['toastui-editor-toolbar-icons', 'forkana-toolbar-icon'].includes(c))));
     expect(names).toEqual(['heading', 'bold', 'italic', 'quote', 'code', 'forkana-subject-link', 'bullet-list', 'ordered-list', 'task-list', 'forkana-cite', 'forkana-more']);
@@ -130,16 +134,18 @@ test.describe('Article Edit tab against figma 7368:264887', () => {
     const groups = toolbar.locator('.toastui-editor-toolbar-group:visible');
     const widths = [];
     for (let i = 0; i < await groups.count(); i++) widths.push(Math.round((await box(groups.nth(i))).width));
-    expect(widths).toEqual([80, 80, 80, 68]);
+    expect(widths).toEqual([81, 81, 81, 64]);
     const more = await box(toolbar.locator('.forkana-more'));
     expect([Math.round(more.width), Math.round(more.height)]).toEqual([40, 24]);
 
     // one row: the Visual / Source tabs and every button in the 47px band
     const band = await box(page.locator('.article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar'));
-    expect(band.height).toBe(48);
+    expect(band.height).toBe(47);
     const tab = await box(page.locator('.article-editor-box .toastui-editor-mode-switch .tab-item.active'));
-    // (the open tab stands 1px over the rule under the band)
-    for (const b of [tab, more]) expect(b.y + b.height).toBeLessThanOrEqual(band.y + band.height + 1);
+    // (#478, #434 item 3: the open tab covers the rule under the band, and its sides stop
+    // there, not 1px into the writing area)
+    for (const b of [tab, more]) expect(b.y + b.height).toBeLessThanOrEqual(band.y + band.height);
+    expect(tab.y + tab.height).toBe(band.y + band.height);
     expect(more.x).toBeGreaterThan(tab.x + tab.width);
 
     // the menu
@@ -156,23 +162,27 @@ test.describe('Article Edit tab against figma 7368:264887', () => {
     await openEdit(page);
     const frame = await box(page.locator('.article-editor-box'));
     const band = page.locator('.article-editor-box .toastui-editor-defaultUI .toastui-editor-toolbar');
-    // Toolbar 7368:264999: a 47px #f6f8fa band over a 1px #d1d9e0 rule
+    // Toolbar 7368:264999: a #f6f8fa band, 47px with its 1px #d1d9e0 rule (figma's strokes
+    // are inside: the band and the rule end at y 48 of the frame, its border included)
     const b = await box(band);
-    expect(b.height).toBe(48);
+    expect(b.height).toBe(47);
+    expect(b.y + b.height - frame.y).toBe(48);
     expectColor(await rgb(band, 'background-color'), '#f6f8fa');
     expectColor(await rgb(band, 'border-bottom-color'), '#d1d9e0');
     expect((await style(band, 'border-bottom-width'))['border-bottom-width']).toBe('1px');
 
-    // Tabnav 7368:265001: tabs 8px from the band's top and left, 4px apart, 40px, 0 16px,
-    // Inter 400 14/20; the open one white, #1f2328, 1px #d1d9e0 sides and top, 6px corners
+    // Tabnav 7368:265001: tabs 8px from the frame's top and left (its border included), 4px
+    // apart, 40px, 0 16px, Inter 400 14/20; the open one white, #1f2328, 1px #d1d9e0 sides
+    // and top, 6px corners
     const active = page.locator('.article-editor-box .toastui-editor-mode-switch .tab-item.active');
     const other = page.locator('.article-editor-box .toastui-editor-mode-switch .tab-item:not(.active)');
     await expect(active).toHaveText('Visual editor');
     await expect(other).toHaveText('Source editor');
     const a = await box(active);
     const o = await box(other);
-    expect(Math.round(a.x - b.x)).toBe(8);
-    expect(Math.round(a.y - b.y)).toBe(8);
+    expect(Math.round(a.x - frame.x)).toBe(8);
+    expect(Math.round(a.y - frame.y)).toBe(8);
+    expect(Math.round(a.height)).toBe(40);
     expect(Math.round(o.x - (a.x + a.width))).toBe(4);
     expect(Math.round(o.height)).toBe(40);
     expect(await style(active, 'padding-left', 'padding-right', 'font-weight', 'font-size', 'line-height', 'border-top-left-radius', 'border-top-width', 'border-bottom-width')).toEqual({
@@ -183,25 +193,60 @@ test.describe('Article Edit tab against figma 7368:264887', () => {
     expectColor(await rgb(active, 'border-top-color'), '#d1d9e0');
     expectColor(await rgb(other, 'color'), '#59636e');
 
-    // Frame 386 7368:265002: 24px buttons 13px from the band's top, the last one ending
-    // 8px from its right edge; 4px apart in a group, 16px between groups; #59636e icons
+    // "Editor tools (compact)" 7601:68855: 24px buttons 13px from the frame's top, the last
+    // one ending 8px from its right edge (its border included); side by side in a group,
+    // the groups 9px apart around a 1×16 #d1d9e0 separator ("Sep" 7601:68869); #59636e
+    // icons
     const icons = page.locator('.article-editor-box .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons:visible');
     const first = await box(icons.first());
     const last = await box(icons.last());
     expect(first.height).toBe(24);
-    expect(Math.round(first.y - b.y)).toBe(13);
-    expect(Math.round(b.x + b.width - (last.x + last.width))).toBe(8);
+    expect(Math.round(first.y - frame.y)).toBe(13);
+    expect(Math.round(frame.x + frame.width - (last.x + last.width))).toBe(8);
     // (one that is not active: the one for the block the caret is in is brand purple)
     expectColor(await rgb(page.locator('.article-editor-box .toastui-editor-defaultUI-toolbar button.toastui-editor-toolbar-icons:not(.active):visible').first(), 'color'), '#59636e');
     const groups = page.locator('.article-editor-box .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-group');
     const g0 = await box(groups.nth(0));
     const g1 = await box(groups.nth(1));
-    expect(Math.round(g1.x - (g0.x + g0.width))).toBe(16);
+    expect(Math.round(g1.x - (g0.x + g0.width))).toBe(0);
+    const sep = page.locator('.article-editor-box .toastui-editor-defaultUI-toolbar .toastui-editor-toolbar-divider').first();
+    const sb = await box(sep);
+    expect([sb.width, sb.height]).toEqual([1, 16]);
+    expect(await style(sep, 'margin-left', 'margin-right')).toEqual({'margin-left': '4px', 'margin-right': '4px'});
+    expectColor(await rgb(sep, 'background-color'), '#d1d9e0');
+    const i0 = await box(icons.nth(0));
+    const i1 = await box(icons.nth(1));
+    expect(Math.round(i1.x - (i0.x + i0.width))).toBe(0);
 
     // the writing area 8px inside the frame, under the band
     const writing = await box(page.locator('.article-editor-box .toastui-editor-ww-container'));
-    expect(Math.round(writing.x - frame.x)).toBe(9); // 8px + the frame's 1px border
+    expect(Math.round(writing.x - frame.x)).toBe(8); // (Form/Textarea 7368:264946 at 8,56, the frame's border included)
+    expect(Math.round(writing.width)).toBe(Math.round(frame.width) - 16);
     expect(Math.round(writing.y - (b.y + b.height))).toBe(8);
+
+    // #478: the editor is 1008px from the frame's top edge ("Comment box" 7368:264944:
+    // the toolbar and the writing area, the tip under it, outside); a long article
+    // scrolls inside it
+    const editor = await box(page.locator('.article-editor-box .toastui-editor-defaultUI'));
+    expect(Math.abs(editor.y + editor.height - frame.y - 1008)).toBeLessThanOrEqual(2);
+    await page.locator('#toast-editor-container').evaluate((el) => (el as HTMLElement & {_giteaToastEditor: {setMarkdown: (md: string) => void}})._giteaToastEditor.setMarkdown(Array.from({length: 120}, (_, i) => `Paragraph ${i}.`).join('\n\n')));
+    expect(Math.abs((await box(page.locator('.article-editor-box .toastui-editor-defaultUI'))).height - editor.height)).toBeLessThanOrEqual(1);
+    expect(await page.locator('.article-editor-box .toastui-editor-ww-container .toastui-editor-contents').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  });
+
+  // #478 (#434 item 5, "double line"): a heading of the article is Inter 700 20/32 over
+  // one 1px #d1d9e0 70% rule 8px under the text, then 24px to the next block (Frame 219
+  // 7368:264958); Toast UI drew its h1 over a 3px double rule
+  test('editor: headings over one rule', async ({page}) => {
+    await openEdit(page);
+    await page.locator('#toast-editor-container').evaluate((el) => (el as HTMLElement & {_giteaToastEditor: {setMarkdown: (md: string) => void}})._giteaToastEditor.setMarkdown('# One\n\nText.\n\n## Two\n\nMore text.\n'));
+    for (const level of ['h1', 'h2']) {
+      const heading = page.locator(`.toastui-editor-ww-container .ProseMirror ${level}`);
+      await expect(heading).toHaveCount(1);
+      expect(await style(heading, 'font-size', 'line-height', 'font-weight', 'padding-bottom', 'margin-bottom', 'border-bottom-style', 'border-bottom-width'), level).toEqual({
+        'font-size': '20px', 'line-height': '32px', 'font-weight': '700', 'padding-bottom': '8px', 'margin-bottom': '24px', 'border-bottom-style': 'solid', 'border-bottom-width': '1px',
+      });
+    }
   });
 
   test('text overrides: the bold path and the tip\'s links', async ({page}) => {

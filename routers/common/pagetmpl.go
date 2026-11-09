@@ -11,6 +11,7 @@ import (
 	activities_model "code.gitea.io/gitea/models/activities"
 	"code.gitea.io/gitea/models/db"
 	issues_model "code.gitea.io/gitea/models/issues"
+	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/services/context"
 )
@@ -65,12 +66,30 @@ func notificationUnreadCount(ctx *context.Context) int64 {
 	return count
 }
 
+// openReceivedChangeRequestCount is the navbar's "Change request" counter (#94,
+// CounterLabel 6484:44075 on Button 7368:274543): the open change requests to the
+// articles the signed-in user owns or maintains, the hub's Received tab.
+func openReceivedChangeRequestCount(ctx *context.Context) int64 {
+	if ctx.Doer == nil || unit.TypePullRequests.UnitGlobalDisabled() {
+		return 0
+	}
+	count, err := CountOpenReceivedChangeRequests(ctx, ctx.Doer)
+	if err != nil {
+		if !errors.Is(err, goctx.Canceled) {
+			log.Warn("Unable to count the open change requests received by user:%-v: %v", ctx.Doer, err)
+		}
+		return 0
+	}
+	return count
+}
+
 type pageGlobalDataType struct {
 	IsSigned    bool
 	IsSiteAdmin bool
 
-	GetNotificationUnreadCount func() int64
-	GetActiveStopwatch         func() *StopwatchTmplInfo
+	GetNotificationUnreadCount        func() int64
+	GetActiveStopwatch                func() *StopwatchTmplInfo
+	GetOpenReceivedChangeRequestCount func() int64
 }
 
 func PageGlobalData(ctx *context.Context) {
@@ -79,5 +98,6 @@ func PageGlobalData(ctx *context.Context) {
 	data.IsSiteAdmin = ctx.Doer != nil && ctx.Doer.IsAdmin
 	data.GetNotificationUnreadCount = sync.OnceValue(func() int64 { return notificationUnreadCount(ctx) })
 	data.GetActiveStopwatch = sync.OnceValue(func() *StopwatchTmplInfo { return getActiveStopwatch(ctx) })
+	data.GetOpenReceivedChangeRequestCount = sync.OnceValue(func() int64 { return openReceivedChangeRequestCount(ctx) })
 	ctx.Data["PageGlobalData"] = data
 }

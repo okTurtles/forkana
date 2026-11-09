@@ -46,7 +46,7 @@
 						</div>
 					</div>
 					<div class="ui attached segment comment-body" role="article">
-						<div class="render-content markup" {{if or $.Permission.IsAdmin $.HasIssuesOrPullsWritePermission $.IsIssuePoster}}data-can-edit="true"{{end}}>
+						<div class="render-content markup" {{if and (not $.Issue.IsPull) (or $.Permission.IsAdmin $.HasIssuesOrPullsWritePermission $.IsIssuePoster)}}data-can-edit="true"{{end}}>
 							{{if .Issue.RenderedContent}}
 								{{.Issue.RenderedContent}}
 							{{else}}
@@ -169,7 +169,9 @@
 	</form>
 </template>
 
-{{template "repo/issue/view_content/reference_issue_dialog" .}}
+{{if not .Issue.IsPull}}{{/* change requests have no "Reference in new issue" (#146) */}}
+	{{template "repo/issue/view_content/reference_issue_dialog" .}}
+{{end}}
 {{template "shared/user/block_user_dialog" .}}
 
 

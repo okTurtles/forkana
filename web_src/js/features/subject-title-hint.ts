@@ -15,20 +15,29 @@ export function subjectTitleHint(value: string): {problem: string, normalized: s
 
 // initSubjectTitleHint explains the subject title rule under the subject inputs of the create
 // and migrate forms while the typed title breaks it, and shows the spelling a new subject would
-// get. The hint never blocks submitting: a title that breaks the rule is still accepted when it
-// resolves to an existing subject, which only the server knows, and the server rejects invalid
-// new subjects with its own error.
+// get. A title that breaks the rule also makes the input invalid, so the browser refuses to
+// submit the form and shows the same message (#401). The one exception is the existing subject
+// the server prefilled (data-existing-subject): it may predate the rule and is still accepted.
+// The server checks the title again either way.
 export function initSubjectTitleHint() {
   for (const elHint of document.querySelectorAll<HTMLElement>('[data-subject-title-hint]')) {
     const input = elHint.closest('.field')?.querySelector<HTMLInputElement>('input[name="subject"]');
     if (!input) continue;
+    const existing = elHint.getAttribute('data-existing-subject');
     const update = () => {
-      const {problem, normalized} = subjectTitleHint(input.value);
+      let {problem, normalized} = subjectTitleHint(input.value);
+      if (existing !== null && input.value.trim() === existing) {
+        problem = '';
+        normalized = '';
+      }
+      const message = problem ? elHint.getAttribute(`data-msg-${problem.replaceAll('_', '-')}`) ?? '' : '';
       if (problem) {
-        elHint.textContent = elHint.getAttribute(`data-msg-${problem.replaceAll('_', '-')}`) ?? '';
+        elHint.textContent = message;
       } else if (normalized) {
         elHint.textContent = (elHint.getAttribute('data-msg-normalized') ?? '').replace('%s', () => normalized);
       }
+      // a message is required: an empty one would leave the input valid
+      input.setCustomValidity(problem ? message || problem : '');
       elHint.classList.toggle('red', Boolean(problem));
       toggleElem(elHint, Boolean(problem || normalized));
     };

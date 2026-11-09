@@ -182,12 +182,16 @@ func Create(ctx *context.Context) {
 		// Prefill the name of the existing subject it resolves to, if any (it may predate the
 		// subject title rule), or else the normalized title. An invalid new title is prefilled
 		// normalized too: the form's hint explains the rule and the POST rejects it.
-		subject, err := repo_model.ResolveSubjectName(ctx, typed)
+		subject, existing, err := repo_model.ResolveSubject(ctx, typed)
 		if err != nil && !repo_model.IsErrSubjectNameInvalid(err) {
-			ctx.ServerError("ResolveSubjectName", err)
+			ctx.ServerError("ResolveSubject", err)
 			return
 		}
 		ctx.Data["subject"] = subject
+		if existing != nil {
+			// the form's script lets this title through even if it breaks the rule
+			ctx.Data["ExistingSubject"] = existing.Name
+		}
 		ctx.Data["repo_name"] = repo_model.GenerateRepoNameFromSubject(subject)
 	}
 
@@ -261,18 +265,27 @@ func CreatePost(ctx *context.Context) {
 	}
 
 	if ctx.HasError() {
+		// a subject that predates the rule must stay acceptable on the form shown again
+		if _, existing, err := repo_model.ResolveSubject(ctx, form.Subject); err == nil && existing != nil {
+			ctx.Data["ExistingSubject"] = existing.Name
+		}
 		ctx.HTML(http.StatusOK, tplCreate)
 		return
 	}
 
 	// Resolve the subject (an existing one is used as-is, a new one must follow the subject
 	// title rule) and derive the repository name from it
-	subjectName, repoName, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.RepoName)
+	subjectName, repoName, existing, err := repo_service.PrepareSubjectAndRepoName(ctx, form.Subject, form.RepoName)
 	if err != nil {
 		handleCreateError(ctx, ctxUser, err, "CreatePost", tplCreate, &form)
 		return
 	}
 	form.Subject, form.RepoName = subjectName, repoName
+	if existing != nil {
+		// the form rendered again after any error below must still accept this subject,
+		// which may predate the subject title rule
+		ctx.Data["ExistingSubject"] = existing.Name
+	}
 
 	// Check global uniqueness for repository name and subject
 	if err := repo_model.CheckCreateRepositoryGlobalUnique(ctx, ctx.Doer, ctxUser, form.RepoName, form.Subject, false); err != nil {

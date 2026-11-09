@@ -1,0 +1,600 @@
+/* The change requests hub (#94, templates/user/dashboard/change_requests.tmpl), after
+   Figma "09 · Changes hub" (section 7368:274515): Received 7368:274516, Sent 7368:274718,
+   Mentions 7368:274915, the Filter menu 7368:275387 and the Sort menu 7368:275446; on a
+   phone 7368:275056 (Received), 7368:275473 (Sent) and 7368:275255 (Mentions). Values are
+   Figma px; the node each one comes from is named next to it. */
+
+/* The 1080px column (Frame 1013, 7368:274556), 23px under the navbar (Back at y 88, the
+   navbar ending at 65), with the page's 16px gutter once the window is narrower. */
+.changes-hub-container {
+  /* the hover tint of the tabs, menu entries and pages: #818b98 at 10% */
+  --color-changes-hub-hover: color-mix(in srgb, var(--color-button-text-disabled) 10%, transparent);
+
+  display: flex;
+  flex-direction: column;
+  max-width: calc(1080px + 2 * 16px);
+  margin: 0 auto;
+  padding: 23px 16px 48px;
+}
+
+/* Back (Frame 631, 7368:274559): a 16px chevron, 4px, Inter 400 14/20 in #4e40fa. */
+.changes-hub-back {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-primary);
+}
+
+.changes-hub-back:hover {
+  color: var(--color-primary-hover);
+}
+
+/* The title block, 16px under Back (_PageHeader.TitleArea 7368:274564 and
+   _PageHeader.Description 7368:274565): Inter 700 20/32 #1f2328, then the description,
+   2px down, in Inter 400 12/20 #59636e. */
+.changes-hub-header {
+  margin-top: 16px;
+}
+
+.changes-hub-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 32px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.changes-hub-description {
+  margin: 0;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-muted-text);
+}
+
+/* The tabs (UnderlineNav 7368:274570), 24px under the title block: a 48px row, 0 16px,
+   the tabs 8px apart over a 1px #d1d9e0 rule. Each tab (Item (01) 7368:274571) is 10px
+   0 around a 28px box, 4px 8px around a 16px icon, an Inter 14/20 #1f2328 label and a
+   counter 8px apart; the open one is 600 and underlined 2px in #4e40fa (its inside
+   stroke covers the row's rule). */
+.changes-hub-tabs {
+  display: flex;
+  gap: 8px;
+  height: 48px;
+  margin-top: 24px;
+  padding: 0 16px;
+  box-shadow: inset 0 -1px 0 var(--color-border-light);
+}
+
+.changes-hub-tab {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  color: var(--color-text-primary);
+}
+
+.changes-hub-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.changes-hub-tab.active {
+  box-shadow: inset 0 -2px 0 var(--color-primary);
+}
+
+.changes-hub-tab-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.changes-hub-tab:hover .changes-hub-tab-inner {
+  background: var(--color-changes-hub-hover);
+}
+
+.changes-hub-tab.active .changes-hub-tab-label {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* The counters (CounterLabel 6484:44075, and 6484:44073 on the open tab): an 18px pill,
+   0 6px, Inter 600 12px; #1f2328 on #818b98 at 12%, white on #59636e on the open tab. */
+.changes-hub-counter {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-button-text-disabled) 12%, transparent);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.changes-hub-tab.active .changes-hub-counter {
+  background: var(--color-muted-text);
+  color: var(--color-body);
+}
+
+/* Search, Filter and Sort (Frame 627, 7368:274595), 21px under the tabs: a 32px row.
+   The search box (Frame 521, 7368:274596) is 622px, 0 12px inside a 1px #d1d9e0 70%
+   frame with 8px corners, the placeholder Inter 12/20 #59636e and the 16px search icon
+   at its right; Filter and Sort (Frame 541, 7368:274600), 16px apart, are a 16px icon,
+   6px, Inter 12/20 #1f2328 and a 16px caret. */
+.changes-hub-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 32px;
+  margin-top: 21px;
+}
+
+.changes-hub-search {
+  display: flex;
+  align-items: center;
+  flex: 0 1 622px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--color-border-light) 70%, transparent);
+  border-radius: 8px;
+  background: var(--color-body);
+}
+
+.changes-hub-search:focus-within {
+  border-color: var(--color-primary);
+}
+
+.changes-hub-search input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.changes-hub-search input::placeholder {
+  color: var(--color-muted-text);
+  opacity: 1;
+}
+
+.changes-hub-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.changes-hub-search-button {
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.changes-hub-menus {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+/* (`.ui.dropdown` to outweigh Fomantic's own dropdown rules) */
+.changes-hub-menu.ui.dropdown {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.changes-hub-menu-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The two menus (7368:275387, 7368:275446): white cards with 12px corners, 4px under
+   their button, 146px (Filter) and 171px (Sort) wide, the overlay shadow of the design
+   system; each entry 32px, 6px 8px around an Inter 12/20 #1f2328 label, 6px corners. */
+.changes-hub-menu.ui.dropdown > .menu {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-body);
+  box-shadow: 0 6px 18px 0 #25292e1f, 0 6px 12px -3px #25292e0a, 0 0 0 1px color-mix(in srgb, var(--color-border-light) 50%, transparent);
+}
+
+.changes-hub-menu.ui.dropdown > .changes-hub-filter-menu {
+  min-width: 146px;
+}
+
+.changes-hub-menu.ui.dropdown > .changes-hub-sort-menu {
+  min-width: 171px;
+}
+
+.changes-hub-menu.ui.dropdown > .menu > .item {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 32px;
+  min-height: 32px; /* Fomantic's is 36px */
+  padding: 6px 8px !important;
+  border: 0 !important;
+  border-radius: 6px;
+  font-size: 12px !important;
+  line-height: 20px !important;
+  font-weight: var(--font-weight-normal) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* The highlighted entry (currentSelection, ActionList.Item 7368:275447): #818b98 at 10%. */
+.changes-hub-menu.ui.dropdown > .menu > .item:hover,
+.changes-hub-menu.ui.dropdown > .menu > .item.active {
+  background: var(--color-changes-hub-hover) !important;
+}
+
+/* ActionList.Divider (7368:275395): 8px above and below a 1px #d1d9e0 70% rule. */
+.changes-hub-menu-divider {
+  height: 1px;
+  margin: 8px 0;
+  background: color-mix(in srgb, var(--color-border-light) 70%, transparent);
+}
+
+/* The Filter entries' checkboxes (_CheckboxInput, 7368:275398): 16px, white, a 1px
+   #818b98 border with 3px corners, a #1f2328 check when on. */
+.changes-hub-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-button-text-disabled);
+  border-radius: 3px;
+  background: var(--color-body);
+  color: var(--color-text-primary);
+}
+
+/* The list (Frame 758532267, 7368:274611), 16px under the toolbar: a 1px #d1d9e0 70%
+   frame with 6px corners. */
+.changes-hub-list {
+  margin-top: 16px;
+  border: 1px solid color-mix(in srgb, var(--color-border-light) 70%, transparent);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* A change request (Frame 758532265, 7368:274614, and the rows under it): 16px at the
+   sides, the content 4px above a 1px #d1d9e0 rule, the next row's content 12px + 4px
+   under it (8px for the first row); the 28px avatar (6px corners, a #1f2328 15% ring),
+   16px, the two lines, then the state, 16px, and a 24px #1f2328 chevron. */
+.changes-hub-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 16px 4px;
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text-primary);
+}
+
+.changes-hub-row:first-child {
+  padding-top: 8px;
+}
+
+.changes-hub-row:hover {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-button-text-disabled) 6%, transparent);
+}
+
+.changes-hub-avatar {
+  display: flex;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.changes-hub-avatar img.ui.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  outline: 1px solid color-mix(in srgb, var(--color-text-primary) 15%, transparent);
+  outline-offset: -1px;
+}
+
+/* The two lines (Frame 758532263, 7368:274619): Inter 12/18 in 20px lines, the first
+   #000 with the names in 600, the second #59636e. */
+.changes-hub-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.changes-hub-line,
+.changes-hub-sub,
+.changes-hub-quote {
+  padding-bottom: 2px;
+  overflow-wrap: anywhere; /* a long unbroken name must not push the page sideways */
+}
+
+.changes-hub-line {
+  color: var(--color-changes-hub-strong-text);
+}
+
+.changes-hub-line strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+.changes-hub-sub,
+.changes-hub-quote {
+  color: var(--color-muted-text);
+}
+
+/* "Has conflicts" (Group 89, 7368:274652): a 24px #59636e disc with a white alert. */
+.changes-hub-conflicts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-muted-text);
+  color: var(--color-body);
+}
+
+/* The state (StateLabel 5785:108041 Open, 5785:108047 Closed, 5785:108043 Merged):
+   28px, 4px 8px, 100px corners, a 16px white icon, 4px, an Inter 600 14/20 white
+   label; #1f883d, #cf222e, #4e40fa. */
+.changes-hub-state {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  height: 28px;
+  padding: 4px 8px;
+  border-radius: 100px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-white);
+}
+
+.changes-hub-state-open {
+  background: var(--color-green);
+}
+
+.changes-hub-state-closed {
+  background: var(--color-red);
+}
+
+.changes-hub-state-merged {
+  background: var(--color-primary);
+}
+
+.changes-hub-chevron {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--color-text-primary);
+}
+
+.changes-hub-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-muted-text);
+}
+
+/* The footer (DataTable/Footer 7368:274706): 48px; "10 of 32" 8px 16px from the left in
+   Inter 12/20 #59636e; the pages 8px 16px from the right, 4px apart: Previous and Next
+   5px 10px, a 16px chevron 4px from an Inter 14/20 #4e40fa label; the pages 32px, 8px
+   apart, 6px corners, Inter 14/20 #1f2328, the current one white on #4e40fa. */
+.changes-hub-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+}
+
+.changes-hub-shown {
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-muted-text);
+}
+
+.changes-hub-pagination {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+}
+
+.changes-hub-page-direction {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-primary);
+}
+
+a.changes-hub-page-direction:hover {
+  color: var(--color-primary);
+  background: var(--color-changes-hub-hover);
+}
+
+.changes-hub-page-direction.disabled {
+  color: var(--color-button-text-disabled);
+}
+
+.changes-hub-pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.changes-hub-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+a.changes-hub-page:hover {
+  color: var(--color-text-primary);
+  background: var(--color-changes-hub-hover);
+}
+
+.changes-hub-page.current {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+/* ── Phone (Mobile 7368:275056, 7368:275473, 7368:275255) ────────────────────
+   No Back; the title block (0 15px, Frame 758532281) then, 16px apart: the search row,
+   the tabs and the list. */
+@media (max-width: 767.98px) {
+  .changes-hub-container {
+    padding: 23px 0 32px;
+  }
+
+  .changes-hub-back {
+    display: none;
+  }
+
+  .changes-hub-header {
+    margin-top: 0;
+    padding: 0 15px;
+  }
+
+  /* Frame 669 (7368:275073): 0 16px, the search box (_Header/Search) taking the room
+     Filter and Sort leave, 12px from them: 8px inside a 1px #d1d9e0 frame with 6px
+     corners and a 1px inner shadow, the 16px icon first, 8px from the placeholder;
+     Filter and Sort 12px apart in #000. */
+  .changes-hub-toolbar {
+    gap: 12px;
+    margin-top: 16px;
+    padding: 0 16px;
+  }
+
+  /* (_Header/Search 7368:275076 is 32px tall with 8px all round, i.e. a 16px content
+     box for the 16px icon: the box stays 32px, so the 8px only shows at the sides) */
+  .changes-hub-search {
+    flex: 1 1 auto;
+    gap: 8px;
+    padding-inline: 8px;
+    border-color: var(--color-border-light);
+    border-radius: 6px;
+    box-shadow: inset 0 1px 0 #1f23280a;
+  }
+
+  .changes-hub-search-button {
+    order: -1;
+    color: var(--color-muted-text);
+  }
+
+  .changes-hub-menus {
+    gap: 12px;
+  }
+
+  .changes-hub-menu.ui.dropdown {
+    color: var(--color-changes-hub-strong-text);
+  }
+
+  /* UnderlineNav (7368:275090): 46px, the tabs centred 4px apart, each 10px 0 around a
+     26px box with an Inter 12/18 label. */
+  .changes-hub-tabs {
+    order: 1;
+    justify-content: center;
+    gap: 4px;
+    height: 46px;
+    margin-top: 16px;
+    padding: 0;
+  }
+
+  .changes-hub-tab-inner {
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  /* The list (Frame 758532267, 7368:275124) in the 16px gutter; a row is 8px 12px 4px
+     8px: the avatar, 8px, the first line beside the chevron, then 4px under it the
+     state (26px, Inter 600 12/18) and the time 8px apart. */
+  .changes-hub-list {
+    order: 2;
+    margin: 16px 16px 0;
+  }
+
+  .changes-hub-row {
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px 4px 8px;
+  }
+
+  .changes-hub-text {
+    gap: 4px;
+  }
+
+  .changes-hub-line,
+  .changes-hub-quote {
+    padding-bottom: 0;
+  }
+
+  .changes-hub-mobile-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-muted-text);
+  }
+
+  .changes-hub-mobile-meta .changes-hub-state {
+    height: 26px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  /* The footer (DataTable/Footer 7368:275244): 46px, its labels in Inter 12/20, no
+     page numbers. */
+  .changes-hub-footer {
+    min-height: 46px;
+  }
+
+  .changes-hub-page-direction {
+    font-size: 12px;
+  }
+
+  /* "That's all your mentions" (7368:275386): Inter 12/18 #59636e, centred. */
+  .changes-hub-end {
+    order: 3;
+    margin: 20px 16px 0;
+    text-align: center;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--color-muted-text);
+  }
+}

@@ -5,12 +5,14 @@ package validation
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 
 	"code.gitea.io/gitea/modules/auth"
 	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/glob"
+	"code.gitea.io/gitea/modules/json"
 	"code.gitea.io/gitea/modules/util"
 
 	"gitea.com/go-chi/binding"
@@ -28,6 +30,30 @@ const (
 	// ErrInvalidGroupTeamMap is returned when a group team mapping is invalid
 	ErrInvalidGroupTeamMap = "InvalidGroupTeamMap"
 )
+
+// jsonProvider makes binding decode/encode JSON bodies with Gitea's json module
+// instead of its default goccy/go-json, which can corrupt long multi-byte UTF-8 text
+// (go-gitea/gitea#37211).
+type jsonProvider struct{}
+
+func (j jsonProvider) Marshal(v any) ([]byte, error) { return json.Marshal(v) }
+
+func (j jsonProvider) Unmarshal(data []byte, v any) error { return json.Unmarshal(data, v) }
+
+func (j jsonProvider) NewDecoder(reader io.Reader) binding.JSONDecoder {
+	return json.NewDecoder(reader)
+}
+
+func (j jsonProvider) NewEncoder(writer io.Writer) binding.JSONEncoder {
+	return json.NewEncoder(writer)
+}
+
+// binding.JSONProvider has no default, so set it at package init rather than in
+// AddBindingRules: install mode serves routes that bind forms without calling
+// AddBindingRules, and a nil provider panics on any JSON request there.
+func init() {
+	binding.JSONProvider = jsonProvider{}
+}
 
 // AddBindingRules adds additional binding rules
 func AddBindingRules() {

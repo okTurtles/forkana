@@ -82,14 +82,6 @@
   margin-bottom: .5rem !important;
 }
 
-/* #1 — "Change request" navbar pill style */
-.navbar-pill-active {
-  background: var(--color-navbar-pill-bg) !important;
-  border-radius: 6px;
-  padding: 4px 12px !important;
-  font-weight: var(--font-weight-medium);
-}
-
 /* #5 — Tab count: plain inline number instead of badge circle */
 .issue-content .tabular.menu .item .ui.label {
   background: transparent !important;

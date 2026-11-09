@@ -8,7 +8,6 @@ import (
 
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
-	"code.gitea.io/gitea/modules/markup"
 	"code.gitea.io/gitea/modules/markup/markdown"
 
 	_ "code.gitea.io/gitea/modules/markup/orgmode"
@@ -20,9 +19,18 @@ func TestRepoFile(t *testing.T) {
 	unittest.PrepareTestEnv(t)
 	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 
+	t.Run("HTMLHeadingID", func(t *testing.T) {
+		// raw HTML headings get an id like Markdown headings, so they get a permalink
+		rctx := NewRenderContextRepoFile(t.Context(), repo1).WithMarkupType(markdown.MarkupName)
+		rendered, err := testRenderString(rctx, "# Markdown Title\n\n<h2>Early <em>History</em></h2>\n")
+		assert.NoError(t, err)
+		assert.Contains(t, rendered, `<h1 id="user-content-markdown-title">Markdown Title</h1>`)
+		assert.Contains(t, rendered, `<h2 id="user-content-early-history">Early <em>History</em></h2>`)
+	})
+
 	t.Run("AutoLink", func(t *testing.T) {
 		rctx := NewRenderContextRepoFile(t.Context(), repo1).WithMarkupType(markdown.MarkupName)
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 65f1bf27bc3bf70f64657658635e66094edbcb4d
 #1
 @user2
@@ -39,40 +47,41 @@ func TestRepoFile(t *testing.T) {
 	t.Run("AbsoluteAndRelative", func(t *testing.T) {
 		rctx := NewRenderContextRepoFile(t.Context(), repo1, RepoFileOptions{CurrentRefPath: "branch/main"}).
 			WithMarkupType(markdown.MarkupName)
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 [/test](/test)
 [./test](./test)
 ![/image](/image)
 ![./image](./image)
 `)
 		assert.NoError(t, err)
-		// Repository 1 has subject_id 1, which is "example-subject"
+		// Files resolve under the repository routes, not the article url, which serves none of
+		// src, raw or media (#167).
 		assert.Equal(t,
-			`<p><a href="/subject/example-subject/user2/src/branch/main/test" rel="nofollow">/test</a>
-<a href="/subject/example-subject/user2/src/branch/main/test" rel="nofollow">./test</a>
-<a href="/subject/example-subject/user2/src/branch/main/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/branch/main/image" alt="/image"/></a>
-<a href="/subject/example-subject/user2/src/branch/main/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/branch/main/image" alt="./image"/></a></p>
+			`<p><a href="/user2/repo1/src/branch/main/test" rel="nofollow">/test</a>
+<a href="/user2/repo1/src/branch/main/test" rel="nofollow">./test</a>
+<a href="/user2/repo1/src/branch/main/image" target="_blank" rel="nofollow noopener"><img src="/user2/repo1/media/branch/main/image" alt="/image"/></a>
+<a href="/user2/repo1/src/branch/main/image" target="_blank" rel="nofollow noopener"><img src="/user2/repo1/media/branch/main/image" alt="./image"/></a></p>
 `, rendered)
 	})
 
 	t.Run("WithCurrentRefPath", func(t *testing.T) {
 		rctx := NewRenderContextRepoFile(t.Context(), repo1, RepoFileOptions{CurrentRefPath: "/commit/1234"}).
 			WithMarkupType(markdown.MarkupName)
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 [/test](/test)
 ![/image](/image)
 `)
 		assert.NoError(t, err)
-		// Repository 1 has subject_id 1, which is "example-subject"
-		assert.Equal(t, `<p><a href="/subject/example-subject/user2/src/commit/1234/test" rel="nofollow">/test</a>
-<a href="/subject/example-subject/user2/src/commit/1234/image" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/commit/1234/image" alt="/image"/></a></p>
+		// Files resolve under the repository routes, not the article url (#167).
+		assert.Equal(t, `<p><a href="/user2/repo1/src/commit/1234/test" rel="nofollow">/test</a>
+<a href="/user2/repo1/src/commit/1234/image" target="_blank" rel="nofollow noopener"><img src="/user2/repo1/media/commit/1234/image" alt="/image"/></a></p>
 `, rendered)
 	})
 
 	t.Run("AttachmentPaths", func(t *testing.T) {
 		rctx := NewRenderContextRepoFile(t.Context(), repo1, RepoFileOptions{CurrentRefPath: "commit/1234"}).
 			WithMarkupType(markdown.MarkupName)
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 ![a](/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11)
 ![b](attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11)
 [c](/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11)
@@ -85,7 +94,7 @@ func TestRepoFile(t *testing.T) {
 			`<p><a href="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" target="_blank" rel="nofollow noopener"><img src="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" alt="a"/></a>
 <a href="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" target="_blank" rel="nofollow noopener"><img src="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" alt="b"/></a>
 <a href="/attachments/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11" rel="nofollow">c</a>
-<a href="/subject/example-subject/user2/src/commit/1234/attachments/not-a-uuid" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/commit/1234/attachments/not-a-uuid" alt="d"/></a></p>
+<a href="/user2/repo1/src/commit/1234/attachments/not-a-uuid" target="_blank" rel="nofollow noopener"><img src="/user2/repo1/media/commit/1234/attachments/not-a-uuid" alt="d"/></a></p>
 `, rendered)
 	})
 
@@ -95,14 +104,14 @@ func TestRepoFile(t *testing.T) {
 			CurrentTreePath: "my-dir",
 		}).
 			WithMarkupType(markdown.MarkupName)
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 <img src="LINK">
 <video src="LINK">
 `)
 		assert.NoError(t, err)
-		// Repository 1 has subject_id 1, which is "example-subject"
-		assert.Equal(t, `<a href="/subject/example-subject/user2/src/commit/1234/my-dir/LINK" target="_blank" rel="nofollow noopener"><img src="/subject/example-subject/user2/media/commit/1234/my-dir/LINK"/></a>
-<video src="/subject/example-subject/user2/media/commit/1234/my-dir/LINK">
+		// Files resolve under the repository routes, not the article url (#167).
+		assert.Equal(t, `<a href="/user2/repo1/src/commit/1234/my-dir/LINK" target="_blank" rel="nofollow noopener"><img src="/user2/repo1/media/commit/1234/my-dir/LINK"/></a>
+<video src="/user2/repo1/media/commit/1234/my-dir/LINK">
 </video>`, rendered)
 	})
 }
@@ -117,22 +126,22 @@ func TestRepoFileOrgMode(t *testing.T) {
 			CurrentTreePath: "my-dir",
 		}).WithRelativePath("my-dir/a.org")
 
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 [[https://google.com/]]
 [[ImageLink.svg][The Image Desc]]
 `)
 		assert.NoError(t, err)
-		// Repository 1 has subject_id 1, which is "example-subject"
+		// Files resolve under the repository routes, not the article url (#167).
 		assert.Equal(t, `<p>
 <a href="https://google.com/" class="external-link" rel="nofollow">https://google.com/</a>
-<a href="/subject/example-subject/user2/src/commit/1234/my-dir/ImageLink.svg" rel="nofollow">The Image Desc</a></p>
+<a href="/user2/repo1/src/commit/1234/my-dir/ImageLink.svg" rel="nofollow">The Image Desc</a></p>
 `, rendered)
 	})
 
 	t.Run("CodeHighlight", func(t *testing.T) {
 		rctx := NewRenderContextRepoFile(t.Context(), repo1, RepoFileOptions{}).WithRelativePath("my-dir/a.org")
 
-		rendered, err := markup.RenderString(rctx, `
+		rendered, err := testRenderString(rctx, `
 #+begin_src c
 int a = 1;
 #+end_src

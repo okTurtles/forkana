@@ -38,13 +38,15 @@ function boxOf(page: Page, selector: string): Promise<Box> {
   });
 }
 
+// (Compare is null in the Article view's Edit and History tabs, which have none: #478,
+// figma 7368:264887 and 7368:263253)
 async function headerOf(page: Page) {
   await page.evaluate(() => document.fonts.ready);
   return {
     title: await boxOf(page, '.subject-header h1'),
     follow: await boxOf(page, '.repo-header-follow'),
     tabs: await boxOf(page, '#subject-view-tabs'),
-    compare: await boxOf(page, '#compare-mode-button'),
+    compare: await page.locator('#compare-mode-button').isVisible() ? await boxOf(page, '#compare-mode-button') : null,
   };
 }
 
@@ -69,9 +71,11 @@ async function settle(page: Page) {
 function expectSameHeader(actual: Awaited<ReturnType<typeof headerOf>>, expected: Awaited<ReturnType<typeof headerOf>>, label: string) {
   expect(actual.title, `${label}: title`).toEqual(expected.title);
   expect(actual.tabs, `${label}: view tabs`).toEqual(expected.tabs);
-  expect(actual.compare.y, `${label}: Compare`).toBe(expected.compare.y);
-  expect(actual.compare.height, `${label}: Compare`).toBe(expected.compare.height);
-  expect(actual.compare.x + actual.compare.width, `${label}: Compare`).toBeCloseTo(expected.compare.x + expected.compare.width, 0);
+  if (actual.compare && expected.compare) {
+    expect(actual.compare.y, `${label}: Compare`).toBe(expected.compare.y);
+    expect(actual.compare.height, `${label}: Compare`).toBe(expected.compare.height);
+    expect(actual.compare.x + actual.compare.width, `${label}: Compare`).toBeCloseTo(expected.compare.x + expected.compare.width, 0);
+  }
   expect(actual.follow.y, `${label}: Follow`).toBe(expected.follow.y);
   expect(actual.follow.height, `${label}: Follow`).toBe(expected.follow.height);
   expect(actual.follow.x + actual.follow.width / 2, `${label}: Follow`).toBeCloseTo(expected.follow.x + expected.follow.width / 2, 0);
@@ -157,7 +161,10 @@ for (const {width, column} of layouts) {
       const reference = await headerOf(page);
       for (const view of compared) {
         await open(page, view);
-        expectSameHeader(await headerOf(page), reference, view);
+        const header = await headerOf(page);
+        expectSameHeader(header, reference, view);
+        // Compare in the Bubble and Table views and the Read tab, not in History (#478)
+        expect(header.compare === null, `${view}: no Compare`).toBe(view === 'history');
         const content = await boxOf(page, '.history-view-section:not([hidden]) :is(.history-table, #article-view-root)');
         expect(content.width, `${view}: content column`).toBe(column);
       }
@@ -181,6 +188,9 @@ for (const {width, column} of layouts) {
 
     // Info bars stay in the flow on every width (Pierre's decision on #469): a bar sits
     // right under the navbar, above the header, and pushes the header down by its height.
+    // Its top rule lies on the navbar's bottom one (#478: figma's Announcements 7368:264940
+    // and 7368:260311 are at y 63 under the 64px Navbar), so it starts 1px up and pushes
+    // the header down by its height less that 1px.
     test('an info bar sits in the flow above the header and pushes it down by its height', async ({page}) => {
       await open(page, 'read');
       const reference = await headerOf(page);
@@ -191,11 +201,11 @@ for (const {width, column} of layouts) {
       await expect(page.locator('#article-signin-banner')).toBeVisible();
       await settle(page);
       const banner = await boxOf(page, '#article-signin-banner');
-      expect(banner.y).toBeCloseTo(navbar.y + navbar.height, 0);
+      expect(banner.y).toBeCloseTo(navbar.y + navbar.height - 1, 0);
       const pushed = await headerOf(page);
-      expect(pushed.title.y).toBeCloseTo(reference.title.y + banner.height, 0);
-      expect(pushed.follow.y).toBeCloseTo(reference.follow.y + banner.height, 0);
-      expect(pushed.tabs.y).toBeCloseTo(reference.tabs.y + banner.height, 0);
+      expect(pushed.title.y).toBeCloseTo(reference.title.y + banner.height - 1, 0);
+      expect(pushed.follow.y).toBeCloseTo(reference.follow.y + banner.height - 1, 0);
+      expect(pushed.tabs.y).toBeCloseTo(reference.tabs.y + banner.height - 1, 0);
 
       // the Bubble view's Compare banner
       await open(page, 'bubble');
@@ -203,8 +213,8 @@ for (const {width, column} of layouts) {
       await expect(page.locator('.compare-announcement')).toBeVisible();
       await settle(page);
       const compareBanner = await boxOf(page, '.compare-announcement');
-      expect(compareBanner.y).toBeCloseTo(navbar.y + navbar.height, 0);
-      expect((await headerOf(page)).tabs.y).toBeCloseTo(reference.tabs.y + compareBanner.height, 0);
+      expect(compareBanner.y).toBeCloseTo(navbar.y + navbar.height - 1, 0);
+      expect((await headerOf(page)).tabs.y).toBeCloseTo(reference.tabs.y + compareBanner.height - 1, 0);
     });
   });
 }
@@ -242,6 +252,19 @@ test('desktop: the header and the sign-in banner have figma text styles', async 
   }
   await links.locator('a').first().hover();
   expect((await style('.article-signin-banner-links a')).color).toBe('rgb(31, 35, 40)');
+});
+
+// #478: Compare is in the Read tab's header ("Article view / Logged out - Read only"
+// 7368:264676); pressed there it does what it did before: it opens the Bubble view in
+// compare mode, whose banner says what to do next
+test('Compare in the Read tab opens the Bubble view in compare mode', async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await open(page, 'read');
+  await page.locator('#compare-mode-button').click();
+  await expect(page.locator(shown.bubble)).toBeVisible({timeout: 10000});
+  await expect(page).toHaveURL(/view=bubble/);
+  await expect(page.locator('.compare-announcement')).toBeVisible({timeout: 10000});
+  await expect(page.locator('#compare-mode-button')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('desktop: the title block is 136px and the view tabs row 48px (7368:260781, 7368:260789)', async ({page}) => {
@@ -387,10 +410,13 @@ test.describe('switching tabs does not move the page', () => {
 type BarSample = {height: number, gap: number};
 
 // Clicks `action` in the page, then samples every frame the height of a bar and how far
-// the title is below it: from the click until `settleMs` after the bar first changed (an
-// article tab is fetched first), or 8s.
-function sampleBar(page: Page, bar: string, action: string, settleMs = 400): Promise<BarSample[]> {
-  return page.evaluate(async ({bar, action, settleMs}) => {
+// the title is below it: from the click until both `settleMs` and `settleFrames` frames
+// have passed since the bar first changed (an article tab is fetched first), or 8s. The
+// frames count because a slide advances by at most 34ms a frame (info-bar-transition.ts):
+// it takes at least 6 frames plus the one that ends it, however slow they are (WebKit on
+// CI draws one every ~100ms), so 400ms alone can stop sampling mid-slide.
+function sampleBar(page: Page, bar: string, action: string, settleMs = 400, settleFrames = 10): Promise<BarSample[]> {
+  return page.evaluate(async ({bar, action, settleMs, settleFrames}) => {
     const measure = () => {
       const el = document.querySelector(bar);
       const rect = el?.getBoundingClientRect();
@@ -400,19 +426,21 @@ function sampleBar(page: Page, bar: string, action: string, settleMs = 400): Pro
     };
     const samples = [measure()];
     document.querySelector<HTMLElement>(action).click();
-    let end = performance.now() + 8000;
-    let changed = false;
-    while (performance.now() < end) {
+    const timeout = performance.now() + 8000;
+    let settleEnd = Infinity;
+    let framesLeft = Infinity;
+    while (performance.now() < timeout && (performance.now() < settleEnd || framesLeft > 0)) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const sample = measure();
       samples.push(sample);
-      if (!changed && Math.abs(sample.height - samples[0].height) > 0.5) {
-        changed = true;
-        end = performance.now() + settleMs;
+      framesLeft--;
+      if (settleEnd === Infinity && Math.abs(sample.height - samples[0].height) > 0.5) {
+        settleEnd = performance.now() + settleMs;
+        framesLeft = settleFrames;
       }
     }
     return samples;
-  }, {bar, action, settleMs});
+  }, {bar, action, settleMs, settleFrames});
 }
 
 // heights going from 0 to full (opening) or from full to 0 (closing), through frames in
