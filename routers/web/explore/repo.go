@@ -1247,6 +1247,49 @@ func processGitCommits(ctx *context.Context, commits []*git.Commit) ([]*user_mod
 	return userCommits, nil
 }
 
+// articleCollaboratorsSummary words the line above the collaborators, counting who can edit
+// the article (#461, figma "Collaborators – list" 7618:67561): "3 people can edit this
+// article and approve change requests: you, 1 collaborator and 1 waiting invite." A
+// delegate is "you" next to the owner, and is told what they may do (#477, figma "NEW ·
+// Delegate – Collaborators" 8020:64472): "…: JaneZ (owner), you and 1 waiting invite. You
+// can invite and remove Maintainers."
+func articleCollaboratorsSummary(ctx *context.Context, isRepoOwner bool, collaborators []*repo_model.ArticleCollaborator) template.HTML {
+	accepted, pending := 0, 0
+	for _, c := range collaborators {
+		switch {
+		case ctx.Doer != nil && c.UserID == ctx.Doer.ID:
+			// the doer is "you", counted apart
+		case c.IsPending():
+			pending++
+		default:
+			accepted++
+		}
+	}
+
+	you := ctx.Locale.TrString("repo.settings.article_collaborators_summary_you")
+	parts := []string{you}
+	if !isRepoOwner {
+		parts = []string{ctx.Locale.TrString("repo.settings.article_collaborators_summary_owner", ctx.Repo.Repository.Owner.DisplayName()), you}
+	}
+	if accepted > 0 {
+		parts = append(parts, ctx.Locale.TrString(util.Iif(accepted == 1, "repo.settings.article_collaborators_count_1", "repo.settings.article_collaborators_count_n"), accepted))
+	}
+	if pending > 0 {
+		parts = append(parts, ctx.Locale.TrString(util.Iif(pending == 1, "repo.settings.article_collaborators_waiting_1", "repo.settings.article_collaborators_waiting_n"), pending))
+	}
+	list := parts[0]
+	if len(parts) > 1 {
+		list = ctx.Locale.TrString("repo.settings.article_collaborators_summary_and", strings.Join(parts[:len(parts)-1], ", "), parts[len(parts)-1])
+	}
+
+	// Tr escapes the list, which holds the owner's name
+	summary := ctx.Locale.Tr("repo.settings.article_collaborators_summary", len(collaborators)+1, list)
+	if !isRepoOwner {
+		summary += " " + ctx.Locale.Tr("repo.settings.article_collaborators_summary_delegate")
+	}
+	return summary
+}
+
 // prepareArticleCollaboratorsData sets up what the doer may do with the article
 // collaborators, the Accept/Decline banner of a pending invitation and, in the settings
 // mode, the collaborator list. It returns false when the response was written.
@@ -1287,18 +1330,7 @@ func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mod
 	}
 	ctx.Data["ArticleCollaborators"] = collaborators
 
-	// the line above the list counts them: "3 people can edit this article and approve
-	// change requests: you, 1 collaborator and 1 waiting invite." (#461, figma
-	// "Collaborators – list" 7618:67561)
-	pending := 0
-	for _, c := range collaborators {
-		if c.IsPending() {
-			pending++
-		}
-	}
-	ctx.Data["ArticleCollaboratorsPending"] = pending
-	ctx.Data["ArticleCollaboratorsAccepted"] = len(collaborators) - pending
-	ctx.Data["ArticleCollaboratorsPeople"] = len(collaborators) + 1
+	ctx.Data["ArticleCollaboratorsSummary"] = articleCollaboratorsSummary(ctx, isRepoOwner, collaborators)
 
 	// a delegate only has the collaborators section, the owner lands on it when coming
 	// back from a collaborator action

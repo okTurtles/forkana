@@ -121,6 +121,57 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 		AssertHTMLElement(t, articlePage(t, maintainerSession, "read"), `[data-article-tab="settings"]`, false)
 	})
 
+	// #477 (Pam's delegate rules, figma "NEW · Delegate – Collaborators" 8020:64472 and
+	// "– Invite, access level fixed" 8020:65052): a delegate invites and removes
+	// Maintainers only; no actions on the owner's row or on a delegate's, their own
+	// included; the access level is fixed to Maintainer; the server refuses the rest.
+	t.Run("DelegateRules", func(t *testing.T) {
+		htmlDoc := articlePage(t, delegateSession, "settings")
+		assert.Equal(t, fmt.Sprintf("3 people can edit this article and approve change requests: %s (owner), you and 1 collaborator. You can invite and remove Maintainers.", owner.DisplayName()),
+			strings.TrimSpace(htmlDoc.Find(`[data-role="collaborators-summary"]`).Text()))
+
+		ownerRow := htmlDoc.Find("[data-article-collaborator-owner]")
+		assert.Equal(t, 0, ownerRow.Find("input, button, .ui.dropdown").Length(), "no actions on the owner")
+		ownRow := htmlDoc.Find(fmt.Sprintf(`[data-article-collaborator]:has(a[href="%s"])`, delegate.HomeLink()))
+		require.Equal(t, 1, ownRow.Length())
+		assert.Contains(t, ownRow.Text(), delegate.DisplayName()+" (you)")
+		assert.Equal(t, 0, ownRow.Find("input, button, .ui.dropdown").Length(), "no actions on a delegate")
+		assert.Equal(t, "Maintainer delegate", strings.TrimSpace(ownRow.Find(".article-collaborator-role-text").Text()))
+		maintainerRow := htmlDoc.Find(fmt.Sprintf(`[data-article-collaborator]:has(a[href="%s"])`, maintainer.HomeLink()))
+		assert.Equal(t, 1, maintainerRow.Find("[data-article-collaborator-select]").Length(), "a Maintainer can be selected")
+		assert.Equal(t, 1, maintainerRow.Find("[data-article-collaborator-remove]").Length(), "and removed")
+		assert.Equal(t, 0, maintainerRow.Find(".ui.dropdown").Length(), "but their role is not changed by a delegate")
+
+		// the access level is fixed to Maintainer, inactive, with the reason
+		role := htmlDoc.Find("#article-collaborator-invite-modal #article-collaborator-role")
+		_, disabled := role.Attr("disabled")
+		assert.True(t, disabled)
+		assert.Equal(t, "Maintainer", strings.TrimSpace(role.Text()))
+		assert.Equal(t, "1", htmlDoc.Find(`#article-collaborator-invite-modal input[name="role"]`).AttrOr("value", ""))
+		assert.Contains(t, htmlDoc.Find("#article-collaborator-role-reason").Text(), "Only the owner can add Maintainer delegates.")
+		// the owner's is the menu of both levels
+		AssertHTMLElement(t, articlePage(t, ownerSession, "settings"), `#article-collaborator-role.ui.dropdown .item[data-value="2"]`, true)
+
+		jsonPost := func(t *testing.T, action string, values map[string]string) *httptest.ResponseRecorder {
+			t.Helper()
+			values["_csrf"] = GetUserCSRFToken(t, delegateSession)
+			req := NewRequestWithValues(t, "POST", collaboratorsURL+"/"+action, values).SetHeader("Accept", "application/json")
+			return delegateSession.MakeRequest(t, req, http.StatusBadRequest)
+		}
+		// no removing the owner, themselves or another delegate
+		for _, uid := range []int64{owner.ID, delegate.ID} {
+			resp := jsonPost(t, "remove", map[string]string{"uid": strconv.FormatInt(uid, 10)})
+			assert.Contains(t, resp.Body.String(), "You are not allowed to do this.")
+		}
+		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: delegate.ID})
+		// no role changes, for anyone
+		for _, uid := range []int64{maintainer.ID, delegate.ID, owner.ID} {
+			resp := jsonPost(t, "role", map[string]string{"uid": strconv.FormatInt(uid, 10), "role": strconv.Itoa(int(repo_model.ArticleCollaboratorRoleMaintainer))})
+			assert.Contains(t, resp.Body.String(), "You are not allowed to do this.")
+		}
+		// and no inviting a delegate (DelegateCannotGrantDelegation above)
+	})
+
 	// #477: Settings is no tab any more, the "…" menu holds it, above a divider and Report
 	t.Run("SettingsInMoreMenu", func(t *testing.T) {
 		htmlDoc := articlePage(t, ownerSession, "read")

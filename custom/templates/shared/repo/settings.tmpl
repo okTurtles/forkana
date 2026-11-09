@@ -7,15 +7,29 @@
 {{$subjectName := .Repository.GetSubject ctx}}
 {{$section := .ArticleSettingsSection}}
 {{$articleName := printf "%s / %s" .Repository.OwnerName $subjectName}}
-<div class="article-settings" id="article-settings-root" data-section="{{$section}}">
+<div class="article-settings{{if not .IsRepoOwner}} article-settings-delegate{{end}}" id="article-settings-root" data-section="{{$section}}">
     {{/* "Settings title" 7621:69346: "‹ Back" (the Change requests page's link) to the Read
          tab, then the title. */}}
     <div class="article-settings-title">
         <a class="article-settings-back" href="{{QueryBuild .ArticleLink "view" "article" "mode" "read"}}" data-article-tab="read">
             {{svg "octicon-chevron-left" 16}}<span>{{ctx.Locale.Tr "repo.settings.article_back"}}</span>
         </a>
-        {{/* a delegate has only the Collaborators section, which the page is then named after */}}
-        <h2 class="article-settings-heading">{{if .IsRepoOwner}}{{ctx.Locale.Tr "repo.settings"}}{{else}}{{ctx.Locale.Tr "repo.article_more_collaborators"}}{{end}}</h2>
+        {{if .IsRepoOwner}}
+            <h2 class="article-settings-heading">{{ctx.Locale.Tr "repo.settings"}}</h2>
+        {{else}}
+            {{/* A delegate only has the Collaborators section, which the page is named
+                 after ("NEW · Delegate – Collaborators" 8020:64472). On a phone, the
+                 section's own heading row goes, and its Invite button sits on the title's
+                 row instead ("Title row" of 8020:64781). */}}
+            <div class="article-settings-title-row">
+                <h2 class="article-settings-heading">{{ctx.Locale.Tr "repo.article_more_collaborators"}}</h2>
+                {{if and (not .Repository.IsArchived) .ArticleCollaborators}}
+                    <button type="button" class="forkana-btn forkana-btn-primary forkana-btn-sm article-settings-title-invite" data-article-settings-modal="#article-collaborator-invite-modal">
+                        {{svg "octicon-person-add" 16}}<span>{{ctx.Locale.Tr "repo.settings.article_collaborators_invite_button_short"}}</span>
+                    </button>
+                {{end}}
+            </div>
+        {{end}}
     </div>
     {{if .IsRepoOwner}}
         {{/* SegmentedControl 7581:68630 in place of the old left menu */}}

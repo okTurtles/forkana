@@ -33,6 +33,15 @@ const delegateByProject: Record<string, string> = {
 };
 const delegateFor = (project: string) => delegateByProject[project] ?? 'user13';
 
+// the person each project's delegate picks in the invite dialog (never invited)
+const delegatePickByProject: Record<string, string> = {
+  'chromium': 'user20',
+  'webkit': 'user21',
+  'Mobile Chrome': 'user24',
+  'Mobile Safari': 'user27',
+};
+const delegatePickFor = (project: string) => delegatePickByProject[project] ?? 'user20';
+
 // the Invite button: in the box's header, or in the empty state when nobody is listed yet
 function inviteButton(page: Page) {
   return page.locator('#article-settings-collaborators [data-article-settings-modal="#article-collaborator-invite-modal"]').first();
@@ -285,6 +294,42 @@ test.describe('Article settings', () => {
     await expect(page.locator('#article-settings-collaborators')).toBeVisible();
     await expect(page.locator('.forkana-segmented')).toHaveCount(0);
     await expect(page.locator('[data-article-settings-panel="general"]')).toHaveCount(0);
+
+    // Pam's rules ("NEW · Delegate – Collaborators" 8020:64472): no actions on the owner's
+    // row or on a delegate's, their own included; the line says what they can do
+    await expect(page.locator('[data-role="collaborators-summary"]')).toContainText('(owner), you');
+    await expect(page.locator('[data-role="collaborators-summary"]')).toContainText('You can invite and remove Maintainers.');
+    const ownRow = page.locator(`[data-article-collaborator]:has(a[href$="/${delegate}"])`);
+    await expect(ownRow).toContainText('(you)');
+    await expect(ownRow.locator('.article-collaborator-role-text')).toHaveText('Maintainer delegate');
+    await expect(ownRow.locator('input, button, .ui.dropdown')).toHaveCount(0);
+    await expect(page.locator('[data-article-collaborator-owner]').locator('input, button, .ui.dropdown')).toHaveCount(0);
+
+    // the invite ("– Invite, access level fixed" 8020:65052), on a desktop and as the
+    // phone's bottom sheet, opened from the title's row there (8020:64781, 8022:64527)
+    const pick = delegatePickFor(workerInfo.project.name);
+    for (const {width, opener} of [
+      {width: 1280, opener: '.article-collaborators-header [data-article-settings-modal]'},
+      {width: 375, opener: '.article-settings-title-row [data-article-settings-modal]'},
+    ]) {
+      await page.setViewportSize({width, height: 812});
+      await page.locator(opener).click();
+      const dialog = page.locator('#article-collaborator-invite-modal');
+      await expect(dialog).toBeVisible();
+      await dialog.locator('#article-collaborator-invitee').fill(pick);
+      await dialog.locator(`.results .result:has(.description:text-is("@${pick}"))`).click();
+      const role = dialog.locator('#article-collaborator-role');
+      await expect(role).toBeDisabled();
+      await expect(role).toHaveText('Maintainer');
+      await expect(dialog.locator('#article-collaborator-role-reason')).toHaveText('Only the owner can add Maintainer delegates.');
+      await expect(dialog.locator('input[name="role"]')).toHaveValue('1');
+      await expect(dialog.locator('#article-collaborator-invite-submit')).toHaveText(`Invite ${pick}`);
+      await dialog.locator('.actions .cancel').click();
+      await expect(dialog).toBeHidden();
+    }
+    // on the phone, the section's own heading row gives way to the title's
+    await expect(page.locator('.article-collaborators-header')).toBeHidden();
+    await expect(page.locator('.article-settings-title-row [data-article-settings-modal]')).toHaveText('Invite');
     await delegateContext.close();
 
     // so that the next run starts without them

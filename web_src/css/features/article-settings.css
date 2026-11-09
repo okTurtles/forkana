@@ -463,11 +463,59 @@
   justify-content: flex-end;
 }
 
+/* a role that cannot be changed: the role button's box and label, without its triangle
+   (a delegate's own row and the other delegates' in "NEW · Delegate – Collaborators"
+   8020:64472: Button 132×26, 4px 8px) */
 .article-collaborator-role-text {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 4px 8px;
   font-size: 12px;
   line-height: 18px;
   font-weight: var(--font-weight-semibold);
   color: var(--color-button-text);
+  white-space: nowrap;
+}
+
+/* The access level a delegate cannot change ("NEW · Delegate – Invite, access level
+   fixed" 8020:65052): the select's 32px box, 6px 12px, #e6eaef without a border, its
+   Inter 600 14/20 label and triangle #59636e; the reason under it. */
+.forkana-select-fixed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--color-segmented-bg);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-muted-text);
+  cursor: not-allowed;
+}
+
+/* The page title of a delegate: on a phone it shares its row with the Invite button
+   ("Title row" of 8020:64781, 26px, 8px apart); on a desktop the button is the box's. */
+.article-settings-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.article-settings-title-row > .article-settings-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.article-settings-title-invite {
+  display: none;
 }
 
 /* The Role filter and a person's role (Button 7618:67561): the small invisible button,
@@ -1152,6 +1200,16 @@
 
   .article-collaborators-invite-short {
     display: inline;
+  }
+
+  /* a delegate's Invite is on the title's row, so the section's heading row goes
+     ("NEW · Delegate – Collaborators (mobile)" 8020:64781) */
+  .article-settings-title-row > .article-settings-title-invite {
+    display: inline-flex;
+  }
+
+  .article-settings-delegate .article-collaborators-header {
+    display: none;
   }
 
   .article-collaborators-summary {

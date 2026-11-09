@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	activities_model "code.gitea.io/gitea/models/activities"
 	"code.gitea.io/gitea/models/db"
@@ -296,6 +297,11 @@ func RemoveArticleCollaborators(ctx context.Context, doer *user_model.User, repo
 	}
 	if !p.CanManage {
 		return util.NewPermissionDeniedErrorf("cannot manage article collaborators")
+	}
+	// the owner is not a collaborator and is never removed: a request naming them is
+	// refused rather than reported as done (#477, nobody gets actions on the owner's row)
+	if slices.Contains(userIDs, repo.OwnerID) {
+		return util.NewPermissionDeniedErrorf("cannot remove the article owner")
 	}
 
 	return db.WithTx(ctx, func(ctx context.Context) error {

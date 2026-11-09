@@ -23,19 +23,8 @@
     </div>
     <div class="forkana-box-body">
     {{if .ArticleCollaborators}}
-        {{$you := ctx.Locale.Tr "repo.settings.article_collaborators_summary_you"}}
-        {{if not $doerIsOwner}}{{$you = $owner.DisplayName}}{{end}}
-        {{$accepted := ctx.Locale.TrN .ArticleCollaboratorsAccepted "repo.settings.article_collaborators_count_1" "repo.settings.article_collaborators_count_n" .ArticleCollaboratorsAccepted}}
-        {{$pending := ctx.Locale.TrN .ArticleCollaboratorsPending "repo.settings.article_collaborators_waiting_1" "repo.settings.article_collaborators_waiting_n" .ArticleCollaboratorsPending}}
-        <p class="article-collaborators-summary" data-role="collaborators-summary">
-            {{- if and .ArticleCollaboratorsAccepted .ArticleCollaboratorsPending -}}
-                {{ctx.Locale.Tr "repo.settings.article_collaborators_summary_three" .ArticleCollaboratorsPeople $you $accepted $pending}}
-            {{- else if .ArticleCollaboratorsAccepted -}}
-                {{ctx.Locale.Tr "repo.settings.article_collaborators_summary_two" .ArticleCollaboratorsPeople $you $accepted}}
-            {{- else -}}
-                {{ctx.Locale.Tr "repo.settings.article_collaborators_summary_two" .ArticleCollaboratorsPeople $you $pending}}
-            {{- end -}}
-        </p>
+        {{/* (worded in explore.articleCollaboratorsSummary) */}}
+        <p class="article-collaborators-summary" data-role="collaborators-summary">{{.ArticleCollaboratorsSummary}}</p>
         <form id="article-collaborators-remove-form" class="article-collaborators-table" method="post" action="{{.RepoOperationsLink}}/article_collaborators/remove">
             {{.CsrfTokenHtml}}
             {{/* "Header row": Select all and the Role filter, or, while someone is
@@ -211,12 +200,25 @@
                 <span class="forkana-field-label" id="article-collaborator-role-label">{{ctx.Locale.Tr "repo.settings.article_collaborators_access"}}</span>
                 {{/* the maintainer role, data-default-value restores it when the dialog is reopened */}}
                 {{$defaultRole := "1"}}
-                <div class="ui selection dropdown forkana-select" id="article-collaborator-role" data-default-value="{{$defaultRole}}" tabindex="0" aria-labelledby="article-collaborator-role-label">
+                {{if .ArticleCollaboratorPerm.IsOwner}}
+                    <div class="ui selection dropdown forkana-select" id="article-collaborator-role" data-default-value="{{$defaultRole}}" tabindex="0" aria-labelledby="article-collaborator-role-label">
+                        <input type="hidden" name="role" value="{{$defaultRole}}">
+                        <span class="text">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_maintainer"}}</span>
+                        {{svg "octicon-triangle-down" 16 "dropdown icon"}}
+                        {{template "shared/repo/settings_collaborators_role_menu" (dict "IsOwner" .ArticleCollaboratorPerm.IsOwner "Selected" 1)}}
+                    </div>
+                {{else}}
+                    {{/* #477: a delegate can only invite Maintainers, so the access level is
+                         fixed, shown inactive with the reason ("NEW · Delegate – Invite,
+                         access level fixed" 8020:65052); the server refuses any other */}}
                     <input type="hidden" name="role" value="{{$defaultRole}}">
-                    <span class="text">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_maintainer"}}</span>
-                    {{svg "octicon-triangle-down" 16 "dropdown icon"}}
-                    {{template "shared/repo/settings_collaborators_role_menu" (dict "IsOwner" .ArticleCollaboratorPerm.IsOwner "Selected" 1)}}
-                </div>
+                    <button type="button" class="forkana-select-fixed" id="article-collaborator-role" disabled
+                        aria-labelledby="article-collaborator-role-label" aria-describedby="article-collaborator-role-reason">
+                        <span>{{ctx.Locale.Tr "repo.settings.article_collaborators_role_maintainer"}}</span>
+                        {{svg "octicon-triangle-down" 16}}
+                    </button>
+                    <p class="forkana-field-caption" id="article-collaborator-role-reason">{{ctx.Locale.Tr "repo.settings.article_collaborators_role_fixed"}}</p>
+                {{end}}
                 <p class="forkana-field-caption" data-role="invite-hint" data-template="{{ctx.Locale.TrString "repo.settings.article_collaborators_invite_hint" "{name}"}}"></p>
             </div>
         </div>

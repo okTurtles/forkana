@@ -106,6 +106,23 @@ func TestArticleCollaborators(t *testing.T) {
 		err = RemoveArticleCollaborators(t.Context(), delegate, repo, []int64{maintainer.ID, delegate.ID})
 		assert.ErrorIs(t, err, util.ErrPermissionDenied)
 		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+
+		// #477: nor their own row, nor a role change for the owner
+		err = RemoveArticleCollaborators(t.Context(), delegate, repo, []int64{delegate.ID})
+		assert.ErrorIs(t, err, util.ErrPermissionDenied)
+		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: delegate.ID})
+		err = ChangeArticleCollaboratorRole(t.Context(), delegate, repo, owner.ID, repo_model.ArticleCollaboratorRoleMaintainer)
+		assert.ErrorIs(t, err, util.ErrPermissionDenied)
+	})
+
+	// #477: nobody gets actions on the owner's row; a removal naming them is refused,
+	// whoever sends it, and removes nobody else either
+	t.Run("OwnerCannotBeRemoved", func(t *testing.T) {
+		for _, doer := range []*user_model.User{delegate, owner} {
+			err := RemoveArticleCollaborators(t.Context(), doer, repo, []int64{maintainer.ID, owner.ID})
+			assert.ErrorIs(t, err, util.ErrPermissionDenied)
+			unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+		}
 	})
 
 	t.Run("OwnerChangesRole", func(t *testing.T) {
