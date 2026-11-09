@@ -2,6 +2,17 @@
 {{if and .IsArticleModeEdit (not .Repository.IsArchived)}}
 <div class="ui bottom attached article-mode-body">
     {{template "shared/repo/article_path" .}}
+    {{/* #156: nobody reviews the change requests of this article (its owner is fork-only,
+         deactivated or cannot sign in, and it has no active maintainer), so submitting
+         creates the editor's own article (one who already has a fork edits it there,
+         through "Edit in your fork", so it is not shown to them). No Figma frame has this notice: it is the Edit
+         tab's info message, as for an editor who already has an article for the subject. */}}
+    {{if and .ForkOnlyArticle .NeedsFork (not .NotEditableReason)}}
+        <div class="ui info message" data-role="article-fork-only-notice">
+            {{svg "octicon-info" 16 "tw-mr-2"}}
+            {{ctx.Locale.Tr "repo.editor.fork_only_notice" .ForkOnlyOwnerName}}
+        </div>
+    {{end}}
     {{if .NotEditableReason}}
         <div class="ui warning message">
             <h4>{{.NotEditableReason}}</h4>
@@ -52,7 +63,7 @@
             {{/* Optional commit message fields - will use default if empty */}}
             <input type="hidden" name="commit_summary" value="">
             <input type="hidden" name="commit_message" value="">
-            {{/* Fork-on-edit field - only true when user needs to create a new fork (not when they have an existing fork, as that case shows a link instead of a form) */}}
+            {{/* Fork-on-edit field - only true when user needs to create a new fork (not when they have an existing fork, as that case shows a link instead of a form); on a fork-only article (#156) the Submit changes button submits it as is, so it forks */}}
             <input type="hidden" id="fork_and_edit" name="fork_and_edit" value="{{if .NeedsFork}}true{{else}}false{{end}}">
             {{/* Submit change request field - when true, creates fork + branch + commit + PR back to original */}}
             <input type="hidden" id="submit_change_request" name="submit_change_request" value="false">

@@ -2765,6 +2765,16 @@ func CompareAndPullRequestPost(ctx *context.Context) {
 		return
 	}
 
+	// #156: nobody reviews the change requests of a fork-only article
+	if err := repo_service.CheckArticleAcceptsChangeRequest(ctx, ctx.Doer, repo); err != nil {
+		if errors.Is(err, repo_service.ErrArticleForkOnly) {
+			ctx.JSONError(ctx.Tr("repo.editor.fork_only_no_change_requests", repo.OwnerName))
+		} else {
+			ctx.ServerError("CheckArticleAcceptsChangeRequest", err)
+		}
+		return
+	}
+
 	validateRet := ValidateRepoMetasForNewIssue(ctx, *form, true)
 	if ctx.Written() {
 		return

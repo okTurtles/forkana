@@ -142,7 +142,10 @@
                                         </button>
                                         {{end}}
                                     {{else if .NeedsFork}}
-                                        {{/* User needs to create a fork - show fork-and-submit button */}}
+                                        {{/* User needs to create a fork - show fork-and-submit button.
+                                             #156: not on a fork-only article, whose Submit changes
+                                             forks it already: it is the only action the notice names. */}}
+                                        {{if not .ForkOnlyArticle}}
                                         <button type="button" id="fork-article-button" class="forkana-btn forkana-btn-secondary"
                                             data-fork-and-edit="true"
                                             data-tooltip-content="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
@@ -156,10 +159,18 @@
                                             <span class="article-fork-count" data-role="article-fork-count"
                                                 aria-label="{{ctx.Locale.TrN .Repository.NumForks "repo.article_forks_1" "repo.article_forks_n" .Repository.NumForks}}">{{.Repository.NumForks}}</span>
                                         </button>
+                                        {{end}}
                                         {{/* Submit Change Request - opens modal for title/description, then creates branch + commit + PR */}}
                                         {{if .CanSubmitChangeRequest}}
                                         <button type="button" id="pre-submit-changes-button" class="forkana-btn forkana-btn-primary"
                                             data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
+                                            {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                        </button>
+                                        {{else if .ForkOnlyArticle}}
+                                        {{/* #156: nobody reviews this article's change requests, Submit changes
+                                             forks the article and commits to the fork (fork_and_edit), as the notice says */}}
+                                        <button type="button" id="submit-changes-button" class="forkana-btn forkana-btn-primary" data-fork-and-edit="true"
+                                            data-tooltip-content="{{ctx.Locale.Tr "repo.editor.fork_only_notice" .ForkOnlyOwnerName}}">
                                             {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                         </button>
                                         {{end}}

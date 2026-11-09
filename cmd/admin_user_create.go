@@ -92,6 +92,10 @@ func microcmdUserCreate() *cli.Command {
 				Name:  "restricted",
 				Usage: "Make a restricted user account",
 			},
+			&cli.BoolFlag{
+				Name:  "fork-only",
+				Usage: "Make a fork-only user account: it does not accept change requests, editing its articles creates a fork (for the accounts importing Wikipedia articles)",
+			},
 			&cli.StringFlag{
 				Name:  "fullname",
 				Usage: `The full, human-readable name of the user`,
@@ -194,6 +198,7 @@ func runCreateUser(ctx context.Context, c *cli.Command) error {
 		MustChangePassword: mustChangePassword,
 		Visibility:         visibility,
 		FullName:           c.String("fullname"),
+		IsForkOnly:         c.Bool("fork-only"),
 	}
 
 	overwriteDefault := &user_model.CreateUserOverwriteOptions{

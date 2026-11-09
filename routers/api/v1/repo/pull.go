@@ -412,6 +412,16 @@ func CreatePullRequest(ctx *context.APIContext) {
 		milestoneID int64
 	)
 
+	// #156: nobody reviews the change requests of a fork-only article
+	if err := repo_service.CheckArticleAcceptsChangeRequest(ctx, ctx.Doer, repo); err != nil {
+		if errors.Is(err, repo_service.ErrArticleForkOnly) {
+			ctx.APIError(http.StatusForbidden, err)
+		} else {
+			ctx.APIErrorInternal(err)
+		}
+		return
+	}
+
 	// Get repo/branch information
 	compareResult, closer := parseCompareInfo(ctx, form)
 	if ctx.Written() {

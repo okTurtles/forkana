@@ -89,6 +89,9 @@ func CreateUser(ctx *context.APIContext) {
 	if form.MustChangePassword != nil {
 		u.MustChangePassword = *form.MustChangePassword
 	}
+	if form.ForkOnly != nil {
+		u.IsForkOnly = *form.ForkOnly
+	}
 
 	parseAuthSource(ctx, u, form.SourceID)
 	if ctx.Written() {
@@ -246,6 +249,7 @@ func EditUser(ctx *context.APIContext) {
 		MaxRepoCreation:         optional.FromPtr(form.MaxRepoCreation),
 		AllowCreateOrganization: optional.FromPtr(form.AllowCreateOrganization),
 		IsRestricted:            optional.FromPtr(form.Restricted),
+		IsForkOnly:              optional.FromPtr(form.ForkOnly),
 	}
 
 	if err := user_service.UpdateUser(ctx, ctx.ContextUser, opts); err != nil {
