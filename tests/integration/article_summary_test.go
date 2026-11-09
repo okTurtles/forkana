@@ -4,6 +4,7 @@
 package integration
 
 import (
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -44,9 +45,7 @@ func TestArticleSummaryEdit(t *testing.T) {
 				"commit_choice":       "direct",
 				"redirect_to_article": "true",
 			}
-			for k, v := range values {
-				form[k] = v
-			}
+			maps.Copy(form, values)
 			return form
 		}
 		headCommit := func(t *testing.T, r *repo_model.Repository) string {
