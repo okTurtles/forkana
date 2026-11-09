@@ -290,6 +290,10 @@ func RemoveArticleCollaborators(ctx context.Context, doer *user_model.User, repo
 	if len(userIDs) == 0 {
 		return nil
 	}
+	// (a user named twice is removed once)
+	userIDs = slices.Clone(userIDs)
+	slices.Sort(userIDs)
+	userIDs = slices.Compact(userIDs)
 
 	p, err := GetArticleCollaboratorPermission(ctx, doer, repo)
 	if err != nil {
@@ -308,6 +312,11 @@ func RemoveArticleCollaborators(ctx context.Context, doer *user_model.User, repo
 		collaborators, err := repo_model.GetArticleCollaboratorsByUserIDs(ctx, repo.ID, userIDs)
 		if err != nil {
 			return err
+		}
+		// all or none: a user who is not (or no longer) a collaborator fails the call
+		// rather than being reported as removed
+		if len(collaborators) != len(userIDs) {
+			return util.NewNotExistErrorf("some of the users are not collaborators of the article")
 		}
 		acceptedIDs := make([]int64, 0, len(collaborators))
 		for _, c := range collaborators {

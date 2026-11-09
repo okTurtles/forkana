@@ -1170,6 +1170,7 @@ func handleSettingsPostDeleteWiki(ctx *context.Context) {
 }
 
 func handleSettingsPostArchive(ctx *context.Context) {
+	form := web.GetForm(ctx).(*forms.RepoSettingForm)
 	repo := ctx.Repo.Repository
 	if !ctx.Repo.IsOwner() {
 		ctx.HTTPError(http.StatusForbidden)
@@ -1183,7 +1184,7 @@ func handleSettingsPostArchive(ctx *context.Context) {
 	if fromArticle {
 		redirectURL = articleSettingsURL(ctx)
 		// the archive dialog asks for "<owner> / <subject>", like Transfer and Delete
-		if !articleNameConfirmed(ctx, web.GetForm(ctx).(*forms.RepoSettingForm).ArticleName) {
+		if !articleNameConfirmed(ctx, form.ArticleName) {
 			ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
 			ctx.Redirect(redirectURL)
 			return

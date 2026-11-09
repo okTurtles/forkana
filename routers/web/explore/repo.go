@@ -883,12 +883,13 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	// ownership via prepareArticleForkOnEditData).
 	isRepoOwner := ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
 	ctx.Data["IsRepoOwner"] = isRepoOwner
-	if !prepareArticleCollaboratorsData(ctx, isRepoOwner, mode) {
+	canManage, ok := prepareArticleCollaboratorsData(ctx, isRepoOwner, mode)
+	if !ok {
 		return
 	}
 	// Settings has no tab to fall back on (#477): someone who may not manage the article
 	// is shown the article to read instead of an empty page.
-	if canManage, _ := ctx.Data["CanManageArticleCollaborators"].(bool); mode == "settings" && !canManage {
+	if mode == "settings" && !canManage {
 		mode = "read"
 		ctx.Data["ArticleMode"] = mode
 		ctx.Data["IsArticleModeRead"] = true
@@ -1292,8 +1293,9 @@ func articleCollaboratorsSummary(ctx *context.Context, isRepoOwner bool, collabo
 
 // prepareArticleCollaboratorsData sets up what the doer may do with the article
 // collaborators, the Accept/Decline banner of a pending invitation and, in the settings
-// mode, the collaborator list. It returns false when the response was written.
-func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mode string) bool {
+// mode, the collaborator list. It returns whether the doer may manage the collaborators,
+// and ok false when the response was written.
+func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mode string) (canManage, ok bool) {
 	repo := ctx.Repo.Repository
 
 	// one lookup serves both the permission and the pending invitation banner
@@ -1303,7 +1305,7 @@ func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mod
 		doerCollaborator, err = repo_model.GetArticleCollaborator(ctx, repo.ID, ctx.Doer.ID)
 		if err != nil {
 			ctx.ServerError("GetArticleCollaborator", err)
-			return false
+			return false, false
 		}
 	}
 
@@ -1314,19 +1316,19 @@ func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mod
 	if doerCollaborator != nil && doerCollaborator.IsPending() && !repo.IsArchived {
 		if err := doerCollaborator.LoadInviter(ctx); err != nil {
 			ctx.ServerError("LoadInviter", err)
-			return false
+			return false, false
 		}
 		ctx.Data["PendingArticleCollaboratorInvite"] = doerCollaborator
 	}
 
 	if mode != "settings" || !collaboratorPerm.CanManage {
-		return true
+		return collaboratorPerm.CanManage, true
 	}
 
 	collaborators, err := repo_model.ListArticleCollaborators(ctx, repo.ID)
 	if err != nil {
 		ctx.ServerError("ListArticleCollaborators", err)
-		return false
+		return false, false
 	}
 	ctx.Data["ArticleCollaborators"] = collaborators
 
@@ -1339,7 +1341,7 @@ func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mod
 		section = "collaborators"
 	}
 	ctx.Data["ArticleSettingsSection"] = section
-	return true
+	return true, true
 }
 
 // prepareArticleForkOnEditData sets up context data for fork-on-edit workflow

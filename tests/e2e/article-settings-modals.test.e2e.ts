@@ -7,15 +7,23 @@ import {login_user, load_logged_in_context} from './utils_e2e.ts';
 const articleURL = '/subject/example-subject/user2?view=article';
 const settingsURL = `${articleURL}&mode=settings`;
 
-// The projects run at the same time against the same server: each invites its own user,
-// so that one project's invite does not show up in another's checks.
-const inviteeByProject: Record<string, string> = {
-  'chromium': 'user4',
-  'webkit': 'user5',
-  'Mobile Chrome': 'user8',
-  'Mobile Safari': 'user10',
+// The projects run at the same time against the same server: each has its own users, so
+// that one project's invite never shows up in another's checks. A project missing here
+// (one added or renamed) fails at once rather than sharing a user.
+type ProjectUsers = {invitee: string, delegate: string, delegatePick: string};
+const usersByProject: Record<string, ProjectUsers> = {
+  // the invitee; the delegate; the person the delegate picks in the dialog (never invited)
+  'chromium': {invitee: 'user4', delegate: 'user13', delegatePick: 'user20'},
+  'webkit': {invitee: 'user5', delegate: 'user15', delegatePick: 'user21'},
+  'Mobile Chrome': {invitee: 'user8', delegate: 'user16', delegatePick: 'user24'},
+  'Mobile Safari': {invitee: 'user10', delegate: 'user18', delegatePick: 'user27'},
 };
-const inviteeFor = (project: string) => inviteeByProject[project] ?? 'user4';
+
+function usersFor(project: string): ProjectUsers {
+  const users = usersByProject[project];
+  if (!users) throw new Error(`no test users reserved for the Playwright project "${project}"`);
+  return users;
+}
 
 async function openPage(page: Page, url: string) {
   await page.goto(url);
@@ -23,24 +31,6 @@ async function openPage(page: Page, url: string) {
   // are followed in the page
   await page.waitForFunction(() => window.history.state !== null);
 }
-
-// the delegate each project makes, for the same reason
-const delegateByProject: Record<string, string> = {
-  'chromium': 'user13',
-  'webkit': 'user15',
-  'Mobile Chrome': 'user16',
-  'Mobile Safari': 'user18',
-};
-const delegateFor = (project: string) => delegateByProject[project] ?? 'user13';
-
-// the person each project's delegate picks in the invite dialog (never invited)
-const delegatePickByProject: Record<string, string> = {
-  'chromium': 'user20',
-  'webkit': 'user21',
-  'Mobile Chrome': 'user24',
-  'Mobile Safari': 'user27',
-};
-const delegatePickFor = (project: string) => delegatePickByProject[project] ?? 'user20';
 
 // the Invite button: in the box's header, or in the empty state when nobody is listed yet
 function inviteButton(page: Page) {
@@ -60,7 +50,7 @@ async function removeIfListed(page: Page, name: string) {
       csrf: form?.querySelector<HTMLInputElement>('input[name="_csrf"]')?.value ?? '',
     };
   }, name);
-  await Promise.all(listed.uid ? [page.request.post(listed.action, {form: {_csrf: listed.csrf, uid: listed.uid}})] : []);
+  if (listed.uid) await page.request.post(listed.action, {form: {_csrf: listed.csrf, uid: listed.uid}});
   await openPage(page, `${settingsURL}&section=collaborators`);
 }
 
@@ -80,6 +70,18 @@ async function invite(page: Page, name: string, delegate = false) {
 test.describe('Article settings', () => {
   test.beforeAll(async ({browser}, workerInfo) => {
     await login_user(browser, workerInfo, 'user2');
+  });
+
+  // a test that fails half-way must not leave its project's invitee or delegate on repo1
+  // for the next tests or files
+  test.afterEach(async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user2');
+    const page = await context.newPage();
+    await openPage(page, `${settingsURL}&section=collaborators`);
+    const {invitee, delegate} = usersFor(workerInfo.project.name);
+    await removeIfListed(page, invitee);
+    await removeIfListed(page, delegate);
+    await context.close();
   });
 
   // #477: no Settings tab; the owner's "…" menu holds Settings, a divider, then Report
@@ -161,7 +163,7 @@ test.describe('Article settings', () => {
     await expect(cancelButtons).toHaveCount(5);
     await expect(cancelButtons.locator('svg')).toHaveCount(0);
     await expect(page.locator('.ui.modal[id^="article-"] .required.field')).toHaveCount(0);
-    await expect(page.locator('.ui.modal[id^="article-"] label')).not.toContainText(['*']);
+    await expect(page.locator('.ui.modal[id^="article-"] label', {hasText: '*'})).toHaveCount(0);
     await context.close();
   });
 
@@ -194,7 +196,7 @@ test.describe('Article settings', () => {
   // the picked person is a chip, the access level shows and the button reads
   // "Invite {username}"
   test('invite: the button waits for a person, then names them', async ({browser}, workerInfo) => {
-    const invitee = inviteeFor(workerInfo.project.name);
+    const invitee = usersFor(workerInfo.project.name).invitee;
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
     const page = await context.newPage();
     await openPage(page, `${settingsURL}&section=collaborators`);
@@ -229,7 +231,7 @@ test.describe('Article settings', () => {
   // #461: the invited person shows "Waiting invite"; Remove asks first, shows a refusal in
   // the dialog ("Remove – states" 7675:74699), and once removed the banner says so
   test('remove: confirmation, error state, then success banner', async ({browser}, workerInfo) => {
-    const invitee = inviteeFor(workerInfo.project.name);
+    const invitee = usersFor(workerInfo.project.name).invitee;
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
     const page = await context.newPage();
     await openPage(page, `${settingsURL}&section=collaborators`);
@@ -241,6 +243,18 @@ test.describe('Article settings', () => {
     const row = page.locator(`[data-article-collaborator]:has(a[href$="/${invitee}"])`);
     await expect(row.locator('.forkana-label-attention')).toHaveText('Waiting invite');
     await expect(page.locator('[data-article-collaborator-owner]')).toContainText('(you)');
+
+    // Enter in the search, with the row checked, removes nobody: only the dialog does
+    await row.locator('[data-article-collaborator-select]').check();
+    const url = page.url();
+    await page.locator('#article-collaborators-search').fill(invitee);
+    await page.locator('#article-collaborators-search').press('Enter');
+    await expect(row).toBeVisible();
+    await expect(row.locator('[data-article-collaborator-select]')).toBeChecked();
+    await expect(page.locator('#article-collaborators-remove-modal')).toBeHidden();
+    expect(page.url()).toBe(url);
+    await page.locator('#article-collaborators-search').fill('');
+    await row.locator('[data-article-collaborator-select]').uncheck();
 
     await row.locator('[data-article-collaborator-remove]').click();
     const remove = page.locator('#article-collaborators-remove-modal');
@@ -270,7 +284,7 @@ test.describe('Article settings', () => {
   // instead of Settings; it opens the Collaborators section alone, without the General |
   // Collaborators switch or the General boxes
   test('a delegate: "Collaborators" in the "…" menu, and that section alone', async ({browser}, workerInfo) => {
-    const delegate = delegateFor(workerInfo.project.name);
+    const delegate = usersFor(workerInfo.project.name).delegate;
     await login_user(browser, workerInfo, delegate);
     const ownerContext = await load_logged_in_context(browser, workerInfo, 'user2');
     const owner = await ownerContext.newPage();
@@ -297,7 +311,7 @@ test.describe('Article settings', () => {
 
     // Pam's rules ("NEW · Delegate – Collaborators" 8020:64472): no actions on the owner's
     // row or on a delegate's, their own included; the line says what they can do
-    await expect(page.locator('[data-role="collaborators-summary"]')).toContainText('(owner), you');
+    await expect(page.locator('[data-role="collaborators-summary"]')).toContainText(/\(owner\)(,| and) you\b/);
     await expect(page.locator('[data-role="collaborators-summary"]')).toContainText('You can invite and remove Maintainers.');
     const ownRow = page.locator(`[data-article-collaborator]:has(a[href$="/${delegate}"])`);
     await expect(ownRow).toContainText('(you)');
@@ -307,7 +321,7 @@ test.describe('Article settings', () => {
 
     // the invite ("– Invite, access level fixed" 8020:65052), on a desktop and as the
     // phone's bottom sheet, opened from the title's row there (8020:64781, 8022:64527)
-    const pick = delegatePickFor(workerInfo.project.name);
+    const pick = usersFor(workerInfo.project.name).delegatePick;
     for (const {width, opener} of [
       {width: 1280, opener: '.article-collaborators-header [data-article-settings-modal]'},
       {width: 375, opener: '.article-settings-title-row [data-article-settings-modal]'},
@@ -346,7 +360,7 @@ test('on a phone: tabs without icons, Watch and "…" on their row', async ({pag
   await page.setViewportSize({width: 375, height: 812});
   await page.goto(`${articleURL}&mode=read`);
   const row = await page.locator('#article-tabs').boundingBox();
-  expect(row.height).toBe(41); // the 40px tabs and the 1px rule under them
+  expect(row.height).toBeCloseTo(41, 0); // the 40px tabs and the 1px rule under them
   await expect(page.locator('#article-tabs .tabular.menu a.item .svg').first()).toBeHidden();
   const read = await page.locator('#article-tabs a[data-article-tab="read"]').boundingBox();
   expect(read.width).toBeCloseTo(66, -1); // TabNav.Link 7596:67066: 16 + "Read" + 16

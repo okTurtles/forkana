@@ -76,7 +76,7 @@
                 </li>
                 {{range .ArticleCollaborators}}
                     {{$canRemove := $perm.CanRemove .}}
-                    <li class="article-collaborator-row" data-article-collaborator data-role="{{.Role}}" data-search="{{.User.LowerName}} {{.User.FullName}}"
+                    <li class="article-collaborator-row" data-article-collaborator data-collaborator-role="{{.Role}}" data-search="{{.User.LowerName}} {{.User.FullName}}"
                         data-name="{{.User.DisplayName}}" data-pending="{{if .IsPending}}true{{end}}">
                         <div class="article-collaborator-who">
                             <span class="article-collaborator-select">
@@ -105,9 +105,9 @@
                                 {{end}}
                             </div>
                             <div class="article-collaborator-status">
-                                {{if .IsPending}}
+                                {{- if .IsPending -}}
                                     <span class="forkana-label forkana-label-attention">{{ctx.Locale.Tr "repo.settings.article_collaborators_status_pending"}}</span>
-                                {{end}}
+                                {{- end -}}
                             </div>
                             <div class="article-collaborator-action">
                                 {{if $canRemove}}

@@ -106,6 +106,7 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 
 	t.Run("DelegateCannotGrantDelegation", func(t *testing.T) {
 		invite(t, delegateSession, maintainer, repo_model.ArticleCollaboratorRoleMaintainerDelegate)
+		assert.Equal(t, "You are not allowed to do this.", delegateSession.GetCookieFlashMessage().ErrorMsg)
 		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
 	})
 
@@ -158,7 +159,7 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 			req := NewRequestWithValues(t, "POST", collaboratorsURL+"/"+action, values).SetHeader("Accept", "application/json")
 			return delegateSession.MakeRequest(t, req, http.StatusBadRequest)
 		}
-		// no removing the owner, themselves or another delegate
+		// no removing the owner or a delegate, themselves being the only one listed here
 		for _, uid := range []int64{owner.ID, delegate.ID} {
 			resp := jsonPost(t, "remove", map[string]string{"uid": strconv.FormatInt(uid, 10)})
 			assert.Contains(t, resp.Body.String(), "You are not allowed to do this.")
@@ -170,6 +171,34 @@ func testArticleCollaborator(t *testing.T, _ *url.URL) {
 			assert.Contains(t, resp.Body.String(), "You are not allowed to do this.")
 		}
 		// and no inviting a delegate (DelegateCannotGrantDelegation above)
+
+		// what a delegate may do goes through: inviting a Maintainer, then removing them
+		invite(t, delegateSession, outsider, repo_model.ArticleCollaboratorRoleMaintainer)
+		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: outsider.ID})
+		post(t, delegateSession, "remove", map[string]string{"uid": strconv.FormatInt(outsider.ID, 10)})
+		assert.Empty(t, delegateSession.GetCookieFlashMessage().ErrorMsg)
+		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: outsider.ID})
+	})
+
+	// #477: removing the owner is refused for anyone, the owner included, and a request
+	// naming them removes nobody else
+	t.Run("OwnerNeverRemoved", func(t *testing.T) {
+		req := NewRequestWithURLValues(t, "POST", collaboratorsURL+"/remove", url.Values{
+			"_csrf": {GetUserCSRFToken(t, ownerSession)},
+			"uid":   {strconv.FormatInt(owner.ID, 10), strconv.FormatInt(maintainer.ID, 10)},
+		}).SetHeader("Accept", "application/json")
+		resp := ownerSession.MakeRequest(t, req, http.StatusBadRequest)
+		assert.Contains(t, resp.Body.String(), "You are not allowed to do this.")
+		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+
+		// nor is anyone reported removed when the request names someone not listed
+		req = NewRequestWithURLValues(t, "POST", collaboratorsURL+"/remove", url.Values{
+			"_csrf": {GetUserCSRFToken(t, ownerSession)},
+			"uid":   {strconv.FormatInt(outsider.ID, 10), strconv.FormatInt(maintainer.ID, 10)},
+		}).SetHeader("Accept", "application/json")
+		resp = ownerSession.MakeRequest(t, req, http.StatusBadRequest)
+		assert.Contains(t, resp.Body.String(), "is no longer a collaborator of this article")
+		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
 	})
 
 	// #477: Settings is no tab any more, the "…" menu holds it, above a divider and Report

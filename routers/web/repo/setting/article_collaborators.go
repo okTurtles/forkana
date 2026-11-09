@@ -7,6 +7,7 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -218,7 +219,7 @@ func ArticleCollaboratorsRemove(ctx *context.Context) {
 	values := ctx.FormStrings("uid")
 	userIDs := make([]int64, 0, len(values))
 	for _, value := range values {
-		if id, err := strconv.ParseInt(value, 10, 64); err == nil && id > 0 {
+		if id, err := strconv.ParseInt(value, 10, 64); err == nil && id > 0 && !slices.Contains(userIDs, id) {
 			userIDs = append(userIDs, id)
 		}
 	}
@@ -241,16 +242,19 @@ func ArticleCollaboratorsRemove(ctx *context.Context) {
 	}
 
 	if err := repo_service.RemoveArticleCollaborators(ctx, ctx.Doer, ctx.Repo.Repository, userIDs); err != nil {
-		if !wantsJSON {
-			if flashArticleCollaboratorError(ctx, err) {
-				ctx.Redirect(redirectURL)
-			}
-			return
+		message := articleCollaboratorErrorMessage(ctx, err)
+		if errors.Is(err, util.ErrNotExist) {
+			// someone on the page is no longer listed (removed meanwhile, or a stale id)
+			message = ctx.Tr("repo.settings.article_collaborators_not_listed")
 		}
-		if message := articleCollaboratorErrorMessage(ctx, err); message != "" {
-			ctx.JSONError(message)
-		} else {
+		switch {
+		case message == "":
 			ctx.ServerError("RemoveArticleCollaborators", err)
+		case wantsJSON:
+			ctx.JSONError(message)
+		default:
+			ctx.Flash.Error(message)
+			ctx.Redirect(redirectURL)
 		}
 		return
 	}

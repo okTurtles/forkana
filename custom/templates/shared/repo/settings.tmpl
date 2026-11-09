@@ -42,7 +42,7 @@
             {{/* "Box / General" 7581:68929: today's fields, in the read-only input style */}}
             <section class="forkana-box" id="article-settings-general">
                 <h3 class="forkana-box-header">{{ctx.Locale.Tr "repo.settings.article_general"}}</h3>
-                <div class="forkana-box-body article-settings-fields">
+                <div class="forkana-box-body">
                     <div class="forkana-field">
                         <label class="forkana-field-label" for="article-settings-owner">{{ctx.Locale.Tr "repo.settings.collaboration.owner"}}</label>
                         <input class="forkana-input" id="article-settings-owner" type="text" readonly value="{{.Repository.Owner.Name}}">
@@ -108,7 +108,7 @@
 {{if .IsRepoOwner}}
 {{if not .Repository.IsArchived}}
 {{/* "477 · Transfer – dialog" 7626:70961 and "– pick new owner" 7626:71053 */}}
-<div class="ui modal forkana-dialog" id="article-transfer-modal" role="dialog" aria-modal="true" aria-labelledby="article-transfer-modal-title">
+<div class="ui modal forkana-dialog" id="article-transfer-modal" role="dialog" aria-modal="true" aria-labelledby="article-transfer-modal-title" aria-describedby="article-transfer-desc">
     {{template "shared/repo/settings_dialog_header" (dict "ID" "article-transfer-modal" "Title" (ctx.Locale.Tr "repo.settings.article_transfer_modal_header"))}}
     <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/settings" method="post">
         {{/* Chrome ignores autocomplete="off" for name-like fields; the invisible dummy
@@ -140,7 +140,7 @@
 </div>
 
 {{/* "477 · Archive – dialog" 7626:71162 */}}
-<div class="ui modal forkana-dialog" id="article-archive-modal" role="dialog" aria-modal="true" aria-labelledby="article-archive-modal-title">
+<div class="ui modal forkana-dialog" id="article-archive-modal" role="dialog" aria-modal="true" aria-labelledby="article-archive-modal-title" aria-describedby="article-archive-desc">
     {{template "shared/repo/settings_dialog_header" (dict "ID" "article-archive-modal" "Title" (ctx.Locale.Tr "repo.settings.article_archive_modal_header"))}}
     <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/settings" method="post">
         {{template "base/disable_form_autofill"}}
@@ -160,7 +160,7 @@
 {{end}}
 
 {{/* "477 · Delete – dialog" 7626:71252 */}}
-<div class="ui modal forkana-dialog" id="article-delete-modal" role="dialog" aria-modal="true" aria-labelledby="article-delete-modal-title">
+<div class="ui modal forkana-dialog" id="article-delete-modal" role="dialog" aria-modal="true" aria-labelledby="article-delete-modal-title" aria-describedby="article-delete-desc">
     {{template "shared/repo/settings_dialog_header" (dict "ID" "article-delete-modal" "Title" (ctx.Locale.Tr "repo.settings.article_delete_modal_header"))}}
     <form class="forkana-dialog-form" action="{{.RepoOperationsLink}}/settings" method="post">
         {{template "base/disable_form_autofill"}}
@@ -191,7 +191,7 @@
      which enables the dialog's button ("<ID>-submit") once it names the article. */}}
 <input type="hidden" name="action" value="{{.Action}}">
 <input type="hidden" name="redirect_to_article" value="true">
-<p>{{.Prompt}}</p>
+<p id="{{.ID}}-desc">{{.Prompt}}</p>
 <div class="forkana-field">
     <label for="{{.ID}}-confirm-name" class="forkana-field-label">{{.Label}}</label>
     <input id="{{.ID}}-confirm-name" class="forkana-input" name="article_name" required maxlength="255"
@@ -216,7 +216,7 @@
      the close button on the right. */}}
 <div class="header forkana-dialog-header">
     {{if .Icon}}{{svg .Icon 20 "forkana-dialog-icon"}}{{end}}
-    <span class="forkana-dialog-title" id="{{.ID}}-title" data-role="dialog-title">{{.Title}}</span>
+    <h3 class="forkana-dialog-title" id="{{.ID}}-title" data-role="dialog-title">{{.Title}}</h3>
     <button type="button" class="forkana-dialog-close" data-dialog-close aria-label="{{ctx.Locale.Tr "repo.settings.article_dialog_close"}}">{{svg "octicon-x" 16}}</button>
 </div>
 {{end}}

@@ -3,6 +3,7 @@
 
 /* fomantic replacements */
 @import "./modules/button.css";
+@import "./modules/banner.css";
 @import "./modules/container.css";
 @import "./modules/divider.css";
 @import "./modules/header.css";

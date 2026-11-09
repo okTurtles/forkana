@@ -223,8 +223,6 @@ function markMenuItem(dropdownEl: HTMLElement, value: string): void {
   }
 }
 
-type RemovalTarget = {rows: HTMLElement[]};
-
 // the confirm button's listener for the dialog's current opening
 let removeListener: AbortController | null = null;
 
@@ -234,7 +232,7 @@ let removeListener: AbortController | null = null;
 // its button reads "Removing…" and the dialog cannot be closed; a refusal shows in a
 // banner under its header and the buttons work again; a success reloads the
 // collaborators, with its banner under the navbar.
-function openRemoveCollaboratorsModal({rows}: RemovalTarget): void {
+function openRemoveCollaboratorsModal(rows: HTMLElement[]): void {
   const modal = document.querySelector<HTMLElement>('#article-collaborators-remove-modal');
   const form = document.querySelector<HTMLFormElement>('#article-collaborators-remove-form');
   if (!modal || !form || !rows.length) return;
@@ -270,7 +268,7 @@ function openRemoveCollaboratorsModal({rows}: RemovalTarget): void {
   submit.disabled = false;
 
   const $modal = fomanticQuery(modal);
-  $modal.modal({closable: true});
+  $modal.modal('setting', 'closable', true);
   // the dialog is reused: the confirmation of the last opening must not run again
   removeListener?.abort();
   removeListener = new AbortController();
@@ -300,7 +298,8 @@ function openRemoveCollaboratorsModal({rows}: RemovalTarget): void {
         window.location.href = json.redirect;
         return;
       }
-      if (json.errorMessage) message = json.errorMessage;
+      // (HTML, Tr escapes it: the banner shows its text)
+      if (json.errorMessage) message = new DOMParser().parseFromString(json.errorMessage, 'text/html').body.textContent;
     } catch {
       // the generic message says to try again
     }
@@ -331,6 +330,11 @@ function initArticleCollaborators(): void {
   const elNoMatch = root.querySelector<HTMLElement>('#article-collaborators-no-match');
   let roleFilter = '';
 
+  // The search field is in the removal form, which has no submit button: Enter in it
+  // would submit the form, removing whoever is checked without asking. The form is only
+  // ever sent by the confirmation dialog.
+  root.querySelector<HTMLFormElement>('#article-collaborators-remove-form')?.addEventListener('submit', (e) => e.preventDefault());
+
   const rowCheckbox = (row: HTMLElement) => row.querySelector<HTMLInputElement>('[data-article-collaborator-select]');
   const visibleRows = () => rows.filter((row) => !row.classList.contains('tw-hidden'));
   const visibleCheckboxes = () => visibleRows().map(rowCheckbox).filter(Boolean);
@@ -359,7 +363,7 @@ function initArticleCollaborators(): void {
     let shown = 0;
     for (const row of rows) {
       const matches = (!query || row.getAttribute('data-search').toLowerCase().includes(query)) &&
-        (!roleFilter || row.getAttribute('data-role') === roleFilter);
+        (!roleFilter || row.getAttribute('data-collaborator-role') === roleFilter);
       toggleElem(row, matches);
       // a collaborator filtered out of sight must not be removed along with the visible ones
       const checkbox = rowCheckbox(row);
@@ -393,13 +397,13 @@ function initArticleCollaborators(): void {
   }
 
   elRemoveSelected?.addEventListener('click', () => {
-    openRemoveCollaboratorsModal({rows: visibleRows().filter((row) => rowCheckbox(row)?.checked)});
+    openRemoveCollaboratorsModal(visibleRows().filter((row) => rowCheckbox(row)?.checked));
   });
   // removing a single collaborator names them in the dialog, whatever else is selected
   for (const button of root.querySelectorAll<HTMLElement>('[data-article-collaborator-remove]')) {
     button.addEventListener('click', () => {
       const row = button.closest<HTMLElement>('[data-article-collaborator]');
-      if (row) openRemoveCollaboratorsModal({rows: [row]});
+      if (row) openRemoveCollaboratorsModal([row]);
     });
   }
 
@@ -430,7 +434,7 @@ function initArticleCollaborators(): void {
           textEl.textContent = dropdownEl.querySelector(`.item[data-value="${value}"]`)?.getAttribute('data-text') ?? '';
           dropdownEl.setAttribute('data-last-value', value);
           markMenuItem(dropdownEl, value);
-          row?.setAttribute('data-role', value);
+          row?.setAttribute('data-collaborator-role', value);
           applyFilter();
           // the server escapes the message, it is HTML
           const {message} = await response.json();

@@ -190,7 +190,7 @@
    second selector outweighs) */
 :is(.forkana-input.forkana-input, .ui.input > input.forkana-input) {
   width: 100%;
-  height: 32px;
+  height: var(--input-height, 32px);
   margin: 0;
   padding: 0 7px;
   border: 1px solid var(--color-border-light);
@@ -231,8 +231,8 @@
 }
 
 /* the search row's 28px input (Search row 7618:67561) */
-.forkana-input.forkana-input-sm {
-  height: 28px;
+.forkana-input-sm {
+  --input-height: 28px;
 }
 
 /* a 16px search icon 8px into the field, 8px from the text */
@@ -262,10 +262,6 @@
   color: var(--color-muted-text);
 }
 
-.article-settings-fields {
-  gap: 16px;
-}
-
 /* ── Buttons ─────────────────────────────────────────────────────────────────
    Transfer article, Archive article, Delete article (Button 7581:68971): the secondary
    button with an Inter 600 #d1242f label. Unavailable in a dialog (Button of the Transfer
@@ -274,11 +270,6 @@
    design system's own disabled state (modules/button.css) stays as it is everywhere else
    (the New subject page's Create button, for one). The dialogs are moved out of the
    settings into Fomantic's dimmer when they open, hence the second root. */
-.forkana-btn.forkana-btn-danger-text,
-.forkana-btn.forkana-btn-danger-text:hover {
-  color: var(--color-danger-fg);
-}
-
 :is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary:disabled,
 :is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary:disabled:hover,
 :is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-secondary:disabled:active {
@@ -293,13 +284,8 @@
   color: color-mix(in srgb, var(--color-danger-fg) 50%, transparent);
 }
 
-/* the unavailable primary one (Invite 7619:68300): #dad5ff, a white 80% label */
-:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-primary:disabled {
-  opacity: 1;
-  border-color: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
-  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
-  color: rgb(255 255 255 / 80%);
-}
+/* (the unavailable primary one, Invite 7619:68300, is .forkana-btn-primary-unavailable's
+   look: modules/button.css) */
 
 :is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn .svg {
   flex-shrink: 0;
@@ -575,11 +561,11 @@
 }
 
 .ui.dropdown > .menu.forkana-menu > .item {
-  display: flex !important; /* (Fomantic's item display is itself !important) */
+  display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 10px 8px !important;
-  border: 0 !important;
+  padding: 10px 8px !important; /* (Fomantic's item padding is itself !important) */
+  border: 0;
   border-radius: 6px;
   font-size: 14px;
   line-height: 20px;
@@ -674,124 +660,6 @@
   padding-top: 16px;
 }
 
-/* ── Banner (Banner 7646:74305, under the navbar) ────────────────────────────
-   Full width, 8px around: the 16px icon in a 32px square, the Inter 400 14/20 message
-   (6px 8px 6px 0) and a 32px dismiss button. Success #dafbe1 and its #1a7f37 icon;
-   error, warning and info in their colours. */
-.forkana-banner {
-  display: flex;
-  align-items: flex-start;
-  padding: 8px;
-  background: var(--color-success-bg);
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-text-primary) 4%, transparent);
-}
-
-.forkana-banner-icon {
-  flex-shrink: 0;
-  box-sizing: content-box;
-  width: 16px;
-  padding: 8px;
-  color: var(--color-green-dark-1);
-}
-
-.forkana-banner-text {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  padding: 6px 8px 6px 0;
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--color-text-primary);
-}
-
-.forkana-banner-dismiss {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 8px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-primary);
-  cursor: pointer;
-}
-
-.forkana-banner-dismiss:hover {
-  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
-}
-
-.forkana-banner-error {
-  background: var(--color-danger-bg);
-}
-
-.forkana-banner-error .forkana-banner-icon {
-  color: var(--color-danger-fg);
-}
-
-.forkana-banner-warning {
-  background: var(--color-warning-bg);
-}
-
-.forkana-banner-warning .forkana-banner-icon {
-  color: var(--color-attention-fg);
-}
-
-.forkana-banner-info {
-  background: var(--color-banner-bg);
-}
-
-.forkana-banner-info .forkana-banner-icon {
-  color: var(--color-primary);
-}
-
-/* ── Announcement (7619:69436, "Invited person – Accept / Decline") ──────────
-   An invite or a transfer to answer, full width under the navbar: #dad5ff with a #4e40fa
-   40% rule above and below, 8px 48px (8px 16px on a phone, 7622:69790); the 16px icon in
-   a 24px column, the Inter 400 14/20 message (6px 8px 6px 0), then Decline and Accept,
-   4px apart. */
-.forkana-announcement {
-  display: flex;
-  align-items: flex-start;
-  padding: 7px 48px;
-  border-top: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--color-text-primary);
-}
-
-.forkana-announcement-message {
-  display: flex;
-  flex: 1;
-  align-items: flex-start;
-  min-width: 0;
-}
-
-.forkana-announcement-message > .svg {
-  flex-shrink: 0;
-  box-sizing: content-box;
-  width: 16px;
-  padding: 8px 8px 8px 0;
-}
-
-.forkana-announcement-message > span {
-  padding: 6px 8px 6px 0;
-}
-
-.forkana-announcement-actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 4px;
-}
-
-.forkana-announcement-actions > form {
-  margin: 0;
-}
-
 /* ── Dialogs (Dialog 7619:68568 and the others, the moderator dialogs' layout) ─
    560px, white, 12px corners, a 0 40px 80px #25292e 24% shadow and a 1px #d1d9e0 50% ring,
    over a #c8d1da 40% backdrop. The header #f6f8fa, 12px 12px 12px 16px, a #d1d9e0 70%
@@ -805,7 +673,8 @@
 .ui.modal.forkana-dialog {
   width: 560px;
   max-width: calc(100vw - 32px);
-  overflow: hidden;
+  /* (not overflow: hidden, which clipped the Access level menu: the header and footer
+     round their own corners) */
   border-radius: 12px;
   background: var(--color-surface);
   box-shadow: 0 40px 80px 0 var(--color-dialog-shadow),
@@ -831,9 +700,13 @@
   color: var(--color-text-primary);
 }
 
+/* (an h3, in the header's own type) */
 .forkana-dialog-title {
   flex: 1;
   min-width: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
 }
 
 .forkana-dialog-close {
@@ -863,15 +736,6 @@
 
 .forkana-dialog-form {
   margin: 0;
-}
-
-/* (out of the layout, as form.css does for .ui .form: base/disable_form_autofill) */
-.forkana-dialog-form > .autofill-dummy {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  z-index: -10000;
 }
 
 .ui.modal.forkana-dialog > .content,
@@ -977,10 +841,6 @@
   flex-direction: column;
 }
 
-.ui.search.article-user-search > .ui.input > .prompt.forkana-input {
-  border-radius: 6px;
-}
-
 .ui.search.article-user-search > .results {
   position: static;
   width: 100%;
@@ -999,7 +859,7 @@
   gap: 8px;
   height: 36px;
   padding: 8px;
-  border: 0 !important; /* (Fomantic's result separators) */
+  border: 0;
   border-radius: 6px;
   background: transparent;
 }
@@ -1275,18 +1135,6 @@
 
   .article-collaborator-row.is-owner .article-collaborator-action {
     display: none;
-  }
-
-  /* the Announcement 8px 16px, its buttons 8px under the message and 6px above its
-     padding (Content 6px 8px 6px 0 of 7622:69790) */
-  .forkana-announcement {
-    flex-direction: column;
-    gap: 2px;
-    padding: 7px 16px 13px;
-  }
-
-  .forkana-announcement-actions {
-    padding-left: 24px;
   }
 
   /* the dialogs open as a bottom sheet (Dialog 7622:69567): full width, 16px top corners,
