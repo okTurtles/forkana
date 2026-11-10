@@ -432,7 +432,8 @@ export function initRepoHistory() {
       subject: initialSubject || '',
       selectionOf: selectionFromElement,
       getSelection: () => selectedRepo.value,
-      // opening a row selects its article (figma 641:61208 highlights the open row)
+      // opening a row selects its article (figma 641:61208 highlights the open row), and a
+      // click on empty space clears it (null), recorded as the Bubble view's clearing is
       select: (selection) => setSelection(selection, 'replace'),
       openArticle: openArticleFrom,
     });
