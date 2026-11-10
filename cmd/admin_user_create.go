@@ -94,7 +94,7 @@ func microcmdUserCreate() *cli.Command {
 			},
 			&cli.BoolFlag{
 				Name:  "fork-only",
-				Usage: "Make a fork-only user account: it does not accept change requests, editing its articles creates a fork (for the accounts importing Wikipedia articles)",
+				Usage: "Make a fork-only user account, e.g. for an account importing Wikipedia articles: it does not accept change requests, so editing its articles creates a fork",
 			},
 			&cli.StringFlag{
 				Name:  "fullname",
