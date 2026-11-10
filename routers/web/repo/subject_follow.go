@@ -6,12 +6,9 @@ package repo
 import (
 	"net/http"
 
-	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/templates"
 	"code.gitea.io/gitea/services/context"
-
-	"xorm.io/builder"
 )
 
 // tplSubjectFollow is the subject header's Follow button (#165).
@@ -32,11 +29,11 @@ func ActionSubjectFollow(ctx *context.Context) {
 		return
 	}
 	// a subject is only there for a reader of one of its articles, as on its pages: a
-	// subject whose articles the reader cannot read is answered as one that does not exist
-	readable, err := db.GetEngine(ctx).Table("repository").Where(builder.Eq{"subject_id": subject.ID}.
-		And(builder.In("id", repo_model.AccessibleRepoIDsQuery(ctx.Doer)))).Exist()
+	// subject whose articles the reader cannot open (all deleted, or private) is answered as
+	// one that does not exist
+	readable, err := repo_model.HasOpenableArticle(ctx, subject.ID, ctx.Doer)
 	if err != nil {
-		ctx.ServerError("Exist", err)
+		ctx.ServerError("HasOpenableArticle", err)
 		return
 	}
 	if !readable {

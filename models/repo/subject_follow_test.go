@@ -43,9 +43,14 @@ func TestFollowSubject(t *testing.T) {
 	assert.False(t, isFollowingSubject(t, 5, 1))
 	assert.True(t, isFollowingSubject(t, 4, 1))
 
-	// no user or no subject follows nothing
+	// no user or no subject follows nothing, and can neither follow nor unfollow: xorm would
+	// leave the zero id out, and unfollow every follower of the subject
 	assert.False(t, isFollowingSubject(t, 0, 1))
 	assert.False(t, isFollowingSubject(t, 4, 0))
+	assert.Error(t, repo_model.FollowSubject(ctx, 4, 0, true))
+	assert.Error(t, repo_model.FollowSubject(ctx, 0, 1, false))
+	assert.True(t, isFollowingSubject(t, 4, 1))
+	assert.Equal(t, 1, unittest.GetCount(t, &repo_model.SubjectFollow{UserID: 4}), "no follow of subject 0")
 }
 
 // FindFollowedSubjectReadableRepoIDs: the articles of the followed subjects, only those the
@@ -72,17 +77,21 @@ func TestFindFollowedSubjectReadableRepoIDs(t *testing.T) {
 	ids, err = repo_model.FindFollowedSubjectReadableRepoIDs(ctx, user5, 50)
 	require.NoError(t, err)
 	assert.Equal(t, []int64{1}, ids)
-}
 
-// GetSubjectByID with no id finds nothing (xorm ignores a zero ID, and would find any
-// subject).
-func TestGetSubjectByIDZero(t *testing.T) {
-	require.NoError(t, unittest.PrepareTestDatabase())
-	for _, id := range []int64{0, -1} {
-		subject, err := repo_model.GetSubjectByID(t.Context(), id)
-		assert.True(t, repo_model.IsErrSubjectNotExist(err), "id %d", id)
-		assert.Nil(t, subject)
-	}
+	// a deleted (tombstoned) article is no longer there, and its subject then has nothing
+	// to open
+	has, err := repo_model.HasOpenableArticle(ctx, 1, user5)
+	require.NoError(t, err)
+	assert.True(t, has)
+	repo1 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
+	repo1.IsTombstoned = true
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo1, "is_tombstoned"))
+	ids, err = repo_model.FindFollowedSubjectReadableRepoIDs(ctx, user5, 50)
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+	has, err = repo_model.HasOpenableArticle(ctx, 1, user5)
+	require.NoError(t, err)
+	assert.False(t, has)
 }
 
 // A deleted subject takes its follows with it, so that a later subject is not followed by

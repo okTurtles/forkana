@@ -176,6 +176,8 @@
   color: var(--color-text);
 }
 
+/* (no backdrop, as in the figma, which shows the sheet over the page as it is; the page
+   is inert while it is open, and a press outside it closes it) */
 .article-watch-menu::backdrop {
   background: transparent;
 }

@@ -7,9 +7,9 @@ import (
 	"context"
 
 	"code.gitea.io/gitea/models/db"
-	"code.gitea.io/gitea/models/unit"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/timeutil"
+	"code.gitea.io/gitea/modules/util"
 
 	"xorm.io/builder"
 )
@@ -45,8 +45,12 @@ func IsFollowingSubject(ctx context.Context, userID, subjectID int64) (bool, err
 // FollowSubject makes the user follow the subject (follow true) or stop following it.
 // Following a subject twice, or unfollowing one that is not followed, changes nothing; so
 // does a follow that loses a race with the same follow (a double click), which the unique
-// index rejects.
+// index rejects. Both ids are required: xorm leaves a zero field out of the delete's
+// condition, and a follow of subject 0 would follow every repository without a subject.
 func FollowSubject(ctx context.Context, userID, subjectID int64, follow bool) error {
+	if userID <= 0 || subjectID <= 0 {
+		return util.NewInvalidArgumentErrorf("invalid user id %d or subject id %d", userID, subjectID)
+	}
 	if !follow {
 		_, err := db.GetEngine(ctx).Delete(&SubjectFollow{UserID: userID, SubjectID: subjectID})
 		return err
@@ -65,13 +69,22 @@ func FollowSubject(ctx context.Context, userID, subjectID int64, follow bool) er
 	return nil
 }
 
+// HasOpenableArticle reports whether the subject has an article the doer can open (see
+// openableArticleCond): a subject without one is not there for them, as on its pages.
+func HasOpenableArticle(ctx context.Context, subjectID int64, doer *user_model.User) (bool, error) {
+	return db.GetEngine(ctx).Table("repository").
+		Where(builder.Eq{"`repository`.subject_id": subjectID}.And(openableArticleCond(doer))).
+		Exist()
+}
+
 // FollowedSubjectReadableRepoCond selects, in the repository table, the articles (forks
-// included) of every subject the user follows that the user can read.
+// included) of every subject the user follows that the user can open (openableArticleCond:
+// not the deleted ones, nor those of a private owner).
 func FollowedSubjectReadableRepoCond(user *user_model.User) builder.Cond {
 	return builder.In("`repository`.subject_id",
 		builder.Select("`subject_follow`.subject_id").From("`subject_follow`").
 			Where(builder.Eq{"`subject_follow`.user_id": user.ID}),
-	).And(AccessibleRepositoryCondition(user, unit.TypeInvalid))
+	).And(openableArticleCond(user))
 }
 
 // FindFollowedSubjectReadableRepoIDs returns the ids of up to limit repositories of

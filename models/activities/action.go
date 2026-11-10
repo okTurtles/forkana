@@ -486,7 +486,7 @@ type GetFeedsOptions struct {
 	// their ids, or a subquery when there are too many for an IN list
 	followedSubjectsResolved bool
 	followedRepoIDs          []int64
-	followedRepoQuery        *builder.Builder
+	followedRepoIDsQuery     *builder.Builder
 }
 
 // resolveFollowedSubjects finds, for IncludeFollowedSubjects, the articles of the subjects
@@ -508,7 +508,7 @@ func (opts GetFeedsOptions) resolveFollowedSubjects(ctx context.Context) (GetFee
 	case len(ids) <= db.DefaultMaxInSize:
 		opts.followedRepoIDs = ids
 	default:
-		opts.followedRepoQuery = builder.Select("`repository`.id").From("`repository`").
+		opts.followedRepoIDsQuery = builder.Select("`repository`.id").From("`repository`").
 			Where(repo_model.FollowedSubjectReadableRepoCond(opts.RequestedUser))
 	}
 	return opts, nil
@@ -517,7 +517,8 @@ func (opts GetFeedsOptions) resolveFollowedSubjects(ctx context.Context) (GetFee
 // requestedUserCond selects the feed of RequestedUser: the actions inserted for them (theirs,
 // their organizations' and those of the articles they watch, see services/feed.NotifyWatchers)
 // and, with IncludeFollowedSubjects (once resolved), the actions on the articles of the
-// subjects they follow and can read. An action on such an article is taken from its actor's
+// subjects they follow and can open (not deleted, see repo_model.FollowedSubjectReadableRepoCond).
+// An action on such an article is taken from its actor's
 // own copy (user_id = act_user_id), which every action has, whether or not the user watched
 // the article when it happened; the copy the user may also have got as a watcher is left
 // out, so that it is not listed twice. (So an action by a since-deleted user, whose own copy
@@ -530,12 +531,12 @@ func (opts GetFeedsOptions) requestedUserCond() builder.Cond {
 	if !opts.IncludeFollowedSubjects || !opts.followedSubjectsResolved {
 		return builder.Eq{"`action`.user_id": userID}
 	}
-	inFollowed := builder.In("`action`.repo_id", opts.followedRepoIDs)
-	notInFollowed := builder.NotIn("`action`.repo_id", opts.followedRepoIDs)
-	if opts.followedRepoQuery != nil {
-		inFollowed = builder.In("`action`.repo_id", opts.followedRepoQuery)
-		notInFollowed = builder.NotIn("`action`.repo_id", opts.followedRepoQuery)
+	followedRepos := any(opts.followedRepoIDs)
+	if opts.followedRepoIDsQuery != nil {
+		followedRepos = opts.followedRepoIDsQuery
 	}
+	inFollowed := builder.In("`action`.repo_id", followedRepos)
+	notInFollowed := builder.NotIn("`action`.repo_id", followedRepos)
 	return builder.Or(
 		builder.Eq{"`action`.user_id": userID}.And(builder.Or(
 			builder.Eq{"`action`.act_user_id": userID},

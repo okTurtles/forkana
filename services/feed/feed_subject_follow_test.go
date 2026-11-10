@@ -54,19 +54,13 @@ func TestGetFeedsFollowedSubjects(t *testing.T) {
 	}
 
 	feed := func(t *testing.T, user, actor *user_model.User, followed bool) []int64 {
-		actions, _, err := GetFeeds(ctx, activities_model.GetFeedsOptions{
+		return feedRepoIDs(t, activities_model.GetFeedsOptions{
 			RequestedUser:           user,
 			Actor:                   actor,
 			IncludePrivate:          true,
 			SinceUnix:               since,
 			IncludeFollowedSubjects: followed,
 		})
-		require.NoError(t, err)
-		repoIDs := make([]int64, 0, len(actions))
-		for _, act := range actions {
-			repoIDs = append(repoIDs, act.RepoID)
-		}
-		return repoIDs
 	}
 
 	// not following: user5 has nothing, user4 has repo1 as a watcher
@@ -120,17 +114,24 @@ func TestGetFeedsFollowedSubjectsManyArticles(t *testing.T) {
 			Content:   "1|subject follow",
 		}))
 	}
-	actions, _, err := GetFeeds(ctx, activities_model.GetFeedsOptions{
+	repoIDs := feedRepoIDs(t, activities_model.GetFeedsOptions{
 		RequestedUser:           user4,
 		Actor:                   user4,
 		IncludePrivate:          true,
 		SinceUnix:               since,
 		IncludeFollowedSubjects: true,
 	})
+	assert.ElementsMatch(t, []int64{repo1.ID, last.ID}, repoIDs, "each once, repo1's watcher copy left out")
+}
+
+// feedRepoIDs returns the article of each action of the feed, in its order.
+func feedRepoIDs(t *testing.T, opts activities_model.GetFeedsOptions) []int64 {
+	t.Helper()
+	actions, _, err := GetFeeds(t.Context(), opts)
 	require.NoError(t, err)
 	repoIDs := make([]int64, 0, len(actions))
 	for _, act := range actions {
 		repoIDs = append(repoIDs, act.RepoID)
 	}
-	assert.ElementsMatch(t, []int64{repo1.ID, last.ID}, repoIDs, "each once, repo1's watcher copy left out")
+	return repoIDs
 }

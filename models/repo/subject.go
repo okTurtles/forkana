@@ -304,19 +304,22 @@ func DeleteSubjectIfOrphaned(ctx context.Context, id int64) (bool, error) {
 		return false, nil
 	}
 
-	res, err := db.Exec(ctx,
-		"DELETE FROM `subject` WHERE id = ? AND NOT EXISTS (SELECT 1 FROM `repository` WHERE subject_id = ?)", id, id)
-	if err != nil {
-		return false, err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	if affected == 0 {
-		return false, nil
-	}
-	return true, deleteSubjectFollows(ctx, id)
+	// (its follows go with it, in the same transaction)
+	return db.WithTx2(ctx, func(ctx context.Context) (bool, error) {
+		res, err := db.Exec(ctx,
+			"DELETE FROM `subject` WHERE id = ? AND NOT EXISTS (SELECT 1 FROM `repository` WHERE subject_id = ?)", id, id)
+		if err != nil {
+			return false, err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return false, err
+		}
+		if affected == 0 {
+			return false, nil
+		}
+		return true, deleteSubjectFollows(ctx, id)
+	})
 }
 
 // FindSubjects finds subjects based on options

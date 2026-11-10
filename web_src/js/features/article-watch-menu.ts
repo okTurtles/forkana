@@ -27,4 +27,18 @@ export function initArticleWatchMenu() {
       target.close();
     }
   });
+
+  // The answer replaces the control, focused button included: when the focus was in it (on
+  // Watch, or on a choice of the menu), give it back to the new Watch button rather than
+  // letting it fall to the page.
+  let refocusWatch = false;
+  document.addEventListener('htmx:beforeRequest', (e) => {
+    const elt = (e as CustomEvent<{elt?: Element}>).detail?.elt;
+    refocusWatch = Boolean(elt?.closest('.article-watch-control') && document.activeElement?.closest('.article-watch-control'));
+  });
+  document.addEventListener('htmx:afterSettle', () => {
+    if (!refocusWatch) return;
+    refocusWatch = false;
+    document.querySelector<HTMLElement>('.article-watch-control [data-role="article-watch"]')?.focus();
+  });
 }

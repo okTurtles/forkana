@@ -629,3 +629,14 @@ func containsSubjectID(subjects []*repo_model.Subject, id int64) bool {
 	}
 	return false
 }
+
+// GetSubjectByID with no id finds nothing (xorm ignores a zero ID, and would find any
+// subject).
+func TestGetSubjectByIDZero(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	for _, id := range []int64{0, -1} {
+		subject, err := repo_model.GetSubjectByID(t.Context(), id)
+		assert.True(t, repo_model.IsErrSubjectNotExist(err), "id %d", id)
+		assert.Nil(t, subject)
+	}
+}
