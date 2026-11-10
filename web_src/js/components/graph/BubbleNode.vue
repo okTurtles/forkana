@@ -23,6 +23,7 @@
      the article on its own (ArticleDetailView, 425px, centred), which is where
      "Read full article" and "View history" live. */
 
+import { t, tn } from './bubble-i18n.ts';
 import { computed, watch, reactive } from "vue";
 import { formatDateYMD } from '../../utils/time.ts';
 import {
@@ -128,7 +129,7 @@ const fit = reactive({
 });
 
 /* Label text: simple helper function for pluralization (not computed to avoid unnecessary reactivity) */
-const getLabelText = (count: number) => count === 1 ? "Contributor" : "Contributors";
+const getLabelText = (count: number) => tn(count, 'repo.bubble.contributor_1', 'repo.bubble.contributor_n');
 
 /* Format date to yyyy-mm-dd using shared utility */
 const formattedDate = computed(() => formatDateYMD(props.updatedAt));
@@ -148,7 +149,7 @@ function recomputeFit() {
   const labelTextStr = getLabelText(props.contributors);
   const fsCount = props.countFontSize;
   const countW = props.countText.length * fsCount * CHAR_WIDTH_RATIO_COUNT;
-  const updLine1 = "Last updated";
+  const updLine1 = t('repo.bubble.last_updated');
   const updLine2 = formattedDate.value;
 
   /* Does a block of text of this size fit INSIDE the circle? Corners, not a
@@ -237,12 +238,11 @@ const compareBadge = computed(() => compareBadgeCenter(props.r));
    drawn) is said in words, and aria-pressed follows the pick, not the page's
    selection. */
 const ariaLabel = computed(() => {
-  const count = `${props.contributors} contributor${props.contributors === 1 ? '' : 's'}`;
-  const base = props.isTombstoned ?
-    `Repository node with ${count}, deleted by its author` :
-    `Repository node with ${count}${props.updatedAt ? `, last updated ${props.updatedAt}` : ''}`;
-  const pick = compareOrder.value !== null ? `, selected for comparison (${compareOrder.value} of 2)` : '';
-  return `${base}${pick}. Press Enter to select.`;
+  const count = tn(props.contributors, 'repo.contributor_count_lower_1', 'repo.contributor_count_lower_n', props.contributors);
+  let label = props.isTombstoned ? t('repo.bubble.aria_node_deleted', count) :
+    props.updatedAt ? t('repo.bubble.aria_node_updated', count, props.updatedAt) : t('repo.bubble.aria_node', count);
+  if (compareOrder.value !== null) label = t('repo.bubble.aria_compare_pick', label, compareOrder.value);
+  return t('repo.bubble.aria_press_enter', label);
 });
 
 /* The compare stroke's width, or 0 where there is no compare outline. */
@@ -349,10 +349,10 @@ function onKeyDown(ev: KeyboardEvent) {
         <div class="expanded-count-label">{{ getLabelText(contributors) }}</div>
         <!-- The excerpt is the article's content and a tombstone has none left
              to show; the card says what happened to it instead. -->
-        <div v-if="isTombstoned" class="expanded-deleted">Deleted by its author</div>
+        <div v-if="isTombstoned" class="expanded-deleted">{{ t('repo.bubble.deleted_by_author') }}</div>
         <div v-else-if="description" class="expanded-description">{{ description }}</div>
         <div v-if="updatedAt" class="expanded-updated">
-          <div>Last updated</div>
+          <div>{{ t('repo.bubble.last_updated') }}</div>
           <div>{{ formattedDate }}</div>
         </div>
       </div>
@@ -375,7 +375,7 @@ function onKeyDown(ev: KeyboardEvent) {
           v-if="fit.showUpdated" class="updated"
           :style="`font-size: ${fit.fsSmall}px; margin-top: ${LABEL_GAP_SECONDARY}px;`"
         >
-          <div>Last updated</div>
+          <div>{{ t('repo.bubble.last_updated') }}</div>
           <div :style="`margin-top: ${LABEL_GAP_UPDATED_INNER}px;`">{{ formattedDate }}</div>
         </div>
       </div>

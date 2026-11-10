@@ -930,6 +930,14 @@ export default defineConfig([
     },
   },
   {
+    // The Bubble view's text comes from the locale (./components/graph/bubble-i18n.ts):
+    // no bare English in its templates or text attributes (#138).
+    files: ['web_src/js/components/graph/**/*.vue'],
+    rules: {
+      'vue/no-bare-strings-in-template': [2],
+    },
+  },
+  {
     files: ['web_src/js/modules/fetch.ts', 'web_src/js/standalone/**/*'],
     rules: {
       'no-restricted-syntax': [2, ...restrictedSyntax],

@@ -19,6 +19,7 @@
    drawn at all (ArticleDetailView.vue). Hover says what the article IS, click
    says what you can DO with it. See the HOVER / OPEN section. */
 
+import { t, tn } from './bubble-i18n.ts';
 import { onMounted, reactive, ref, onBeforeUnmount, nextTick, computed, watch } from "vue";
 // @ts-ignore - d3-selection types may not be available in CI environment
 import { select } from "d3-selection";
@@ -640,7 +641,7 @@ async function fetchForkGraphAndSet() {
 
     const res = await fetch(urlObj.toString(), { credentials: 'same-origin' });
     if (!res.ok) {
-      const errorText = `Failed to load fork graph (${res.status} ${res.statusText})`;
+      const errorText = t('repo.bubble.load_failed_status', `${res.status} ${res.statusText}`);
       console.error('FishboneGraph: API error', res.status);
       errorMessage.value = errorText;
       isLoading.value = false;
@@ -650,7 +651,7 @@ async function fetchForkGraphAndSet() {
     }
     await applyGraphResponse(await res.json() as ForkGraphResponse);
   } catch (err) {
-    const errorText = err instanceof Error ? err.message : 'Failed to load fork graph';
+    const errorText = err instanceof Error ? err.message : t('repo.bubble.load_failed');
     console.error('FishboneGraph: failed to fetch graph', err);
     errorMessage.value = errorText;
     isLoading.value = false;
@@ -733,13 +734,13 @@ async function applyGraphResponse(json: ForkGraphResponse | null) {
       graphHistoryRestored = true;
       restoreGraphHistory();
     }
-    announceToScreenReader(`Loaded fork graph with ${Object.keys(graph).length} repositories`);
+    announceToScreenReader(t('repo.bubble.announce_loaded', Object.keys(graph).length));
   } else {
     /* No article yet: the "Create the first article" bubble is centred in the
        canvas box by CSS, so the box has to be the size of the space it has. */
     await nextTick();
     syncCanvasHeight();
-    announceToScreenReader('No fork data available');
+    announceToScreenReader(t('repo.bubble.announce_no_data'));
   }
 }
 
@@ -1993,7 +1994,7 @@ function setHovered(id: NodeId | null, immediate = false) {
     hoveredId.value = id;
     reflow();
     const n = nodeById(id);
-    if (n) announceToScreenReader(`${n.fullName || n.id}, ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
+    if (n) announceToScreenReader(`${n.fullName || n.id}, ${tn(n.contributors, 'repo.contributor_count_lower_1', 'repo.contributor_count_lower_n', n.contributors)}`);
   };
   if (immediate || HOVER_DEBOUNCE_MS <= 0) apply();
   else hoverTimer = window.setTimeout(apply, HOVER_DEBOUNCE_MS);
@@ -2062,7 +2063,7 @@ function onBubbleClick(n: Node) {
   if (detail) {
     const payload = { ...detail };
     applySelection(n, payload);
-    announceToScreenReader(`Selected ${n.fullName || n.id} with ${n.contributors} contributor${n.contributors === 1 ? '' : 's'}`);
+    announceToScreenReader(t('repo.bubble.announce_selected', n.fullName || n.id, tn(n.contributors, 'repo.contributor_count_lower_1', 'repo.contributor_count_lower_n', n.contributors)));
     window.dispatchEvent(new CustomEvent(BUBBLE_SELECTED_EVENT, { detail: payload }));
   }
   setSelectedJoint(null);
@@ -2158,7 +2159,7 @@ function openDetail(n: Node) {
   detailNode.value = n;
   historyOpen.value = false;
   nextTick(updateHistoryAnchor);
-  announceToScreenReader(`Opened ${n.fullName || n.id}`);
+  announceToScreenReader(t('repo.bubble.announce_opened', n.fullName || n.id));
 }
 
 /** Ask for the close. The view animates, then calls finishDetailClose(). */
@@ -2730,7 +2731,7 @@ function goToComparison() {
   // Validate both articles have the same subject
   if (subject1 !== subject2) {
     console.warn('FishboneGraph: cannot compare articles from different subjects');
-    announceToScreenReader('Cannot compare articles from different subjects.');
+    announceToScreenReader(t('repo.bubble.cannot_compare_subjects'));
     return;
   }
 
@@ -2767,7 +2768,7 @@ function goToComparison() {
           ref="svgRef" class="tw-w-full"
           :class="{ 'graph-hidden': isLoading || errorMessage || !hasData, 'graph-dimmed': expandedId !== null }"
           :style="{ height: svgHeight + 'px' }" style="touch-action: pan-y;" role="img"
-          aria-label="Fork repository graph showing contributors and relationships" tabindex="0"
+          :aria-label="t('repo.bubble.graph_aria')" tabindex="0"
         >
           <defs>
             <!-- Soft radial bubble gradient -->
@@ -2790,8 +2791,8 @@ function goToComparison() {
             <template v-if="graphRendered">
               <!-- Trunks (vertical) -->
               <line
-                v-for="t in trunksList" :key="t.id" class="trunk" :class="{'is-related': expandedId === t.id}"
-                :x1="t.x" :x2="t.x" :y1="t.y1" :y2="t.y2"
+                v-for="trunk in trunksList" :key="trunk.id" class="trunk" :class="{'is-related': expandedId === trunk.id}"
+                :x1="trunk.x" :x2="trunk.x" :y1="trunk.y1" :y2="trunk.y2"
                 stroke="var(--bubble-edge-stroke)" stroke-width="2" stroke-linecap="round"
               />
 
@@ -2826,7 +2827,7 @@ function goToComparison() {
                 style="cursor: pointer;"
                 :role="j.inert ? undefined : 'button'" :tabindex="j.inert ? -1 : 0"
                 :aria-hidden="j.inert ? 'true' : undefined"
-                :aria-label="j.inert ? undefined : `Compare ${j.sourceOwner} with ${j.targetOwner}`"
+                :aria-label="j.inert ? undefined : t('repo.bubble.aria_contention', j.sourceOwner, j.targetOwner)"
                 @click.stop="() => onJointClick(j)" @keydown.enter.stop="() => onJointClick(j)"
                 @keydown.space.stop="() => onJointClick(j)"
               />
@@ -2858,7 +2859,7 @@ function goToComparison() {
         <div v-if="isLoading" class="state-overlay loading-state">
           <svg
             class="tw-w-full" viewBox="0 0 1100 400" preserveAspectRatio="xMidYMid meet" role="img"
-            aria-label="Loading fork graph"
+            :aria-label="t('repo.bubble.loading_aria')"
           >
             <defs>
               <radialGradient id="loadingBubbleGrad" cx="35%" cy="30%" r="65%">
@@ -2876,7 +2877,7 @@ function goToComparison() {
               <text
                 text-anchor="middle" dominant-baseline="central" fill="var(--bubble-shadow-color)" font-size="16"
                 font-weight="500"
-              >Loading...</text>
+              >{{ t('loading') }}</text>
             </g>
           </svg>
         </div>
@@ -2890,9 +2891,9 @@ function goToComparison() {
                 d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <h3 class="state-title">Failed to Load Fork Graph</h3>
+            <h3 class="state-title">{{ t('repo.bubble.load_failed_title') }}</h3>
             <p class="state-description">{{ errorMessage }}</p>
-            <button class="state-button" @click="fetchForkGraphAndSet">Try Again</button>
+            <button class="state-button" @click="fetchForkGraphAndSet">{{ t('repo.subject_articles_retry') }}</button>
           </div>
         </div>
 

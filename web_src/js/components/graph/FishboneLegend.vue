@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from './bubble-i18n.ts';
 /* Simple, reusable legend; keeps layout file cleaner. The figma legend always
    shows all three keys — Article, Point of contention, Deleted — whatever the
    graph contains.
@@ -14,12 +15,12 @@
     <div class="legend-key">
       <!-- Ellipse 5 (6399:44057): a flat #d1d9e0 disc, the bubbles' strong end -->
       <span class="legend-swatch legend-swatch--article"/>
-      <span>Article</span>
+      <span>{{ t('repo.bubble.legend_article') }}</span>
     </div>
     <div class="legend-key">
       <!-- Ellipse 23 (6399:44061): white, 1px #818b98 ring, as the joint dots -->
       <span class="legend-swatch legend-swatch--contention"/>
-      <span>Point of contention</span>
+      <span>{{ t('repo.bubble.legend_contention') }}</span>
     </div>
     <div class="legend-key">
       <!-- #421 item 3: the tombstone of figma's Group 214 (6399:44065): a 14×11
@@ -32,7 +33,7 @@
         <rect class="tombstone-eye" x="3.86" y="4.19" width="2.1" height="2.1" rx=".3"/>
         <rect class="tombstone-eye" x="8.05" y="4.19" width="2.1" height="2.1" rx=".3"/>
       </svg>
-      <span>Deleted</span>
+      <span>{{ t('repo.tombstone.label') }}</span>
     </div>
   </div>
 </template>

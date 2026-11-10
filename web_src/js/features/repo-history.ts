@@ -505,7 +505,7 @@ export function initRepoHistory() {
       if (articleRequestToken !== currentToken) return;
       console.error('Failed to load article view', err);
       isLoading.value = false;
-      loadError.value = 'Unable to load article view';
+      loadError.value = errorEl?.getAttribute('data-msg-load-failed') || 'Unable to load article view';
       updateArticleStatus();
     }
   }

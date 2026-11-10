@@ -222,6 +222,8 @@ Gitea uses a locale file from `custom/options/locale/` *instead of* the embedded
 - `make lint-locale-forkana` (part of `make lint-backend`, so CI) **fails** when a translation's placeholders (`%s`, `%[1]d`…; unindexed ones in the same order), HTML tags or wrapping quotes differ from the English it was made from, Gitea's INI reader would read a translation or a generated file differently from what is meant (a lone leading backtick, `'…'` or `"""`), a translation file has a key that isn't a Forkana key or lacks a `# en:` line, a generated or translation file is out of date, or a custom locale file has no upstream file. It only **warns** on missing translations and stale ones (the `# en:` line differs from the current English): a PR that adds or rewords a string doesn't have to translate it.
 - `make lint-locale-forkana-strict` (`go run build/forkana-locales.go check -strict`) also fails on those warnings: run it after a translation pass.
 
+- The Bubble view's Vue components (`web_src/js/components/graph/`) take their strings from the locale too: `bubble-i18n.ts` lists the keys with their English fallback, `custom/templates/shared/repo/bubble.tmpl` sends their translations as JSON in `data-i18n`, and components call `t(key, ...args)` / `tn(count, key1, keyN, ...args)`. `bubble-i18n.test.ts` checks that the fallbacks are custom en-US's text and that the template sends every key, and ESLint's `vue/no-bare-strings-in-template` rejects bare English in those components' templates. Other scripts read their strings from `data-msg-*` attributes set in the template.
+
 To add or change a string:
 
 1. Add or change it in `custom/options/locale/locale_en-US.ini` (only there).

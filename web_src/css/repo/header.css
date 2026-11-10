@@ -149,10 +149,6 @@
   margin: 0;
 }
 
-#subject-view-tabs > .item > .not-mobile {
-  margin-left: -4px !important; /* "Bubble view" is one label: 4px between its words, not the 8px gap */
-}
-
 /* ── Subject view tabs row (#386) ─────────────────────────────────────────
    Item 2: the tabs are centred in the CONTAINER, not in the space left over
    next to the Compare button — the button is lifted out of the flow and pinned

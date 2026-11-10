@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from './bubble-i18n.ts';
 const props = defineProps<{
   owner: string | null;
   repo: string | null;
@@ -38,7 +39,7 @@ function handleCreateArticle(event: Event) {
       type="button"
       class="create-article-bubble-button"
       @click="handleCreateArticle"
-      aria-label="Create the first article"
+      :aria-label="t('repo.bubble.create_first_article')"
     >
       <svg
         class="empty-state-svg"
@@ -84,7 +85,7 @@ function handleCreateArticle(event: Event) {
           font-weight="500"
           class="create-text"
         >
-          Create the first article
+          {{ t('repo.bubble.create_first_article') }}
         </text>
       </svg>
     </button>
