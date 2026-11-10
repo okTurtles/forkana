@@ -135,4 +135,26 @@ func testForkOnlyArticle(t *testing.T, _ *url.URL) {
 		require.NotNil(t, fork, "the editor has their own article now")
 		assert.Equal(t, fork.Link()+"?mode=read", test.RedirectURL(resp))
 	})
+
+	// an editor who already has a fork is sent to it, or told to unarchive it first
+	t.Run("EditTabWithAFork", func(t *testing.T) {
+		fork, err := repo_model.GetForkedRepo(t.Context(), editor.ID, repo.ID)
+		require.NoError(t, err)
+		require.NotNil(t, fork)
+		noticeText := func(t *testing.T) string {
+			doc := editTab(t)
+			assert.Equal(t, 0, doc.Find("#submit-changes-button, #pre-submit-changes-button").Length())
+			return strings.Join(strings.Fields(doc.Find(`[data-role="article-fork-only-notice"]`).Text()), " ")
+		}
+
+		assert.Equal(t,
+			fmt.Sprintf("The user %s doesn't accept change requests: edit your fork of this article instead", owner.Name),
+			noticeText(t))
+
+		require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), fork, true))
+		defer func() { require.NoError(t, repo_model.SetArchiveRepoState(t.Context(), fork, false)) }()
+		assert.Equal(t,
+			fmt.Sprintf("The user %s doesn't accept change requests, and your fork of this article is archived: unarchive it in its settings to edit it", owner.Name),
+			noticeText(t))
+	})
 }

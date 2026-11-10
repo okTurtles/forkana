@@ -126,7 +126,8 @@
                                     {{else if .HasExistingFork}}
                                         {{/* User has an existing fork of this repo - show both options */}}
                                         {{if .ExistingForkArchived}}
-                                            {{/* An archived fork is read-only, so editing it is refused: only a change request is possible */}}
+                                            {{/* An archived fork is read-only, so editing it is refused: only a change request is possible,
+                                                 unless the article is fork-only (#156): then the Edit tab's notice says to unarchive the fork */}}
                                             <span class="forkana-btn forkana-btn-unavailable disabled" data-tooltip-content="{{ctx.Locale.Tr "repo.editor.existing_fork_archived"}}">
                                                 {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
                                             </span>

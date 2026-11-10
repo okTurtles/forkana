@@ -3,14 +3,20 @@
 <div class="ui bottom attached article-mode-body">
     {{template "shared/repo/article_path" .}}
     {{/* #156: nobody reviews the change requests of this article (its owner is fork-only,
-         deactivated or cannot sign in, and it has no active maintainer), so submitting
-         creates the editor's own article (one who already has a fork edits it there,
-         through "Edit in your fork", so it is not shown to them). No Figma frame has this notice: it is the Edit
-         tab's info message, as for an editor who already has an article for the subject. */}}
-    {{if and .ForkOnlyArticle .NeedsFork (not .NotEditableReason)}}
+         deactivated or cannot sign in, and it has no active maintainer). Submitting creates
+         the editor's own article; one who already has a fork is sent to it, or told to
+         unarchive it first. No Figma frame has this notice: it is the Edit tab's info
+         message, as for an editor who already has an article for the subject. */}}
+    {{if and .ForkOnlyArticle (not .NotEditableReason)}}
         <div class="ui info message" data-role="article-fork-only-notice">
             {{svg "octicon-info" 16 "tw-mr-2"}}
-            {{ctx.Locale.Tr "repo.editor.fork_only_notice" .ForkOnlyOwnerName}}
+            {{if .NeedsFork}}
+                {{ctx.Locale.Tr "repo.editor.fork_only_notice" .ForkOnlyOwnerName}}
+            {{else if .ExistingForkArchived}}
+                {{ctx.Locale.Tr "repo.editor.fork_only_notice_archived_fork" .ForkOnlyOwnerName}}
+            {{else}}
+                {{ctx.Locale.Tr "repo.editor.fork_only_notice_existing_fork" .ForkOnlyOwnerName}}
+            {{end}}
         </div>
     {{end}}
     {{if .NotEditableReason}}
