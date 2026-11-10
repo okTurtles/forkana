@@ -1,5 +1,5 @@
 import {
-  fillMessage, formatTableDate, isEmptySpaceClick, nextComparePicks, tableCompareState, tableCounterText, tablePageCount, tablePageOfRow, tablePageRange,
+  fillMessage, formatTableDate, isEmptySpaceClick, nextComparePicks, popupOpen, tableCompareState, tableCounterText, tablePageCount, tablePageOfRow, tablePageRange,
 } from './repo-history-table.ts';
 
 const article = (owner: string) => ({owner, repo: 'moon-landing', subject: 'Moon Landing'});
@@ -75,4 +75,20 @@ test('what a click must land on to clear the selection (#495)', () => {
   }
   expect(isEmptySpaceClick(null)).toBe(false);
   expect(isEmptySpaceClick(document.createElement('div'))).toBe(false); // not on the page
+});
+
+test('a hover tooltip is not a pop-up the click dismisses (#495)', () => {
+  const tippy = (theme: string) => `<div data-tippy-root><div class="tippy-box" data-theme="${theme}"></div></div>`;
+  document.body.innerHTML = '<div class="ui dropdown"><div class="menu"></div></div>';
+  expect(popupOpen()).toBe(false);
+  for (const theme of ['tooltip', 'warning', 'forkana']) {
+    document.body.innerHTML = tippy(theme);
+    expect([theme, popupOpen()]).toEqual([theme, false]);
+  }
+  for (const theme of ['menu', 'default', 'box-with-header']) {
+    document.body.innerHTML = tippy(theme);
+    expect([theme, popupOpen()]).toEqual([theme, true]);
+  }
+  document.body.innerHTML = '<div class="ui dropdown active"><div class="menu visible"></div></div>';
+  expect(popupOpen()).toBe(true);
 });

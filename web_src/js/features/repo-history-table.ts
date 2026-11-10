@@ -102,9 +102,16 @@ export function isEmptySpaceClick(target: EventTarget | null): boolean {
   return !target.closest(KEEPS_SELECTION);
 }
 
+/* Pop-ups a click dismisses. Hover tooltips (modules/tippy.ts's attachTooltip themes) are
+   not: one still fading out when the pointer leaves its button must not swallow the click. */
+const OPEN_POPUP = [
+  '.ui.dropdown.active', '.ui.dropdown .menu.visible', '.ui.dimmer.active',
+  '[data-tippy-root] .tippy-box:not([data-theme="tooltip"], [data-theme="warning"], [data-theme="forkana"])',
+].join(',');
+
 /** A menu or pop-up is open: the click that dismisses it is not one on empty space. */
-function popupOpen(): boolean {
-  return Boolean(document.querySelector('.ui.dropdown.active, .ui.dropdown .menu.visible, [data-tippy-root], .ui.dimmer.active'));
+export function popupOpen(): boolean {
+  return Boolean(document.querySelector(OPEN_POPUP));
 }
 
 type TableOptions = {
