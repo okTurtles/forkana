@@ -342,6 +342,8 @@ func EditFile(ctx *context.Context) {
 	fileName := strings.ToLower(path.Base(treePath))
 	isCreatingFirstArticle := isNewFile && ctx.Repo.Repository.IsEmpty && (fileName == "readme.md" || strings.EqualFold(treePath, "readme.md"))
 	ctx.Data["IsCreatingFirstArticle"] = isCreatingFirstArticle
+	// the first-article editor's Summary field (shared/repo/summary_field.tmpl, #475)
+	ctx.Data["ArticleSummaryMaxLength"] = forms.MaxArticleSummaryLength
 
 	if !isNewFile {
 		prefetch, dataRc, fInfo := editFileOpenExisting(ctx)

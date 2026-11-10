@@ -1,9 +1,10 @@
-{{/* The article's Summary (#475): the repository's description, required and up to 200
-     characters (forms.MaxArticleSummaryLength), edited on the article's Edit tab and when its
+{{/* The article's Summary (#475): the repository's description, required and up to
+     forms.MaxArticleSummaryLength characters, edited on the article's Edit tab and when its
      first version is written (figma Textarea 7368:264938 in "Article view / Logged out - Edit"
      7368:264887, and 7368:273784 in "New Subject" 7368:273660).
-     dict "Value" (the current summary) "Form" (optional: the id of the form it is submitted with,
-     for a field outside that form)
+     dict "Value" (the current summary) "MaxLength" (forms.MaxArticleSummaryLength, which the
+     handlers set as .ArticleSummaryMaxLength) "Form" (optional: the id of the form it is
+     submitted with, for a field outside that form)
 
      An Inter 600 14/20 label (FormControl.Label: "(required)" is spelled out, never "*"), 4px
      above a 64px white box with a 1px #d1d9e0 border, 6px radius and 8px 16px padding around
@@ -11,11 +12,11 @@
      web_src/css/features/article-view.css. data-required-message is what article-summary.ts
      shows when the field is blank (maxlength keeps it from being too long). */}}
 <div class="article-summary-field" data-role="article-summary">
-    <label class="article-summary-label" for="article-summary-input">{{ctx.Locale.Tr "repo.article_summary"}} <span class="article-summary-required">{{ctx.Locale.Tr "repo.article_summary_required_marker"}}</span></label>
-    <textarea id="article-summary-input" class="article-summary-box" name="summary" rows="2" required maxlength="200"
+    <label class="article-summary-label" for="article-summary-input">{{ctx.Locale.Tr "repo.article_summary"}} {{ctx.Locale.Tr "repo.article_summary_required_marker"}}</label>
+    <textarea id="article-summary-input" class="article-summary-box" name="summary" rows="2" required maxlength="{{.MaxLength}}"
         {{if .Form}}form="{{.Form}}"{{end}}
         placeholder="{{ctx.Locale.Tr "repo.article_summary_placeholder"}}"
         aria-describedby="article-summary-caption"
         data-required-message="{{ctx.Locale.Tr "repo.editor.summary_required"}}">{{.Value}}</textarea>
-    <div class="article-summary-caption" id="article-summary-caption">{{ctx.Locale.Tr "repo.article_summary_caption" 200}}</div>
+    <div class="article-summary-caption" id="article-summary-caption">{{ctx.Locale.Tr "repo.article_summary_caption" .MaxLength}}</div>
 </div>

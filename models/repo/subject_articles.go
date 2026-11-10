@@ -121,9 +121,11 @@ func HasReadableArticle(ctx context.Context, subjectID int64, ownerName string, 
 // the summary (description) of the subject's original article, and when an article of the
 // subject was last updated.
 type SubjectListing struct {
-	// Summary is the description of the subject's root article: the oldest non-fork article
-	// (as GetSubjectRootRepository picks it) among those the doer can open. It is empty when
-	// that article has no summary or the doer cannot open any non-fork article.
+	// Summary is the description of the subject's root article: the oldest non-fork,
+	// non-empty article among those the doer can open, ties broken by id. Unlike
+	// GetSubjectRootRepository it skips deleted (tombstoned) articles, so a deleted article
+	// never lends its summary to the row. It is empty when that article has no summary or the
+	// doer cannot open any non-fork article.
 	Summary string
 	// UpdatedUnix is the latest update of an article of the subject the doer can open.
 	UpdatedUnix timeutil.TimeStamp

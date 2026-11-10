@@ -31,7 +31,7 @@
         {{/* #475: the Summary (figma Textarea 7368:264938): the article's description, edited with
              the article and saved with it, so it belongs to the editor form below (form=). It is
              required: an article without a summary cannot be saved until it has one. */}}
-        {{template "shared/repo/summary_field" dict "Value" .Repository.Description "Form" "article-edit-form"}}
+        {{template "shared/repo/summary_field" dict "Value" .Repository.Description "MaxLength" .ArticleSummaryMaxLength "Form" "article-edit-form"}}
         {{/* Editor form */}}
         <form class="ui edit form" id="article-edit-form" method="post" action="{{.RepoOperationsLink}}/_edit/{{PathEscapeSegments .BranchName}}/{{.ReadmeTreePath}}"
               data-can-edit-directly="{{if .CanEditDirectly}}true{{else}}false{{end}}"

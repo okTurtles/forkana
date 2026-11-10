@@ -72,9 +72,9 @@ func NormalizeArticleSummary(s string) string {
 // ArticleSummary returns the summary submitted with the article, its blanks trimmed and its
 // line breaks made spaces (it is shown as one paragraph). It is required whenever the form
 // comes from an article editor (required, or a Summary was sent) and then must be from 1 to
-// MaxArticleSummaryLength characters. ok is false when there is no summary to save: the form
-// is not an article editor's.
-func (f *EditRepoFileForm) ArticleSummary(required bool) (summary string, ok bool, err error) {
+// MaxArticleSummaryLength characters. hasSummary tells whether the form is an article editor's,
+// which a summary goes with: it is true even when err says that summary is invalid.
+func (f *EditRepoFileForm) ArticleSummary(required bool) (summary string, hasSummary bool, err error) {
 	if !f.Summary.Has() && !required {
 		return "", false, nil
 	}

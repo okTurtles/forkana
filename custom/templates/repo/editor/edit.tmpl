@@ -23,7 +23,7 @@
 					     "New Subject" 7368:273660: Textarea 7368:273784 under the path) */}}
 					{{if not .NotEditableReason}}
 						<div class="first-article-summary">
-							{{template "shared/repo/summary_field" dict "Value" .Repository.Description}}
+							{{template "shared/repo/summary_field" dict "Value" .Repository.Description "MaxLength" .ArticleSummaryMaxLength}}
 						</div>
 					{{end}}
 				{{else}}

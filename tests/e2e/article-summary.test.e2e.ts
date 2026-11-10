@@ -39,7 +39,7 @@ async function box(locator: Locator) {
 
 // Textarea 7368:264938 (Edit tab) and 7368:273784 (first-article editor): a 64px box, 8/16
 // padding inside its 1px #d1d9e0 border, 6px corners, Inter 400 16/24 #59636e on white, the
-// same when hovered; the empty field's placeholder #757575; the label Inter 600 14/20 #1f2328.
+// same when hovered; the label Inter 600 14/20 #1f2328.
 async function expectFigmaSummary(page: Page) {
   const field = page.locator('#article-summary-input');
   const label = page.locator('.article-summary-field .article-summary-label');
@@ -52,16 +52,6 @@ async function expectFigmaSummary(page: Page) {
   expectColor(await rgb(field, 'color'), '#59636e');
   expectColor(await rgb(field, 'border-top-color'), '#d1d9e0');
   expectColor(await rgb(field, 'background-color'), '#ffffff');
-  // the placeholder's computed style is only exposed by Chromium
-  if (await field.inputValue() === '' && ['chromium', 'Mobile Chrome'].includes(test.info().project.name)) {
-    const placeholder = await field.evaluate((el) => {
-      const c = document.createElement('canvas').getContext('2d');
-      c.fillStyle = getComputedStyle(el, '::placeholder').color;
-      c.fillRect(0, 0, 1, 1);
-      return Array.from(c.getImageData(0, 0, 1, 1).data.slice(0, 3));
-    });
-    expectColor(placeholder, '#757575');
-  }
   await field.hover();
   expectColor(await rgb(field, 'border-top-color'), '#d1d9e0');
   expect(await style(label, 'font-size', 'line-height', 'font-weight')).toEqual({'font-size': '14px', 'line-height': '20px', 'font-weight': '600'});
@@ -101,6 +91,19 @@ test.describe('Article summary on the Edit tab (#475)', () => {
     await context.close();
   });
 
+  test('the empty Summary shows its placeholder in #757575', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, 'user2');
+    const page = await context.newPage();
+    await page.goto(editURL);
+    // the fixture article has no summary; base.css paints every ::placeholder with
+    // --color-placeholder-text (!important), which the box sets (I7368:273784;30948:151685).
+    // The token is read rather than the pseudo-element, whose style only Chromium exposes.
+    const field = page.locator('#article-summary-input');
+    await expect(field).toHaveValue('');
+    expectColor(await rgb(field, '--color-placeholder-text'), '#757575');
+    await context.close();
+  });
+
   test('the first version of an article is written with the same Summary', async ({browser}, workerInfo) => {
     const context = await load_logged_in_context(browser, workerInfo, 'user2');
     const page = await context.newPage();
@@ -126,16 +129,14 @@ test.describe('Article summary on the Edit tab (#475)', () => {
 
     // the fixture article has no summary: nothing is sent, and the field is the one to fix
     await field.fill('   ');
-    // eslint-disable-next-line playwright/no-force-option
-    await submit.click({force: true});
+    await submit.click();
     await expect(field).toHaveAttribute('aria-invalid', 'true');
     await expect(field).toBeFocused();
     expect(bodies).toHaveLength(0);
 
     await field.fill('The summary from the Edit tab');
     await expect(field).not.toHaveAttribute('aria-invalid', 'true');
-    // eslint-disable-next-line playwright/no-force-option
-    await submit.click({force: true});
+    await submit.click();
     await expect.poll(() => bodies.length).toBe(1);
     expect(bodies[0]).toContain('The summary from the Edit tab');
     expect(bodies[0]).toMatch(/name="summary"|summary=/);
