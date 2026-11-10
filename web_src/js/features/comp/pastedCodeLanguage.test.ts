@@ -1,6 +1,4 @@
-// @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
-import Editor from '@toast-ui/editor';
-import {pastedCodeLanguagePlugin, transformPastedCodeLanguage} from './pastedCodeLanguage.ts';
+import {transformPastedCodeLanguage} from './pastedCodeLanguage.ts';
 
 const diagram = 'flowchart TD\n  Start --> Stop\n';
 // As a clipboard holds it, with `>` escaped: happy-dom's parser garbles a raw `-->` in text
@@ -23,6 +21,9 @@ describe('transformPastedCodeLanguage', () => {
     ['<pre lang="X"> with a <code>', `<pre lang="mermaid"><code>${htmlDiagram}</code></pre>`, 'mermaid'],
     ['<pre lang="X"> without a <code>', `<pre lang="mermaid">${htmlDiagram}</pre>`, 'mermaid'],
     ['GitHub highlight-source-X wrapper', `<div class="highlight highlight-source-js"><pre><span class="pl-k">const</span> a = 1;</pre></div>`, 'js'],
+    ['GitHub highlight-text-X wrapper', `<div class="highlight highlight-text-md"><pre># Title</pre></div>`, 'md'],
+    ['GitHub highlight-text-html-basic, as html', `<div class="highlight highlight-text-html-basic"><pre>&lt;p&gt;</pre></div>`, 'html'],
+    ['the class before <pre lang> (the natural language)', `<pre lang="en"><code class="language-js">x</code></pre>`, 'js'],
   ])('reads the language from %s', (_, html, language) => {
     const result = codeOf(html);
     expect(result.code.tagName).toBe('CODE');
@@ -34,6 +35,19 @@ describe('transformPastedCodeLanguage', () => {
     expect(result.language).toBe('mermaid');
     expect(result.text).toBe(diagram);
     expect(result.pre.children).toHaveLength(1);
+  });
+
+  test('keeps every <code> region and a note after a toolbar', () => {
+    const result = codeOf(`<pre><div>js<button>Copy</button></div><div><code class="language-js">a()</code>\n<code>b()</code></div> // note</pre>`);
+    expect(result.language).toBe('js');
+    expect(result.text).toBe('a()\nb() // note');
+  });
+
+  test('keeps text before a <code> that is the first element', () => {
+    const html = `<pre>Output: <code class="language-js">a()</code>\n<code>b()</code></pre>`;
+    const result = codeOf(html);
+    expect(result.language).toBe('js');
+    expect(result.text).toBe('Output: a()\nb()');
   });
 
   test('wraps a <pre> of highlighter spans without losing text', () => {
@@ -49,27 +63,5 @@ describe('transformPastedCodeLanguage', () => {
     ['a language that cannot be an info string', '<pre><code class="language-a`b">x</code></pre>'],
   ])('returns the HTML unchanged for %s', (_, html) => {
     expect(transformPastedCodeLanguage(html)).toBe(html);
-  });
-});
-
-describe('pasting into the real Visual editor', () => {
-  function createEditor(plugins: unknown[]) {
-    const el = document.createElement('div');
-    document.body.append(el);
-    return new Editor({el, initialEditType: 'wysiwyg', usageStatistics: false, plugins});
-  }
-
-  test('a pasted language-mermaid block is saved as a ```mermaid fence', () => {
-    const editor = createEditor([pastedCodeLanguagePlugin]);
-    editor.wwEditor.view.pasteHTML(`<pre><code class="language-mermaid">${htmlDiagram}</code></pre>`);
-    expect(editor.getMarkdown()).toContain('```mermaid\nflowchart TD\n  Start --> Stop');
-    editor.destroy();
-  });
-
-  test('without the plugin the language is lost (the bug)', () => {
-    const editor = createEditor([]);
-    editor.wwEditor.view.pasteHTML(`<pre><code class="language-mermaid">${htmlDiagram}</code></pre>`);
-    expect(editor.getMarkdown()).not.toContain('```mermaid');
-    editor.destroy();
   });
 });

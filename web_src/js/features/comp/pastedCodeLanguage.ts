@@ -24,20 +24,30 @@ function languageFromClass(el: Element | null): string | null {
   return null;
 }
 
+// GitHub names a few grammars after their TextMate scope rather than their fence name.
+const githubScopeAliases: Record<string, string> = {'html-basic': 'html'};
+
 function languageOf(pre: HTMLElement, code: Element | null): string | null {
-  const lang = pre.getAttribute('lang');
-  if (lang && languagePattern.test(lang)) return lang;
+  // The classes first: `lang` is, in HTML, the natural language of the text (`<pre lang="en">`),
+  // and only a legacy code-language mark when a page uses it so.
   const fromClass = languageFromClass(code) ?? languageFromClass(pre);
   if (fromClass) return fromClass;
-  // GitHub's rendered Markdown: <div class="highlight highlight-source-js"><pre>…</pre></div>
-  const wrapper = pre.parentElement?.closest('[class*="highlight-source-"]');
+  const lang = pre.getAttribute('lang');
+  if (lang && languagePattern.test(lang)) return lang;
+  // GitHub's rendered Markdown: <div class="highlight highlight-source-js"><pre>…</pre></div>,
+  // or highlight-text-X for text-like grammars (md, html-basic, xml).
+  const wrapper = pre.parentElement?.closest('[class*="highlight-source-"], [class*="highlight-text-"]');
   if (wrapper) {
     for (const name of wrapper.classList) {
-      const match = /^highlight-source-(.+)$/.exec(name);
-      if (match && languagePattern.test(match[1])) return match[1];
+      const match = /^highlight-(?:source|text)-(.+)$/.exec(name);
+      if (match && languagePattern.test(match[1])) return githubScopeAliases[match[1]] ?? match[1];
     }
   }
   return null;
+}
+
+function isBlank(node: Node): boolean {
+  return node.nodeType === Node.TEXT_NODE && !node.textContent?.trim();
 }
 
 // transformPastedCodeLanguage rewrites every <pre> whose language is given in a form Toast UI
@@ -59,10 +69,20 @@ export function transformPastedCodeLanguage(html: string): string {
       target = doc.createElement('code');
       target.append(...pre.childNodes);
       pre.append(target);
-    } else if (pre.firstElementChild !== target || pre.childNodes.length !== 1) {
+    } else if (pre.firstElementChild !== target) {
       // A <code> after a toolbar (ChatGPT puts the language name and a "Copy" button in the
-      // <pre> before it): keep only the code, or the toolbar text is pasted into the block.
-      pre.replaceChildren(target);
+      // <pre> before it, and the code in a <div>): bring the <code> up to the <pre> so Toast UI
+      // reads its language, and drop the elements before it, or the toolbar text is pasted
+      // into the block. Everything from the <code> on is kept (more <code> regions, a note),
+      // and so is text before it: Toast UI pastes all the text of a <pre>.
+      for (let wrapper = target.parentElement; wrapper && wrapper !== pre; wrapper = target.parentElement) {
+        wrapper.replaceWith(...wrapper.childNodes);
+      }
+      const children = Array.from(pre.childNodes);
+      const before = children.slice(0, children.indexOf(target));
+      for (const node of before) {
+        if (node.nodeType === Node.ELEMENT_NODE || isBlank(node)) node.remove();
+      }
     }
     target.setAttribute('data-language', language);
     changed = true;
