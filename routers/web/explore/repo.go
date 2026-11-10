@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -37,6 +38,7 @@ import (
 	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/services/context"
+	"code.gitea.io/gitea/services/forms"
 	repo_service "code.gitea.io/gitea/services/repository"
 	"code.gitea.io/gitea/services/sharemeta"
 )
@@ -322,6 +324,17 @@ func Subjects(ctx *context.Context) {
 
 		allSubjects = subjects
 		count = totalCount
+	}
+
+	// The rows show the summary of each subject's original article and its latest update
+	// (#248), loaded for all the listed subjects at once.
+	listed := slices.Concat(allSubjects, similarSubjects)
+	if exactMatch != nil {
+		listed = append(listed, exactMatch)
+	}
+	if err := repo_model.LoadSubjectListings(ctx, listed, ctx.Doer); err != nil {
+		ctx.ServerError("LoadSubjectListings", err)
+		return
 	}
 
 	ctx.Data["Total"] = count
@@ -866,6 +879,8 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	ctx.Data["IsArticleModeHistory"] = mode == "history"
 	ctx.Data["IsArticleModeSettings"] = mode == "settings"
 	ctx.Data["ReadmeRequested"] = true
+	// the Edit tab's Summary field (shared/repo/summary_field.tmpl, #475)
+	ctx.Data["ArticleSummaryMaxLength"] = forms.MaxArticleSummaryLength
 
 	// Article routes set "ArticleLink" to the route the article was requested through;
 	// other entry points (subject page) fall back to the vanity article URL.

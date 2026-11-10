@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {login_user, load_logged_in_context} from './utils_e2e.ts';
+import {login_user, load_logged_in_context, fill_article_summary} from './utils_e2e.ts';
 
 // Test users:
 // - user2: owns repo1 (public, has subject_id: 1 "example-subject")
@@ -29,6 +29,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       });
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
@@ -70,6 +71,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       const submitButton = page.locator('#submit-changes-button');
@@ -85,6 +87,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
@@ -124,6 +127,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
@@ -160,6 +164,7 @@ test.describe('Fork Article Confirmation Modal', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
@@ -202,6 +207,7 @@ test.describe('Fork Button Tooltip', () => {
     const page = await context.newPage();
 
     await page.goto('/subject/example-subject/user2?mode=edit');
+    await fill_article_summary(page);
     await page.waitForLoadState('domcontentloaded');
 
     const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
@@ -226,6 +232,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
@@ -252,6 +259,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       const submitButton = page.locator('#submit-changes-button');
@@ -287,6 +295,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Verify we're on the article page
@@ -310,6 +319,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Non-owner should see both Fork button and Submit Change Request button
@@ -330,6 +340,7 @@ test.describe('Fork-on-Edit Permission Tests', () => {
   test.describe('Unauthenticated User Tests', () => {
     test('unauthenticated user is sent to sign in by Fork and Submit changes', async ({page}) => {
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // #434: the layout's Fork and Submit changes buttons, which lead to sign in
@@ -356,6 +367,7 @@ test.describe('Accessibility Tests', () => {
     const page = await context.newPage();
 
     await page.goto('/subject/example-subject/user2?mode=edit');
+    await fill_article_summary(page);
     await page.waitForLoadState('domcontentloaded');
 
     const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
@@ -381,6 +393,7 @@ test.describe('Accessibility Tests', () => {
     const page = await context.newPage();
 
     await page.goto('/subject/example-subject/user2?mode=edit');
+    await fill_article_summary(page);
     await page.waitForLoadState('domcontentloaded');
 
     const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
@@ -414,6 +427,7 @@ test.describe('Accessibility Tests', () => {
     const page = await context.newPage();
 
     await page.goto('/subject/example-subject/user2?mode=edit');
+    await fill_article_summary(page);
     await page.waitForLoadState('domcontentloaded');
 
     const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');
@@ -445,6 +459,7 @@ test.describe('Accessibility Tests', () => {
     const page = await context.newPage();
 
     await page.goto('/subject/example-subject/user2?mode=edit');
+    await fill_article_summary(page);
     await page.waitForLoadState('domcontentloaded');
 
     const forkButton = page.locator('#fork-article-button[data-fork-and-edit="true"]');

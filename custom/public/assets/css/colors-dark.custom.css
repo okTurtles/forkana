@@ -285,6 +285,21 @@
   }
 }
 
+/* #475: the article Summary's placeholder (set to the figma's #757575 for the light themes in
+   web_src/css/features/article-view.css) is Primer's dark placeholder, a step dimmer than the
+   field's #8d96a0 text, so that an empty field does not read as filled in. */
+[data-theme="gitea-dark"] .article-summary-field > textarea.article-summary-box[name="summary"],
+[data-theme="gitea-dark-protanopia-deuteranopia"] .article-summary-field > textarea.article-summary-box[name="summary"] {
+  --color-placeholder-text: #6e7681;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="gitea-auto"] .article-summary-field > textarea.article-summary-box[name="summary"],
+  [data-theme="gitea-auto-protanopia-deuteranopia"] .article-summary-field > textarea.article-summary-box[name="summary"] {
+    --color-placeholder-text: #6e7681;
+  }
+}
+
 /* Dark colorblind diff colors, values single-sourced from the --cb-dark-* block at the top.
    This block must stay *after* the two palette blocks above, which both set the standard
    red/blue diff tokens and would otherwise win on source order. */

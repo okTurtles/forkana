@@ -38,6 +38,7 @@ import {initUserAuthWebAuthn, initUserAuthWebAuthnRegister} from './features/use
 import {initRepoRelease, initRepoReleaseNew} from './features/repo-release.ts';
 import {initRepoEditor} from './features/repo-editor.ts';
 import {initArticleEditor} from './features/article-editor.ts';
+import {initArticleSummary} from './features/article-summary.ts';
 import {initArticleSettings} from './features/article-settings.ts';
 import {initCompSearchUserBox} from './features/comp/SearchUserBox.ts';
 import {initInstall} from './features/install.ts';
@@ -140,6 +141,7 @@ const initPerformanceTracer = callInitFunctions([
   initRepoDiffCommitBranchesAndTags,
   initRepoEditor,
   initArticleEditor,
+  initArticleSummary,
   initArticleSettings,
   initRepoGraphGit,
   initRepoIssueContentHistory,

@@ -86,6 +86,7 @@ func TestEditorFormActionWithoutSubject(t *testing.T) {
 				"content":             "edited again\n",
 				"commit_choice":       "direct",
 				"redirect_to_article": "true",
+				"summary":             "An article without a subject", // required with the article (#475)
 			}
 			resp := session.MakeRequest(t, NewRequestWithValues(t, "POST", action, form), http.StatusOK)
 			redirect := test.RedirectURL(resp)
