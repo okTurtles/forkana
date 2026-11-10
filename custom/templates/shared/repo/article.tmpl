@@ -15,7 +15,7 @@
              Bubble view tab is right above. */}}
         {{if .IsTombstonedRepo}}
             {{template "shared/repo/tombstone_notice" dict "Repository" .Repository}}
-        {{else if .ReadmeError}}
+        {{else if and .ReadmeError (not .IsArticleModeSettings)}}
             <div class="ui error message">
                 {{.ReadmeError}}
             </div>
@@ -23,7 +23,9 @@
             {{/* #433 item 2: the two tokens of figma Frame 549 (641:65477): "335 Contributors"
                  with person-24 and "Last updated: Yesterday" with sync-24, 14px apart. The
                  number 641:65477 draws before "Last updated" is left out, at Pierre's request
-                 (the later frames, 6961:73971, have none either). */}}
+                 (the later frames, 6961:73971, have none either). (The settings stay
+                 reachable for an article without a README, to delete it; it has no tokens.) */}}
+            {{if not .ReadmeError}}
             <div class="article-tokens" data-role="article-tokens">
                 <span class="article-token">
                     {{svg "octicon-person" 16}}
@@ -38,6 +40,7 @@
                     </span>
                 {{end}}
             </div>
+            {{end}}
             {{/* ArticleLink points at the route the article was requested through, so the
                  tabs keep the reader on the vanity URL or the permanent repository URL.
                  Every handler that renders this view sets it (prepareArticleView falls back
@@ -45,6 +48,11 @@
                  could only hard-code the vanity URL, which resolves to a different article
                  for an archived repository. */}}
             {{$articleLink := .ArticleLink}}
+            {{if .IsArticleModeSettings}}
+            {{/* #477: Settings is no tab any more, it opens from the "…" menu and has no row of
+                 tabs: "‹ Back" to the Read tab and its title stand in their place. */}}
+            {{template "shared/repo/settings" .}}
+            {{else}}
             <div id="article-tabs">
                 <div class="ui top attached tabular menu">
                     <a class="{{if .IsArticleModeRead}}active {{end}}item"
@@ -64,13 +72,6 @@
                         data-article-tab="history">
                         {{svg "octicon-history" 16}} {{ctx.Locale.Tr "repo.file_history"}}
                     </a>
-                    {{if .CanManageArticleCollaborators}}
-                        <a class="{{if .IsArticleModeSettings}}active {{end}}item"
-                            href="{{QueryBuild $articleLink "view" "article" "mode" "settings"}}"
-                            data-article-tab="settings">
-                            {{svg "octicon-gear" 16}} {{ctx.Locale.Tr "repo.settings"}}
-                        </a>
-                    {{end}}
                 </div>
                 <div class="article-tabs-trailing">
                     {{/* #433 item 3: Watch at the end of the tabs' row (figma View Tab
@@ -93,13 +94,29 @@
                          and Submit changes there instead). Its menu ("Profile" 7368:404268 in
                          "Report" 7368:404084, the frame of the Report button) holds Report,
                          which has no flow yet: shown, but unavailable. (The menu's Watch item,
-                         7368:404275, is hidden: Watch is the button before it.) */}}
+                         7368:404275, is hidden: Watch is the button before it.)
+                         #477: for the people who manage the article (its owner, and the
+                         delegates, who have its Collaborators section), Settings comes first,
+                         then a divider, then Report ("Profile" 7621:70837 of "Read – "…" menu
+                         with Settings (desktop, owner)" 7621:70651). */}}
                     {{if not .IsArticleModeEdit}}
                         <div class="ui dropdown jump article-more-dropdown" data-role="article-more">
                             <button type="button" class="article-more-button" aria-haspopup="menu" aria-label="{{ctx.Locale.Tr "repo.article_more_actions"}}">
                                 {{svg "octicon-kebab-horizontal" 16}}
                             </button>
                             <div class="menu">
+                                {{if .CanManageArticleCollaborators}}
+                                    {{/* #477 (issuecomment-6727300520): a delegate only manages the
+                                         collaborators, so their item says so and opens that section */}}
+                                    <a class="item article-more-settings" href="{{QueryBuild $articleLink "view" "article" "mode" "settings"}}" data-article-tab="settings">
+                                        {{if .IsRepoOwner}}
+                                            {{svg "octicon-gear" 16}}<span>{{ctx.Locale.Tr "repo.settings"}}</span>
+                                        {{else}}
+                                            {{svg "octicon-people" 16}}<span>{{ctx.Locale.Tr "repo.article_more_collaborators"}}</span>
+                                        {{end}}
+                                    </a>
+                                    <div class="article-more-divider" role="separator"></div>
+                                {{end}}
                                 <div class="item article-more-report" aria-disabled="true" data-tooltip-content="{{ctx.Locale.Tr "repo.article_report_unavailable"}}">
                                     {{svg "forkana-flag-16" 16}}<span>{{ctx.Locale.Tr "repo.article_report"}}</span>
                                 </div>
@@ -205,7 +222,7 @@
             {{template "shared/repo/read" .}}
             {{template "shared/repo/edit" .}}
             {{template "shared/repo/history" .}}
-            {{template "shared/repo/settings" .}}
+            {{end}}
         {{end}}
         </div>
     </div>

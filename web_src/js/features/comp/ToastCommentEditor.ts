@@ -8,6 +8,7 @@ import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {hideElem, generateElemId} from '../../utils/dom.ts';
 import {defaultToolbarItems} from './toastEditorToolbar.ts';
+import {pastedCodeLanguagePlugin} from './pastedCodeLanguage.ts';
 import {imageInfo} from '../../utils/image.ts';
 import {
   EventUploadStateChanged,
@@ -106,6 +107,8 @@ export class ToastCommentEditor {
       hideModeSwitch: false,
       toolbarItems,
       widgetRules,
+      // A code block pasted as HTML keeps its language, so pasted mermaid renders (#373).
+      plugins: [pastedCodeLanguagePlugin],
     });
     // Raw HTML Toast UI cannot convert must not crash the Visual editor (issue #446).
     installRawHtmlGuard(this.editor, widgetRules);

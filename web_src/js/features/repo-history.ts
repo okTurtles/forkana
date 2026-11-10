@@ -432,15 +432,19 @@ export function initRepoHistory() {
       subject: initialSubject || '',
       selectionOf: selectionFromElement,
       getSelection: () => selectedRepo.value,
-      // opening a row selects its article (figma 641:61208 highlights the open row)
+      // opening a row selects its article (figma 641:61208 highlights the open row), and a
+      // click on empty space clears it (null), recorded as the Bubble view's clearing is
       select: (selection) => setSelection(selection, 'replace'),
       openArticle: openArticleFrom,
     });
   }
 
+  // The tabs, and the links that act as one (#477: Settings in the "…" menu, and the
+  // Settings page's "Back", which has no row of tabs).
   function bindArticleTabs() {
-    if (!articleTabs) return;
-    for (const anchor of articleTabs.querySelectorAll<HTMLAnchorElement>('a[data-article-tab]')) {
+    const scope = articleContentEl ?? articleTabs;
+    if (!scope) return;
+    for (const anchor of scope.querySelectorAll<HTMLAnchorElement>('a[data-article-tab]')) {
       anchor.addEventListener('click', (event) => {
         if (!selectedRepo.value) return;
         event.preventDefault();

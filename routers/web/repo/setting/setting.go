@@ -826,6 +826,16 @@ func articleSettingsURL(ctx *context.Context) string {
 	return ctx.Repo.RepoLink + "?view=article&mode=settings"
 }
 
+// articleNameConfirmed tells whether the confirmation typed in an article settings dialog
+// names the current article. The dialogs show it as "<owner> / <subject>" (#477, figma
+// "477 · Transfer – dialog" 7626:70961); the spaces around the slash are optional, so
+// "<owner>/<subject>" is accepted as well.
+func articleNameConfirmed(ctx *context.Context, typed string) bool {
+	owner, subject, ok := strings.Cut(typed, "/")
+	return ok && strings.TrimSpace(owner) == ctx.Repo.Owner.Name &&
+		strings.TrimSpace(subject) == ctx.Repo.Repository.GetSubject(ctx)
+}
+
 // ArticleTransferCandidates searches the users the current article can be transferred
 // to, excluding its owner and everyone who already owns an active article on the same
 // subject: an archived article is read-only and does not occupy the subject slot.
@@ -900,7 +910,7 @@ func handleArticleSettingsPostTransfer(ctx *context.Context) {
 		return
 	}
 
-	if form.ArticleName != ctx.Repo.Owner.Name+"/"+repo.GetSubject(ctx) {
+	if !articleNameConfirmed(ctx, form.ArticleName) {
 		ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
 		ctx.Redirect(redirectURL)
 		return
@@ -957,7 +967,7 @@ func handleArticleSettingsPostTransfer(ctx *context.Context) {
 		return
 	}
 
-	recipientLink := htmlutil.HTMLFormat(`<a href="%s">%s</a>`, newOwner.HomeLink(), newOwner.DisplayName())
+	recipientLink := htmlutil.HTMLFormat(`<a href="%s">@%s</a>`, newOwner.HomeLink(), newOwner.Name)
 	if repo.Status == repo_model.RepositoryPendingTransfer {
 		log.Trace("Article transfer process was started: %s/%s -> %s", ctx.Repo.Owner.Name, repo.Name, newOwner.Name)
 		ctx.Flash.Success(ctx.Tr("repo.settings.article_transfer_started", recipientLink))
@@ -1094,7 +1104,7 @@ func handleSettingsPostDelete(ctx *context.Context) {
 	// returns to the article settings view instead of the repository settings page.
 	fromArticle := ctx.FormBool("redirect_to_article")
 	if fromArticle {
-		if form.ArticleName != ctx.Repo.Owner.Name+"/"+repo.GetSubject(ctx) {
+		if !articleNameConfirmed(ctx, form.ArticleName) {
 			ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
 			ctx.Redirect(articleSettingsURL(ctx))
 			return
@@ -1127,7 +1137,7 @@ func handleSettingsPostDelete(ctx *context.Context) {
 		ctx.Flash.Warning(ctx.Tr("repo.settings.tombstone_no_op"))
 	case fromArticle:
 		log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
-		ctx.Flash.Success(ctx.Tr("repo.settings.article_delete_success"))
+		ctx.Flash.Success(ctx.Tr("repo.settings.article_delete_success", ctx.Repo.Owner.Name+" / "+repo.GetSubject(ctx)))
 	default:
 		log.Trace("Repository deleted: %s/%s", ctx.Repo.Owner.Name, repo.Name)
 		ctx.Flash.Success(ctx.Tr("repo.settings.deletion_success"))
@@ -1160,6 +1170,7 @@ func handleSettingsPostDeleteWiki(ctx *context.Context) {
 }
 
 func handleSettingsPostArchive(ctx *context.Context) {
+	form := web.GetForm(ctx).(*forms.RepoSettingForm)
 	repo := ctx.Repo.Repository
 	if !ctx.Repo.IsOwner() {
 		ctx.HTTPError(http.StatusForbidden)
@@ -1172,6 +1183,12 @@ func handleSettingsPostArchive(ctx *context.Context) {
 	redirectURL := ctx.Repo.RepoLink + "/settings"
 	if fromArticle {
 		redirectURL = articleSettingsURL(ctx)
+		// the archive dialog asks for "<owner> / <subject>", like Transfer and Delete
+		if !articleNameConfirmed(ctx, form.ArticleName) {
+			ctx.Flash.Error(ctx.Tr("form.enterred_invalid_article_name"))
+			ctx.Redirect(redirectURL)
+			return
+		}
 	}
 
 	if repo.IsMirror {

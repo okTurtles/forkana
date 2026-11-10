@@ -60,8 +60,8 @@ func TestArticleSettingsDeleteModalNotices(t *testing.T) {
 		req := NewRequest(t, "GET", articleSettingsURL)
 		resp := session.MakeRequest(t, req, http.StatusOK)
 
-		notices := NewHTMLParser(t, resp.Body).Find("#article-delete-modal .warning.message").Text()
-		assert.Contains(t, notices, "will permanently delete")
+		notices := NewHTMLParser(t, resp.Body).Find("#article-delete-modal .forkana-dialog-banner-warning").Text()
+		assert.Contains(t, notices, "will be permanently deleted")
 		assert.NotContains(t, notices, "kept as a tombstone")
 	})
 
@@ -71,9 +71,9 @@ func TestArticleSettingsDeleteModalNotices(t *testing.T) {
 		req := NewRequest(t, "GET", articleSettingsURL)
 		resp := session.MakeRequest(t, req, http.StatusOK)
 
-		notices := NewHTMLParser(t, resp.Body).Find("#article-delete-modal .warning.message").Text()
+		notices := NewHTMLParser(t, resp.Body).Find("#article-delete-modal .forkana-dialog-banner-warning").Text()
 		assert.Contains(t, notices, "kept as a tombstone")
-		assert.NotContains(t, notices, "will permanently delete")
+		assert.NotContains(t, notices, "will be permanently deleted")
 	})
 }
 

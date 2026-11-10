@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {login_user, load_logged_in_context} from './utils_e2e.ts';
+import {login_user, load_logged_in_context, fill_article_summary} from './utils_e2e.ts';
 
 // Test users:
 // - user2: owns repo1 (public, has subject_id: 1 "example-subject")
@@ -19,6 +19,7 @@ test.describe('Submit Change Request Workflow', () => {
 
       // Navigate to article edit page
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Wait for the article content to be present
@@ -44,6 +45,7 @@ test.describe('Submit Change Request Workflow', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Wait for the article content to be present
@@ -71,6 +73,7 @@ test.describe('Submit Change Request Workflow', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       // Wait for the article view to be ready
@@ -111,6 +114,7 @@ test.describe('Submit Change Request Workflow', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
@@ -158,6 +162,7 @@ test.describe('Submit Change Request Workflow', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
@@ -182,6 +187,7 @@ test.describe('Submit Change Request Workflow', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});
@@ -217,6 +223,7 @@ test.describe('Submit Change Request Workflow', () => {
       const page = await context.newPage();
 
       await page.goto('/subject/example-subject/user2?mode=edit');
+      await fill_article_summary(page);
       await page.waitForLoadState('domcontentloaded');
 
       const submitCRButton = page.locator('#pre-submit-changes-button');
@@ -233,6 +240,7 @@ test.describe('Submit Change Request Workflow', () => {
 test.describe('Submit Change Request - Unauthenticated User', () => {
   test('unauthenticated user is sent to sign in by Fork and Submit changes', async ({page}) => {
     await page.goto('/subject/example-subject/user2?mode=edit');
+    await fill_article_summary(page);
     await page.waitForLoadState('domcontentloaded');
 
     // Wait for the article view to be present
@@ -266,6 +274,7 @@ test.describe('Submit Change Request vs Fork Button', () => {
     const page = await context.newPage();
 
     await page.goto('/subject/example-subject/user2?mode=edit');
+    await fill_article_summary(page);
     await page.waitForLoadState('domcontentloaded');
 
     await expect(page.locator('#article-view-root')).toBeVisible({timeout: 10000});

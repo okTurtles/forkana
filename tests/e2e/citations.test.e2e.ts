@@ -1,5 +1,5 @@
 import {expect, test, type Page} from '@playwright/test';
-import {create_first_article, delete_repo, disableGeneratedHooks, load_logged_in_context, login_user, normalizeSubjectTitle} from './utils_e2e.ts';
+import {create_first_article, delete_repo, disableGeneratedHooks, load_logged_in_context, login_user, normalizeSubjectTitle, fill_article_summary} from './utils_e2e.ts';
 
 // Internal links and external references (issue #399).
 // Fixtures: user2 owns repo1, the only article of the subject "example-subject".
@@ -8,6 +8,7 @@ type ToastEditorContainer = HTMLElement & {_giteaToastEditor?: {getMarkdown: () 
 
 async function openArticleEditor(page: Page): Promise<void> {
   await page.goto('/article/user2/example-subject?mode=edit');
+  await fill_article_summary(page);
   await expect(page.locator('.toastui-editor-ww-container .ProseMirror')).toBeVisible({timeout: 20000});
 }
 
@@ -177,6 +178,7 @@ test.describe('Citations and internal links', () => {
         '',
       ].join('\n'));
       await expect(page.locator('#commit-button')).toBeEnabled({timeout: 10000});
+      await fill_article_summary(page);
       await page.locator('#commit-button').click();
       await page.waitForURL(`**/subject/${normalizeSubjectTitle(subject)}/user2**`, {timeout: 30000});
 
