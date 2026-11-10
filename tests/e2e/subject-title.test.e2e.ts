@@ -59,9 +59,9 @@ test.describe('Subject title rule', () => {
     try {
       // the search offers to create the short title, it does not say it already exists
       await page.goto(`/explore/subjects?q=${encodeURIComponent(short)}`);
-      const create = page.locator('a.ui.primary.button[href^="/repo/create?subject="]');
+      const create = page.locator('a[data-role="create-new-subject"][href^="/repo/create?subject="]');
       await expect(create).toBeVisible();
-      await expect(page.locator('a.ui.basic.button[href^="/subject/"]')).toHaveCount(0);
+      await expect(page.locator('a[data-role="view-existing-subject"][href^="/subject/"]')).toHaveCount(0);
       await create.click();
 
       await expect(page.locator('input#subject')).toHaveValue(short);

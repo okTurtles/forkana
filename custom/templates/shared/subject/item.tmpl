@@ -1,20 +1,30 @@
 {{/*
 	Subject item partial template
-	Expects a Subject object with: Name
+	Expects a Subject object with: Name, Listing (repo_model.SubjectListing, loaded by
+	repo_model.LoadSubjectListings; nil when the viewer can open no article of the subject)
 
-	A subject row is name-only by design (#248): the leading icon is the atom "forkana-atom" (#460) so a row
-	matches the Subjects tab in explore/navbar.tmpl, and neither the repository counts that
-	Gitea's stock flex-list puts in "flex-item-trailing" nor the created/updated line it puts in
-	"flex-item-body" are rendered. That leaves nothing for "flex-item-main"/"flex-item-header" to
-	lay out, so the title is a direct child of the row. Row spacing, the icon colour, the
-	capitalised first letter and the removal of the flex-list separators live in
-	explore-subjects.custom.css.
+	A subject row (#248, figma "Explore_ Articles" 7368:273049, rows 7368:273085 and the four
+	under it): the atom "forkana-atom" (#460), as on the Subjects tab in explore/navbar.tmpl,
+	8px before a column of the name, the summary of the subject's original article and
+	"Updated …" (the latest update of any of its articles), 2px apart. Gitea's stock repository
+	counts ("flex-item-trailing") are not rendered. Sizes, colours and the removal of the
+	flex-list separators live in explore-subjects.custom.css.
 */}}
-<div class="flex-item">
+<div class="flex-item" data-role="subject-row">
 	<div class="flex-item-leading">
 		{{svg "forkana-atom" 16}}
 	</div>
-	<div class="flex-item-title">
-		<a class="text primary name" href="{{AppSubUrl}}/subject/{{PathEscape .Name}}">{{.Name}}</a>
+	<div class="flex-item-main">
+		<div class="flex-item-title">
+			<a class="text primary name" href="{{AppSubUrl}}/subject/{{PathEscape .Name}}">{{.Name}}</a>
+		</div>
+		{{if .Listing}}
+			{{if .Listing.Summary}}
+				<div class="subject-row-summary" data-role="subject-summary">{{.Listing.Summary}}</div>
+			{{end}}
+			{{if .Listing.UpdatedUnix}}
+				<div class="subject-row-updated" data-role="subject-updated">{{ctx.Locale.Tr "org.repo_updated"}} {{DateUtils.TimeSince .Listing.UpdatedUnix}}</div>
+			{{end}}
+		{{end}}
 	</div>
 </div>

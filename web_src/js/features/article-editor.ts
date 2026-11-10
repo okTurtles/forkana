@@ -1,5 +1,6 @@
 import {createToastEditor} from './toast-editor.ts';
 import {submitFormFetchAction} from './common-fetch-action.ts';
+import {checkArticleSummary, initArticleSummary} from './article-summary.ts';
 import {fomanticQuery} from '../modules/fomantic/base.ts';
 import {createElementFromHTML} from '../utils/dom.ts';
 import {svg} from '../svg.ts';
@@ -69,6 +70,9 @@ export function initArticleEditor() {
   if (editForm.hasAttribute('data-article-editor-initialized')) return;
   editForm.setAttribute('data-article-editor-initialized', '');
 
+  // #475: the Summary is submitted with the article and required; every button below checks it
+  initArticleSummary();
+
   // Initialize Toast UI Editor
   (async () => {
     const editor = await createToastEditor(textarea, {
@@ -92,6 +96,7 @@ export function initArticleEditor() {
     const forkArticleButton = document.querySelector<HTMLButtonElement>('#fork-article-button');
     if (forkArticleButton && !forkArticleButton.classList.contains('disabled')) {
       forkArticleButton.addEventListener('click', async () => {
+        if (!checkArticleSummary()) return;
         // Get confirmation modal content from data attributes
         const title = forkArticleButton.getAttribute('data-fork-confirm-title') || 'Confirm Fork';
         const body = forkArticleButton.getAttribute('data-fork-confirm-body') || 'Are you sure you want to fork this article?';
@@ -129,6 +134,7 @@ export function initArticleEditor() {
       const modalDescriptionInput = submitCRModal.querySelector<HTMLTextAreaElement>('#modal-cr-description');
 
       preSubmitChangesButton.addEventListener('click', () => {
+        if (!checkArticleSummary()) return;
         // Clear previous values when opening modal
         if (modalTitleInput) modalTitleInput.value = '';
         if (modalDescriptionInput) modalDescriptionInput.value = '';
@@ -184,6 +190,7 @@ export function initArticleEditor() {
     const submitChangesButton = document.querySelector<HTMLButtonElement>('#submit-changes-button');
     if (submitChangesButton && !submitChangesButton.classList.contains('disabled')) {
       submitChangesButton.addEventListener('click', async () => {
+        if (!checkArticleSummary()) return;
         // Update textarea with editor content before submission
         textarea.value = editor.getMarkdown();
 

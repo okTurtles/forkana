@@ -1,6 +1,6 @@
 import {test, expect} from '@playwright/test';
 import type {Locator, Page, Request} from '@playwright/test';
-import {login_user, load_logged_in_context} from './utils_e2e.ts';
+import {login_user, load_logged_in_context, fill_article_summary} from './utils_e2e.ts';
 
 // An article whose file opens with YAML front matter (the Wikipedia imports do) keeps it
 // byte for byte when it is edited, in either editor (#433: the Visual editor used to save it
@@ -45,6 +45,7 @@ async function openEditorWithFrontMatter(page: Page) {
     });
   }, ARTICLE);
   await page.goto(editURL, {waitUntil: 'domcontentloaded'});
+  await fill_article_summary(page);
   await expect(page.locator('#submit-changes-button')).toBeVisible({timeout: 10000});
   await expect(page.locator('.toastui-editor-ww-container .ProseMirror p', {hasText: 'preliminary publication'})).toBeVisible({timeout: 20000});
 }

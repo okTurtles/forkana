@@ -1,0 +1,18 @@
+{{define "shared/repo/flash_banner"}}
+{{/* The flash messages of the subject page as the design system's Banner (#477, #461):
+     full width under the navbar, the icon, the message and a dismiss button; values in
+     web_src/css/features/article-settings.css. The flash-* classes are the ones of
+     base/alert, which the integration tests look for. */}}
+{{- if .Flash.ErrorMsg}}{{template "shared/repo/flash_banner_item" (dict "Kind" "error" "Icon" "octicon-stop" "Message" .Flash.ErrorMsg)}}{{end -}}
+{{- if .Flash.SuccessMsg}}{{template "shared/repo/flash_banner_item" (dict "Kind" "success" "Icon" "octicon-check-circle" "Message" .Flash.SuccessMsg)}}{{end -}}
+{{- if .Flash.InfoMsg}}{{template "shared/repo/flash_banner_item" (dict "Kind" "info" "Icon" "octicon-info" "Message" .Flash.InfoMsg)}}{{end -}}
+{{- if .Flash.WarningMsg}}{{template "shared/repo/flash_banner_item" (dict "Kind" "warning" "Icon" "octicon-alert" "Message" .Flash.WarningMsg)}}{{end -}}
+{{end}}
+
+{{define "shared/repo/flash_banner_item"}}
+<div class="forkana-banner forkana-banner-{{.Kind}} flash-message flash-{{.Kind}}" id="flash-banner-{{.Kind}}" role="{{if eq .Kind "error"}}alert{{else}}status{{end}}">
+    {{svg .Icon 16 "forkana-banner-icon"}}
+    <p class="forkana-banner-text">{{.Message | SanitizeHTML}}</p>
+    <button type="button" class="forkana-banner-dismiss hide-panel" data-panel="#flash-banner-{{.Kind}}" aria-label="{{ctx.Locale.Tr "repo.settings.article_dialog_close"}}">{{svg "octicon-x" 16}}</button>
+</div>
+{{end}}

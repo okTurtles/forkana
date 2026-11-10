@@ -550,10 +550,19 @@ It needs some tricks to tweak the left/right borders with active state */
   border-color: var(--color-button-border-disabled);
 }
 
-.forkana-btn.forkana-btn-primary-unavailable {
+.forkana-btn.forkana-btn-primary-unavailable,
+:is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-primary:disabled {
+  opacity: 1;
   color: rgb(255 255 255 / 80%);
   background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
   border-color: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+}
+
+/* A secondary button with a red label: the article settings' Transfer, Archive and Delete
+   (Button 7581:68971, #477). */
+.forkana-btn.forkana-btn-danger-text,
+.forkana-btn.forkana-btn-danger-text:hover {
+  color: var(--color-danger-fg);
 }
 
 .forkana-btn.forkana-btn-unavailable:hover,

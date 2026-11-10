@@ -342,6 +342,8 @@ func EditFile(ctx *context.Context) {
 	fileName := strings.ToLower(path.Base(treePath))
 	isCreatingFirstArticle := isNewFile && ctx.Repo.Repository.IsEmpty && (fileName == "readme.md" || strings.EqualFold(treePath, "readme.md"))
 	ctx.Data["IsCreatingFirstArticle"] = isCreatingFirstArticle
+	// the first-article editor's Summary field (shared/repo/summary_field.tmpl, #475)
+	ctx.Data["ArticleSummaryMaxLength"] = forms.MaxArticleSummaryLength
 
 	if !isNewFile {
 		prefetch, dataRc, fInfo := editFileOpenExisting(ctx)
@@ -387,6 +389,19 @@ func EditFilePost(ctx *context.Context) {
 	if ctx.Written() {
 		return
 	}
+
+	// #475: the article editors (the article's Edit tab and its first version) submit the
+	// article's summary with it, and an article cannot be saved without one.
+	summary, hasSummary, err := parsed.form.ArticleSummary(ctx.FormBool("redirect_to_article"))
+	if err != nil {
+		if errors.Is(err, forms.ErrArticleSummaryTooLong) {
+			ctx.JSONError(ctx.Tr("repo.editor.summary_too_long", forms.MaxArticleSummaryLength))
+		} else {
+			ctx.JSONError(ctx.Tr("repo.editor.summary_required"))
+		}
+		return
+	}
+	forkedForNeedFork := false
 
 	// Skip the NeedFork workflow if ForkAndEdit or SubmitChangeRequest is true
 	// The ForkAndEdit workflow (handled later) will create the fork
@@ -487,6 +502,7 @@ func EditFilePost(ctx *context.Context) {
 		ctx.Repo.Repository = forkedRepo
 		ctx.Repo.Owner = ctx.Doer
 		ctx.Repo.RepoLink = forkedRepo.Link()
+		forkedForNeedFork = true
 	}
 
 	defaultCommitMessage := util.Iif(isNewFile, ctx.Locale.TrString("repo.editor.add", parsed.form.TreePath), ctx.Locale.TrString("repo.editor.update", parsed.form.TreePath))
@@ -515,7 +531,13 @@ func EditFilePost(ctx *context.Context) {
 
 	// Handle submit-change-request workflow (fork + branch + commit + PR)
 	if parsed.form.SubmitChangeRequest {
-		pr := handleSubmitChangeRequest(ctx, parsed.form, parsed)
+		// A change request is a branch of the article, and the summary is not in git: a new
+		// summary is proposed in the change request's description for the owner to apply.
+		proposedSummary := ""
+		if hasSummary && summary != forms.NormalizeArticleSummary(ctx.Repo.Repository.Description) {
+			proposedSummary = summary
+		}
+		pr := handleSubmitChangeRequest(ctx, parsed.form, parsed, proposedSummary)
 		if ctx.Written() || pr == nil {
 			return
 		}
@@ -541,7 +563,25 @@ func EditFilePost(ctx *context.Context) {
 	subjectID := ctx.Repo.Repository.SubjectID
 	isNotFork := !ctx.Repo.Repository.IsFork
 
-	_, err := files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+	// #475: the summary is the article's, so it is saved only with a commit to the default branch
+	// of the article committed to, and only by who may change that article: a writer of its code
+	// in place (not a maintainer editing a contributor's branch), or the doer on their own fork.
+	savesSummary := hasSummary && parsed.NewBranchName == targetRepo.DefaultBranch &&
+		(parsed.form.ForkAndEdit || forkedForNeedFork || ctx.Repo.Permission.CanWrite(unit.TypeCode))
+
+	// #475: an edit of the summary alone, made in place, saves the summary without committing
+	// the article unchanged (which would add an empty "Update README.md" to its history).
+	if savesSummary && operation == "update" && !parsed.form.ForkAndEdit && !forkedForNeedFork &&
+		parsed.NewBranchName == ctx.Repo.BranchName && parsed.form.TreePath == ctx.Repo.TreePath &&
+		articleContentUnchanged(ctx, parsed.form.Content.Value()) {
+		if !saveArticleSummary(ctx, targetRepo, summary) {
+			return
+		}
+		redirectForCommitChoice(ctx, parsed, parsed.form.TreePath)
+		return
+	}
+
+	_, err = files_service.ChangeRepoFiles(ctx, targetRepo, ctx.Doer, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: parsed.form.LastCommit,
 		OldBranch:    parsed.OldBranchName,
 		NewBranch:    parsed.NewBranchName,
@@ -571,6 +611,12 @@ func EditFilePost(ctx *context.Context) {
 		handleFirstArticleBecomesRoot(ctx, subjectID)
 	}
 
+	// #475: the summary is saved on the article that was committed to: the article itself, or
+	// the doer's fork of it (the fork's own summary, which its change requests start from).
+	if savesSummary && !saveArticleSummary(ctx, targetRepo, summary) {
+		return
+	}
+
 	// If we committed to a fork, redirect to the fork's article page
 	if parsed.form.ForkAndEdit && targetRepo != nil {
 		ctx.JSONRedirect(targetRepo.Link() + "?mode=read")
@@ -578,6 +624,42 @@ func EditFilePost(ctx *context.Context) {
 	}
 
 	redirectForCommitChoice(ctx, parsed, parsed.form.TreePath)
+}
+
+// articleContentUnchanged reports whether content is what the article's file (ctx.Repo.TreePath
+// at ctx.Repo.Commit) already holds, line endings aside.
+func articleContentUnchanged(ctx *context.Context, content string) bool {
+	if ctx.Repo.Commit == nil || ctx.Repo.TreePath == "" {
+		return false
+	}
+	entry, err := ctx.Repo.Commit.GetTreeEntryByPath(ctx.Repo.TreePath)
+	if err != nil || entry.IsDir() {
+		return false
+	}
+	blob := entry.Blob()
+	if blob.Size() > setting.UI.MaxDisplayFileSize {
+		return false
+	}
+	current, err := blob.GetBlobContent(setting.UI.MaxDisplayFileSize)
+	if err != nil {
+		return false
+	}
+	return strings.ReplaceAll(content, "\r", "") == strings.ReplaceAll(current, "\r", "")
+}
+
+// saveArticleSummary sets the article's summary (its description) when it changed, the stored
+// one compared in its normalized form (forms.NormalizeArticleSummary). It reports false after it
+// has written an error response.
+func saveArticleSummary(ctx *context.Context, repo *repo_model.Repository, summary string) bool {
+	if forms.NormalizeArticleSummary(repo.Description) == summary {
+		return true
+	}
+	repo.Description = summary
+	if err := repo_model.UpdateRepositoryColsWithAutoTime(ctx, repo, "description"); err != nil {
+		ctx.ServerError("UpdateRepositoryCols", err)
+		return false
+	}
+	return true
 }
 
 // handleForkAndEdit handles the fork-and-edit workflow
@@ -667,7 +749,10 @@ func cleanupOrphanedBranch(ctx *context.Context, repo *repo_model.Repository, gi
 // It creates a unique branch in the target repository, commits the changes, and creates a change request
 // from that branch to the default branch (same-repo CR, no fork involved).
 // Returns the created change request, or nil if an error occurred.
-func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileForm, parsed *preparedEditorCommitForm[*forms.EditRepoFileForm]) *issues_model.PullRequest {
+//
+// proposedSummary, when not empty, is a new summary for the article: it is not in git, so the
+// change request's description proposes it (#475).
+func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileForm, parsed *preparedEditorCommitForm[*forms.EditRepoFileForm], proposedSummary string) *issues_model.PullRequest {
 	// Verify user is authenticated (defense-in-depth, middleware should already handle this)
 	if ctx.Doer == nil {
 		ctx.JSONError(ctx.Tr("error.not_found"))
@@ -820,6 +905,9 @@ func handleSubmitChangeRequest(ctx *context.Context, form *forms.EditRepoFileFor
 
 	// Create the change request using the title computed above
 	prContent := strings.TrimSpace(form.ChangeRequestDescription)
+	if proposedSummary != "" {
+		prContent = strings.TrimSpace(prContent + "\n\n" + ctx.Locale.TrString("repo.editor.change_request_proposed_summary") + "\n\n> " + proposedSummary)
+	}
 	// Defense-in-depth: cap description length so downstream processing/storage isn't impacted by huge input.
 	// Note: this does not limit the incoming request size.
 	prContent = util.TruncateRunes(prContent, 65535)
