@@ -3,6 +3,7 @@
 
 /* fomantic replacements */
 @import "./modules/button.css";
+@import "./modules/banner.css";
 @import "./modules/container.css";
 @import "./modules/divider.css";
 @import "./modules/header.css";
@@ -45,6 +46,7 @@
 @import "./features/bubble-graph.css";
 @import "./features/subject-views.css";
 @import "./features/article-view.css";
+@import "./features/article-settings.css";
 @import "./features/subject-compare.css";
 @import "./features/changes-hub.css";
 

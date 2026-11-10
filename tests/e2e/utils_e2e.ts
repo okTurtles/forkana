@@ -181,6 +181,16 @@ export async function create_article_via_api(user: string, subjectName: string, 
 }
 
 /**
+ * Fill the article's Summary (#475), which the Edit tab and the first-article editor require
+ * before they save, when the page shows it and it is blank. The fixture articles have none.
+ */
+export async function fill_article_summary(page: Page, summary = 'A summary written by an E2E test'): Promise<void> {
+  const field = page.locator('#article-summary-input');
+  if (await field.count() === 0) return;
+  if ((await field.inputValue()).trim() === '') await field.fill(summary);
+}
+
+/**
  * Create an article by going through the standard repo create form.
  * This is useful when we want to create an empty repo without auto-redirect to editor.
  */

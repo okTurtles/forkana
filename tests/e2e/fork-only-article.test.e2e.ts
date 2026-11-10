@@ -58,4 +58,16 @@ test('Edit tab of a fork-only article: the notice, and Submit changes forks it',
   await submit.click();
   await page.waitForURL((url) => url.pathname.includes(`/${editor}`) && !url.pathname.includes('/pulls/'), {timeout: 20000});
   expect(page.url()).toContain('mode=read');
+
+  // the compare page explains that the article takes no change requests instead of
+  // offering the change request form, even now that the editor has a fork
+  const repoName = `${subject}-${owner}`;
+  const api = await request.newContext({baseURL: `${(env.GITEA_URL || 'http://localhost:3000').replace(/\/+$/, '')}/`});
+  const {default_branch: branch} = await (await api.get(`api/v1/repos/${owner}/${repoName}`)).json();
+  await api.dispose();
+  await page.goto(`/${owner}/${repoName}/compare/${branch}...${editor}/${repoName}:${branch}`);
+  const compareNotice = page.locator('[data-role="compare-fork-only-notice"]');
+  await expect(compareNotice).toContainText(`The user ${owner} doesn't accept change requests`);
+  await expect(compareNotice.locator('a')).toHaveAttribute('href', /mode=edit/);
+  await expect(page.locator('.pullrequest-form')).toHaveCount(0);
 });

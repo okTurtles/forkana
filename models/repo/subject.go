@@ -37,6 +37,10 @@ type Subject struct {
 	Slug        string             `xorm:"VARCHAR(255) UNIQUE NOT NULL"` // URL-safe slug (globally unique)
 	CreatedUnix timeutil.TimeStamp `xorm:"INDEX created"`
 	UpdatedUnix timeutil.TimeStamp `xorm:"INDEX updated"`
+
+	// Listing is what the subjects list shows under the name, set by LoadSubjectListings
+	// (nil until then, or when the doer can open no article of the subject).
+	Listing *SubjectListing `xorm:"-"`
 }
 
 func init() {

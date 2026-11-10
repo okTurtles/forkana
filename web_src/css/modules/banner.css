@@ -1,0 +1,135 @@
+/* The design system's Banner and Announcement, as the subject page shows them above
+   the article (#477, #461): what an action reports, and an invite or a transfer to
+   answer. Values from figma section 08 (7570:71939). */
+
+/* ── Banner (Banner 7646:74305, under the navbar) ────────────────────────────
+   Full width, 8px around: the 16px icon in a 32px square, the Inter 400 14/20 message
+   (6px 8px 6px 0) and a 32px dismiss button. Success #dafbe1 and its #1a7f37 icon;
+   error, warning and info in their colours. */
+.forkana-banner {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px;
+  background: var(--color-success-bg);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-text-primary) 4%, transparent);
+}
+
+.forkana-banner-icon {
+  flex-shrink: 0;
+  box-sizing: content-box;
+  width: 16px;
+  padding: 8px;
+  color: var(--color-green-dark-1);
+}
+
+.forkana-banner-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px 6px 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.forkana-banner-dismiss {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.forkana-banner-dismiss:hover {
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+}
+
+.forkana-banner-error {
+  background: var(--color-danger-bg);
+}
+
+.forkana-banner-error .forkana-banner-icon {
+  color: var(--color-danger-fg);
+}
+
+.forkana-banner-warning {
+  background: var(--color-warning-bg);
+}
+
+.forkana-banner-warning .forkana-banner-icon {
+  color: var(--color-attention-fg);
+}
+
+.forkana-banner-info {
+  background: var(--color-banner-bg);
+}
+
+.forkana-banner-info .forkana-banner-icon {
+  color: var(--color-primary);
+}
+
+/* ── Announcement (7619:69436, "Invited person – Accept / Decline") ──────────
+   An invite or a transfer to answer, full width under the navbar: #dad5ff with a #4e40fa
+   40% rule above and below, 8px 48px (8px 16px on a phone, 7622:69790); the 16px icon in
+   a 24px column, the Inter 400 14/20 message (6px 8px 6px 0), then Decline and Accept,
+   4px apart. */
+.forkana-announcement {
+  display: flex;
+  align-items: flex-start;
+  padding: 7px 48px;
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.forkana-announcement-message {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.forkana-announcement-message > .svg {
+  flex-shrink: 0;
+  box-sizing: content-box;
+  width: 16px;
+  padding: 8px 8px 8px 0;
+}
+
+.forkana-announcement-message > span {
+  padding: 6px 8px 6px 0;
+}
+
+.forkana-announcement-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.forkana-announcement-actions > form {
+  margin: 0;
+}
+
+@media (max-width: 767.98px) {
+  /* the Announcement 8px 16px, its buttons 8px under the message and 6px above its
+     padding (Content 6px 8px 6px 0 of 7622:69790) */
+  .forkana-announcement {
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px 16px 13px;
+  }
+
+  .forkana-announcement-actions {
+    padding-left: 24px;
+  }
+}

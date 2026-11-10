@@ -1,6 +1,6 @@
 import {test, expect} from '@playwright/test';
 import type {Locator, Page, Request} from '@playwright/test';
-import {create_first_article, delete_repo, disableGeneratedHooks, load_logged_in_context, login_user, normalizeSubjectTitle} from './utils_e2e.ts';
+import {create_first_article, delete_repo, disableGeneratedHooks, load_logged_in_context, login_user, normalizeSubjectTitle, fill_article_summary} from './utils_e2e.ts';
 
 // An article with raw HTML that Toast UI cannot convert to its Visual editor (a declaration,
 // a processing instruction, a comment it does not recognize, an indented HTML block) used to
@@ -73,12 +73,14 @@ test.describe('Article with raw HTML in the editor', () => {
         (el as HTMLElement & {_giteaToastEditor: {setMarkdown: (md: string) => void}})._giteaToastEditor.setMarkdown(text);
       }, ARTICLE);
       await expect(page.locator('#commit-button')).toBeEnabled({timeout: 10000});
+      await fill_article_summary(page);
       await page.locator('#commit-button').click();
       await page.waitForURL(`**/subject/${normalizeSubjectTitle(subject)}/user2**`, {timeout: 30000});
       pageErrors.length = 0;
 
       // Edit it again: the Visual editor opens with the content.
       await page.goto(`/subject/${normalizeSubjectTitle(subject)}/user2?mode=edit`, {waitUntil: 'domcontentloaded'});
+      await fill_article_summary(page);
       await expect(page.locator('#submit-changes-button')).toBeVisible({timeout: 20000});
       await expect(visual(page).locator('p', {hasText: 'Last paragraph.'})).toBeVisible({timeout: 20000});
       await expect(visual(page).locator('h1', {hasText: 'Mark down'})).toBeVisible();

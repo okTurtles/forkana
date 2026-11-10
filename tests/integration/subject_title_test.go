@@ -182,7 +182,7 @@ func TestSubjectTitleRule(t *testing.T) {
 
 		// ... which offers to create a cleaned-up, valid title instead
 		resp = session.MakeRequest(t, NewRequest(t, "GET", location), http.StatusOK)
-		href, ok := NewHTMLParser(t, resp.Body).Find(`a.ui.primary.button[href^="/repo/create?subject="]`).Attr("href")
+		href, ok := NewHTMLParser(t, resp.Body).Find(`a[data-role="create-new-subject"][href^="/repo/create?subject="]`).Attr("href")
 		require.True(t, ok)
 		assert.Equal(t, "/repo/create?subject=Hashtag", href)
 	})
@@ -190,7 +190,7 @@ func TestSubjectTitleRule(t *testing.T) {
 	t.Run("Explore create offer uses a cleaned title", func(t *testing.T) {
 		offer := func(t *testing.T, keyword string) (string, bool) {
 			resp := session.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q="+url.QueryEscape(keyword)), http.StatusOK)
-			return NewHTMLParser(t, resp.Body).Find(`a.ui.primary.button[href^="/repo/create?subject="]`).Attr("href")
+			return NewHTMLParser(t, resp.Body).Find(`a[data-role="create-new-subject"][href^="/repo/create?subject="]`).Attr("href")
 		}
 		// valid titles are offered as typed, apart from the first letter
 		href, ok := offer(t, ";qwerty")
@@ -430,8 +430,8 @@ func TestSubjectTitleWithoutASCIILetters(t *testing.T) {
 	searchOffer := func(t *testing.T, keyword string) (create, existing string) {
 		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q="+url.QueryEscape(keyword)), http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
-		create = htmlDoc.Find(`a.ui.primary.button[href^="/repo/create?subject="]`).AttrOr("href", "")
-		existing = htmlDoc.Find(`a.ui.basic.button[href^="/subject/"]`).AttrOr("href", "")
+		create = htmlDoc.Find(`a[data-role="create-new-subject"][href^="/repo/create?subject="]`).AttrOr("href", "")
+		existing = htmlDoc.Find(`a[data-role="view-existing-subject"][href^="/subject/"]`).AttrOr("href", "")
 		return create, existing
 	}
 
@@ -563,6 +563,6 @@ func TestSubjectTitleWithoutASCIILetters(t *testing.T) {
 
 		// the search for the bare number does not report the Moscow subject as an exact match
 		resp := session2.MakeRequest(t, NewRequest(t, "GET", "/explore/subjects?q=1980"), http.StatusOK)
-		assert.NotContains(t, NewHTMLParser(t, resp.Body).Find(`a.ui.basic.button[href^="/subject/"]`).AttrOr("href", ""), url.PathEscape("Москва"))
+		assert.NotContains(t, NewHTMLParser(t, resp.Body).Find(`a[data-role="view-existing-subject"][href^="/subject/"]`).AttrOr("href", ""), url.PathEscape("Москва"))
 	})
 }

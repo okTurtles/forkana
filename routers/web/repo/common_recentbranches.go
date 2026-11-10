@@ -6,6 +6,7 @@ package repo
 import (
 	git_model "code.gitea.io/gitea/models/git"
 	access_model "code.gitea.io/gitea/models/perm/access"
+	repo_model "code.gitea.io/gitea/models/repo"
 	unit_model "code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/services/context"
@@ -42,6 +43,13 @@ func prepareRecentlyPushedNewBranches(ctx *context.Context) {
 		return
 	}
 	if !opts.BaseRepo.UnitEnabled(ctx, unit_model.TypePullRequests) || !baseRepoPerm.CanRead(unit_model.TypePullRequests) {
+		return
+	}
+	// Forkana #156: no "compare & pull request" prompt towards a fork-only article
+	if refuses, err := repo_model.ArticleRefusesChangeRequestsFrom(ctx, opts.BaseRepo, ctx.Doer); err != nil {
+		log.Error("ArticleRefusesChangeRequestsFrom: %v", err)
+		return
+	} else if refuses {
 		return
 	}
 

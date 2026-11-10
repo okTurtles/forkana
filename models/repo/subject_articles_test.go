@@ -123,3 +123,63 @@ func TestReadableArticlesBySubject(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, counts)
 }
+
+// #248: a subject row shows its original article's summary and its latest update
+func TestFindSubjectListings(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	subject, err := repo_model.GetOrCreateSubject(ctx, "Apollo 11")
+	require.NoError(t, err)
+	other, err := repo_model.GetOrCreateSubject(ctx, "Apollo 17")
+	require.NoError(t, err)
+	unread, err := repo_model.GetOrCreateSubject(ctx, "Apollo 13")
+	require.NoError(t, err)
+
+	assign := func(repoID, subjectID, created, updated int64, description string, fork bool) {
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repoID})
+		repo.SubjectID, repo.Description = subjectID, description
+		repo.CreatedUnix, repo.UpdatedUnix = timeutil.TimeStamp(created), timeutil.TimeStamp(updated)
+		repo.IsFork = fork
+		require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, repo,
+			"subject_id", "description", "created_unix", "updated_unix", "is_fork"))
+	}
+	assign(2, subject.ID, 50, 100, "The private one", false)   // user2, private: the oldest
+	assign(1, subject.ID, 100, 200, "  The original  ", false) // user2, public
+	assign(4, subject.ID, 200, 900, "A fork", true)            // user5, a fork: the latest update
+	assign(33, other.ID, 300, 400, "", false)                  // user2, public, no summary
+	assign(10, unread.ID, 10, 10, "Deleted", false)            // user12, deleted below
+	tomb := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 10})
+	tomb.IsTombstoned = true
+	require.NoError(t, repo_model.UpdateRepositoryColsNoAutoTime(ctx, tomb, "is_tombstoned"))
+
+	ids := []int64{subject.ID, other.ID, unread.ID}
+
+	// signed out, the private article is neither the root nor the latest update; a fork is
+	// never the root but its update counts
+	listings, err := repo_model.FindSubjectListings(ctx, ids, nil)
+	require.NoError(t, err)
+	require.Contains(t, listings, subject.ID)
+	assert.Equal(t, "The original", listings[subject.ID].Summary)
+	assert.Equal(t, timeutil.TimeStamp(900), listings[subject.ID].UpdatedUnix)
+	require.Contains(t, listings, other.ID)
+	assert.Empty(t, listings[other.ID].Summary)
+	assert.Equal(t, timeutil.TimeStamp(400), listings[other.ID].UpdatedUnix)
+	assert.NotContains(t, listings, unread.ID)
+
+	// its owner can open the private article, the oldest, so it is the root for them
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	listings, err = repo_model.FindSubjectListings(ctx, ids, user2)
+	require.NoError(t, err)
+	assert.Equal(t, "The private one", listings[subject.ID].Summary)
+
+	subjects := []*repo_model.Subject{subject, other, unread}
+	require.NoError(t, repo_model.LoadSubjectListings(ctx, subjects, nil))
+	require.NotNil(t, subject.Listing)
+	assert.Equal(t, "The original", subject.Listing.Summary)
+	assert.Nil(t, unread.Listing)
+
+	listings, err = repo_model.FindSubjectListings(ctx, nil, nil)
+	require.NoError(t, err)
+	assert.Empty(t, listings)
+}

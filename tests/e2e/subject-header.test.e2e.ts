@@ -329,7 +329,7 @@ async function switchTab(page: Page, tab: string) {
 // anchor in the section being swapped, scrolled the page (sometimes to the top).
 
 // The boxes that must not move, in the page, and the scroll position. The first line of
-// content is the article's path, in Read, Edit and History (Settings has its own).
+// content is the article's path, in Read, Edit and History.
 const FIRST_CONTENT = '#article-view-root .article-path';
 
 type Layout = {scrollY: number, boxes: Record<string, Box>};
@@ -372,13 +372,13 @@ test.describe('switching tabs does not move the page', () => {
         await page.evaluate((y) => window.scrollTo(0, y), scrolled);
         const reference = await layoutOf(page);
         expect(Math.abs(reference.scrollY - scrolled)).toBeLessThanOrEqual(1);
-        // Read, Edit, History and the owner's Settings
+        // Read, Edit and History (#477: Settings is in the "…" menu, not a tab). On a
+        // phone, the Edit tab's Fork and Submit changes have a row of their own under the
+        // tabs, so its content starts lower; the tabs themselves do not move.
         for (const tab of ['edit', 'history', 'read', 'edit']) {
           await switchTab(page, tab);
-          expectSameLayout(await layoutOf(page), reference, tab);
+          expectSameLayout(await layoutOf(page, !(width < 768 && tab === 'edit')), reference, tab);
         }
-        await switchTab(page, 'settings');
-        expectSameLayout(await layoutOf(page, false), reference, 'settings');
         // the editor was not focused on its own
         expect(await page.evaluate(() => Boolean(document.activeElement?.closest('.toastui-editor-defaultUI')))).toBe(false);
         await context.close();

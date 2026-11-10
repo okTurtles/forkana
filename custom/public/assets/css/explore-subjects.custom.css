@@ -1,41 +1,47 @@
-/* Explore Subjects list — the name-first row from the Forkana design (#248).
+/* Explore Subjects list (#248), after the figma "Explore_ Articles" frames of "V2. Search by a
+   Subject (with description)": 7368:273049 (with an exact match) and 7368:273128 (without).
 
    Gitea's stock flex-list draws a rule between every row and spaces them for a repository
-   listing. The subjects list is a plain index of names, so the separators are removed and the
-   rows are tightened. Scoped to ".page-content.explore.subjects" so the flex-lists on the user
-   profile and the explore users tab keep their own treatment. */
+   listing; the design has neither. Scoped to ".page-content.explore.subjects" so the flex-lists on
+   the user profile and the explore users tab keep their own treatment. */
 
 .page-content.explore.subjects .flex-list {
   margin-top: 8px;
 }
 
 /* Drop the row separators (web_src/css/shared/flex-list.css sets a border-top here) and space
-   the rows 16px apart. The gap is a margin between siblings rather than padding on every row so
-   that it is exactly 16px of whitespace, and so the section headings inside the list keep the
-   margins their own utility classes give them. */
+   the rows 16px apart (Frame 1029 7368:273083, gap 16). The gap is a margin between siblings
+   rather than padding on every row so that it is exactly 16px of whitespace, and so the section
+   headings inside the list keep their own margins. */
 .page-content.explore.subjects .flex-list > .flex-item + .flex-item {
   border-top: none;
   margin-top: 16px;
 }
 
-/* The 8px gap matches the stock .flex-item, but it is a value the design asks for by name, so
-   it is restated here rather than inherited from a rule that is free to change. */
+/* A row (Frame 1018 7368:273085): the icon, 8px, then the text column, both from the top */
 .page-content.explore.subjects .flex-list > .flex-item {
   padding: 0;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
 }
 
-/* Target glyph in the body text colour rather than the link colour, so the name is the only
-   accented thing in the row. The token is near-black on light themes and near-white on dark
-   ones, which keeps the glyph legible either way. */
+/* The atom glyph (#460) in the body text colour rather than the link colour, so the name is the
+   only accented thing in the row; 2px down so that it is centred on the name's 20px line. */
 .page-content.explore.subjects .flex-item .flex-item-leading {
   color: var(--color-text);
+  padding-top: 2px;
 }
 
+/* The text column (Frame 592 7368:273087): the name, the summary and "Updated …", 2px apart */
+.page-content.explore.subjects .flex-item .flex-item-main {
+  gap: 2px;
+}
+
+/* The name (7368:273089): Inter 600 14px/20px #4e40fa */
 .page-content.explore.subjects .flex-item .flex-item-title a {
   font-size: 14px;
-  font-weight: 500;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
   /* ::first-letter only applies to a block container, and the anchor is inline by default. */
   display: inline-block;
 }
@@ -43,4 +49,79 @@
 /* Display-only capitalisation: the stored subject name and the URL it links to are untouched. */
 .page-content.explore.subjects .flex-item .flex-item-title a::first-letter {
   text-transform: uppercase;
+}
+
+/* The summary of the subject's original article (7368:273098 and the rows under it): Inter 400
+   12px/20px #1f2328 */
+.page-content.explore.subjects .subject-row-summary {
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* "Updated 1 min ago" (7368:273081): Inter 400 12px/18px #59636e */
+.page-content.explore.subjects .subject-row-updated {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-text-light-3);
+}
+
+/* The section headings, "Search results for Moon" (7368:273125) and "Similar" (7368:273127):
+   Inter 600 16px/24px #1f2328, 16px above their first row. "Similar" is 34px under the exact
+   match (its row ends at 324, the heading starts at 358) and 39px under the "Create a new
+   Subject" button (which ends at 319 in 7368:273128). */
+.page-content.explore.subjects .subject-list-heading {
+  margin: 0 0 16px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.page-content.explore.subjects .subject-list-heading.subject-list-similar {
+  margin-top: 34px;
+}
+
+.page-content.explore.subjects .subject-no-exact + .subject-list-heading.subject-list-similar {
+  margin-top: 39px;
+}
+
+/* "No exact page found for 'Moon'. Want to create it?" (Frame 1018 7368:273143): the skip icon,
+   8px, Inter 400 12px/18px #1f2328, neither italic nor muted */
+.page-content.explore.subjects .subject-no-exact-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-text-primary);
+}
+
+.page-content.explore.subjects .subject-no-exact-message .svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* "Create a new Subject" (Button 7368:273149): the small secondary button, 11px under the
+   message and 22px in from the icon's left edge (x 204 against 182) */
+.page-content.explore.subjects .subject-no-exact .forkana-btn {
+  margin: 11px 0 0 22px;
+}
+
+/* #248 item 2: the search field's clear button is violet (--color-primary) while the field
+   holds text. Chrome and Safari draw it with ::-webkit-search-cancel-button, in their own grey
+   or blue; the octicon x-circle-fill (public/assets/img/svg, next to this file's assets/css)
+   replaces it, painted in the primary colour. */
+.page-content.explore.subjects #subject-search-form input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  cursor: pointer;
+  background-color: var(--color-primary);
+  -webkit-mask: url("../img/svg/octicon-x-circle-fill.svg") center / 16px 16px no-repeat;
+  mask: url("../img/svg/octicon-x-circle-fill.svg") center / 16px 16px no-repeat;
 }

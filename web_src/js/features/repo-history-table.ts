@@ -4,6 +4,7 @@ import {collapseInfoBar, expandInfoBar} from '../modules/info-bar-transition.ts'
 import {fetchReadmeSummary} from '../components/graph/article-summary.ts';
 import {matchesSelection, type RepoSelection} from '../modules/repo-selection.ts';
 import {getCurrentLocale} from '../utils.ts';
+import {isPlainClick} from '../utils/dom.ts';
 import {
   COMPARE_MODE_STATE_EVENT, compareAnnouncementFor, readCompareMessages, subjectCompareUrl,
   type CompareAnnouncementState, type CompareModeState,
@@ -16,7 +17,9 @@ import {
    - One row open at a time: its summary (the repository description, or else the first
      paragraph of the article's README, as the Bubble view shows it) and "Go to article".
      Opening a row selects its article.
-   - The selected article's row is highlighted (641:61208).
+   - The selected article's row is highlighted (641:61208). A click on empty space clears
+     the selection (and closes the open row), as a click on the Bubble view's empty canvas
+     does (#495): figma's unselected table (641:61176) has no row highlighted or open.
    - Compare mode of its own (#437): the header's Compare button, pressed on the Table view,
      keeps the table on screen; the rows (their checkboxes, or the rows themselves) pick
      the two articles to compare and the Compare banner (CompareAnnouncement.vue) says how
@@ -81,13 +84,44 @@ export function tableCompareState(on: boolean, picks: number, unavailableShown: 
   return unavailableShown ? 'unavailable' : null;
 }
 
+/* What a click must land on to leave the selection alone (#495): the article rows and
+   their summaries, anything that does something (links, buttons, form controls, menus,
+   pop-ups, modals), the Compare banners, and the site's navbar and footer. */
+const KEEPS_SELECTION = [
+  'tr.article-row', 'tr.article-detail-row',
+  'a', 'button', 'input', 'select', 'textarea', 'label', 'summary', '[contenteditable]:not([contenteditable="false"])',
+  '[role="button"]', '[role="link"]', '[role="menu"]', '[role="menuitem"]', '[role="dialog"]', '[role="tab"]',
+  '.dropdown', '.menu', '.ui.modal', '.ui.dimmer', '[data-tippy-root]',
+  '#compare-announcement-root', '#table-compare-announcement-root',
+  '#navbar', '.page-footer',
+].join(',');
+
+/** Does a click on `target` land on empty space, which clears the selection (#495)? */
+export function isEmptySpaceClick(target: EventTarget | null): boolean {
+  if (!(target instanceof Element) || !target.isConnected) return false;
+  return !target.closest(KEEPS_SELECTION);
+}
+
+/* Pop-ups a click dismisses. Hover tooltips (modules/tippy.ts's attachTooltip themes) are
+   not: one still fading out when the pointer leaves its button must not swallow the click. */
+const OPEN_POPUP = [
+  '.ui.dropdown.active', '.ui.dropdown .menu.visible', '.ui.dimmer.active',
+  '[data-tippy-root] .tippy-box:not([data-theme="tooltip"], [data-theme="warning"], [data-theme="forkana"])',
+].join(',');
+
+/** A menu or pop-up is open: the click that dismisses it is not one on empty space. */
+export function popupOpen(): boolean {
+  return Boolean(document.querySelector(OPEN_POPUP));
+}
+
 type TableOptions = {
   section: HTMLElement;
   appSubUrl: string;
   subject: string;
   selectionOf: (el: Element) => RepoSelection | null;
   getSelection: () => RepoSelection | null;
-  select: (selection: RepoSelection) => void;
+  /** Changes the page's selection; null clears it. */
+  select: (selection: RepoSelection | null) => void;
   openArticle: (el: Element) => void;
 };
 
@@ -373,6 +407,26 @@ export function initHistoryTable(opts: TableOptions): HistoryTable | null {
       showPage(page + step, true);
     });
   }
+
+  // #495: a click on empty space clears the selection, as one on the Bubble view's empty
+  // canvas does (FishboneGraph.vue's "click.bg"), and closes the open row with it, since
+  // opening a row is what selected it. Not in compare mode, whose highlighted rows are the
+  // picks, and not by a click that ends a text selection or dismisses an open menu.
+  let popupOpenOnPress = false;
+  document.addEventListener('pointerdown', () => {
+    popupOpenOnPress = popupOpen();
+  }, {capture: true});
+  document.addEventListener('click', (event) => {
+    const dismissedPopup = popupOpenOnPress;
+    popupOpenOnPress = false;
+    if (!active || compare.on || dismissedPopup || event.defaultPrevented) return;
+    if (!isPlainClick(event)) return;
+    const textSelection = window.getSelection();
+    if (textSelection && !textSelection.isCollapsed) return;
+    if (!isEmptySpaceClick(event.target)) return;
+    for (const row of rows) if (row.classList.contains('is-open')) setOpen(row, false);
+    if (getSelection()) select(null);
+  });
 
   // the page holding the selected article, else the first
   const selectedIdx = rowOf(getSelection());

@@ -16,62 +16,27 @@ import (
 var ErrArticleForkOnly = util.NewPermissionDeniedErrorf("the article does not accept change requests")
 
 // UserAcceptsChangeRequests reports whether somebody reads the change requests sent to
-// the user: not when the user is fork-only (like the accounts importing Wikipedia
-// articles), deactivated or prohibited from signing in.
+// the user, see repo_model.UserAcceptsChangeRequests.
 func UserAcceptsChangeRequests(u *user_model.User) bool {
-	if u == nil {
-		return false
-	}
-	if u.IsForkOnly {
-		return false
-	}
-	// an organization is not a person who signs in, its members review for it
-	if u.IsOrganization() {
-		return true
-	}
-	return u.IsActive && !u.ProhibitLogin
+	return repo_model.UserAcceptsChangeRequests(u)
 }
 
 // IsArticleForkOnly reports whether nobody can review the change requests of the
-// article, so editing it must create the editor's own article (a fork) instead: its
-// owner does not accept change requests (see UserAcceptsChangeRequests) and it has no
-// active maintainer. It returns the article's owner as well, to name them to the editor.
-// An owner whose account is gone is the ghost user, who accepts nothing. A repository
-// without a subject is not an article, it is never fork-only.
+// article, so editing it must create the editor's own article (a fork) instead, see
+// repo_model.IsArticleForkOnly. It returns the article's owner as well.
 func IsArticleForkOnly(ctx context.Context, repo *repo_model.Repository) (bool, *user_model.User, error) {
-	if repo.SubjectID == 0 {
-		return false, nil, nil
-	}
-	owner := user_model.NewGhostUser()
-	if err := repo.LoadOwner(ctx); err == nil {
-		owner = repo.Owner
-	} else if !user_model.IsErrUserNotExist(err) {
-		return false, nil, err
-	}
-	if UserAcceptsChangeRequests(owner) {
-		return false, owner, nil
-	}
-
-	hasMaintainer, err := repo_model.HasActiveArticleMaintainer(ctx, repo.ID)
-	if err != nil {
-		return false, nil, err
-	}
-	return !hasMaintainer, owner, nil
+	return repo_model.IsArticleForkOnly(ctx, repo)
 }
 
 // CheckArticleAcceptsChangeRequest returns ErrArticleForkOnly when the doer may not open a
 // change request against the article because nobody can review it. Its owner and its
 // maintainers, who can merge change requests, are never refused.
 func CheckArticleAcceptsChangeRequest(ctx context.Context, doer *user_model.User, repo *repo_model.Repository) error {
-	canMerge, err := CanUserMergeArticleChangeRequest(ctx, doer, repo)
-	if err != nil || canMerge {
-		return err
-	}
-	forkOnly, _, err := IsArticleForkOnly(ctx, repo)
+	refuses, err := repo_model.ArticleRefusesChangeRequestsFrom(ctx, repo, doer)
 	if err != nil {
 		return err
 	}
-	if forkOnly {
+	if refuses {
 		return ErrArticleForkOnly
 	}
 	return nil
