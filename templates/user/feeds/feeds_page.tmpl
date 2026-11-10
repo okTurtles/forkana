@@ -165,7 +165,7 @@
 		{{with .Page.Paginater}}
 		{{$params := $.Page.GetParams}}
 		{{if or (eq .TotalPages -1) (gt .TotalPages 1)}}
-		<nav class="feeds-pagination tw-mt-8" aria-label="Pagination">
+		<nav class="feeds-pagination tw-mt-8" aria-label="{{ctx.Locale.Tr "home.feeds_pagination"}}">
 			<a class="feeds-pg-item feeds-pg-nav{{if not .HasPrevious}} feeds-pg-disabled{{end}}"
 				{{if .HasPrevious}}href="{{AppSubUrl}}/feeds?page={{.Previous}}{{if $params}}&{{$params}}{{end}}"{{end}}>
 				{{svg "octicon-chevron-left" 16}}

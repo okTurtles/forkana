@@ -16,7 +16,7 @@
 						{{$start := Eval $current "*" $pagingNum "-" $pagingNum "+" 1}}
 						{{$end := Eval $current "*" $pagingNum}}
 						{{if gt $end $total}}{{$end = $total}}{{end}}
-						{{$start}}-{{$end}} of {{$total}}
+						{{ctx.Locale.Tr "repo.article_history_range" $start $end $total}}
 					{{end}}
 				</div>
 				{{template "base/paginate" .}}

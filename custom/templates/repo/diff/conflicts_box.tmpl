@@ -25,7 +25,31 @@
 	</div>
 	{{if not .DiffNotAvailable}}
 		<div id="diff-container">
-			<div id="diff-file-boxes" class="sixteen wide column conflict-diff-file-boxes" data-base-commit-id="{{$.BeforeCommitID}}" data-head-commit-id="{{$.AfterCommitID}}" data-whitespace="{{$.WhitespaceBehavior}}">
+			<div id="diff-file-boxes" class="sixteen wide column conflict-diff-file-boxes" data-base-commit-id="{{$.BeforeCommitID}}" data-head-commit-id="{{$.AfterCommitID}}" data-whitespace="{{$.WhitespaceBehavior}}"
+				{{/* the strings of web_src/js/features/repo-conflict-review.ts (keys in repo-conflict-i18n.ts) */}}
+				data-i18n="{{JsonUtils.EncodeToString (dict
+					"repo.pulls.conflicts_counter" (ctx.Locale.Tr "repo.pulls.conflicts_counter")
+					"repo.pulls.conflicts_prev" (ctx.Locale.Tr "repo.pulls.conflicts_prev")
+					"repo.pulls.conflicts_next" (ctx.Locale.Tr "repo.pulls.conflicts_next")
+					"repo.pulls.conflicts_keep" (ctx.Locale.Tr "repo.pulls.conflicts_keep")
+					"repo.pulls.conflicts_use" (ctx.Locale.Tr "repo.pulls.conflicts_use")
+					"repo.pulls.conflicts_resolve" (ctx.Locale.Tr "repo.pulls.conflicts_resolve")
+					"repo.pulls.conflicts_resolved_button" (ctx.Locale.Tr "repo.pulls.conflicts_resolved_button")
+					"repo.pulls.conflicts_resolved" (ctx.Locale.Tr "repo.pulls.conflicts_resolved")
+					"repo.pulls.conflicts_resolved_more_1" (ctx.Locale.Tr "repo.pulls.conflicts_resolved_more_1")
+					"repo.pulls.conflicts_resolved_more_n" (ctx.Locale.Tr "repo.pulls.conflicts_resolved_more_n")
+					"repo.pulls.conflicts_edit" (ctx.Locale.Tr "repo.pulls.conflicts_edit")
+					"repo.pulls.conflicts_show_context" (ctx.Locale.Tr "repo.pulls.conflicts_show_context")
+					"repo.pulls.conflicts_hide_context" (ctx.Locale.Tr "repo.pulls.conflicts_hide_context")
+					"repo.pulls.conflicts_submitting" (ctx.Locale.Tr "repo.pulls.conflicts_submitting")
+					"repo.pulls.conflicts_submit_failed" (ctx.Locale.Tr "repo.pulls.conflicts_submit_failed")
+					"repo.pulls.conflicts_submit_network_error" (ctx.Locale.Tr "repo.pulls.conflicts_submit_network_error")
+					"repo.pulls.conflicts_init_failed" (ctx.Locale.Tr "repo.pulls.conflicts_init_failed")
+					"repo.pulls.conflicts_draft_title" (ctx.Locale.Tr "repo.pulls.conflicts_draft_title")
+					"repo.pulls.conflicts_draft_text" (ctx.Locale.Tr "repo.pulls.conflicts_draft_text")
+					"repo.pulls.conflicts_draft_restore" (ctx.Locale.Tr "repo.pulls.conflicts_draft_restore")
+					"repo.pulls.conflicts_draft_dismiss" (ctx.Locale.Tr "repo.pulls.conflicts_draft_dismiss")
+				)}}">
 				{{range $i, $file := .Diff.Files}}
 					<div class="diff-file-box file-content {{TabSizeClass $.Editorconfig $file.Name}} tw-mt-0" id="diff-{{$file.NameHash}}" data-old-filename="{{$file.OldName}}" data-new-filename="{{$file.Name}}" data-file-delete-choice="{{if $file.IsDeleted}}use{{else if $file.IsCreated}}keep{{else}}none{{end}}">
 						<div class="diff-file-body ui attached unstackable table segment">

@@ -1,8 +1,10 @@
 /* The Bubble view's strings, translated by the server: custom/templates/shared/repo/bubble.tmpl
-   puts them, keyed by their locale key, as JSON in #bubble-view-root's data-i18n, the
-   same way other Forkana scripts get theirs through data-msg-* attributes. The English
+   puts them, keyed by their locale key, as JSON in #bubble-view-root's data-i18n
+   (modules/page-i18n.ts). The English
    below is the fallback (unit tests, a page without the root); bubble-i18n.test.ts checks
    that it is custom en-US's text and that the template sends every key. */
+
+import {formatMessage, pageMessages} from '../../modules/page-i18n.ts';
 
 export const bubbleMessages = {
   'repo.bubble.contributor_1': 'Contributor',
@@ -56,46 +58,15 @@ export const bubbleMessages = {
 
 export type BubbleMessageKey = keyof typeof bubbleMessages;
 
-let translated: Partial<Record<BubbleMessageKey, string>> | null = null;
-
-function messages(): Partial<Record<BubbleMessageKey, string>> {
-  if (translated) return translated;
-  const json = document.querySelector('#bubble-view-root')?.getAttribute('data-i18n');
-  try {
-    translated = json ? JSON.parse(json) : {};
-  } catch {
-    translated = {};
-  }
-  return translated;
-}
-
-/* Fills Go-style verbs: %s / %d in order, %[n]s / %[n]d by position. */
-export function formatMessage(format: string, args: Array<string | number>): string {
-  let next = 0;
-  return format.replace(/%(?:\[(\d+)\])?([sd%])/g, (_m, index: string | undefined, verb: string) => {
-    if (verb === '%') return '%';
-    const arg = index ? args[Number(index) - 1] : args[next++];
-    return arg === undefined ? '' : String(arg);
-  });
-}
+const messages = pageMessages<BubbleMessageKey>('#bubble-view-root', bubbleMessages);
 
 /* The translated string of a key, with its verbs filled. */
-export function t(key: BubbleMessageKey, ...args: Array<string | number>): string {
-  return formatMessage(messages()[key] ?? bubbleMessages[key], args);
-}
+export const t = messages.t;
 
 /* The singular or plural key, by the page language's plural rules ("one" or not). */
-export function tn(count: number, key1: BubbleMessageKey, keyN: BubbleMessageKey, ...args: Array<string | number>): string {
-  let one = count === 1;
-  try {
-    one = new Intl.PluralRules(document.documentElement.lang || 'en').select(count) === 'one';
-  } catch {
-    // an unknown language tag: keep the English rule
-  }
-  return t(one ? key1 : keyN, ...args);
-}
+export const tn = messages.tn;
 
 /* For tests: forget the messages read from the page. */
-export function resetBubbleMessages() {
-  translated = null;
-}
+export const resetBubbleMessages = messages.reset;
+
+export {formatMessage};
