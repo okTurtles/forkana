@@ -813,7 +813,21 @@ func CompareDiff(ctx *context.Context) {
 			return
 		}
 
-		if !nothingToCompare {
+		// Forkana #156: nobody reviews the change requests of a fork-only article, so the
+		// page explains that edits to it make a fork instead of offering the form (whose
+		// submission CompareAndPullRequestPost refuses anyway)
+		refuses, err := repo_model.ArticleRefusesChangeRequestsFrom(ctx, ctx.Repo.Repository, ctx.Doer)
+		if err != nil {
+			ctx.ServerError("ArticleRefusesChangeRequestsFrom", err)
+			return
+		}
+		if refuses {
+			ctx.Data["CompareForkOnlyArticle"] = true
+			ctx.Data["CompareForkOnlyOwnerName"] = ctx.Repo.Repository.OwnerName
+			ctx.Data["CompareForkOnlyEditLink"] = ctx.Repo.Repository.LinkCtx(ctx) + "?view=article&mode=edit"
+		}
+
+		if !nothingToCompare && !refuses {
 			// Setup information for new form.
 			pageMetaData := retrieveRepoIssueMetaData(ctx, ctx.Repo.Repository, nil, true)
 			if ctx.Written() {

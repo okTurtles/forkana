@@ -204,6 +204,12 @@
 						{{ctx.Locale.Tr "repo.archive.title_date" (DateUtils.AbsoluteLong .Repository.ArchivedUnix)}}
 					{{end}}
 				</div>
+			{{else if .CompareForkOnlyArticle}}
+				{{/* Forkana #156: the article takes no change requests, edits to it make a fork */}}
+				<div class="ui info message" data-role="compare-fork-only-notice">
+					{{svg "octicon-info" 16 "tw-mr-2"}}
+					{{ctx.Locale.Tr "repo.pulls.fork_only_compare" .CompareForkOnlyOwnerName .CompareForkOnlyEditLink}}
+				</div>
 			{{else if $allowCreatePR}}
 				<div class="ui info message pullrequest-form-toggle {{if .ExpandNewPrForm}}tw-hidden{{end}}">
 					<button class="ui button primary show-panel toggle" data-panel=".pullrequest-form-toggle, .pullrequest-form">{{ctx.Locale.Tr "repo.pulls.new"}}</button>

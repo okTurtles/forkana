@@ -157,4 +157,36 @@ func testForkOnlyArticle(t *testing.T, _ *url.URL) {
 			fmt.Sprintf("The user %s doesn't accept change requests, and your fork of this article is archived: unarchive it in its settings to edit it", owner.Name),
 			noticeText(t))
 	})
+
+	// the compare page and the change request list offer no change request either (the
+	// editor has a fork now, which would otherwise let them open one)
+	t.Run("CompareAndPullListOfferNoChangeRequest", func(t *testing.T) {
+		// the editor's fork, with their own version, against the article
+		fork, err := repo_model.GetForkedRepo(t.Context(), editor.ID, repo.ID)
+		require.NoError(t, err)
+		require.NotNil(t, fork)
+		compareURL := fmt.Sprintf("/%s/%s/compare/%s...%s/%s:%s", owner.Name, repo.Name, repo.DefaultBranch, editor.Name, fork.Name, fork.DefaultBranch)
+		pullsURL := fmt.Sprintf("/%s/%s/pulls", owner.Name, repo.Name)
+		get := func(t *testing.T, link string) *HTMLDoc {
+			resp := session.MakeRequest(t, NewRequest(t, "GET", link), http.StatusOK)
+			return NewHTMLParser(t, resp.Body)
+		}
+
+		doc := get(t, compareURL)
+		notice := doc.Find(`[data-role="compare-fork-only-notice"]`)
+		require.Equal(t, 1, notice.Length())
+		assert.Contains(t, strings.Join(strings.Fields(notice.Text()), " "),
+			fmt.Sprintf("The user %s doesn't accept change requests", owner.Name))
+		assert.Contains(t, notice.Find("a").AttrOr("href", ""), "mode=edit")
+		assert.Equal(t, 0, doc.Find(".pullrequest-form").Length())
+		assert.Equal(t, 0, get(t, pullsURL).Find(".new-pr-button").Length())
+
+		// once the owner accepts change requests again, both are back
+		setForkOnly(t, false)
+		defer setForkOnly(t, true)
+		doc = get(t, compareURL)
+		assert.Equal(t, 0, doc.Find(`[data-role="compare-fork-only-notice"]`).Length())
+		assert.Equal(t, 1, doc.Find(".pullrequest-form").Length())
+		assert.Equal(t, 1, get(t, pullsURL).Find(".new-pr-button").Length())
+	})
 }
