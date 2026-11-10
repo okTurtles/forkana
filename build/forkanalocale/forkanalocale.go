@@ -13,21 +13,26 @@
 // For every other language, custom/translations/locale_<lang>.ini holds the
 // translations of the Forkana keys only. Generate merges it into the upstream
 // options/locale/locale_<lang>.ini to produce custom/options/locale/locale_<lang>.ini.
+// Repository runs the whole thing on a checkout (see repository.go).
 package forkanalocale
 
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
+
+	"code.gitea.io/gitea/modules/setting"
 )
 
 // EnglishComment prefixes the comment that records, above each translation, the
 // English text it was translated from. A translation whose comment differs from
-// the current English is stale.
+// the current English is stale. (An empty English would read as a plain comment;
+// no Forkana key is empty.)
 const EnglishComment = "# en: "
 
 // GeneratedHeader is the first line of every generated locale file.
@@ -67,9 +72,20 @@ func (f *File) Get(fullKey string) (Entry, bool) {
 	return f.Entries[i], true
 }
 
+func (f *File) add(e Entry) {
+	if i, ok := f.index[e.FullKey()]; ok {
+		f.Entries[i] = e
+		return
+	}
+	f.index[e.FullKey()] = len(f.Entries)
+	f.Entries = append(f.Entries, e)
+}
+
 // Parse reads a locale file. It follows the parts of Gitea's locale INI rules
 // the locale files use: one "key = value" per line, "[section]" headers, and
-// "#" or ";" comment lines. A key repeated in a section is an error.
+// "#" or ";" comment lines. A key repeated in a section is an error. Values that
+// Gitea's reader would read differently (a lone leading backtick, '…' quotes,
+// """ multi-line values) are reported by Check.
 func Parse(data []byte) (*File, error) {
 	f := &File{index: map[string]int{}}
 	section := ""
@@ -103,14 +119,14 @@ func Parse(data []byte) (*File, error) {
 		if _, dup := f.index[e.FullKey()]; dup {
 			return nil, fmt.Errorf("line %d: duplicate key %q", lineNo, e.FullKey())
 		}
-		f.index[e.FullKey()] = len(f.Entries)
-		f.Entries = append(f.Entries, e)
+		f.add(e)
 	}
 	return f, sc.Err()
 }
 
-// Unquote strips the quotes Gitea's INI reader strips: a value wholly wrapped
-// in backticks or double quotes.
+// Unquote strips the quotes the locale files use: a value wholly wrapped in
+// backticks or double quotes. It is what a value is meant to read as; ReadsAs
+// tells what Gitea's reader actually makes of it.
 func Unquote(v string) string {
 	if len(v) >= 2 && (v[0] == '`' || v[0] == '"') && v[len(v)-1] == v[0] {
 		return v[1 : len(v)-1]
@@ -118,24 +134,44 @@ func Unquote(v string) string {
 	return v
 }
 
+// ReadsAs returns the text Gitea's locale reader (go-ini, with the options of
+// setting.NewConfigProviderForLocale) reads from a raw value, or an error when
+// it can't read it on one line.
+func ReadsAs(raw string) (string, error) {
+	cfg, err := setting.NewConfigProviderForLocale([]byte("k=" + raw + "\nend=1\n"))
+	if err != nil {
+		return "", err
+	}
+	if cfg.Section("").Key("end").String() != "1" {
+		return "", errors.New("the value runs over the following lines")
+	}
+	return cfg.Section("").Key("k").String(), nil
+}
+
 // Forkana describes the Forkana strings, from upstream and custom en-US.
 type Forkana struct {
-	English *File           // custom en-US
 	Keys    []Entry         // Forkana keys, in custom en-US order
 	keySet  map[string]bool // full keys of Keys
 	Removed map[string]bool // upstream en-US keys Forkana deleted
+
+	bySection    map[string][]Entry // Keys by section
+	sectionOrder []string           // sections of Keys, in custom en-US order
 }
 
 // NewForkana finds the Forkana keys: the custom en-US keys that upstream en-US
 // lacks or words differently. options/locale/locale_en-US.ini must therefore
 // stay as upstream ships it: Forkana strings go to the custom en-US only.
 func NewForkana(upstreamEnglish, customEnglish *File) *Forkana {
-	fk := &Forkana{English: customEnglish, keySet: map[string]bool{}, Removed: map[string]bool{}}
+	fk := &Forkana{keySet: map[string]bool{}, Removed: map[string]bool{}, bySection: map[string][]Entry{}}
 	for _, e := range customEnglish.Entries {
 		up, ok := upstreamEnglish.Get(e.FullKey())
 		if !ok || Unquote(up.Value) != Unquote(e.Value) {
 			fk.Keys = append(fk.Keys, e)
 			fk.keySet[e.FullKey()] = true
+			if _, ok := fk.bySection[e.Section]; !ok {
+				fk.sectionOrder = append(fk.sectionOrder, e.Section)
+			}
+			fk.bySection[e.Section] = append(fk.bySection[e.Section], e)
 		}
 	}
 	for _, e := range upstreamEnglish.Entries {
@@ -149,37 +185,38 @@ func NewForkana(upstreamEnglish, customEnglish *File) *Forkana {
 // IsKey tells whether a full key is a Forkana key.
 func (fk *Forkana) IsKey(fullKey string) bool { return fk.keySet[fullKey] }
 
+// usable tells whether a translation can go into the generated file: it exists
+// and has the placeholders, HTML tags and quoting of the current English.
+func usable(english Entry, translations *File) (string, bool) {
+	t, ok := translations.Get(english.FullKey())
+	if !ok || t.Value == "" || len(structuralProblems(english.Value, t.Value)) > 0 {
+		return "", false
+	}
+	return t.Value, true
+}
+
 // Generate builds custom/options/locale/locale_<lang>.ini: the upstream file of
 // the language, without the keys Forkana deleted from en-US, with every Forkana
-// key set to its translation. A Forkana key without a translation, or whose
-// translation no longer matches the English's placeholders, HTML tags or quotes,
-// is left out, so that Gitea shows its Forkana English instead.
+// key set to its translation. A Forkana key without a usable translation (see
+// usable) is left out, so that Gitea shows its Forkana English instead.
 func Generate(fileName string, upstream []byte, fk *Forkana, translations *File) ([]byte, error) {
 	if _, err := Parse(upstream); err != nil {
 		return nil, fmt.Errorf("upstream %s: %w", fileName, err)
 	}
 	translated := map[string]string{}
 	for _, k := range fk.Keys {
-		if t, ok := translations.Get(k.FullKey()); ok && t.Value != "" && len(structuralProblems(k.Value, t.Value)) == 0 {
-			translated[k.FullKey()] = t.Value
+		if v, ok := usable(k, translations); ok {
+			translated[k.FullKey()] = v
 		}
-	}
-	// Forkana keys by section, in en-US order, to append the new ones at the end of each section.
-	bySection := map[string][]Entry{}
-	var sectionOrder []string
-	for _, k := range fk.Keys {
-		if _, ok := bySection[k.Section]; !ok {
-			sectionOrder = append(sectionOrder, k.Section)
-		}
-		bySection[k.Section] = append(bySection[k.Section], k)
 	}
 
 	var out bytes.Buffer
 	fmt.Fprintf(&out, GeneratedHeader+"\n", fileName, fileName, fileName)
 	emitted := map[string]bool{}
 	seenSections := map[string]bool{}
+	// flush appends the Forkana keys of a section that upstream doesn't have.
 	flush := func(section string) {
-		for _, k := range bySection[section] {
+		for _, k := range fk.bySection[section] {
 			if v, ok := translated[k.FullKey()]; ok && !emitted[k.FullKey()] {
 				fmt.Fprintf(&out, "%s=%s\n", k.Key, v)
 				emitted[k.FullKey()] = true
@@ -196,6 +233,8 @@ func Generate(fileName string, upstream []byte, fk *Forkana, translations *File)
 		trailer = nil
 	}
 
+	// The upstream lines are copied as they are, so this walks them itself
+	// rather than through Parse, with the same classification.
 	section := ""
 	sc := bufio.NewScanner(bytes.NewReader(upstream))
 	sc.Buffer(make([]byte, 1024*1024), 1024*1024)
@@ -234,12 +273,12 @@ func Generate(fileName string, upstream []byte, fk *Forkana, translations *File)
 	flush(section)
 	seenSections[section] = true
 	writeTrailer()
-	for _, s := range sectionOrder {
+	for _, s := range fk.sectionOrder {
 		if seenSections[s] {
 			continue
 		}
 		hasAny := false
-		for _, k := range bySection[s] {
+		for _, k := range fk.bySection[s] {
 			if _, ok := translated[k.FullKey()]; ok {
 				hasAny = true
 			}
@@ -257,6 +296,43 @@ func Generate(fileName string, upstream []byte, fk *Forkana, translations *File)
 	return out.Bytes(), nil
 }
 
+// VerifyGenerated reads a generated locale file with Gitea's own reader and
+// returns the Forkana keys it doesn't read as their translation.
+func VerifyGenerated(lang string, generated []byte, fk *Forkana, translations *File) []string {
+	cfg, err := setting.NewConfigProviderForLocale(generated)
+	if err != nil {
+		return []string{fmt.Sprintf("%s: Gitea can't read the generated file: %v", lang, err)}
+	}
+	var problems []string
+	for _, k := range fk.Keys {
+		v, ok := usable(k, translations)
+		if !ok {
+			continue
+		}
+		section := k.Section
+		if section == "" {
+			section = "DEFAULT"
+		}
+		if got := cfg.Section(section).Key(k.Key).String(); got != Unquote(v) {
+			problems = append(problems, fmt.Sprintf("%s: %s: Gitea reads the generated file as %q, not %q", lang, k.FullKey(), got, Unquote(v)))
+		}
+	}
+	return problems
+}
+
+// writeKeys writes entries grouped under their section headers, each with a
+// "# en:" line, as translation files and todo fragments have them.
+func writeKeys(out *bytes.Buffer, entries []Entry) {
+	section := "" // root keys come first, without header
+	for _, e := range entries {
+		if e.Section != section {
+			section = e.Section
+			fmt.Fprintf(out, "\n[%s]\n", section)
+		}
+		fmt.Fprintf(out, "%s%s\n%s = %s\n", EnglishComment, e.English, e.Key, e.Value)
+	}
+}
+
 // FormatTranslations writes a translation file in canonical form: the Forkana
 // keys in en-US order, grouped by section, each with the English it was
 // translated from. Keys without a translation are left out; keys that are not
@@ -265,84 +341,90 @@ func FormatTranslations(lang string, fk *Forkana, translations *File) []byte {
 	var out bytes.Buffer
 	fmt.Fprintf(&out, "# Forkana strings in %s. Each \"# en:\" line is the English the translation below it was made from.\n", lang)
 	out.WriteString("# See \"Translations\" in AGENTS.md. `make lint-locale-forkana` checks this file.\n")
-	section := "\x00"
+	var entries []Entry
 	for _, k := range fk.Keys {
 		t, ok := translations.Get(k.FullKey())
 		if !ok || t.Value == "" {
 			continue
 		}
-		if k.Section != section {
-			section = k.Section
-			if section != "" {
-				fmt.Fprintf(&out, "\n[%s]\n", section)
-			}
-		}
 		english := t.English
 		if english == "" {
 			english = k.Value
 		}
-		fmt.Fprintf(&out, "%s%s\n%s = %s\n", EnglishComment, english, k.Key, t.Value)
+		entries = append(entries, Entry{Section: k.Section, Key: k.Key, Value: t.Value, English: english})
 	}
+	writeKeys(&out, entries)
 	return out.Bytes()
 }
 
 // Todo returns a fragment to translate: the Forkana keys whose translation is
 // missing or stale (its English changed), with the English as value.
 func Todo(fk *Forkana, translations *File) ([]byte, int) {
-	var out bytes.Buffer
-	n := 0
-	section := "\x00"
+	var entries []Entry
 	for _, k := range fk.Keys {
-		t, ok := translations.Get(k.FullKey())
-		if ok && t.Value != "" && t.English == k.Value {
+		if t, ok := translations.Get(k.FullKey()); ok && t.Value != "" && t.English == k.Value {
 			continue
 		}
-		if k.Section != section {
-			section = k.Section
-			if section != "" {
-				fmt.Fprintf(&out, "\n[%s]\n", section)
-			}
-		}
-		fmt.Fprintf(&out, "%s%s\n%s = %s\n", EnglishComment, k.Value, k.Key, k.Value)
-		n++
+		entries = append(entries, Entry{Section: k.Section, Key: k.Key, Value: k.Value, English: k.Value})
 	}
-	return out.Bytes(), n
+	var out bytes.Buffer
+	writeKeys(&out, entries)
+	return out.Bytes(), len(entries)
 }
 
 // Merge returns translations with the entries of a translated fragment (as
-// written by Todo) added or replaced.
-func Merge(translations, fragment *File) *File {
-	merged := &File{index: map[string]int{}}
-	add := func(e Entry) {
-		if i, ok := merged.index[e.FullKey()]; ok {
-			merged.Entries[i] = e
-			return
-		}
-		merged.index[e.FullKey()] = len(merged.Entries)
-		merged.Entries = append(merged.Entries, e)
+// written by Todo) added or replaced. A fragment entry still equal to its
+// English (its "# en:" line, or the current English when it has none) was not
+// translated: it is left out, and returned in untranslated. A translation that
+// really is the English word goes into custom/translations/ by hand.
+func Merge(fk *Forkana, translations, fragment *File) (merged *File, untranslated []string) {
+	current := map[string]string{}
+	for _, k := range fk.Keys {
+		current[k.FullKey()] = k.Value
 	}
+	merged = &File{index: map[string]int{}}
 	for _, e := range translations.Entries {
-		add(e)
+		merged.add(e)
 	}
 	for _, e := range fragment.Entries {
-		add(e)
+		english := e.English
+		if english == "" {
+			english = current[e.FullKey()]
+		}
+		if english != "" && Unquote(e.Value) == Unquote(english) {
+			untranslated = append(untranslated, e.FullKey())
+			continue
+		}
+		merged.add(e)
 	}
-	return merged
+	return merged, untranslated
 }
 
 var (
-	placeholderRe = regexp.MustCompile(`%(?:\[\d+\])?[-+#0]*\d*(?:\.\d+)?[a-zA-Z%]`)
+	// A format verb: %s, %d, %[1]s, %-5d, %04[1]X (Go also takes the index after the width).
+	placeholderRe = regexp.MustCompile(`%(?:\[\d+\])?[-+#0]*\d*(?:\.\d+)?(?:\[\d+\])?[a-zA-Z%]`)
 	tagRe         = regexp.MustCompile(`</?[a-zA-Z][a-zA-Z0-9]*`)
 )
 
-// Placeholders returns the sorted format verbs (%s, %[1]d, ...) of a string.
-func Placeholders(s string) []string { return sortedMatches(placeholderRe, s) }
+// Placeholders returns the format verbs (%s, %[1]d, ...) of a string: the
+// unindexed ones in order (Go binds them to the arguments by position), then
+// the indexed ones sorted (a translation may reorder those).
+func Placeholders(s string) []string {
+	var positional, indexed []string
+	for _, v := range placeholderRe.FindAllString(s, -1) {
+		if strings.Contains(v, "[") {
+			indexed = append(indexed, v)
+		} else {
+			positional = append(positional, v)
+		}
+	}
+	sort.Strings(indexed)
+	return append(positional, indexed...)
+}
 
 // Tags returns the sorted HTML tag openings and closings (<a, </a, ...) of a string.
-func Tags(s string) []string { return sortedMatches(tagRe, s) }
-
-func sortedMatches(re *regexp.Regexp, s string) []string {
-	m := re.FindAllString(s, -1)
+func Tags(s string) []string {
+	m := tagRe.FindAllString(s, -1)
 	sort.Strings(m)
 	return m
 }
@@ -350,8 +432,9 @@ func sortedMatches(re *regexp.Regexp, s string) []string {
 // Problems are the results of Check.
 type Problems struct {
 	// Errors break a language or the build: a translation whose placeholders,
-	// HTML tags or quotes differ from the English it was made from, a key that
-	// is not a Forkana key, a translation without its "# en:" line.
+	// HTML tags or quotes differ from the English it was made from, or that
+	// Gitea's reader would read differently, a key that is not a Forkana key,
+	// a translation without its "# en:" line.
 	Errors []string
 	// Warnings are translation work left: missing translations, and stale ones
 	// (the English changed since). Gitea shows the Forkana English, or the stale
@@ -359,7 +442,7 @@ type Problems struct {
 	Warnings []string
 }
 
-// Check returns the problems of a language.
+// Check returns the problems of a language's translations.
 func Check(lang string, fk *Forkana, translations *File) Problems {
 	var p Problems
 	errorf := func(format string, args ...any) {
@@ -399,11 +482,17 @@ func Check(lang string, fk *Forkana, translations *File) Problems {
 }
 
 // structuralProblems compares a translation with its English: placeholders,
-// HTML tags and wrapping quotes must be the same.
+// HTML tags and wrapping quotes must be the same, and Gitea's reader must read
+// the translation as meant.
 func structuralProblems(english, translation string) []string {
 	var problems []string
-	if en, tr := Placeholders(english), Placeholders(translation); !slices.Equal(en, tr) {
-		problems = append(problems, fmt.Sprintf("placeholders %v, English has %v", tr, en))
+	// Without placeholders in the English, Gitea calls the string without
+	// arguments and shows it as is: a "%" in the translation is then plain text
+	// (German "100%ige").
+	if en := Placeholders(english); len(en) > 0 {
+		if tr := Placeholders(translation); !slices.Equal(en, tr) {
+			problems = append(problems, fmt.Sprintf("placeholders %v, English has %v (unindexed ones must keep their order)", tr, en))
+		}
 	}
 	if en, tr := Tags(english), Tags(translation); !slices.Equal(en, tr) {
 		problems = append(problems, fmt.Sprintf("HTML tags %v, English has %v", tr, en))
@@ -412,6 +501,11 @@ func structuralProblems(english, translation string) []string {
 		problems = append(problems, fmt.Sprintf("quoting %q differs from the English's %q", q, quote(english)))
 	} else if q != "" && strings.Contains(Unquote(translation), q) {
 		problems = append(problems, fmt.Sprintf("the quote character %s appears inside the value it wraps", q))
+	}
+	if got, err := ReadsAs(translation); err != nil {
+		problems = append(problems, fmt.Sprintf("Gitea can't read it: %v (a value starting with a backtick or \"\"\" must be wrapped whole)", err))
+	} else if got != Unquote(translation) {
+		problems = append(problems, fmt.Sprintf("Gitea reads it as %q (quotes around the whole value are stripped)", got))
 	}
 	return problems
 }

@@ -1,6 +1,6 @@
 # Forkana glossary
 
-Use these words for Forkana's terms in every translation of `custom/translations/locale_<lang>.ini`, so that a language says "change request" the same way everywhere. Gitea terms that Forkana keeps (repository, issue, commit, branch, merge, review, label, milestone, webhook…) follow the upstream translation in `options/locale/locale_<lang>.ini`. "Watch" and, where it already exists, "Fork" also follow upstream, because upstream strings keep using them next to Forkana's.
+Use these words for Forkana's terms in every translation of `custom/translations/locale_<lang>.ini`, so that a language says "change request" the same way everywhere. Gitea terms that Forkana keeps (repository, issue, commit, branch, merge, review, label, milestone, webhook…) follow the upstream translation in `options/locale/locale_<lang>.ini`. "Watch" and "Fork" also follow upstream, because upstream strings keep using them next to Forkana's, except where the upstream word is wrong or misleading: Forkana says Fork in nl-NL (upstream "Vork"), id-ID ("Garpu"), cs-CZ ("Rozštěpit") and it-IT ("Forka"), 分叉 in zh-HK ("複製", "copy"), and 關注 for Watch in zh-HK (upstream's 關註 is a conversion slip).
 
 | Language | Subject | Article | Change request | Fork (noun / verb) | Follow | Watch | Maintainer |
 |---|---|---|---|---|---|---|---|
@@ -30,7 +30,7 @@ Use these words for Forkana's terms in every translation of `custom/translations
 | tr-TR | Konu | Makale | Değişiklik İsteği | Çatal / çatallamak | Takip Et | İzle | Bakımcı |
 | uk-UA | Тема | Стаття | Запит на зміну | Форк / форкнути | Стежити | Стежити | Супровідник |
 | zh-CN | 主题 | 文章 | 变更请求 | 派生 | 关注 | 关注 | 维护者 |
-| zh-HK | 主題 | 文章 | 變更請求 | 分叉 | 關注 | 關註 | 維護者 |
+| zh-HK | 主題 | 文章 | 變更請求 | 分叉 | 關注 | 關注 | 維護者 |
 | zh-TW | 主題 | 文章 | 變更請求 | 分叉 | 追蹤 | 關注 | 維護者 |
 
 Notes:

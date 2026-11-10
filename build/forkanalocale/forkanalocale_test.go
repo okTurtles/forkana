@@ -157,8 +157,9 @@ gone = Weg
 	assert.Equal(t, []string{
 		`de-DE: repo.pulls` + noEnglish,
 		`de-DE: repo.pulls.closed_at` + noEnglish,
-		`de-DE: repo.pulls.closed_at: placeholders [%[1]s], English has [%[1]s %[2]s]`,
+		`de-DE: repo.pulls.closed_at: placeholders [%[1]s], English has [%[1]s %[2]s] (unindexed ones must keep their order)`,
 		`de-DE: repo.pulls.closed_at: quoting "\"" differs from the English's "` + "`" + `"`,
+		`de-DE: repo.pulls.closed_at: Gitea reads it as "\"hat diese Änderungsanfrage <a id=\"%[1]s\">geschlossen</a>\"" (quotes around the whole value are stripped)`,
 		`de-DE: citation.references` + noEnglish,
 		`de-DE: home.gone: not a Forkana key (any more): remove it`,
 	}, p.Errors)
@@ -179,7 +180,7 @@ gone = Weg
 	stale := mustParse(t, "[repo]\n# en: Fork\nfork_article = Forken\n")
 	p = Check("de-DE", fk, stale)
 	assert.Empty(t, p.Errors)
-	assert.Contains(t, p.Warnings, `de-DE: repo.fork_article: stale translation, the English changed to "Fork %s" (left out until translated: placeholders [], English has [%s])`)
+	assert.Contains(t, p.Warnings, `de-DE: repo.fork_article: stale translation, the English changed to "Fork %s" (left out until translated: placeholders [], English has [%s] (unindexed ones must keep their order))`)
 	out, err := Generate("locale_de-DE.ini", []byte(upstreamGerman), fk, stale)
 	require.NoError(t, err)
 	assert.NotContains(t, string(out), "fork_article=")
@@ -202,7 +203,8 @@ func TestTodoMergeFormat(t *testing.T) {
 	assert.Contains(t, string(todo), "[repo]\n# en: Change Requests\npulls = Change Requests\n")
 
 	fragment := mustParse(t, "[repo]\npulls = Änderungsanfragen\npulls.closed_at = `hat diese Änderungsanfrage <a id=\"%[1]s\">%[2]s</a> geschlossen`\n")
-	merged := Merge(tr, fragment)
+	merged, untranslated := Merge(fk, tr, fragment)
+	assert.Empty(t, untranslated)
 	formatted := FormatTranslations("de-DE", fk, merged)
 	p := Check("de-DE", fk, mustParse(t, string(formatted)))
 	assert.Empty(t, p.Errors)
@@ -214,11 +216,131 @@ func TestTodoMergeFormat(t *testing.T) {
 	assert.Zero(t, n)
 }
 
+func TestMergeLeavesOutUntranslated(t *testing.T) {
+	fk := testForkana(t)
+	tr := mustParse(t, "[repo]\n# en: Pull Requests\npulls = Pull-Requests\n")
+	todo, _ := Todo(fk, tr)
+	// A todo file merged back untouched: every value is still the English.
+	merged, untranslated := Merge(fk, tr, mustParse(t, string(todo)))
+	assert.Equal(t, []string{"new_repo", "repo.pulls", "repo.pulls.closed_at", "repo.fork_article", "repo.follow_article", "citation.references"}, untranslated)
+	assert.Equal(t, tr.Entries, merged.Entries, "the stale translation is kept, not overwritten with the English")
+
+	// Without "# en:" lines, the current English is the reference.
+	_, untranslated = Merge(fk, tr, mustParse(t, "[repo]\nfollow_article = Follow\nfork_article = %s forken\n"))
+	assert.Equal(t, []string{"repo.follow_article"}, untranslated)
+}
+
 func TestPlaceholders(t *testing.T) {
-	assert.Equal(t, []string{"%[1]s", "%[2]d", "%d", "%s"}, Placeholders("%s and %d, %[2]d of %[1]s"))
+	assert.Equal(t, []string{"%s", "%d", "%[1]s", "%[2]d"}, Placeholders("%s and %d, %[2]d of %[1]s"))
+	assert.Equal(t, []string{"%04[1]X"}, Placeholders("U+%04[1]X"), "Go also takes the index after the width")
 	assert.Empty(t, Placeholders("No single publisher above 30%"))
 	assert.Empty(t, Placeholders("% followed by two hexadecimal digits (such as %41)"))
 	assert.Empty(t, Placeholders("30 % des sources"))
+}
+
+func TestStructuralProblems(t *testing.T) {
+	ok := func(english, translation string) {
+		t.Helper()
+		assert.Empty(t, structuralProblems(english, translation), "%q", translation)
+	}
+	bad := func(english, translation, want string) {
+		t.Helper()
+		problems := structuralProblems(english, translation)
+		require.NotEmpty(t, problems, "%q", translation)
+		assert.Contains(t, strings.Join(problems, "; "), want, "%q", translation)
+	}
+	// Unindexed verbs bind by position: swapping them breaks the string.
+	bad(`File "%s" exceeds the limit of %d MB.`, `Die Datei „%d“ überschreitet %s MB.`, "placeholders [%d %s], English has [%s %d]")
+	ok(`File "%s" exceeds the limit of %d MB.`, `Die Datei „%s“ überschreitet %d MB.`)
+	ok("%[1]s of %[2]s", "%[2]s の %[1]s")
+	bad("%[1]s of %[2]s", "%[1]s の %[1]s", "placeholders")
+	// No placeholders in the English: Gitea shows the string as is.
+	ok("Fully free", "100%ige kostenlos")
+
+	// What Gitea's reader makes of the value.
+	bad("Fork article", "`Artikel forken", "Gitea can't read it")
+	bad("Fork article", "`Artikel` forken und so", `Gitea reads it as "Artikel"`)
+	bad("Follow", "'Folgen'", `Gitea reads it as "Folgen"`)
+	bad("Follow", `"""Folgen`, "Gitea can't read it")
+	ok("Follow", "Folgen 'jetzt'")
+	ok("`closed this <a>%[1]s</a>`", "`hat <a>%[1]s</a> geschlossen`")
+	bad("`closed this <a>%[1]s</a>`", "hat <a>%[1]s</a> geschlossen", "quoting")
+	bad("Fork", "Forken <b>jetzt</b>", "HTML tags")
+}
+
+func TestReadsAs(t *testing.T) {
+	for raw, want := range map[string]string{
+		"plain":            "plain",
+		"`quoted`":         "quoted",
+		`"quoted"`:         "quoted",
+		"'quoted'":         "quoted",
+		"a `b` c":          "a `b` c",
+		`say "hi" please`:  `say "hi" please`,
+		"100%ige # no tag": "100%ige # no tag",
+	} {
+		got, err := ReadsAs(raw)
+		require.NoError(t, err, raw)
+		assert.Equal(t, want, got, raw)
+	}
+	_, err := ReadsAs("`lone backtick")
+	assert.Error(t, err)
+}
+
+// TestRepositoryCheck runs the whole check on a checkout in a temporary directory.
+func TestRepositoryCheck(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(content), 0o644))
+	}
+	write("options/locale/locale_en-US.ini", upstreamEnglish)
+	write("options/locale/locale_de-DE.ini", upstreamGerman)
+	write("custom/options/locale/locale_en-US.ini", customEnglish)
+	write("custom/translations/locale_de-DE.ini", germanTranslations+"\n[repo]\npulls.closed_at = `hat diese Änderungsanfrage <a id=\"%[1]s\">%[2]s</a> geschlossen`\n")
+
+	r, err := OpenRepository(root)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"de-DE"}, r.Languages)
+	require.NoError(t, r.Generate())
+	errs, warnings, err := r.Check()
+	require.NoError(t, err)
+	assert.Empty(t, errs)
+	assert.Empty(t, warnings)
+
+	translations, err := os.ReadFile(filepath.Join(root, "custom/translations/locale_de-DE.ini"))
+	require.NoError(t, err)
+	edit := func(old, replacement string) {
+		t.Helper()
+		require.Contains(t, string(translations), old)
+		write("custom/translations/locale_de-DE.ini", strings.Replace(string(translations), old, replacement, 1))
+	}
+
+	// A lone leading backtick: Gitea would swallow the following keys.
+	edit("fork_article = %s forken", "fork_article = `%s forken")
+	errs, _, err = r.Check()
+	require.NoError(t, err)
+	assert.Contains(t, strings.Join(errs, "\n"), "de-DE: repo.fork_article: Gitea can't read it")
+	assert.Contains(t, errs, "de-DE: custom/options/locale/locale_de-DE.ini is out of date: run `make generate-locale-forkana`", "the broken translation is left out of the generated file")
+
+	// A missing translation is only a warning, once the files are generated.
+	edit("# en: Fork %s\nfork_article = %s forken\n", "")
+	require.NoError(t, r.Generate())
+	errs, warnings, err = r.Check()
+	require.NoError(t, err)
+	assert.Empty(t, errs)
+	assert.Equal(t, []string{"de-DE: repo.fork_article: missing translation"}, warnings)
+	assert.Equal(t, []string{"repo.fork_article: missing translation (1: de-DE)"}, GroupByLanguage(warnings))
+
+	// A hand-edited generated file, and a custom locale file without upstream file.
+	write("custom/options/locale/locale_de-DE.ini", "home=Startseite\n")
+	write("custom/options/locale/locale_xx-XX.ini", "home=Xx\n")
+	errs, _, err = r.Check()
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"de-DE: custom/options/locale/locale_de-DE.ini is out of date: run `make generate-locale-forkana`",
+		"locale_xx-XX.ini: no upstream options/locale/locale_xx-XX.ini",
+	}, errs)
 }
 
 // TestRepositoryLocales checks that Gitea reads every generated locale file of
