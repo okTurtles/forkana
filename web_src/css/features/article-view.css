@@ -99,9 +99,11 @@
   border-bottom: none;
 }
 
+/* (0 16px on a phone too, #477 TabNav.Link 7596:67066; important, as base.css gives every
+   tabular menu item an important 11.55px 12px to match Gitea's dashboard bar) */
 #article-tabs .ui.tabular.menu > a.item {
   height: 40px;
-  padding: 0 16px;
+  padding: 0 16px !important;
   gap: 8px;
   font-size: 14px;
   line-height: 20px;
@@ -233,7 +235,8 @@
   top: calc(100% + 2.5px);
   right: 0;
   left: auto;
-  width: 108px;
+  /* (108px, wider only for a delegate's longer "Collaborators" item, #477) */
+  width: max-content;
   min-width: 108px;
   margin: 0;
   padding: 12px;
@@ -269,13 +272,55 @@
   color: var(--color-danger-icon);
 }
 
-/* The tabs are 0 16px (TabNav.Link I7368:264911;24375:95723): base.css gives every
-   tabular menu item an important 11.55px 12px, to match Gitea's dashboard bar. (On a
-   phone they keep 12px at the sides, below.) */
-@media (min-width: 768px) {
-  #article-tabs .ui.tabular.menu > a.item {
-    padding: 0 16px !important;
-  }
+/* #477: for the people who manage the article, Settings above Report ("Profile"
+   7621:70837): a 16px gear-24 #1f2328 8px from an Inter 400 12/20 #1f2328 "Settings",
+   then a 1px #d1d9e0 divider, 12px from either item (Frame 914's gap). */
+#article-tabs .ui.dropdown.article-more-dropdown > .menu:has(> .article-more-settings) {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#article-tabs .ui.dropdown.article-more-dropdown > .menu.visible:has(> .article-more-settings) {
+  display: flex !important; /* (Fomantic shows the menu with an important display: block) */
+}
+
+#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-settings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  min-height: 0;
+  padding: 0 !important; /* (Fomantic's item padding is itself !important) */
+  border: none;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-primary);
+  background: none;
+}
+
+#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-settings:hover,
+#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-settings.selected {
+  text-decoration: underline;
+}
+
+/* (the keyboard's item: Fomantic marks it .selected; a tab focus gets the ring) */
+#article-tabs .ui.dropdown.article-more-dropdown > .menu > .item.article-more-settings:focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+#article-tabs .article-more-settings .svg {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+#article-tabs .article-more-divider {
+  height: 1px;
+  background: var(--color-border-light);
 }
 
 /* ── The article's path (Frame 566 641:65486) ───────────────────────────────── */
@@ -854,21 +899,20 @@ a.article-history-page-direction:hover {
     padding: 7px 16px;
   }
 
-  /* The buttons at the end of the row (Watch and "…", the Edit tab's Fork and Submit
-     changes) get a row of their own ABOVE the tabs, rather than running past the
-     screen's edge, in every tab, so that the tabs do not move from one tab to another
-     (#469). The tabs stay on one line (an owner has four) and scroll sideways if they
-     must, so the open tab keeps standing on the rule under them. */
+  /* #477 (figma "Read – Watch icon + "…" (mobile, owner)" 7596:66930, Frame 310
+     7596:67062): Read · Edit · History without their icons, 0 16px each and 4px apart,
+     then, at the end of the same row, Watch as a 32×32 eye and "…" (Trailing 7596:67086).
+     The tabs end at 217px and the buttons start at 271px of the 343px row, so they fit:
+     everyone has the same three tabs now that Settings is in the "…" menu. */
   #article-tabs {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 0;
   }
 
   /* (the buttons that do not fit the width scroll sideways inside their row, rather than
-     wrapping to a second line and pushing the tabs down) */
+     wrapping to a second line) */
   .article-tabs-trailing {
-    order: -1;
     justify-content: flex-start;
     overflow-x: auto;
     scrollbar-width: none;
@@ -880,12 +924,27 @@ a.article-history-page-direction:hover {
     margin-left: auto;
   }
 
+  /* The Edit tab's Fork and Submit changes do not fit beside the tabs: they get a row of
+     their own under them, laid out of the row's box, so that the row of tabs keeps its
+     height and place from one tab to another (#469). 24px under the tabs, 40px tall, and
+     24px from the content (the column's gap). */
+  #article-view-root[data-article-mode="edit"] #article-tabs {
+    position: relative;
+    margin-bottom: 64px;
+  }
+
+  #article-view-root[data-article-mode="edit"] .article-tabs-trailing {
+    position: absolute;
+    top: calc(100% + 24px);
+    right: 0;
+    left: 0;
+  }
+
   /* #478: Watch and "…" side by side, Watch a 32×32 icon button with 8px around its eye
-     (Mobile 7368:263684: "Watch (icon)" 7629:71522 at 287, Action 7601:70817 at 319,
-     ending 16px from the screen's edge). The figma lays them at the end of the tabs' own
-     row; they keep the row above, as the Edit tab's buttons need it. */
+     ("Watch (icon)" 7621:71051 at 271, Action 7596:67142 at 303, ending at the row's end) */
   #article-view-root:not([data-article-mode="edit"]) .article-tabs-trailing {
     gap: 0;
+    overflow: visible; /* (they fit; a scrolling row would clip the "…" menu) */
   }
 
   .article-watch .article-action-button {
@@ -912,7 +971,10 @@ a.article-history-page-direction:hover {
 
   #article-tabs .ui.tabular.menu > a.item {
     flex-shrink: 0;
-    padding: 0 12px;
+  }
+
+  #article-tabs .ui.tabular.menu > a.item .svg {
+    display: none;
   }
 
   /* the table keeps its columns and scrolls sideways inside its frame */

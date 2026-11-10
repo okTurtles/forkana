@@ -64,11 +64,20 @@ func TestArticleSettingsArchiveSuccess(t *testing.T) {
 	assert.True(t, notice.HasClass("tw-hidden"))
 	assert.Empty(t, strings.TrimSpace(notice.Text()))
 
-	req = NewRequestWithValues(t, "POST", settingsURL,
-		archiveForm(GetUserCSRFToken(t, session), owner.Name, subjectName))
-	resp = session.MakeRequest(t, req, http.StatusSeeOther)
-
+	// a confirmation that does not name the article is refused, as for Transfer and Delete
 	articleSettingsURL := fmt.Sprintf("/subject/%s/%s?view=article&mode=settings", subjectName, owner.Name)
+	wrong := archiveForm(GetUserCSRFToken(t, session), owner.Name, subjectName)
+	wrong["article_name"] = owner.Name + " / not-" + subjectName
+	resp = session.MakeRequest(t, NewRequestWithValues(t, "POST", settingsURL, wrong), http.StatusSeeOther)
+	assert.Equal(t, articleSettingsURL, test.RedirectURL(resp))
+	assert.Equal(t, "The article owner and subject you entered are incorrect.", session.GetCookieFlashMessage().ErrorMsg)
+	assert.False(t, unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID}).IsArchived)
+
+	// the dialog shows "<owner> / <subject>", which is what a reader types
+	form := archiveForm(GetUserCSRFToken(t, session), owner.Name, subjectName)
+	form["article_name"] = owner.Name + " / " + subjectName
+	req = NewRequestWithValues(t, "POST", settingsURL, form)
+	resp = session.MakeRequest(t, req, http.StatusSeeOther)
 	assert.Equal(t, articleSettingsURL, test.RedirectURL(resp))
 
 	// the flash message is carried over in a cookie, so it renders on the next page

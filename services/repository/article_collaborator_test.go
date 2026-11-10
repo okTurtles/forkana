@@ -106,6 +106,33 @@ func TestArticleCollaborators(t *testing.T) {
 		err = RemoveArticleCollaborators(t.Context(), delegate, repo, []int64{maintainer.ID, delegate.ID})
 		assert.ErrorIs(t, err, util.ErrPermissionDenied)
 		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+
+		// #477: nor their own row; and a delegate changes no role, the owner's included
+		err = RemoveArticleCollaborators(t.Context(), delegate, repo, []int64{delegate.ID})
+		assert.ErrorIs(t, err, util.ErrPermissionDenied)
+		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: delegate.ID})
+		err = ChangeArticleCollaboratorRole(t.Context(), delegate, repo, owner.ID, repo_model.ArticleCollaboratorRoleMaintainer)
+		assert.ErrorIs(t, err, util.ErrPermissionDenied)
+	})
+
+	// #477: nobody gets actions on the owner's row; a removal naming them is refused,
+	// whoever sends it, and removes nobody else either
+	t.Run("OwnerCannotBeRemoved", func(t *testing.T) {
+		for _, doer := range []*user_model.User{delegate, owner} {
+			err := RemoveArticleCollaborators(t.Context(), doer, repo, []int64{maintainer.ID, owner.ID})
+			assert.ErrorIs(t, err, util.ErrPermissionDenied)
+			unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+		}
+	})
+
+	// all or none: a user who is not a collaborator fails the whole removal, rather than
+	// being reported as removed; a user named twice is removed once
+	t.Run("RemovalOfANonCollaboratorRefused", func(t *testing.T) {
+		err := RemoveArticleCollaborators(t.Context(), owner, repo, []int64{maintainer.ID, other.ID})
+		assert.ErrorIs(t, err, util.ErrNotExist)
+		unittest.AssertExistsAndLoadBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID, UserID: maintainer.ID})
+		err = RemoveArticleCollaborators(t.Context(), owner, repo, []int64{other.ID})
+		assert.ErrorIs(t, err, util.ErrNotExist)
 	})
 
 	t.Run("OwnerChangesRole", func(t *testing.T) {
@@ -216,7 +243,9 @@ func TestArticleCollaborators(t *testing.T) {
 	})
 
 	t.Run("OwnerRemovesDelegate", func(t *testing.T) {
-		require.NoError(t, RemoveArticleCollaborators(t.Context(), owner, repo, []int64{delegate.ID, maintainer.ID}))
+		// (the maintainer is already gone, DelegateRemovesMaintainer: naming them would
+		// fail the whole removal, RemovalOfANonCollaboratorRefused)
+		require.NoError(t, RemoveArticleCollaborators(t.Context(), owner, repo, []int64{delegate.ID}))
 		unittest.AssertNotExistsBean(t, &repo_model.ArticleCollaborator{RepoID: repo.ID})
 		isCollaborator, err := repo_model.IsCollaborator(t.Context(), repo.ID, delegate.ID)
 		require.NoError(t, err)

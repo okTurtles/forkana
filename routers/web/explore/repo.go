@@ -893,13 +893,22 @@ func prepareArticleView(ctx *context.Context, gitRepo *git.Repository, entries [
 	// is only a line of the page, so a failed lookup is logged and the line left out.
 	loadArticleBaseRepo(ctx)
 
-	// The Settings tab is only rendered for the article owner and the delegates managing
-	// its collaborators, so both must be known in every mode (edit mode refines ownership
-	// via prepareArticleForkOnEditData).
+	// The "…" menu only offers Settings to the article owner and the delegates managing
+	// its collaborators (#477), so both must be known in every mode (edit mode refines
+	// ownership via prepareArticleForkOnEditData).
 	isRepoOwner := ctx.Doer != nil && ctx.Repo.Repository.OwnerID == ctx.Doer.ID
 	ctx.Data["IsRepoOwner"] = isRepoOwner
-	if !prepareArticleCollaboratorsData(ctx, isRepoOwner, mode) {
+	canManage, ok := prepareArticleCollaboratorsData(ctx, isRepoOwner, mode)
+	if !ok {
 		return
+	}
+	// Settings has no tab to fall back on (#477): someone who may not manage the article
+	// is shown the article to read instead of an empty page.
+	if mode == "settings" && !canManage {
+		mode = "read"
+		ctx.Data["ArticleMode"] = mode
+		ctx.Data["IsArticleModeRead"] = true
+		ctx.Data["IsArticleModeSettings"] = false
 	}
 
 	// The settings tab swaps the Transfer section for a "Cancel transfer" one while a
@@ -1254,10 +1263,54 @@ func processGitCommits(ctx *context.Context, commits []*git.Commit) ([]*user_mod
 	return userCommits, nil
 }
 
+// articleCollaboratorsSummary words the line above the collaborators, counting who can edit
+// the article (#461, figma "Collaborators – list" 7618:67561): "3 people can edit this
+// article and approve change requests: you, 1 collaborator and 1 waiting invite." A
+// delegate is "you" next to the owner, and is told what they may do (#477, figma "NEW ·
+// Delegate – Collaborators" 8020:64472): "…: JaneZ (owner), you and 1 waiting invite. You
+// can invite and remove Maintainers."
+func articleCollaboratorsSummary(ctx *context.Context, isRepoOwner bool, collaborators []*repo_model.ArticleCollaborator) template.HTML {
+	accepted, pending := 0, 0
+	for _, c := range collaborators {
+		switch {
+		case ctx.Doer != nil && c.UserID == ctx.Doer.ID:
+			// the doer is "you", counted apart
+		case c.IsPending():
+			pending++
+		default:
+			accepted++
+		}
+	}
+
+	you := ctx.Locale.TrString("repo.settings.article_collaborators_summary_you")
+	parts := []string{you}
+	if !isRepoOwner {
+		parts = []string{ctx.Locale.TrString("repo.settings.article_collaborators_summary_owner", ctx.Repo.Repository.Owner.DisplayName()), you}
+	}
+	if accepted > 0 {
+		parts = append(parts, ctx.Locale.TrString(util.Iif(accepted == 1, "repo.settings.article_collaborators_count_1", "repo.settings.article_collaborators_count_n"), accepted))
+	}
+	if pending > 0 {
+		parts = append(parts, ctx.Locale.TrString(util.Iif(pending == 1, "repo.settings.article_collaborators_waiting_1", "repo.settings.article_collaborators_waiting_n"), pending))
+	}
+	list := parts[0]
+	if len(parts) > 1 {
+		list = ctx.Locale.TrString("repo.settings.article_collaborators_summary_and", strings.Join(parts[:len(parts)-1], ", "), parts[len(parts)-1])
+	}
+
+	// Tr escapes the list, which holds the owner's name
+	summary := ctx.Locale.Tr("repo.settings.article_collaborators_summary", len(collaborators)+1, list)
+	if !isRepoOwner {
+		summary += " " + ctx.Locale.Tr("repo.settings.article_collaborators_summary_delegate")
+	}
+	return summary
+}
+
 // prepareArticleCollaboratorsData sets up what the doer may do with the article
 // collaborators, the Accept/Decline banner of a pending invitation and, in the settings
-// mode, the collaborator list. It returns false when the response was written.
-func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mode string) bool {
+// mode, the collaborator list. It returns whether the doer may manage the collaborators,
+// and ok false when the response was written.
+func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mode string) (canManage, ok bool) {
 	repo := ctx.Repo.Repository
 
 	// one lookup serves both the permission and the pending invitation banner
@@ -1267,7 +1320,7 @@ func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mod
 		doerCollaborator, err = repo_model.GetArticleCollaborator(ctx, repo.ID, ctx.Doer.ID)
 		if err != nil {
 			ctx.ServerError("GetArticleCollaborator", err)
-			return false
+			return false, false
 		}
 	}
 
@@ -1278,21 +1331,23 @@ func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mod
 	if doerCollaborator != nil && doerCollaborator.IsPending() && !repo.IsArchived {
 		if err := doerCollaborator.LoadInviter(ctx); err != nil {
 			ctx.ServerError("LoadInviter", err)
-			return false
+			return false, false
 		}
 		ctx.Data["PendingArticleCollaboratorInvite"] = doerCollaborator
 	}
 
 	if mode != "settings" || !collaboratorPerm.CanManage {
-		return true
+		return collaboratorPerm.CanManage, true
 	}
 
 	collaborators, err := repo_model.ListArticleCollaborators(ctx, repo.ID)
 	if err != nil {
 		ctx.ServerError("ListArticleCollaborators", err)
-		return false
+		return false, false
 	}
 	ctx.Data["ArticleCollaborators"] = collaborators
+
+	ctx.Data["ArticleCollaboratorsSummary"] = articleCollaboratorsSummary(ctx, isRepoOwner, collaborators)
 
 	// a delegate only has the collaborators section, the owner lands on it when coming
 	// back from a collaborator action
@@ -1301,7 +1356,7 @@ func prepareArticleCollaboratorsData(ctx *context.Context, isRepoOwner bool, mod
 		section = "collaborators"
 	}
 	ctx.Data["ArticleSettingsSection"] = section
-	return true
+	return true, true
 }
 
 // prepareArticleForkOnEditData sets up context data for fork-on-edit workflow

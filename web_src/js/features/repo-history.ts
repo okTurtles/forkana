@@ -439,9 +439,12 @@ export function initRepoHistory() {
     });
   }
 
+  // The tabs, and the links that act as one (#477: Settings in the "…" menu, and the
+  // Settings page's "Back", which has no row of tabs).
   function bindArticleTabs() {
-    if (!articleTabs) return;
-    for (const anchor of articleTabs.querySelectorAll<HTMLAnchorElement>('a[data-article-tab]')) {
+    const scope = articleContentEl ?? articleTabs;
+    if (!scope) return;
+    for (const anchor of scope.querySelectorAll<HTMLAnchorElement>('a[data-article-tab]')) {
       anchor.addEventListener('click', (event) => {
         if (!selectedRepo.value) return;
         event.preventDefault();

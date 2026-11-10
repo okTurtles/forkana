@@ -72,6 +72,17 @@
   --color-button-border-disabled: #818b981a;
   /* the unchecked radio's ring (modules/checkbox.css, #460), light value of colors.custom.css */
   --color-radio-border: #818b98;
+  /* the article settings and their dialogs (features/article-settings.css, #477), light
+     values of colors.custom.css */
+  --color-danger-fg: #d1242f;
+  --color-danger-bg: #ffebe9;
+  --color-danger-border: #ff818266;
+  --color-attention-fg: #9a6700;
+  --color-input-readonly-bg: #eff2f5;
+  --color-segmented-bg: #e6eaef;
+  --color-dialog-backdrop: #c8d1da66;
+  --color-dialog-shadow: #25292e3d; /* Dialog 7619:68568: #25292e 24% */
+  --color-menu-shadow: #1a1f262e; /* Overlay 7645:75728: #1a1f26 18% */
 }
 
 @media (min-width: 768px) and (max-width: 1200px) {
