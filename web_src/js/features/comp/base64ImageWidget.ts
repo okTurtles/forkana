@@ -1,6 +1,6 @@
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
-import {formatMessage} from '../../modules/page-i18n.ts';
 import type Editor from '@toast-ui/editor';
+import {formatMessage} from '../../modules/page-i18n.ts';
 
 export function formatBytes(bytes: number, decimals = 1): string {
   if (bytes <= 0) return '0 B';

@@ -20,6 +20,9 @@ declare module '*.vue' {
 
 declare let __webpack_public_path__: string;
 
+// Toast UI's language files only register their texts (comp/toastEditorLanguage.ts)
+declare module '@toast-ui/editor/dist/i18n/*';
+
 declare module 'htmx.org/dist/htmx.esm.js' {
   const value = await import('htmx.org');
   export default value;
