@@ -46,6 +46,7 @@ type SearchUserOptions struct {
 	IsRestricted       optional.Option[bool]
 	IsTwoFactorEnabled optional.Option[bool]
 	IsProhibitLogin    optional.Option[bool]
+	IsForkOnly         optional.Option[bool] // Forkana: users who do not accept change requests
 	IncludeReserved    bool
 
 	// RepoRole filters users by their relationship to repositories they own: whether
@@ -159,6 +160,10 @@ func (opts *SearchUserOptions) toSearchQueryBase(ctx context.Context) *xorm.Sess
 
 	if opts.IsProhibitLogin.Has() {
 		cond = cond.And(builder.Eq{"prohibit_login": opts.IsProhibitLogin.Value()})
+	}
+
+	if opts.IsForkOnly.Has() {
+		cond = cond.And(builder.Eq{"is_fork_only": opts.IsForkOnly.Value()})
 	}
 
 	if opts.RepoRole != "" {

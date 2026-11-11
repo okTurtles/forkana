@@ -756,6 +756,17 @@ func RepoAssignment(ctx *Context) {
 		ctx.Repo.PullRequest.Allowed = canPush
 		ctx.Repo.PullRequest.SameRepo = true
 	}
+	// Forkana #156: nobody reviews the change requests of a fork-only article, so the
+	// "New Pull Request" entry points are not offered for it (edits to it make a fork)
+	if ctx.Repo.PullRequest.Allowed && ctx.Repo.PullRequest.BaseRepo != nil {
+		refuses, err := repo_model.ArticleRefusesChangeRequestsFrom(ctx, ctx.Repo.PullRequest.BaseRepo, ctx.Doer)
+		if err != nil {
+			ctx.ServerError("ArticleRefusesChangeRequestsFrom", err)
+			return
+		}
+		ctx.Repo.PullRequest.Allowed = !refuses
+		ctx.Data["ArticleRefusesChangeRequests"] = refuses
+	}
 	ctx.Data["CanCompareOrPull"] = canCompare
 	ctx.Data["PullRequestCtx"] = ctx.Repo.PullRequest
 

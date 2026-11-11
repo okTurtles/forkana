@@ -134,6 +134,24 @@ func IsAcceptedArticleMaintainer(ctx context.Context, repoID, userID int64) (boo
 	}).Exist(new(ArticleCollaborator))
 }
 
+// HasActiveArticleMaintainer reports whether the article has an accepted maintainer, in
+// either role, who can review its change requests: an active account that may sign in
+// and is not fork-only itself.
+func HasActiveArticleMaintainer(ctx context.Context, repoID int64) (bool, error) {
+	if repoID == 0 {
+		return false, nil
+	}
+	return db.GetEngine(ctx).Table("article_collaborator").
+		Join("INNER", "`user`", "`user`.id = article_collaborator.user_id").
+		Where(builder.Eq{
+			"article_collaborator.repo_id": repoID,
+			"article_collaborator.status":  ArticleCollaboratorStatusAccepted,
+			"`user`.is_active":             true,
+			"`user`.prohibit_login":        false,
+			"`user`.is_fork_only":          false,
+		}).Exist()
+}
+
 // ListArticleCollaborators returns every collaborator of an article with their user
 // loaded, pending invitations first and then by name. A collaborator whose account
 // is gone is dropped, the user deletion removes their rows anyway.

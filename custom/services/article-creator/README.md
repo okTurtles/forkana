@@ -97,6 +97,28 @@ The tool supports the following environment variables (command-line flags take p
 
 ## Required Configuration
 
+### A Dedicated Fork-Only Import Account
+
+The articles are created as the user whose API token is given. Use a dedicated account
+for imports, not a person's, and mark it **fork-only**: nobody reads the change requests
+sent to an import account, so editing its articles creates the editor's own article (a
+fork) instead, and the Edit tab says "This will create a new article because the user
+`<username>` doesn't accept change requests". (An article with an active maintainer
+still takes change requests: the maintainer reviews them.)
+
+Create it fork-only, with its API token, from the server's command line:
+
+```bash
+gitea admin user create --username wikipedia --email wikipedia@forkana.local \
+  --random-password --must-change-password=false --fork-only \
+  --access-token --access-token-name populate --access-token-scopes write:repository,write:user
+```
+
+Or mark an existing account: as a site admin, open Site Administration → User Accounts,
+edit the account and check **Fork-only (does not accept change requests)**, or call
+`PATCH /api/v1/admin/users/{username}` with `{"fork_only": true, "login_name": "…", "source_id": 0}`.
+The user list shows a "Fork-only" label next to such accounts and can be filtered on it.
+
 ### API Token
 
 You need a Gitea API token with repository creation permissions:
