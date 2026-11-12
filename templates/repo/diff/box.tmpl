@@ -4,7 +4,7 @@
 	<div class="diff-info-banner" id="diff-info-banner">
 		<span class="info-icon">{{svg "octicon-info" 16}}</span>
 		<span class="info-text">{{ctx.Locale.Tr "repo.diff.info_banner_text"}}</span>
-		<button class="info-dismiss" id="diff-info-dismiss" aria-label="Dismiss">
+		<button class="info-dismiss" id="diff-info-dismiss" aria-label="{{ctx.Locale.Tr "repo.diff.info_banner_dismiss"}}">
 			{{svg "octicon-x" 16}}
 		</button>
 	</div>
@@ -36,7 +36,7 @@
 		</div>
 		<div class="diff-detail-actions tw-flex tw-items-center tw-gap-2">
 			{{if and .PageIsPullFiles .IsShowingAllCommits}}
-				<a class="ui tiny basic button diff-toggle-mirror-btn" href="?style={{if $.IsSplitStyle}}unified{{else}}split{{end}}&whitespace={{$.WhitespaceBehavior}}&show-outdated={{$.ShowOutdatedComments}}" title="Toggle split/unified view">{{svg "octicon-mirror" 16}}</a>
+				<a class="ui tiny basic button diff-toggle-mirror-btn" href="?style={{if $.IsSplitStyle}}unified{{else}}split{{end}}&whitespace={{$.WhitespaceBehavior}}&show-outdated={{$.ShowOutdatedComments}}" title="{{ctx.Locale.Tr "repo.diff.toggle_split_unified"}}">{{svg "octicon-mirror" 16}}</a>
 			{{end}}
 			{{template "repo/diff/options_dropdown" .}}
 			{{if and .PageIsPullFiles (not $.Repository.IsArchived) $.SignedUserID}}

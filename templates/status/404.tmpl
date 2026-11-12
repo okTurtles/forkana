@@ -4,7 +4,7 @@
 	<div class="ui container">
 		{{template "base/alert" .}}
 		<div class="status-page-error">
-			<div class="status-page-error-title">404 Not Found</div>
+			<div class="status-page-error-title">{{ctx.Locale.Tr "error404_title"}}</div>
 			<div class="tw-text-center">
 				<div class="tw-my-4">{{if .NotFoundPrompt}}{{.NotFoundPrompt}}{{else}}{{ctx.Locale.Tr "error404"}}{{end}}</div>
 				{{if .NotFoundGoBackURL}}

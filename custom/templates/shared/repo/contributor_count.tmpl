@@ -4,6 +4,11 @@
      "title". */}}
 {{define "shared/repo/contributor_count"}}
 {{- $n := .Count -}}
-{{- if and $n (lt $n 0)}}-{{else if .Short}}{{CountFmt (or $n 0)}}{{else}}{{or $n 0}}{{end -}}
-{{- if .Label}} {{if eq .Label "title"}}Contributor{{else}}contributor{{end}}{{if not (and $n (eq $n 1))}}s{{end}}{{end -}}
+{{- $num := "-" -}}
+{{- if not (and $n (lt $n 0))}}{{if .Short}}{{$num = CountFmt (or $n 0)}}{{else}}{{$num = printf "%d" (or $n 0)}}{{end}}{{end -}}
+{{- /* "-" (unknown) takes the plural in every language: TrN would give -1 the singular in fr-FR */ -}}
+{{- $cnt := or $n 0}}{{if lt $cnt 0}}{{$cnt = 2}}{{end -}}
+{{- if not .Label}}{{$num}}
+{{- else if eq .Label "title"}}{{ctx.Locale.TrN $cnt "repo.contributor_count_title_1" "repo.contributor_count_title_n" $num}}
+{{- else}}{{ctx.Locale.TrN $cnt "repo.contributor_count_lower_1" "repo.contributor_count_lower_n" $num}}{{end -}}
 {{end}}

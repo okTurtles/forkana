@@ -1,5 +1,6 @@
 // @ts-expect-error - @toast-ui/editor has type definition issues with package.json exports
 import type Editor from '@toast-ui/editor';
+import {formatMessage} from '../../modules/page-i18n.ts';
 
 export function formatBytes(bytes: number, decimals = 1): string {
   if (bytes <= 0) return '0 B';
@@ -49,7 +50,7 @@ export function createBase64WidgetRule(
 
       const el = document.createElement('span');
       el.className = 'base64-image-widget';
-      el.title = `Alt: ${altText} | Base64 Encoded Image - Click to copy original data URI`;
+      el.title = formatMessage(window.config.i18n.editor_base64_image_title || 'Alt: %s | Base64 Encoded Image - Click to copy original data URI', [altText]);
 
       // Construct SVG programmatically to avoid innerHTML XSS sinks (Issue 10)
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -66,7 +67,7 @@ export function createBase64WidgetRule(
       el.append(svg);
 
       const label = document.createElement('span');
-      label.textContent = `Base64 Image (${extension}, ${formattedSize}${altText ? ` - ${altText}` : ''})`;
+      label.textContent = formatMessage(window.config.i18n.editor_base64_image_label || 'Base64 Image (%s)', [`${extension}, ${formattedSize}${altText ? ` - ${altText}` : ''}`]);
       el.append(label);
 
       // Named click handler to prevent leaks (Issue 8)
@@ -78,7 +79,7 @@ export function createBase64WidgetRule(
           const labelSpan = el.querySelector('span');
           if (labelSpan) {
             const originalText = labelSpan.textContent;
-            labelSpan.textContent = 'Copied to clipboard!';
+            labelSpan.textContent = window.config.i18n.copy_success || 'Copied to clipboard!';
             setTimeout(() => {
               labelSpan.textContent = originalText;
             }, 2000);

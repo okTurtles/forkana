@@ -562,7 +562,7 @@ func RenderRepositoryHistory(ctx *context.Context) {
 	}
 
 	// Set up basic repository data
-	title := ctx.Repo.Repository.Owner.Name + "/" + ctx.Repo.Repository.Name + " (History)"
+	title := ctx.Locale.TrString("repo.history_page_title", ctx.Repo.Repository.Owner.Name+"/"+ctx.Repo.Repository.Name)
 	if ctx.Repo.Repository.Description != "" {
 		title += ": " + ctx.Repo.Repository.Description
 	}

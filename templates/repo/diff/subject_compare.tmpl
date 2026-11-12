@@ -18,20 +18,20 @@
 		<div class="tw-flex tw-items-start tw-justify-between">
 			<h2 class="ui header tw-m-0 tw-text-16">
 				{{svg "octicon-issue-opened" 16 "tw-mr-1"}}
-				Point of contention <span class="tw-font-normal muted">{{.Owner1}}...{{.Owner2}}</span>
+				{{ctx.Locale.Tr "repo.point_of_contention.title"}} <span class="tw-font-normal muted">{{.Owner1}}...{{.Owner2}}</span>
 				<div class="sub header tw-ml-7 tw-text-12 tw-mt-1">
 					<!-- TODO: Use AI to generate this description -->
-					Short description about how these two articles differ.
+					{{ctx.Locale.Tr "repo.point_of_contention.description_placeholder"}}
 				</div>
 			</h2>
 			<div class="tw-flex tw-items-center tw-gap-2">
 				{{/* TODO: These buttons are placeholders for future functionality */}}
 				{{/* Split/unified view toggle - not yet implemented */}}
-				<button class="ui basic button tw-w-9 tw-h-9 tw-min-h-8 tw-m-0 tw-p-0 tw-mt-2" title="Toggle split/unified view" aria-label="Toggle split/unified view" disabled>
+				<button class="ui basic button tw-w-9 tw-h-9 tw-min-h-8 tw-m-0 tw-p-0 tw-mt-2" title="{{ctx.Locale.Tr "repo.diff.toggle_split_unified"}}" aria-label="{{ctx.Locale.Tr "repo.diff.toggle_split_unified"}}" disabled>
 					{{svg "octicon-mirror" 16}}
 				</button>
 				{{/* More options menu - not yet implemented */}}
-				<button class="ui basic button tw-w-9 tw-h-9 tw-min-h-8 tw-m-0 tw-p-0 tw-mt-2" title="More options" aria-label="More options" disabled>
+				<button class="ui basic button tw-w-9 tw-h-9 tw-min-h-8 tw-m-0 tw-p-0 tw-mt-2" title="{{ctx.Locale.Tr "repo.point_of_contention.more_options"}}" aria-label="{{ctx.Locale.Tr "repo.point_of_contention.more_options"}}" disabled>
 					{{svg "octicon-kebab-horizontal" 16}}
 				</button>
 			</div>

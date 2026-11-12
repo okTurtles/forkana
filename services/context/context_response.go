@@ -149,7 +149,7 @@ func (ctx *Context) notFoundInternal(logMsg string, logErr error) {
 	}
 
 	ctx.Data["IsRepo"] = ctx.Repo.Repository != nil
-	ctx.Data["Title"] = "Page Not Found"
+	ctx.Data["Title"] = ctx.Locale.TrString("page_not_found")
 	ctx.HTML(http.StatusNotFound, "status/404")
 }
 

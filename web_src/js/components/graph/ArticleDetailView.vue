@@ -21,6 +21,7 @@
    stops rendering the bubbles and connectors entirely (it re-renders them the
    moment the close starts, so the circle shrinks back INTO its bubble). */
 
+import { t, tn } from './bubble-i18n.ts';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { formatDateYMD } from '../../utils/time.ts';
 import { DETAIL_DIAMETER_DESIGN, DETAIL_EDGE_MARGIN, DETAIL_VIEWPORT_CAP } from './detail-size.ts';
@@ -64,7 +65,7 @@ const emit = defineEmits<{
 const diameter = computed(() => props.size ?? DETAIL_DIAMETER_DESIGN);
 /* The CSS spelling of the viewport cap (see ./detail-size.ts). */
 const viewportCap = `${DETAIL_VIEWPORT_CAP * 100}vw`;
-const label = computed(() => (props.contributors === 1 ? 'Contributor' : 'Contributors'));
+const label = computed(() => tn(props.contributors, 'repo.bubble.contributor_1', 'repo.bubble.contributor_n'));
 const formattedDate = computed(() => formatDateYMD(props.updatedAt));
 const showBack = computed(() => props.showBack !== false);
 
@@ -238,7 +239,7 @@ onBeforeUnmount(() => {
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M15 5l-7 7 7 7" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      Back
+      {{ t('home.back') }}
     </button>
 
     <!-- The circle centres on --detail-center-y: the midpoint of the VISIBLE
@@ -261,11 +262,11 @@ onBeforeUnmount(() => {
           <!-- The article excerpt. This one WRAPS: it is a paragraph, not a label. -->
           <p v-if="description" class="detail-description">{{ description }}</p>
 
-          <button class="btn-neutral detail-read" @click="emit('read')">Read full article</button>
-          <button class="detail-history" @click="emit('history')">View history</button>
+          <button class="btn-neutral detail-read" @click="emit('read')">{{ t('repo.bubble.read_full_article') }}</button>
+          <button class="detail-history" @click="emit('history')">{{ t('repo.bubble.view_history') }}</button>
 
           <p v-if="updatedAt" class="detail-updated">
-            <span>Last updated</span>
+            <span>{{ t('repo.bubble.last_updated') }}</span>
             <span>{{ formattedDate }}</span>
           </p>
         </div>

@@ -7,7 +7,58 @@
         data-subject="{{.SubjectName}}"
         data-default-branch="{{.Repository.DefaultBranch}}"
         {{/* the same parameters the page's embedded graph is built with (repo_service.SubjectForkGraphQuery) */}}
-        data-api-url="{{AppSubUrl}}/api/v1/repos/{{.Repository.Owner.Name}}/{{.Repository.Name}}/forks/graph?{{.SubjectForkGraphQuery}}">
+        data-api-url="{{AppSubUrl}}/api/v1/repos/{{.Repository.Owner.Name}}/{{.Repository.Name}}/forks/graph?{{.SubjectForkGraphQuery}}"
+        {{/* The view's strings (web_src/js/components/graph/bubble-i18n.ts lists the keys;
+             its test checks this list) */}}
+        data-i18n="{{JsonUtils.EncodeToString (dict
+            "repo.bubble.contributor_1" (ctx.Locale.Tr "repo.bubble.contributor_1")
+            "repo.bubble.contributor_n" (ctx.Locale.Tr "repo.bubble.contributor_n")
+            "repo.contributor_count_title_1" (ctx.Locale.Tr "repo.contributor_count_title_1")
+            "repo.contributor_count_title_n" (ctx.Locale.Tr "repo.contributor_count_title_n")
+            "repo.contributor_count_lower_1" (ctx.Locale.Tr "repo.contributor_count_lower_1")
+            "repo.contributor_count_lower_n" (ctx.Locale.Tr "repo.contributor_count_lower_n")
+            "repo.bubble.fork_count_1" (ctx.Locale.Tr "repo.bubble.fork_count_1")
+            "repo.bubble.fork_count_n" (ctx.Locale.Tr "repo.bubble.fork_count_n")
+            "repo.bubble.last_updated" (ctx.Locale.Tr "repo.bubble.last_updated")
+            "repo.article_last_updated" (ctx.Locale.Tr "repo.article_last_updated")
+            "repo.bubble.deleted_by_author" (ctx.Locale.Tr "repo.bubble.deleted_by_author")
+            "repo.bubble.aria_node" (ctx.Locale.Tr "repo.bubble.aria_node")
+            "repo.bubble.aria_node_deleted" (ctx.Locale.Tr "repo.bubble.aria_node_deleted")
+            "repo.bubble.aria_node_updated" (ctx.Locale.Tr "repo.bubble.aria_node_updated")
+            "repo.bubble.aria_compare_pick" (ctx.Locale.Tr "repo.bubble.aria_compare_pick")
+            "repo.bubble.aria_press_enter" (ctx.Locale.Tr "repo.bubble.aria_press_enter")
+            "repo.bubble.articles_selected" (ctx.Locale.Tr "repo.bubble.articles_selected")
+            "repo.bubble.close_comparison" (ctx.Locale.Tr "repo.bubble.close_comparison")
+            "repo.bubble.compare_articles" (ctx.Locale.Tr "repo.bubble.compare_articles")
+            "home.back" (ctx.Locale.Tr "home.back")
+            "repo.bubble.read_full_article" (ctx.Locale.Tr "repo.bubble.read_full_article")
+            "repo.bubble.view_history" (ctx.Locale.Tr "repo.bubble.view_history")
+            "repo.file_history" (ctx.Locale.Tr "repo.file_history")
+            "repo.bubble.article_history" (ctx.Locale.Tr "repo.bubble.article_history")
+            "repo.bubble.close_history" (ctx.Locale.Tr "repo.bubble.close_history")
+            "repo.bubble.fork_of" (ctx.Locale.Tr "repo.bubble.fork_of")
+            "repo.bubble.original_contention" (ctx.Locale.Tr "repo.bubble.original_contention")
+            "repo.bubble.no_fork_description" (ctx.Locale.Tr "repo.bubble.no_fork_description")
+            "repo.bubble.view_full_history" (ctx.Locale.Tr "repo.bubble.view_full_history")
+            "repo.bubble.create_first_article" (ctx.Locale.Tr "repo.bubble.create_first_article")
+            "repo.bubble.legend_article" (ctx.Locale.Tr "repo.bubble.legend_article")
+            "repo.bubble.legend_contention" (ctx.Locale.Tr "repo.bubble.legend_contention")
+            "repo.tombstone.label" (ctx.Locale.Tr "repo.tombstone.label")
+            "repo.bubble.graph_aria" (ctx.Locale.Tr "repo.bubble.graph_aria")
+            "repo.bubble.loading_aria" (ctx.Locale.Tr "repo.bubble.loading_aria")
+            "loading" (ctx.Locale.Tr "loading")
+            "repo.bubble.load_failed_title" (ctx.Locale.Tr "repo.bubble.load_failed_title")
+            "repo.bubble.load_failed" (ctx.Locale.Tr "repo.bubble.load_failed")
+            "repo.bubble.load_failed_status" (ctx.Locale.Tr "repo.bubble.load_failed_status")
+            "repo.subject_articles_retry" (ctx.Locale.Tr "repo.subject_articles_retry")
+            "repo.bubble.announce_loaded" (ctx.Locale.Tr "repo.bubble.announce_loaded")
+            "repo.bubble.announce_no_data" (ctx.Locale.Tr "repo.bubble.announce_no_data")
+            "repo.bubble.announce_selected" (ctx.Locale.Tr "repo.bubble.announce_selected")
+            "repo.bubble.announce_opened" (ctx.Locale.Tr "repo.bubble.announce_opened")
+            "repo.bubble.aria_contention" (ctx.Locale.Tr "repo.bubble.aria_contention")
+            "repo.bubble.cannot_compare_subjects" (ctx.Locale.Tr "repo.bubble.cannot_compare_subjects")
+            "unknown" (ctx.Locale.Tr "unknown")
+        )}}">
     </div>
 </div>
 {{end}}

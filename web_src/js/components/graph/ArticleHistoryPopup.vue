@@ -31,6 +31,7 @@ export type HistoryEntry = {
    card "ActionMenu/History" 641:62665 and its rows 641:62676-62679, unless a
    comment says otherwise. */
 
+import { t } from './bubble-i18n.ts';
 import { ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -61,11 +62,11 @@ function toggle(id: string) {
   <!-- Backdrop: closes on click, and dims the bubble behind the bottom sheet. -->
   <div class="history-backdrop" :class="{'is-sheet': sheet}" @click="emit('close')"/>
 
-  <aside class="history-popup" :class="{'is-sheet': sheet}" role="dialog" aria-label="Article history" @click.stop>
+  <aside class="history-popup" :class="{'is-sheet': sheet}" role="dialog" :aria-label="t('repo.bubble.article_history')" @click.stop>
     <header class="history-header">
-      <h3 class="history-title">History</h3>
+      <h3 class="history-title">{{ t('repo.file_history') }}</h3>
       <!-- x-24 (641:62668): the 24px octicon, #59636e -->
-      <button class="history-close" aria-label="Close history" @click="emit('close')">
+      <button class="history-close" :aria-label="t('repo.bubble.close_history')" @click="emit('close')">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
           <path d="M5.72 5.72a.75.75 0 0 1 1.06 0L12 10.94l5.22-5.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L13.06 12l5.22 5.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L12 13.06l-5.22 5.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L10.94 12 5.72 6.78a.75.75 0 0 1 0-1.06Z"/>
         </svg>
@@ -88,7 +89,7 @@ function toggle(id: string) {
             <path d="M11.25 16.25v-5h1.5v5h-1.5Z"/>
           </svg>
           <span class="history-row-title">
-            <template v-if="entry.isFork">Fork of: </template>{{ entry.title }}
+            {{ entry.isFork ? t('repo.bubble.fork_of', entry.title) : entry.title }}
           </span>
           <!-- chevron-down-24 at 16px, #1f2328; flipped up when open -->
           <svg class="history-chevron" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
@@ -98,11 +99,11 @@ function toggle(id: string) {
 
         <div v-if="expanded === entry.id" class="history-row-body">
           <template v-if="entry.contention">
-            <span class="history-body-label">Original point of contention: </span>
-            <span v-if="entry.owner" class="history-mention">@{{ entry.owner }}</span>
+            <span class="history-body-label">{{ t('repo.bubble.original_contention') }} </span>
+            <span v-if="entry.owner" class="history-mention">{{ `@${entry.owner}` }}</span>
             {{ entry.contention }}
           </template>
-          <span v-else class="history-body-empty">No description recorded for this fork.</span>
+          <span v-else class="history-body-empty">{{ t('repo.bubble.no_fork_description') }}</span>
         </div>
       </li>
     </ul>
@@ -110,7 +111,7 @@ function toggle(id: string) {
     <hr class="history-divider">
 
     <footer class="history-footer">
-      <button class="history-full" @click="emit('view-full-history')">View full history</button>
+      <button class="history-full" @click="emit('view-full-history')">{{ t('repo.bubble.view_full_history') }}</button>
     </footer>
   </aside>
 </template>

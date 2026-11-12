@@ -212,6 +212,30 @@ Environment variables:
 - `CATEGORY` (optional) - Wikipedia category to fetch from
 - `PRIVATE` (optional) - Set "true" for private repos
 
+## Translations
+
+Gitea uses a locale file from `custom/options/locale/` *instead of* the embedded `options/locale/` one: the custom file replaces it wholesale, keys are not merged. So:
+
+- `custom/options/locale/locale_en-US.ini` is a full copy of upstream en-US with Forkana's wording. Its **Forkana keys** are the keys upstream en-US (`options/locale/locale_en-US.ini`) doesn't have, or has with other wording ("Pull Requests" → "Change Requests"). Add and change strings in the custom en-US only: keep `options/locale/locale_en-US.ini` as upstream ships it (Gitea never reads it once the custom en-US exists, and a Forkana string written there too would not count as a Forkana key).
+- `custom/translations/locale_<lang>.ini` holds, for each other upstream language, only the translations of the Forkana keys. Each translation has a `# en:` line above it: the English it was translated from. Terms follow `custom/translations/GLOSSARY.md`.
+- `custom/options/locale/locale_<lang>.ini` is **generated** (`make generate-locale-forkana`, from `build/forkana-locales.go`): the upstream file of the language, with the Forkana keys set to their translations and the keys Forkana deleted from en-US left out. A Forkana key without a usable translation is left out too, so Gitea shows its Forkana English. Never edit these files by hand.
+- `make lint-locale-forkana` (part of `make lint-backend`, so CI) **fails** when a translation's placeholders (`%s`, `%[1]d`…; unindexed ones in the same order), HTML tags or wrapping quotes differ from the English it was made from, Gitea's INI reader would read a translation or a generated file differently from what is meant (a lone leading backtick, `'…'` or `"""`), a translation file has a key that isn't a Forkana key or lacks a `# en:` line, a generated or translation file is out of date, or a custom locale file has no upstream file. It only **warns** on missing translations and stale ones (the `# en:` line differs from the current English): a PR that adds or rewords a string doesn't have to translate it.
+- `make lint-locale-forkana-strict` (`go run build/forkana-locales.go check -strict`) also fails on those warnings: run it after a translation pass.
+
+- Scripts that build their own text take it from the locale too. The Bubble view (`web_src/js/components/graph/bubble-i18n.ts`) and the conflict resolution page (`web_src/js/features/repo-conflict-i18n.ts`) list their keys with the English fallback; their template (`custom/templates/shared/repo/bubble.tmpl`, `custom/templates/repo/diff/conflicts_box.tmpl`) sends the translations as JSON in `data-i18n`, read by `t(key, ...args)` / `tn(count, key1, keyN, ...args)` from `web_src/js/modules/page-i18n.ts`. `page-i18n.test.ts` checks that each list's fallbacks are custom en-US's text and that its template sends every key; ESLint's `vue/no-bare-strings-in-template` rejects bare English in the Bubble view's templates. Other scripts read their strings from `data-msg-*` attributes or `window.config.i18n` (`templates/base/head_script.tmpl`). The Toast UI editor's own texts come from its i18n files, loaded for the page's language (`web_src/js/features/comp/toastEditorLanguage.ts`).
+
+To add or change a string:
+
+1. Add or change it in `custom/options/locale/locale_en-US.ini` (only there).
+2. `make generate-locale-forkana`, then `make lint-locale-forkana`. That is all a PR needs; the new string shows in English in other languages until translated (a reworded string keeps its old translation while it still fits the new English's placeholders, HTML and quotes).
+3. To translate (in the same PR or in a later translation pass):
+   1. `go run build/forkana-locales.go todo /tmp/forkana-todo` writes, per language, the strings to translate (missing or stale), with the English as value.
+   2. Translate the values in those files (keep keys, placeholders, HTML and quotes; use the glossary).
+   3. `go run build/forkana-locales.go merge /tmp/forkana-todo` merges them into `custom/translations/` and regenerates the locale files. A value still equal to its English is left out and listed as untranslated; a translation that really is the English word ("Fork", "URL") goes into `custom/translations/` by hand.
+   4. `make lint-locale-forkana-strict`.
+
+After merging upstream Gitea (new `options/locale/` files), run `make generate-locale-forkana` and `make lint-locale-forkana`. If upstream en-US changed, bring the changes into custom en-US first: a key whose upstream wording changed but custom en-US kept the old one counts as a Forkana key.
+
 ## Configuration
 
 ### Required Config File

@@ -8,6 +8,7 @@ import Editor from '@toast-ui/editor';
 import '@toast-ui/editor/dist/toastui-editor.css';
 import {hideElem, generateElemId} from '../../utils/dom.ts';
 import {defaultToolbarItems} from './toastEditorToolbar.ts';
+import {renameModeTabs, toastEditorLanguage} from './toastEditorLanguage.ts';
 import {pastedCodeLanguagePlugin} from './pastedCodeLanguage.ts';
 import {imageInfo} from '../../utils/image.ts';
 import {
@@ -97,8 +98,10 @@ export class ToastCommentEditor {
       createBase64WidgetRule(() => this.editor),
       rawInlineHtmlWidgetRule,
     ];
+    const language = await toastEditorLanguage();
     this.editor = new Editor({
       el: this.editorWrapper,
+      language,
       height: 'auto',
       minHeight: '0',
       initialEditType,
@@ -129,14 +132,7 @@ export class ToastCommentEditor {
     this.textarea.addEventListener('change', this.onTextareaChange);
     installLosslessMarkdownTracker(this.editor, this.textarea);
 
-    // Rename mode switch labels
-    const switchEl = this.editorWrapper.querySelector('.toastui-editor-mode-switch');
-    if (switchEl) {
-      for (const el of switchEl.querySelectorAll('.tab-item')) {
-        if (el.textContent?.trim() === 'WYSIWYG') el.textContent = 'Visual editor';
-        else if (el.textContent?.trim() === 'Markdown') el.textContent = 'Source editor';
-      }
-    }
+    renameModeTabs(this.editorWrapper);
 
     // Hide the original textarea
     hideElem(this.textarea);

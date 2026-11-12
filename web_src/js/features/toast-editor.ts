@@ -6,6 +6,7 @@ import {installLosslessMarkdownTracker} from './comp/losslessMarkdown.ts';
 import {installRawHtmlGuard, rawInlineHtmlWidgetRule} from './comp/rawHtmlGuard.ts';
 import {installImageSrcResolver, resolveRelativeSrc} from './comp/editorImageSrc.ts';
 import {defaultToolbarItems} from './comp/toastEditorToolbar.ts';
+import {renameModeTabs, toastEditorLanguage} from './comp/toastEditorLanguage.ts';
 import {articleEditorMarkdownOptions} from './comp/toastEditorOptions.ts';
 import {pastedCodeLanguagePlugin} from './comp/pastedCodeLanguage.ts';
 import {showErrorToast} from '../modules/toast.ts';
@@ -82,8 +83,10 @@ export async function createToastEditor(
     createBase64WidgetRule((): Editor => editorRef.current!),
     rawInlineHtmlWidgetRule,
   ];
+  const language = await toastEditorLanguage();
   const editor: Editor = new Editor({
     el: container,
+    language,
     height,
     initialEditType,
     previewStyle,
@@ -261,14 +264,7 @@ export async function createToastEditor(
   // through the DOM gets the lossless getMarkdown/setMarkdown.
   container._giteaToastEditor = editor;
 
-  // Rename mode switch labels
-  const switchEl = container.querySelector('.toastui-editor-mode-switch');
-  if (switchEl) {
-    for (const el of switchEl.querySelectorAll('.tab-item')) {
-      if (el.textContent?.trim() === 'WYSIWYG') el.textContent = 'Visual editor';
-      else if (el.textContent?.trim() === 'Markdown') el.textContent = 'Source editor';
-    }
-  }
+  renameModeTabs(container);
 
   // Hide the original textarea
   textarea.style.display = 'none';

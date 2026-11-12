@@ -345,7 +345,7 @@ lint-frontend: lint-js lint-css ## lint frontend files
 lint-frontend-fix: lint-js-fix lint-css-fix ## lint frontend files and fix issues
 
 .PHONY: lint-backend
-lint-backend: lint-go lint-go-gopls lint-editorconfig ## lint backend files
+lint-backend: lint-go lint-go-gopls lint-editorconfig lint-locale-forkana ## lint backend files
 
 .PHONY: lint-backend-fix
 lint-backend-fix: lint-go-fix lint-go-gitea-vet lint-editorconfig ## lint backend files and fix issues
@@ -414,6 +414,16 @@ lint-go-gopls: ## lint go files with gopls
 lint-editorconfig:
 	@echo "Running editorconfig check..."
 	@$(GO) run $(EDITORCONFIG_CHECKER_PACKAGE) $(EDITORCONFIG_FILES)
+
+.PHONY: lint-locale-forkana
+lint-locale-forkana: ## check the Forkana translations (placeholders, HTML, quotes) and that the custom locale files are generated; warn on missing or stale translations
+	@echo "Running Forkana locale check..."
+	@$(GO) run build/forkana-locales.go check
+
+.PHONY: lint-locale-forkana-strict
+lint-locale-forkana-strict: ## like lint-locale-forkana, but also fail on missing or stale translations
+	@echo "Running strict Forkana locale check..."
+	@$(GO) run build/forkana-locales.go check -strict
 
 .PHONY: lint-actions
 lint-actions: ## lint action workflow files
@@ -962,6 +972,10 @@ update-translations:
 	$(SED_INPLACE) -e 's/\\"/"/g' ./translations/*.ini
 	mv ./translations/*.ini ./options/locale/
 	rmdir ./translations
+
+.PHONY: generate-locale-forkana
+generate-locale-forkana: ## build custom/options/locale/locale_<lang>.ini from options/locale and custom/translations
+	$(GO) run build/forkana-locales.go generate
 
 .PHONY: generate-gitignore
 generate-gitignore: ## update gitignore files

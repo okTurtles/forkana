@@ -11,6 +11,8 @@
  */
 
 import {POST} from '../modules/fetch.ts';
+import {htmlEscape} from '../utils/html.ts';
+import {t, tn} from './repo-conflict-i18n.ts';
 import {showErrorToast} from '../modules/toast.ts';
 import {initToastCommentEditor, getToastCommentEditor, EventEditorContentChanged} from './comp/ToastCommentEditor.ts';
 
@@ -115,8 +117,8 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
     header.innerHTML = `
       <span class="conflict-counter"></span>
       <span class="conflict-nav">
-        <a href="#" class="conflict-nav-prev">&lsaquo; Prev</a>
-        <a href="#" class="conflict-nav-next">Next &rsaquo;</a>
+        <a href="#" class="conflict-nav-prev">${htmlEscape(t('repo.pulls.conflicts_prev'))}</a>
+        <a href="#" class="conflict-nav-next">${htmlEscape(t('repo.pulls.conflicts_next'))}</a>
       </span>
     `;
     wrapper.append(header);
@@ -189,14 +191,14 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
       <td class="lines-type-marker"></td>
       <td class="lines-code lines-code-old conflict-btn-cell">
         <button type="button" class="conflict-choice-btn conflict-keep-btn ui button tiny">
-          ${arrowIcon} Keep this
+          ${arrowIcon} ${htmlEscape(t('repo.pulls.conflicts_keep'))}
         </button>
       </td>
       <td class="lines-num lines-num-new add-code conflict-btn-gutter"></td>
       <td class="lines-type-marker"></td>
       <td class="lines-code lines-code-new conflict-btn-cell">
         <button type="button" class="conflict-choice-btn conflict-use-btn ui button tiny">
-          ${arrowIcon} Use this
+          ${arrowIcon} ${htmlEscape(t('repo.pulls.conflicts_use'))}
         </button>
       </td>
     `;
@@ -218,7 +220,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
       const buttonContainer = editorContent.querySelector('.field.flex-text-block');
       if (buttonContainer) {
         buttonContainer.innerHTML = `
-          <button type="button" class="ui tiny primary button conflict-resolve-btn" disabled>Resolve</button>
+          <button type="button" class="ui tiny primary button conflict-resolve-btn" disabled>${htmlEscape(t('repo.pulls.conflicts_resolve'))}</button>
         `;
       }
 
@@ -231,7 +233,7 @@ async function buildConflictWrappers(table: HTMLTableElement): Promise<HTMLEleme
           await initToastCommentEditor(toastEditorContainer);
         } catch (err) {
           console.error('failed to init conflict editor', err);
-          showErrorToast('Failed to initialize the conflict editor. Please try reloading the page.');
+          showErrorToast(t('repo.pulls.conflicts_init_failed'));
         }
       }
     }
@@ -255,7 +257,7 @@ function numberConflicts(wrappers: HTMLElement[]) {
   for (const [index, wrapper] of wrappers.entries()) {
     const counter = wrapper.querySelector('.conflict-counter');
     if (counter) {
-      counter.textContent = `${index + 1} of ${total} conflicts`;
+      counter.textContent = t('repo.pulls.conflicts_counter', index + 1, total);
     }
     wrapper.setAttribute('data-conflict-index', String(index));
 
@@ -365,7 +367,7 @@ function buildResolvedView(wrapper: HTMLElement, resolvedText: string): HTMLElem
   const footer = document.createElement('div');
   footer.className = 'conflict-resolved-footer';
   // eslint-disable-next-line github/unescaped-html-literal
-  footer.innerHTML = `<button type="button" class="conflict-edit-btn"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="12" height="12"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354ZM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064Z"></path></svg> Edit</button>`;
+  footer.innerHTML = `<button type="button" class="conflict-edit-btn"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="12" height="12"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354ZM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064Z"></path></svg> ${htmlEscape(t('repo.pulls.conflicts_edit'))}</button>`;
   container.append(footer);
 
   return container;
@@ -384,11 +386,12 @@ function updateAllCounters() {
     const counter = wrapper.querySelector('.conflict-counter');
     if (!counter) continue;
     if (wrapper.getAttribute('data-resolved') === 'true') {
-      const rest = unresolvedCount === 0 ? 'Resolved' : `Resolved · ${unresolvedCount} more ${unresolvedCount === 1 ? 'conflict' : 'conflicts'}`;
+      const rest = unresolvedCount === 0 ? t('repo.pulls.conflicts_resolved') :
+        tn(unresolvedCount, 'repo.pulls.conflicts_resolved_more_1', 'repo.pulls.conflicts_resolved_more_n', unresolvedCount);
       // eslint-disable-next-line github/unescaped-html-literal
-      counter.innerHTML = `<span class="conflict-resolved-check">✓</span> ${rest}`;
+      counter.innerHTML = `<span class="conflict-resolved-check">✓</span> ${htmlEscape(rest)}`;
     } else {
-      counter.textContent = `${index + 1} of ${total} conflicts`;
+      counter.textContent = t('repo.pulls.conflicts_counter', index + 1, total);
     }
   }
 }
@@ -465,7 +468,7 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
       wrapper.classList.add('resolved');
       if (keepBtn) keepBtn.disabled = true;
       if (useBtn) useBtn.disabled = true;
-      if (resolveBtn) resolveBtn.textContent = '✓ Resolved';
+      if (resolveBtn) resolveBtn.textContent = t('repo.pulls.conflicts_resolved_button');
     } else {
       wrapper.querySelector('.conflict-resolved-view')?.remove();
       if (innerTable) innerTable.style.display = '';
@@ -476,7 +479,7 @@ function setupWrapperEvents(wrapper: HTMLElement, baseText: string, headText: st
       if (keepBtn) keepBtn.disabled = false;
       if (useBtn) useBtn.disabled = false;
       if (resolveBtn) {
-        resolveBtn.textContent = 'Resolve';
+        resolveBtn.textContent = t('repo.pulls.conflicts_resolve');
         resolveBtn.disabled = !isResolveEnabled();
       }
     }
@@ -560,7 +563,7 @@ function initFoldToggle() {
         row.style.display = folded ? 'none' : '';
       }
       // Update button icon tooltip
-      btn.setAttribute('data-tooltip-content', folded ? 'Show context lines' : 'Hide context lines');
+      btn.setAttribute('data-tooltip-content', t(folded ? 'repo.pulls.conflicts_show_context' : 'repo.pulls.conflicts_hide_context'));
     });
   }
 }
@@ -614,7 +617,7 @@ function initSubmitTracking() {
       // so the backend can verify GET/POST consistency.
       const whitespace = diffBoxes?.getAttribute('data-whitespace') ?? '';
 
-      setButtonsState(true, 'Submitting…');
+      setButtonsState(true, t('repo.pulls.conflicts_submitting'));
 
       try {
         const resp = await POST(window.location.pathname, {data: {baseCommitID, headCommitID, whitespace, files}});
@@ -629,11 +632,11 @@ function initSubmitTracking() {
             msg = `HTTP ${resp.status}`;
           }
           setButtonsState(false);
-          showErrorToast(`Submit failed: ${msg}. Your resolutions have not been saved — you will need to redo them after reloading.`);
+          showErrorToast(t('repo.pulls.conflicts_submit_failed', msg));
         }
       } catch {
         setButtonsState(false);
-        showErrorToast('Submit failed: network error');
+        showErrorToast(t('repo.pulls.conflicts_submit_network_error'));
       }
     });
   }
@@ -723,11 +726,11 @@ function checkForDraft() {
   const banner = document.createElement('div');
   banner.className = 'ui info message conflict-draft-banner';
   banner.innerHTML = `
-    <div class="header">Restore conflict resolution draft?</div>
-    <p>We found a saved draft of your resolutions for this conflict. Would you like to restore it?</p>
+    <div class="header">${htmlEscape(t('repo.pulls.conflicts_draft_title'))}</div>
+    <p>${htmlEscape(t('repo.pulls.conflicts_draft_text'))}</p>
     <div style="margin-top: 1em;">
-      <button type="button" class="ui tiny primary button conflict-draft-restore-btn">Restore Draft</button>
-      <button type="button" class="ui tiny basic button conflict-draft-dismiss-btn">Dismiss</button>
+      <button type="button" class="ui tiny primary button conflict-draft-restore-btn">${htmlEscape(t('repo.pulls.conflicts_draft_restore'))}</button>
+      <button type="button" class="ui tiny basic button conflict-draft-dismiss-btn">${htmlEscape(t('repo.pulls.conflicts_draft_dismiss'))}</button>
     </div>
   `;
 

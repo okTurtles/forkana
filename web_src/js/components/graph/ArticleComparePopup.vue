@@ -19,6 +19,7 @@
        then a divider;
      footer 641:62040 — "Compare articles", full width, 40px. */
 
+import { t, tn } from './bubble-i18n.ts';
 import { formatDateYMD } from '../../utils/time.ts';
 import { COMPARE_CARET_HEIGHT, COMPARE_CARET_WIDTH, COMPARE_POPOVER_WIDTH } from './compare-popover.ts';
 
@@ -50,11 +51,11 @@ const emit = defineEmits<{
 }>();
 
 function getOwner(article: { repoOwner?: string; fullName?: string }): string {
-  return article.repoOwner || article.fullName?.split('/')[0] || 'Unknown';
+  return article.repoOwner || article.fullName?.split('/')[0] || t('unknown');
 }
 
 function getSubjectName(article: { repoSubject?: string; fullName?: string }, subject: string): string {
-  return article.repoSubject || article.fullName?.split('/')[1] || subject || 'Unknown';
+  return article.repoSubject || article.fullName?.split('/')[1] || subject || t('unknown');
 }
 
 /* The article url the server built carries the article index, which only the server
@@ -91,8 +92,8 @@ const geometryStyle = {
     </svg>
 
     <header class="compare-popover-header">
-      <h2 id="compare-popover-title" class="compare-popover-title">{{ articles.length }} articles selected</h2>
-      <button type="button" class="compare-popover-icon-button" aria-label="Close comparison" @click="emit('close')">
+      <h2 id="compare-popover-title" class="compare-popover-title">{{ t('repo.bubble.articles_selected', articles.length) }}</h2>
+      <button type="button" class="compare-popover-icon-button" :aria-label="t('repo.bubble.close_comparison')" @click="emit('close')">
         <!-- octicon x (x-24 in figma) -->
         <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
           <path fill="currentColor" d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
@@ -115,16 +116,16 @@ const geometryStyle = {
              first two lines Inter 600 12/20, the date line Inter 400 italic
              12/20, all #59636e. -->
         <div class="compare-popover-details">
-          <div class="compare-article-count">{{ article.contributors }} Contributor{{ article.contributors === 1 ? '' : 's' }}</div>
-          <div class="compare-article-count">{{ article.children?.length || 0 }} Fork{{ (article.children?.length || 0) === 1 ? '' : 's' }}</div>
-          <div class="compare-article-date">Last updated: {{ formatDateYMD(article.updatedAt, 'Unknown') }}</div>
+          <div class="compare-article-count">{{ tn(article.contributors, 'repo.contributor_count_title_1', 'repo.contributor_count_title_n', article.contributors) }}</div>
+          <div class="compare-article-count">{{ tn(article.children?.length || 0, 'repo.bubble.fork_count_1', 'repo.bubble.fork_count_n', article.children?.length || 0) }}</div>
+          <div class="compare-article-date">{{ t('repo.article_last_updated', formatDateYMD(article.updatedAt, t('unknown'))) }}</div>
         </div>
       </article>
       <div class="compare-popover-divider" role="separator"/>
     </template>
 
     <footer class="compare-popover-footer">
-      <button type="button" class="compare-popover-button" @click="emit('compare')">Compare articles</button>
+      <button type="button" class="compare-popover-button" @click="emit('compare')">{{ t('repo.bubble.compare_articles') }}</button>
     </footer>
   </section>
 </template>
