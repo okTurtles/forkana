@@ -1,4 +1,4 @@
-import {test, expect} from '@playwright/test';
+import {test, expect, type Page} from '@playwright/test';
 import {login_user, load_logged_in_context} from './utils_e2e.ts';
 
 // The Article view's Read, Edit and History tabs as a signed-out reader sees them
@@ -174,15 +174,34 @@ const watcherByProject: Record<string, string> = {
   'Mobile Safari': 'user10',
 };
 
+// Watch (on), or stop watching (off), with the Article view's Watch button: pressed on a
+// wider screen; on a phone, it opens the Watch menu (#165, figma 7368:416644), whose
+// "Receive Notifications" or "Ignore" does it and closes the menu.
+async function setWatch(page: Page, on: boolean) {
+  const watch = page.locator('#article-tabs button[data-role="article-watch"]');
+  await watch.click();
+  if ((page.viewportSize()?.width ?? 1440) < 768) {
+    const menu = page.locator('#article-tabs dialog.article-watch-menu');
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('.article-watch-menu-title')).toHaveText('Watch');
+    await menu.locator(on ? '[data-role="article-watch-notifications"]' : '[data-role="article-watch-ignore"]').click();
+    await expect(menu).toBeHidden();
+  }
+  await expect(watch).toHaveAttribute('data-watching', String(on));
+  await expect(watch.locator('span')).toHaveText(on ? 'Unwatch' : 'Watch');
+}
+
 test.describe('Article view Watch button (signed in)', () => {
   test.beforeAll(async ({browser}, workerInfo) => {
     await login_user(browser, workerInfo, watcherByProject[workerInfo.project.name] ?? 'user4');
   });
 
   // #433 item 3: the Watch button of a tab swapped in without a reload still posts through
-  // htmx (with its CSRF header) and is answered with itself, and the subject header's
-  // Follow star (shown in the Article view too since #469) follows it
-  test('Watch works after switching tabs, and keeps the Follow star in step', async ({browser}, workerInfo) => {
+  // htmx (with its CSRF header) and is answered with itself. #165: it reads "Watch" or
+  // "Unwatch" (figma 7368:416141 / 7368:416259) and leaves the subject header's Follow,
+  // which is for the subject, alone; on a phone it opens the Watch menu (7368:416644),
+  // whose choices toggle it.
+  test('Watch works after switching tabs, on its own', async ({browser}, workerInfo) => {
     const context = await load_logged_in_context(browser, workerInfo, watcherByProject[workerInfo.project.name] ?? 'user4');
     const page = await context.newPage();
     await page.goto(`${article}?mode=edit`);
@@ -193,14 +212,14 @@ test.describe('Article view Watch button (signed in)', () => {
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible({timeout: 10000});
 
     const watch = page.locator('#article-tabs button[data-role="article-watch"]');
-    const star = page.locator('#repo-header-follow-slot .follow-article-button');
-    const watching = await watch.getAttribute('aria-pressed') === 'true';
-    await expect(star).toHaveAttribute('aria-label', watching ? 'Following' : 'Follow');
+    const star = page.locator('.repo-header-follow .subject-follow-button');
+    const watching = await watch.getAttribute('data-watching') === 'true';
+    const following = await star.getAttribute('aria-label');
+    await expect(watch.locator('span')).toHaveText(watching ? 'Unwatch' : 'Watch');
     const url = page.url();
 
-    await watch.click();
-    await expect(watch).toHaveAttribute('aria-pressed', watching ? 'false' : 'true');
-    await expect(star).toHaveAttribute('aria-label', watching ? 'Follow' : 'Following');
+    await setWatch(page, !watching);
+    await expect(star).toHaveAttribute('aria-label', following);
     expect(page.url()).toBe(url);
 
     // nor after switching back to the Edit tab without a reload
@@ -211,9 +230,29 @@ test.describe('Article view Watch button (signed in)', () => {
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible({timeout: 10000});
 
     // and back, so that the fixture keeps its state
-    await watch.click();
-    await expect(watch).toHaveAttribute('aria-pressed', watching ? 'true' : 'false');
-    await expect(star).toHaveAttribute('aria-label', watching ? 'Following' : 'Follow');
+    await setWatch(page, watching);
+    await expect(star).toHaveAttribute('aria-label', following);
+    await context.close();
+  });
+
+  // #165: Follow is for the subject: it toggles "Follow" and "Following" and leaves the
+  // article's Watch alone
+  test('Follow toggles the subject, not the Watch', async ({browser}, workerInfo) => {
+    const context = await load_logged_in_context(browser, workerInfo, watcherByProject[workerInfo.project.name] ?? 'user4');
+    const page = await context.newPage();
+    await page.goto(`${article}?mode=read`);
+    const watch = page.locator('#article-tabs button[data-role="article-watch"]');
+    const star = page.locator('.repo-header-follow .subject-follow-button');
+    await expect(star).toBeVisible();
+    const watchLabel = (await watch.locator('span').textContent()).trim();
+    const following = await star.getAttribute('aria-label') === 'Following';
+
+    for (const to of [!following, following]) {
+      await star.click();
+      await expect(star).toHaveAttribute('aria-label', to ? 'Following' : 'Follow');
+      await expect(star.locator('span')).toHaveText(to ? 'Following' : 'Follow');
+      await expect(watch.locator('span')).toHaveText(watchLabel);
+    }
     await context.close();
   });
 });

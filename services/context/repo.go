@@ -649,6 +649,11 @@ func RepoAssignment(ctx *Context) {
 		ctx.Data["IsWatchingRepo"] = repo_model.IsWatching(ctx, ctx.Doer.ID, repo.ID)
 		ctx.Data["IsStaringRepo"] = repo_model.IsStaring(ctx, ctx.Doer.ID, repo.ID)
 	}
+	// the subject header's Follow (#165)
+	if err := SetSubjectFollowData(ctx, repo.SubjectID); err != nil {
+		ctx.ServerError("SetSubjectFollowData", err)
+		return
+	}
 
 	if repo.IsFork {
 		RetrieveBaseRepo(ctx, repo)
@@ -1258,9 +1263,13 @@ func AssignSubjectRepository(ctx *Context, repo *repo_model.Repository) {
 	ctx.Data["RepoOperationsLink"] = repo.OperationsLink()
 	ctx.Data["FeedURL"] = ctx.Repo.RepoLink
 
-	// Follow (watch) state for the article Follow control rendered in the subject header
+	// the Article view's Watch button and the subject header's Follow (#165)
 	if ctx.IsSigned {
 		ctx.Data["IsWatchingRepo"] = repo_model.IsWatching(ctx, ctx.Doer.ID, repo.ID)
+	}
+	if err := SetSubjectFollowData(ctx, repo.SubjectID); err != nil {
+		ctx.ServerError("SetSubjectFollowData", err)
+		return
 	}
 
 	// Set up release count data
@@ -1480,6 +1489,11 @@ func RepoAssignmentByOwnerAndSubject(ctx *Context) {
 	if ctx.IsSigned {
 		ctx.Data["IsWatchingRepo"] = repo_model.IsWatching(ctx, ctx.Doer.ID, repo.ID)
 		ctx.Data["IsStaringRepo"] = repo_model.IsStaring(ctx, ctx.Doer.ID, repo.ID)
+	}
+	// the subject header's Follow (#165)
+	if err := SetSubjectFollowData(ctx, repo.SubjectID); err != nil {
+		ctx.ServerError("SetSubjectFollowData", err)
+		return
 	}
 
 	// Handle fork base repository

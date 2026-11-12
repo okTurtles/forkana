@@ -567,6 +567,8 @@ func registerWebRoutes(m *web.Router) {
 
 	m.Post("/-/markup", reqSignIn, web.Bind(structs.MarkupOption{}), misc.Markup)
 	m.Post("/-/citation/lookup", reqSignIn, misc.CitationLookup)
+	// the subject header's Follow (#165): the subject's activity in the user's feed
+	m.Post("/-/subject/{id:[0-9]+}/{action:follow|unfollow}", reqSignIn, repo.ActionSubjectFollow)
 
 	m.Get("/subject/{subjectname}", optSignIn, context.RepoAssignmentBySubject, context.RepoRefByDefaultBranch(), repo.SetEditorconfigIfExists, explore.RepoHistory)
 	m.Get("/subject/{subjectname}/compare/{owners}", optSignIn, repo.CompareReadme)

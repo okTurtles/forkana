@@ -76,16 +76,12 @@
                 <div class="article-tabs-trailing">
                     {{/* #433 item 3: Watch at the end of the tabs' row (figma View Tab
                          641:65480, Action I7368:264703;24375:95729), in every tab but Edit
-                         (hidden by CSS there). The subject header's Follow star, which toggles
-                         the same watch, stays above it (#469: the header is the same on every
-                         view). The hidden input is the article's id, which the star sends so
-                         that its answer can update this button. On a phone it is an icon
-                         ("Watch (icon)" 7629:71522 in Mobile 7368:263684). */}}
+                         (hidden by CSS there). It watches this article; the subject header's
+                         Follow above it is for the subject, and the two are independent
+                         (#165). On a phone it is an icon ("Watch (icon)" 7629:71522 in Mobile
+                         7368:263684) that opens the Watch menu (7368:416644). */}}
                     {{if .RepoOperationsLink}}
-                        <div class="article-watch">
-                            {{if .IsSigned}}<input type="hidden" id="article-watch-sync" name="sync_button_repo" value="{{.Repository.ID}}">{{end}}
-                            <div id="article-watch-slot">{{template "repo/watch_button" .}}</div>
-                        </div>
+                        <div class="article-watch">{{template "repo/watch_button" .}}</div>
                     {{end}}
                     {{/* #478: the "…" button after Watch, at the end of the row, in every tab
                          but Edit (Action 7368:264704 of "Article view / Logged out - Read only"

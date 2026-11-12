@@ -207,11 +207,10 @@ func CompareReadme(ctx *context.Context) {
 	// the header builds its links from has to be resolved here.
 	ctx.Data["Repository"] = repo1
 	ctx.Data["SubjectName"] = repo1.GetSubject(ctx)
-	// the header's Follow control posts to the article's operations link and shows
-	// whether the reader follows it
-	ctx.Data["RepoOperationsLink"] = repo1.OperationsLink()
-	if ctx.IsSigned {
-		ctx.Data["IsWatchingRepo"] = repo_model.IsWatching(ctx, ctx.Doer.ID, repo1.ID)
+	// the header's Follow, for the subject (#165)
+	if err := context.SetSubjectFollowData(ctx, repo1.SubjectID); err != nil {
+		ctx.ServerError("SetSubjectFollowData", err)
+		return
 	}
 	ctx.Data["IsBubbleView"] = false
 	ctx.Data["IsTableView"] = false

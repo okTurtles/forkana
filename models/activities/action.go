@@ -478,6 +478,75 @@ type GetFeedsOptions struct {
 	OpTypes            []ActionType // filter by specific action types
 	Keyword            string       // filter by repo (article) name, subject name, or actor name
 	FollowedByUserID   int64        // only actions performed by users this user ID follows
+	// IncludeFollowedSubjects adds, to RequestedUser's own feed, the activity on every
+	// article of the subjects they follow (#165; models/repo.SubjectFollow).
+	IncludeFollowedSubjects bool
+
+	// the followed articles RequestedUser can read, resolved once by resolveFollowedSubjects:
+	// their ids, or a subquery when there are too many for an IN list
+	followedSubjectsResolved bool
+	followedRepoIDs          []int64
+	followedRepoIDsQuery     *builder.Builder
+}
+
+// resolveFollowedSubjects finds, for IncludeFollowedSubjects, the articles of the subjects
+// RequestedUser follows that they can read, before the feed is queried: so that its
+// condition is a plain list of repository ids (which the action table's repo_id indexes
+// serve), and is left out for a user who follows nothing (most users).
+func (opts GetFeedsOptions) resolveFollowedSubjects(ctx context.Context) (GetFeedsOptions, error) {
+	if !opts.IncludeFollowedSubjects || opts.RequestedUser == nil || opts.followedSubjectsResolved {
+		return opts, nil
+	}
+	opts.followedSubjectsResolved = true
+	ids, err := repo_model.FindFollowedSubjectReadableRepoIDs(ctx, opts.RequestedUser, db.DefaultMaxInSize+1)
+	if err != nil {
+		return opts, err
+	}
+	switch {
+	case len(ids) == 0:
+		opts.IncludeFollowedSubjects = false
+	case len(ids) <= db.DefaultMaxInSize:
+		opts.followedRepoIDs = ids
+	default:
+		opts.followedRepoIDsQuery = builder.Select("`repository`.id").From("`repository`").
+			Where(repo_model.FollowedSubjectReadableRepoCond(opts.RequestedUser))
+	}
+	return opts, nil
+}
+
+// requestedUserCond selects the feed of RequestedUser: the actions inserted for them (theirs,
+// their organizations' and those of the articles they watch, see services/feed.NotifyWatchers)
+// and, with IncludeFollowedSubjects (once resolved), the actions on the articles of the
+// subjects they follow and can open (not deleted, see repo_model.FollowedSubjectReadableRepoCond).
+// An action on such an article is taken from its actor's
+// own copy (user_id = act_user_id), which every action has, whether or not the user watched
+// the article when it happened; the copy the user may also have got as a watcher is left
+// out, so that it is not listed twice. (So an action by a since-deleted user, whose own copy
+// went with them, is no longer listed on a followed article, though a watcher's copy of it
+// remains.) The actor's copy was not checked against the user's permissions when it was
+// inserted: it is only taken on an article the user can read, though not unit by unit as a
+// watcher's copy is (an organization's article whose team gives the user no code unit).
+func (opts GetFeedsOptions) requestedUserCond() builder.Cond {
+	userID := opts.RequestedUser.ID
+	if !opts.IncludeFollowedSubjects || !opts.followedSubjectsResolved {
+		return builder.Eq{"`action`.user_id": userID}
+	}
+	followedRepos := any(opts.followedRepoIDs)
+	if opts.followedRepoIDsQuery != nil {
+		followedRepos = opts.followedRepoIDsQuery
+	}
+	inFollowed := builder.In("`action`.repo_id", followedRepos)
+	notInFollowed := builder.NotIn("`action`.repo_id", followedRepos)
+	return builder.Or(
+		builder.Eq{"`action`.user_id": userID}.And(builder.Or(
+			builder.Eq{"`action`.act_user_id": userID},
+			notInFollowed,
+		)),
+		builder.Expr("`action`.user_id = `action`.act_user_id").And(
+			builder.Neq{"`action`.act_user_id": userID},
+			inFollowed,
+		),
+	)
 }
 
 func (opts GetFeedsOptions) shouldExcludeRepoOwner() bool {
@@ -559,6 +628,11 @@ func (opts GetFeedsOptions) applyFeedFilters(cond builder.Cond) builder.Cond {
 func ActivityQueryCondition(ctx context.Context, opts GetFeedsOptions) (builder.Cond, error) {
 	cond := builder.NewCond()
 
+	opts, err := opts.resolveFollowedSubjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	if opts.RequestedTeam != nil && opts.RequestedUser == nil {
 		org, err := user_model.GetUserByID(ctx, opts.RequestedTeam.OrgID)
 		if err != nil {
@@ -622,7 +696,7 @@ func ActivityQueryCondition(ctx context.Context, opts GetFeedsOptions) (builder.
 	}
 
 	if opts.RequestedUser != nil {
-		cond = cond.And(builder.Eq{"user_id": opts.RequestedUser.ID})
+		cond = cond.And(opts.requestedUserCond())
 
 		if opts.OnlyPerformedBy {
 			cond = cond.And(builder.Eq{"act_user_id": opts.RequestedUser.ID})

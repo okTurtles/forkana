@@ -408,6 +408,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(331, "Forkana: create article_collaborator table", v1_25_custom.CreateArticleCollaboratorTable),
 		newMigration(332, "Forkana: give subjects without ASCII letters or digits, or with non-Latin letters, a slug of their own", v1_25_custom.ResluggifySymbolSubjects),
 		newMigration(333, "Forkana: add is_fork_only to user", v1_25_custom.AddIsForkOnlyToUser),
+		newMigration(334, "Forkana: create subject_follow table", v1_25_custom.CreateSubjectFollowTable),
 	}
 	return preparedMigrations
 }

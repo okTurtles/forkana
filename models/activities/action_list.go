@@ -210,13 +210,14 @@ func GetFeeds(ctx context.Context, opts GetFeedsOptions) (ActionList, int64, err
 		return nil, 0, errors.New("need at least one of these filters: RequestedUser, RequestedTeam, RequestedRepo")
 	}
 
-	var err error
+	opts, err := opts.resolveFollowedSubjects(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
 	var cond builder.Cond
 	// if the actor is the requested user or is an administrator, we can skip the ActivityQueryCondition
 	if opts.Actor != nil && opts.RequestedUser != nil && (opts.Actor.IsAdmin || opts.Actor.ID == opts.RequestedUser.ID) {
-		cond = builder.Eq{
-			"user_id": opts.RequestedUser.ID,
-		}.And(
+		cond = opts.requestedUserCond().And(
 			FeedDateCond(opts),
 		)
 
