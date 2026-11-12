@@ -47,7 +47,7 @@ func Users(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("admin.users")
 	ctx.Data["PageIsAdminUsers"] = true
 
-	statusFilterKeys := []string{"is_active", "is_admin", "is_restricted", "is_2fa_enabled", "is_prohibit_login"}
+	statusFilterKeys := []string{"is_active", "is_admin", "is_restricted", "is_2fa_enabled", "is_prohibit_login", "is_fork_only"}
 	statusFilterMap := map[string]string{}
 	for _, filterKey := range statusFilterKeys {
 		paramKey := "status_filter[" + filterKey + "]"
@@ -77,6 +77,7 @@ func Users(ctx *context.Context) {
 		IsRestricted:       optional.ParseBool(statusFilterMap["is_restricted"]),
 		IsTwoFactorEnabled: optional.ParseBool(statusFilterMap["is_2fa_enabled"]),
 		IsProhibitLogin:    optional.ParseBool(statusFilterMap["is_prohibit_login"]),
+		IsForkOnly:         optional.ParseBool(statusFilterMap["is_fork_only"]),
 		IncludeReserved:    true, // administrator needs to list all accounts include reserved, bot, remote ones
 	}, tplUsers)
 }
@@ -438,6 +439,7 @@ func EditUserPost(ctx *context.Context) {
 		MaxRepoCreation:         optional.Some(form.MaxRepoCreation),
 		AllowCreateOrganization: optional.Some(form.AllowCreateOrganization),
 		IsRestricted:            optional.Some(form.Restricted),
+		IsForkOnly:              optional.Some(form.ForkOnly),
 		Visibility:              optional.Some(form.Visibility),
 		Language:                optional.Some(form.Language),
 	}

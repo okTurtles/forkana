@@ -234,6 +234,10 @@ func GetOrCreateSubject(ctx context.Context, name string) (*Subject, error) {
 
 // GetSubjectByID gets a subject by its ID
 func GetSubjectByID(ctx context.Context, id int64) (*Subject, error) {
+	// (xorm ignores a zero ID, and would return any subject)
+	if id <= 0 {
+		return nil, ErrSubjectNotExist{ID: id}
+	}
 	subject := &Subject{ID: id}
 	has, err := db.GetEngine(ctx).Get(subject)
 	if err != nil {
@@ -279,17 +283,21 @@ func UpdateSubject(ctx context.Context, subject *Subject) error {
 
 // DeleteSubject deletes a subject (only if no repositories reference it)
 func DeleteSubject(ctx context.Context, id int64) error {
-	// Check if any repositories reference this subject
-	count, err := db.GetEngine(ctx).Where("subject_id = ?", id).Count(new(Repository))
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return ErrSubjectInUse{ID: id, RepoCount: count}
-	}
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		// Check if any repositories reference this subject
+		count, err := db.GetEngine(ctx).Where("subject_id = ?", id).Count(new(Repository))
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrSubjectInUse{ID: id, RepoCount: count}
+		}
 
-	_, err = db.GetEngine(ctx).ID(id).Delete(new(Subject))
-	return err
+		if _, err = db.GetEngine(ctx).ID(id).Delete(new(Subject)); err != nil {
+			return err
+		}
+		return deleteSubjectFollows(ctx, id)
+	})
 }
 
 // DeleteSubjectIfOrphaned deletes the subject once no repository references it anymore
@@ -300,16 +308,22 @@ func DeleteSubjectIfOrphaned(ctx context.Context, id int64) (bool, error) {
 		return false, nil
 	}
 
-	res, err := db.Exec(ctx,
-		"DELETE FROM `subject` WHERE id = ? AND NOT EXISTS (SELECT 1 FROM `repository` WHERE subject_id = ?)", id, id)
-	if err != nil {
-		return false, err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	return affected > 0, nil
+	// (its follows go with it, in the same transaction)
+	return db.WithTx2(ctx, func(ctx context.Context) (bool, error) {
+		res, err := db.Exec(ctx,
+			"DELETE FROM `subject` WHERE id = ? AND NOT EXISTS (SELECT 1 FROM `repository` WHERE subject_id = ?)", id, id)
+		if err != nil {
+			return false, err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return false, err
+		}
+		if affected == 0 {
+			return false, nil
+		}
+		return true, deleteSubjectFollows(ctx, id)
+	})
 }
 
 // FindSubjects finds subjects based on options

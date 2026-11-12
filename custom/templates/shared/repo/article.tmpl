@@ -76,16 +76,12 @@
                 <div class="article-tabs-trailing">
                     {{/* #433 item 3: Watch at the end of the tabs' row (figma View Tab
                          641:65480, Action I7368:264703;24375:95729), in every tab but Edit
-                         (hidden by CSS there). The subject header's Follow star, which toggles
-                         the same watch, stays above it (#469: the header is the same on every
-                         view). The hidden input is the article's id, which the star sends so
-                         that its answer can update this button. On a phone it is an icon
-                         ("Watch (icon)" 7629:71522 in Mobile 7368:263684). */}}
+                         (hidden by CSS there). It watches this article; the subject header's
+                         Follow above it is for the subject, and the two are independent
+                         (#165). On a phone it is an icon ("Watch (icon)" 7629:71522 in Mobile
+                         7368:263684) that opens the Watch menu (7368:416644). */}}
                     {{if .RepoOperationsLink}}
-                        <div class="article-watch">
-                            {{if .IsSigned}}<input type="hidden" id="article-watch-sync" name="sync_button_repo" value="{{.Repository.ID}}">{{end}}
-                            <div id="article-watch-slot">{{template "repo/watch_button" .}}</div>
-                        </div>
+                        <div class="article-watch">{{template "repo/watch_button" .}}</div>
                     {{end}}
                     {{/* #478: the "…" button after Watch, at the end of the row, in every tab
                          but Edit (Action 7368:264704 of "Article view / Logged out - Read only"
@@ -147,7 +143,8 @@
                                     {{else if .HasExistingFork}}
                                         {{/* User has an existing fork of this repo - show both options */}}
                                         {{if .ExistingForkArchived}}
-                                            {{/* An archived fork is read-only, so editing it is refused: only a change request is possible */}}
+                                            {{/* An archived fork is read-only, so editing it is refused: only a change request is possible,
+                                                 unless the article is fork-only (#156): then the Edit tab's notice says to unarchive the fork */}}
                                             <span class="forkana-btn forkana-btn-unavailable disabled" data-tooltip-content="{{ctx.Locale.Tr "repo.editor.existing_fork_archived"}}">
                                                 {{ctx.Locale.Tr "repo.editor.edit_in_your_fork"}}
                                             </span>
@@ -163,7 +160,10 @@
                                         </button>
                                         {{end}}
                                     {{else if .NeedsFork}}
-                                        {{/* User needs to create a fork - show fork-and-submit button */}}
+                                        {{/* User needs to create a fork - show fork-and-submit button.
+                                             #156: not on a fork-only article, whose Submit changes
+                                             forks it already: it is the only action the notice names. */}}
+                                        {{if not .ForkOnlyArticle}}
                                         <button type="button" id="fork-article-button" class="forkana-btn forkana-btn-secondary"
                                             data-fork-and-edit="true"
                                             data-tooltip-content="{{ctx.Locale.Tr "repo.fork_article_confirm_body"}}"
@@ -177,10 +177,18 @@
                                             <span class="article-fork-count" data-role="article-fork-count"
                                                 aria-label="{{ctx.Locale.TrN .Repository.NumForks "repo.article_forks_1" "repo.article_forks_n" .Repository.NumForks}}">{{.Repository.NumForks}}</span>
                                         </button>
+                                        {{end}}
                                         {{/* Submit Change Request - opens modal for title/description, then creates branch + commit + PR */}}
                                         {{if .CanSubmitChangeRequest}}
                                         <button type="button" id="pre-submit-changes-button" class="forkana-btn forkana-btn-primary"
                                             data-tooltip-content="{{ctx.Locale.Tr "repo.editor.submit_changes_tooltip"}}">
+                                            {{ctx.Locale.Tr "repo.editor.submit_changes"}}
+                                        </button>
+                                        {{else if .ForkOnlyArticle}}
+                                        {{/* #156: nobody reviews this article's change requests, Submit changes
+                                             forks the article and commits to the fork (fork_and_edit), as the notice says */}}
+                                        <button type="button" id="submit-changes-button" class="forkana-btn forkana-btn-primary" data-fork-and-edit="true"
+                                            data-tooltip-content="{{ctx.Locale.Tr "repo.editor.fork_only_notice" .ForkOnlyOwnerName}}">
                                             {{ctx.Locale.Tr "repo.editor.submit_changes"}}
                                         </button>
                                         {{end}}

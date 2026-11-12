@@ -1373,6 +1373,8 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["BlockedByOwnArticle"] = false
 	ctx.Data["OwnRepoForSubject"] = nil
 	ctx.Data["CanSubmitChangeRequest"] = false
+	ctx.Data["ForkOnlyArticle"] = false
+	ctx.Data["ForkOnlyOwnerName"] = ""
 
 	perms, err := repo_service.CheckForkOnEditPermissions(ctx, ctx.Doer, ctx.Repo.Repository)
 	if err != nil {
@@ -1391,4 +1393,7 @@ func prepareArticleForkOnEditData(ctx *context.Context) {
 	ctx.Data["ExistingForkArchived"] = perms.ExistingForkArchived
 	ctx.Data["NeedsFork"] = perms.NeedsFork
 	ctx.Data["CanSubmitChangeRequest"] = perms.CanSubmitChangeRequest
+	// #156: nobody reviews the change requests of this article, editing it forks it
+	ctx.Data["ForkOnlyArticle"] = perms.ForkOnly
+	ctx.Data["ForkOnlyOwnerName"] = perms.ForkOnlyOwnerName
 }

@@ -45,6 +45,7 @@ type UpdateOptions struct {
 	AllowImportLocal             optional.Option[bool]
 	MaxRepoCreation              optional.Option[int]
 	IsRestricted                 optional.Option[bool]
+	IsForkOnly                   optional.Option[bool]
 	Visibility                   optional.Option[structs.VisibleType]
 	KeepActivityPrivate          optional.Option[bool]
 	Language                     optional.Option[string]
@@ -129,6 +130,11 @@ func UpdateUser(ctx context.Context, u *user_model.User, opts *UpdateOptions) er
 		u.IsRestricted = opts.IsRestricted.Value()
 
 		cols = append(cols, "is_restricted")
+	}
+	if opts.IsForkOnly.Has() {
+		u.IsForkOnly = opts.IsForkOnly.Value()
+
+		cols = append(cols, "is_fork_only")
 	}
 	if opts.IsAdmin.Has() {
 		if opts.IsAdmin.Value().FieldValue /* true */ {

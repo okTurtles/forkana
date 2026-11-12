@@ -50,6 +50,7 @@ type AdminEditUserForm struct {
 	AllowImportLocal        bool
 	AllowCreateOrganization bool
 	ProhibitLogin           bool
+	ForkOnly                bool // Forkana: the user does not accept change requests
 	Reset2FA                bool `form:"reset_2fa"`
 	Visibility              structs.VisibleType
 }

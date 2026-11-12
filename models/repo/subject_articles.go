@@ -17,14 +17,19 @@ import (
 )
 
 // readableArticleCond selects the articles of a subject the doer (nil when signed out) can
+// open and that have content (see openableArticleCond): those the listings show.
+func readableArticleCond(doer *user_model.User) builder.Cond {
+	return openableArticleCond(doer).And(builder.Eq{"`repository`.is_empty": false})
+}
+
+// openableArticleCond selects the articles of a subject the doer (nil when signed out) can
 // open: repositories they can access (AccessibleRepositoryCondition, which hides the public
 // repositories of private and, signed out, limited organizations), whose owner is not a
-// private user (nor, signed out, a limited one), that are not deleted (tombstones) and have
-// content.
-func readableArticleCond(doer *user_model.User) builder.Cond {
+// private user (nor, signed out, a limited one), and that are not deleted (tombstones). A
+// brand-new article, still empty, is one: its subject's pages render.
+func openableArticleCond(doer *user_model.User) builder.Cond {
 	cond := AccessibleRepositoryCondition(doer, unit.TypeInvalid).And(builder.Eq{
 		"`repository`.is_tombstoned": false,
-		"`repository`.is_empty":      false,
 	})
 	if doer == nil || !doer.IsAdmin {
 		// signed out, only public owners are visible (HasOrgOrUserVisible)

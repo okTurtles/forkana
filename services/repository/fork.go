@@ -62,6 +62,14 @@ type ForkOnEditPermissions struct {
 	// This is true when the user has an existing fork of this repo (or any repo in the same subject's
 	// fork tree) and wants to propose changes via a pull request instead of editing their own fork.
 	CanSubmitChangeRequest bool
+	// ForkOnly is true when nobody can review the change requests of this article (see
+	// IsArticleForkOnly): editing it creates the user's own article (a fork, or their
+	// existing one) instead, so CanSubmitChangeRequest is false. Only set for a user who
+	// could otherwise submit a change request.
+	ForkOnly bool
+	// ForkOnlyOwnerName is the name of the article's owner, who does not accept change
+	// requests, when ForkOnly is true
+	ForkOnlyOwnerName string
 }
 
 // CheckForkOnEditPermissions determines the user's editing permissions for a repository.
@@ -180,7 +188,7 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 			perms.BlockedBySubject = true
 			perms.OwnRepoForSubject = ownRepo
 		}
-		return perms, nil
+		return applyForkOnlyArticle(ctx, perms, repo)
 	}
 
 	// Case 1: User has no repo for this subject
@@ -195,6 +203,24 @@ func CheckForkOnEditPermissions(ctx context.Context, doer *user_model.User, repo
 		perms.NeedsFork = true
 	}
 
+	return applyForkOnlyArticle(ctx, perms, repo)
+}
+
+// applyForkOnlyArticle turns the change request of a user who could submit one into a
+// fork when nobody can review the article's change requests (see IsArticleForkOnly).
+func applyForkOnlyArticle(ctx context.Context, perms *ForkOnEditPermissions, repo *repo_model.Repository) (*ForkOnEditPermissions, error) {
+	if !perms.CanSubmitChangeRequest {
+		return perms, nil
+	}
+	forkOnly, owner, err := IsArticleForkOnly(ctx, repo)
+	if err != nil {
+		return nil, err
+	}
+	if forkOnly {
+		perms.ForkOnly = true
+		perms.ForkOnlyOwnerName = owner.Name
+		perms.CanSubmitChangeRequest = false
+	}
 	return perms, nil
 }
 

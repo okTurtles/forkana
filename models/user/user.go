@@ -129,6 +129,11 @@ type User struct {
 	// true: the user is not allowed to log in Web UI. Git/SSH access could still be allowed (please refer to Git/SSH access related code/documents)
 	ProhibitLogin bool `xorm:"NOT NULL DEFAULT false"`
 
+	// Forkana: true: the user does not accept change requests, like the accounts that import
+	// Wikipedia articles. Unless an article of theirs has an active maintainer, editing it
+	// creates a fork (the editor's own article) instead of a change request. Set by site admins.
+	IsForkOnly bool `xorm:"NOT NULL DEFAULT false"`
+
 	// Avatar
 	Avatar          string `xorm:"VARCHAR(2048) NOT NULL"`
 	AvatarEmail     string `xorm:"NOT NULL"`

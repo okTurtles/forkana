@@ -110,9 +110,16 @@ func MustAllowPulls(ctx *context.Context) {
 		return
 	}
 
-	// User can send pull request if owns a forked repository.
+	// User can send pull request if owns a forked repository, unless nobody reviews the
+	// change requests of the article (Forkana #156: edits to it make a fork)
 	if ctx.IsSigned && repo_model.HasForkedRepo(ctx, ctx.Doer.ID, ctx.Repo.Repository.ID) {
-		ctx.Repo.PullRequest.Allowed = true
+		refuses, err := repo_model.ArticleRefusesChangeRequestsFrom(ctx, ctx.Repo.Repository, ctx.Doer)
+		if err != nil {
+			ctx.ServerError("ArticleRefusesChangeRequestsFrom", err)
+			return
+		}
+		ctx.Repo.PullRequest.Allowed = !refuses
+		ctx.Data["ArticleRefusesChangeRequests"] = refuses
 	}
 }
 

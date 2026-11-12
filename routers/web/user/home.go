@@ -70,7 +70,9 @@ func HomeFeed(ctx *context.Context) {
 		IncludePrivate:     true,
 		IncludeDeleted:     false,
 		ExcludeRepoOwnerID: ctx.Doer.ID,
-		DontCount:          true,
+		// the activity on the articles of the subjects the user follows (#165)
+		IncludeFollowedSubjects: true,
+		DontCount:               true,
 		ListOptions: db.ListOptions{
 			Page:     1,
 			PageSize: 3,
@@ -127,7 +129,9 @@ func Feeds(ctx *context.Context) {
 		IncludePrivate:     true,
 		IncludeDeleted:     false,
 		ExcludeRepoOwnerID: ctx.Doer.ID,
-		Keyword:            q,
+		// the activity on the articles of the subjects the user follows (#165)
+		IncludeFollowedSubjects: true,
+		Keyword:                 q,
 		ListOptions: db.ListOptions{
 			Page:     page,
 			PageSize: feedsPageSize,
@@ -268,6 +272,9 @@ func Dashboard(ctx *context.Context) {
 		IncludeDeleted:     false,
 		Date:               ctx.FormString("date"),
 		ExcludeRepoOwnerID: ctx.Doer.ID,
+		// the subjects the user follows feed their own dashboard, not an organization's
+		// or a team's (#165)
+		IncludeFollowedSubjects: ctx.Org.Team == nil && ctxUser.ID == ctx.Doer.ID,
 		ListOptions: db.ListOptions{
 			Page:     page,
 			PageSize: setting.UI.FeedPagingNum,

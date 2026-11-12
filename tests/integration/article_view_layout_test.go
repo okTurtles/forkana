@@ -19,6 +19,7 @@ import (
 	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -277,62 +278,32 @@ func TestArticleViewLayout(t *testing.T) {
 		require.Equal(t, 1, form.Length())
 		action := form.AttrOr("action", "")
 		require.Regexp(t, `/action/(un)?watch\?style=button$`, action)
-		next := "/action/unwatch?style=button" // what the button offers once it has been pressed
+		label := func(form *goquery.Selection) string {
+			return strings.TrimSpace(form.Find(`[data-role="article-watch"] span`).Text())
+		}
+		// #165: "Watch" offers to watch, "Unwatch" to stop (figma 7368:416141 / 7368:416259)
+		next, nextLabel := "/action/unwatch?style=button", "Unwatch"
 		if strings.Contains(action, "/action/unwatch") {
-			next = "/action/watch?style=button"
+			assert.Equal(t, "Unwatch", label(form))
+			next, nextLabel = "/action/watch?style=button", "Watch"
+		} else {
+			assert.Equal(t, "Watch", label(form))
 		}
 
 		req := NewRequestWithValues(t, "POST", action, map[string]string{"_csrf": GetUserCSRFToken(t, session)})
 		resp := session.MakeRequest(t, req, http.StatusOK)
 		answer := NewHTMLParser(t, resp.Body)
-		// the answer is the Watch button again, now offering the other action, not the
-		// subject header's Follow star
+		// the answer is the Watch button again, now offering the other action, and nothing
+		// of the subject header's Follow, which is independent of it (#165)
 		require.Equal(t, 1, answer.Find("form.article-watch-form").Length())
 		assert.Contains(t, answer.Find("form.article-watch-form").AttrOr("action", ""), next)
-		assert.Equal(t, 0, answer.Find(".follow-article-button").Length())
-
-		// with the star's article id (what hx-include sends), the answer also re-renders
-		// the star, out of band; with another article's id, it does not
-		back := answer.Find("form.article-watch-form").AttrOr("action", "")
-		req = NewRequestWithValues(t, "POST", back, map[string]string{
-			"_csrf":            GetUserCSRFToken(t, session),
-			"sync_follow_repo": strconv.FormatInt(repo.ID, 10),
-		})
-		answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
-		oob := answer.Find(`#repo-header-follow-slot[hx-swap-oob]`)
-		require.Equal(t, 1, oob.Length())
-		assert.Equal(t, 1, oob.Find(".follow-article-button").Length())
-
-		req = NewRequestWithValues(t, "POST", answer.Find("form.article-watch-form").AttrOr("action", ""), map[string]string{
-			"_csrf":            GetUserCSRFToken(t, session),
-			"sync_follow_repo": "999999",
-		})
-		answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
+		assert.Equal(t, nextLabel, label(answer.Find("form.article-watch-form")))
+		assert.Equal(t, 0, answer.Find(".subject-follow-button").Length())
 		assert.Equal(t, 0, answer.Find(`[hx-swap-oob]`).Length())
-
-		// the star's answer re-renders the Watch button of the same article
-		starAction := strings.Replace(answer.Find("form.article-watch-form").AttrOr("action", ""), "?style=button", "", 1)
-		req = NewRequestWithValues(t, "POST", starAction, map[string]string{
-			"_csrf":            GetUserCSRFToken(t, session),
-			"sync_button_repo": strconv.FormatInt(repo.ID, 10),
-		})
-		answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
-		assert.Equal(t, 1, answer.Find(".follow-article-button").Length())
-		assert.Equal(t, 1, answer.Find(`#article-watch-slot[hx-swap-oob] form.article-watch-form`).Length())
-
-		// a crafted request with both ids is answered with one control and one out-of-band
-		// fragment, whatever its style: the two templates must not include each other on
-		for _, action := range []string{starAction, starAction + "?style=button"} {
-			action = strings.Replace(action, "/action/watch", "/action/unwatch", 1)
-			req = NewRequestWithValues(t, "POST", action, map[string]string{
-				"_csrf":            GetUserCSRFToken(t, session),
-				"sync_follow_repo": strconv.FormatInt(repo.ID, 10),
-				"sync_button_repo": strconv.FormatInt(repo.ID, 10),
-			})
-			answer = NewHTMLParser(t, session.MakeRequest(t, req, http.StatusOK).Body)
-			assert.Equal(t, 1, answer.Find(`[hx-swap-oob]`).Length(), action)
-			assert.Equal(t, 2, answer.Find("form").Length(), action)
-		}
+		// ...with the phone's Watch menu, its choice in force checked
+		watching := nextLabel == "Unwatch"
+		assert.Equal(t, strconv.FormatBool(watching), answer.Find(`[data-role="article-watch-notifications"]`).AttrOr("aria-pressed", ""))
+		assert.Equal(t, strconv.FormatBool(!watching), answer.Find(`[data-role="article-watch-ignore"]`).AttrOr("aria-pressed", ""))
 	})
 }
 

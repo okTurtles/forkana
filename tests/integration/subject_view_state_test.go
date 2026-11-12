@@ -265,7 +265,7 @@ func TestSubjectPageFollowButton(t *testing.T) {
 		for _, view := range []string{"bubble", "table", "article"} {
 			_, body := getSubjectPage(t, session, subjectName, "view="+view)
 			doc := NewHTMLParser(t, bytes.NewBufferString(body))
-			assert.Equal(t, 1, doc.Find(".repo-header-follow .follow-article-button").Length(), "Follow for %q on the %s view", reader, view)
+			assert.Equal(t, 1, doc.Find(".repo-header-follow .subject-follow-button").Length(), "Follow for %q on the %s view", reader, view)
 		}
 	}
 }

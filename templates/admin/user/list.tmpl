@@ -32,6 +32,9 @@
 							<label class="item"><input type="radio" name="status_filter[is_prohibit_login]" value="0"> {{ctx.Locale.Tr "admin.users.list_status_filter.not_prohibit_login"}}</label>
 							<label class="item"><input type="radio" name="status_filter[is_prohibit_login]" value="1"> {{ctx.Locale.Tr "admin.users.list_status_filter.is_prohibit_login"}}</label>
 							<div class="divider"></div>
+							<label class="item"><input type="radio" name="status_filter[is_fork_only]" value="0"> {{ctx.Locale.Tr "admin.users.list_status_filter.not_fork_only"}}</label>
+							<label class="item"><input type="radio" name="status_filter[is_fork_only]" value="1"> {{ctx.Locale.Tr "admin.users.list_status_filter.is_fork_only"}}</label>
+							<div class="divider"></div>
 							<label class="item"><input type="radio" name="status_filter[is_2fa_enabled]" value="1"> {{ctx.Locale.Tr "admin.users.list_status_filter.is_2fa_enabled"}}</label>
 							<label class="item"><input type="radio" name="status_filter[is_2fa_enabled]" value="0"> {{ctx.Locale.Tr "admin.users.list_status_filter.not_2fa_enabled"}}</label>
 						</div>
@@ -90,6 +93,9 @@
 									<span class="ui mini label">{{ctx.Locale.Tr "admin.users.bot"}}</span>
 								{{else if eq 5 .Type}}{{/* Remote user */}}
 									<span class="ui mini label">{{ctx.Locale.Tr "admin.users.remote"}}</span>
+								{{end}}
+								{{if .IsForkOnly}}
+									<span class="ui mini label" data-tooltip-content="{{ctx.Locale.Tr "admin.users.is_fork_only_tooltip"}}">{{ctx.Locale.Tr "admin.users.fork_only"}}</span>
 								{{end}}
 							</td>
 							<td class="gt-ellipsis tw-max-w-48">{{.Email}}</td>
