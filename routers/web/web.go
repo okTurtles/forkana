@@ -1303,6 +1303,12 @@ func registerWebRoutes(m *web.Router) {
 	}, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
 	// end "/subject/{subjectname}/{username}": article-based file operations
 
+	// Moderation: report the article (JSON; the report modal of feature 1.1 posts here).
+	// The flag is checked first, so the route answers 404 for everyone while it is off.
+	addArticleGroup(m, "/-/report", func() {
+		m.Post("", moderation.ReportArticle)
+	}, moderation.RequireEnabled, reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqUnitCodeReader)
+
 	// Article settings helpers, the article settings UI lives on the article view itself
 	addArticleRoute(m, "/settings/transfer_candidates", reqSignIn, context.RepoAssignmentByOwnerAndSubject, reqRepoAdmin, repo_setting.ArticleTransferCandidates)
 	// the delegates managing the collaborators are not repository admins, the handler checks the doer

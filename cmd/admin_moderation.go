@@ -31,7 +31,9 @@ var microcmdModerationSetup = &cli.Command{
 
 What already exists is left as it is, so the command is safe to run again, also after a failed run. It works whether [moderation] ENABLED is on or not, so moderation can be prepared before it is enabled.
 
-It finishes by removing every watch on the cases repository, so moderators aren't notified of every report.`,
+It finishes by removing every watch on the cases repository, so moderators aren't notified of every report.
+
+Never block users from the moderation organization: a blocked user's reports would fail.`,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "owner",
