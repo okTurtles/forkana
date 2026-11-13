@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	issues_model "code.gitea.io/gitea/models/issues"
+	moderation_model "code.gitea.io/gitea/models/moderation"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/templates"
@@ -65,5 +66,18 @@ func Case(ctx *context.Context) {
 	}
 	ctx.Data["Title"] = ctx.Tr("moderation.case.title", issue.Index)
 	ctx.Data["CaseIndex"] = issue.Index
+
+	// Placeholder for the case review (1.6): the reported passage, highlighted.
+	c, err := moderation_model.GetCase(ctx, issue.ID)
+	if err != nil {
+		ctx.ServerError("GetCase", err)
+		return
+	}
+	passage, err := moderation_service.RenderCasePassage(ctx, c)
+	if err != nil {
+		ctx.ServerError("RenderCasePassage", err)
+		return
+	}
+	ctx.Data["Passage"] = passage
 	ctx.HTML(http.StatusOK, tplCase)
 }

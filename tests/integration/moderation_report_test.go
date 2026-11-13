@@ -159,6 +159,16 @@ func TestModerationReport(t *testing.T) {
 		assert.NotContains(t, audit[0].Summary, "home address", "no typed text in the audit log")
 	})
 
+	t.Run("CasePageHighlightsThePassage", func(t *testing.T) {
+		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: openCase(t).IssueID})
+		resp := loginUser(t, admin.Name).MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/-/moderation/cases/%d", caseIssue.Index)), http.StatusOK)
+		doc := NewHTMLParser(t, resp.Body)
+		root := doc.Find(".moderation-passage-root")
+		require.Equal(t, 1, root.Length())
+		assert.Equal(t, blockRange, root.AttrOr("data-passage-highlight", ""))
+		assert.Equal(t, 1, root.Find(fmt.Sprintf(`[data-source-range="%s"]`, blockRange)).Length(), "the reported block is in the rendered article")
+	})
+
 	t.Run("RetryReturnsTheSameSubmission", func(t *testing.T) {
 		before := countIssues(t)
 		out := post(t, readerSession, reportBody{

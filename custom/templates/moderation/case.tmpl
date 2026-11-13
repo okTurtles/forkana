@@ -1,4 +1,7 @@
 {{template "moderation/layout_head" (dict "ctxData" . "pageClass" "moderation-case")}}
 <h1 class="ui header">{{ctx.Locale.Tr "moderation.case.title" .CaseIndex}}</h1>
 <p>{{ctx.Locale.Tr "moderation.case.placeholder"}}</p>
+{{if .Passage}}
+<div class="markup moderation-passage-root" data-passage-highlight="{{.Passage.Range}}">{{.Passage.HTML}}</div>
+{{end}}
 {{template "moderation/layout_footer" .}}
