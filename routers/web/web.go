@@ -32,6 +32,7 @@ import (
 	"code.gitea.io/gitea/routers/web/feed"
 	"code.gitea.io/gitea/routers/web/healthcheck"
 	"code.gitea.io/gitea/routers/web/misc"
+	"code.gitea.io/gitea/routers/web/moderation"
 	"code.gitea.io/gitea/routers/web/org"
 	org_setting "code.gitea.io/gitea/routers/web/org/setting"
 	"code.gitea.io/gitea/routers/web/repo"
@@ -912,6 +913,17 @@ func registerWebRoutes(m *web.Router) {
 		})
 	}, adminReq, ctxDataSet("EnableOAuth2", setting.OAuth2.Enabled, "EnablePackages", setting.Packages.Enabled))
 	// ***** END: Admin *****
+
+	// ***** START: Moderation *****
+	// The moderation workspace: site administrators and moderators team members, only while
+	// [moderation] ENABLED is on. Everyone else gets a 404.
+	// The flag is checked before signing in, so that a signed-out visitor gets the 404 too.
+	reqModerator := moderation.RequireModerator
+	m.Group("/-/moderation", func() {
+		m.Get("", moderation.Queue)
+		m.Get("/cases/{index}", moderation.Case)
+	}, moderation.RequireEnabled, reqSignIn, reqModerator)
+	// ***** END: Moderation *****
 
 	m.Group("", func() {
 		m.Get("/{username}", user.UsernameSubRoute)

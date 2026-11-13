@@ -1,0 +1,4 @@
+{{template "moderation/layout_head" (dict "ctxData" . "pageClass" "moderation-case")}}
+<h1 class="ui header">{{ctx.Locale.Tr "moderation.case.title" .CaseIndex}}</h1>
+<p>{{ctx.Locale.Tr "moderation.case.placeholder"}}</p>
+{{template "moderation/layout_footer" .}}
