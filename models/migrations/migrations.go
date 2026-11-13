@@ -410,6 +410,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(333, "Forkana: add is_fork_only to user", v1_25_custom.AddIsForkOnlyToUser),
 		newMigration(334, "Forkana: create subject_follow table", v1_25_custom.CreateSubjectFollowTable),
 		newMigration(335, "Forkana: create moderation_case, moderation_submission, moderation_report and moderation_audit tables", v1_25_custom.CreateModerationTables),
+		newMigration(336, "Forkana: create moderation_sanction table", v1_25_custom.CreateModerationSanctionTable),
 	}
 	return preparedMigrations
 }
