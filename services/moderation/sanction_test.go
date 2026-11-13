@@ -88,11 +88,9 @@ func TestIssueWarning(t *testing.T) {
 		var wg sync.WaitGroup
 		errs := make([]error, 2)
 		for i, doer := range []*user_model.User{admin, moderator} {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				_, errs[i] = IssueWarning(ctx, WarningOptions{Doer: doer, CaseIssueID: 2})
-			}()
+			})
 		}
 		wg.Wait()
 		failed := 0

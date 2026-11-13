@@ -39,10 +39,7 @@ func loadModerationFrom(rootCfg ConfigProvider) {
 	Moderation.Org = sec.Key("ORG").MustString("forkana-moderation")
 	Moderation.Repo = sec.Key("REPO").MustString("cases")
 	Moderation.Team = sec.Key("TEAM").MustString("moderators")
-	Moderation.MaxAssignedCases = sec.Key("MAX_ASSIGNED_CASES").MustInt(10)
-	if Moderation.MaxAssignedCases < 1 {
-		Moderation.MaxAssignedCases = 1
-	}
+	Moderation.MaxAssignedCases = max(sec.Key("MAX_ASSIGNED_CASES").MustInt(10), 1)
 	Moderation.AssignmentTimeout = sec.Key("ASSIGNMENT_TIMEOUT").MustDuration(48 * time.Hour)
 	if Moderation.AssignmentTimeout <= 0 {
 		Moderation.AssignmentTimeout = 48 * time.Hour
