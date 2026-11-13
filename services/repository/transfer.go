@@ -262,8 +262,11 @@ func transferOwnership(ctx context.Context, doer *user_model.User, newOwnerName 
 		return fmt.Errorf("decrease old owner repository count: %w", err)
 	}
 
-	if err := repo_model.WatchRepo(ctx, doer, repo, true); err != nil {
-		return fmt.Errorf("watchRepo: %w", err)
+	// The moderation cases repository stays unwatched: moderators get targeted alerts instead.
+	if !repo.IsModerationCasesRepo() {
+		if err := repo_model.WatchRepo(ctx, doer, repo, true); err != nil {
+			return fmt.Errorf("watchRepo: %w", err)
+		}
 	}
 
 	if oldOwner.IsOrganization() {

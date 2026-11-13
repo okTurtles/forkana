@@ -71,7 +71,7 @@ func TestEnsureSetup(t *testing.T) {
 		result, err := EnsureSetup(t.Context(), SetupOptions{Owner: admin})
 		require.NoError(t, err)
 		assert.Equal(t, 4+nLabels, countCreated(result))
-		assert.Equal(t, 1, result.Unwatched, "the creator's auto-watch is removed")
+		assert.Zero(t, result.Unwatched, "the creator doesn't auto-watch the cases repository")
 
 		org, err := organization.GetOrgByName(t.Context(), "test-moderation")
 		require.NoError(t, err)

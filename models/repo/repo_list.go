@@ -313,6 +313,8 @@ type SearchRepoOptions struct {
 	// Tombstoned articles are hidden from every listing unless this is set. They stay
 	// reachable by direct URL so that forks keep a resolvable ancestor.
 	IncludeTombstoned bool
+	// The moderation cases repository is hidden from every listing unless this is set.
+	IncludeModerationCasesRepo bool
 }
 
 // notTombstonedCond excludes tombstoned articles from a listing. Tombstones stay
@@ -648,6 +650,10 @@ func SearchRepositoryCondition(opts SearchRepoOptions) builder.Cond {
 
 	if !opts.IncludeTombstoned {
 		cond = cond.And(notTombstonedCond())
+	}
+
+	if !opts.IncludeModerationCasesRepo {
+		cond = cond.And(notModerationCasesRepoCond())
 	}
 
 	if opts.HasMilestones.Has() {

@@ -502,7 +502,8 @@ func createRepositoryInDB(ctx context.Context, doer, u *user_model.User, repo *r
 		return fmt.Errorf("RecalculateAccesses: %w", err)
 	}
 
-	if setting.Service.AutoWatchNewRepos {
+	// The moderation cases repository stays unwatched: moderators get targeted alerts instead.
+	if setting.Service.AutoWatchNewRepos && !repo.IsModerationCasesRepo() {
 		if err = repo_model.WatchRepo(ctx, doer, repo, true); err != nil {
 			return fmt.Errorf("WatchRepo: %w", err)
 		}

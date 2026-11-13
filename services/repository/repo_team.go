@@ -44,8 +44,9 @@ func addRepositoryToTeam(ctx context.Context, t *organization.Team, repo *repo_m
 		return fmt.Errorf("recalculateAccesses: %w", err)
 	}
 
-	// Make all team members watch this repo if enabled in global settings
-	if setting.Service.AutoWatchNewRepos {
+	// Make all team members watch this repo if enabled in global settings. Not the moderation
+	// cases repository: moderators get targeted alerts, not a notification for every report.
+	if setting.Service.AutoWatchNewRepos && !repo.IsModerationCasesRepo() {
 		if err = t.LoadMembers(ctx); err != nil {
 			return fmt.Errorf("getMembers: %w", err)
 		}

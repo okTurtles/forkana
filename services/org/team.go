@@ -265,6 +265,11 @@ func AddTeamMember(ctx context.Context, team *organization.Team, user *user_mode
 
 		go func(repos []*repo_model.Repository) {
 			for _, repo := range repos {
+				// Moderators get targeted alerts, not a notification for every report. Skipped
+				// here rather than unwatched later, which would race this goroutine.
+				if repo.IsModerationCasesRepo() {
+					continue
+				}
 				if err = repo_model.WatchRepo(graceful.GetManager().ShutdownContext(), user, repo, true); err != nil {
 					log.Error("watch repo failed: %v", err)
 				}
