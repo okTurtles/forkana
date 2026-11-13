@@ -32,6 +32,13 @@ func TestSourceRangesOffByDefault(t *testing.T) {
 	assert.NotContains(t, renderWithSourceRanges(t, sourceRangeArticle, false), "data-source-range")
 }
 
+// A fenced code block without attributes must render when source ranges are off: the
+// highlighter then hands the renderer nil attributes.
+func TestSourceRangesOffCodeBlock(t *testing.T) {
+	out := renderWithSourceRanges(t, "```go\nfmt.Println(1)\n```\n", false)
+	assert.Contains(t, out, `<pre class="code-block"><code class="chroma language-go display">`)
+}
+
 func TestSourceRangesRendered(t *testing.T) {
 	out := renderWithSourceRanges(t, sourceRangeArticle, true)
 	matches := reSourceRange.FindAllStringSubmatch(out, -1)

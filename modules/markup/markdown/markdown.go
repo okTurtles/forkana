@@ -93,11 +93,14 @@ func (r *GlodmarkRender) highlightingRenderer(w util.BufWriter, c highlighting.C
 		// the "display" class is used by "js/markup/math.ts" to render the code element as a block
 		// the "math.ts" strictly depends on the structure: <pre class="code-block is-loading"><code class="language-math display">...</code></pre>
 		// a moderation source range (RenderOptions.SourceRanges) goes on the <pre>, the
-		// highlighter writing its own HTML rather than the node's attributes
+		// highlighter writing its own HTML rather than the node's attributes.
+		// Attributes() is nil when the block has none (source ranges off, no info-string attributes).
 		sourceRange := ""
-		if v, ok := c.Attributes().GetString(SourceRangeAttr); ok {
-			if b, isBytes := v.([]byte); isBytes {
-				sourceRange = string(b)
+		if attrs := c.Attributes(); attrs != nil {
+			if v, ok := attrs.GetString(SourceRangeAttr); ok {
+				if b, isBytes := v.([]byte); isBytes {
+					sourceRange = string(b)
+				}
 			}
 		}
 		var err error
