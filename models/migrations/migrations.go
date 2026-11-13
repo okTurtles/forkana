@@ -409,6 +409,7 @@ func prepareMigrationTasks() []*migration {
 		newMigration(332, "Forkana: give subjects without ASCII letters or digits, or with non-Latin letters, a slug of their own", v1_25_custom.ResluggifySymbolSubjects),
 		newMigration(333, "Forkana: add is_fork_only to user", v1_25_custom.AddIsForkOnlyToUser),
 		newMigration(334, "Forkana: create subject_follow table", v1_25_custom.CreateSubjectFollowTable),
+		newMigration(335, "Forkana: create moderation_case, moderation_submission, moderation_report and moderation_audit tables", v1_25_custom.CreateModerationTables),
 	}
 	return preparedMigrations
 }
