@@ -47,6 +47,7 @@
 @import "./features/subject-views.css";
 @import "./features/article-view.css";
 @import "./features/article-settings.css";
+@import "./features/moderation.css";
 @import "./features/subject-compare.css";
 @import "./features/changes-hub.css";
 

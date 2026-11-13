@@ -113,6 +113,17 @@
 						{{svg "octicon-gear"}}
 						{{ctx.Locale.Tr "your_settings"}}
 					</a>
+					{{/* 1.4: the moderation workspace, for moderators and site administrators while
+					     [moderation] ENABLED is on; the badge counts the moderator's own open
+					     cases. No role pill or "Signed in as" here (#386 removed them). */}}
+					{{if and .PageGlobalData (call .PageGlobalData.IsModerator)}}
+						{{$modCount := call .PageGlobalData.GetModeratorOpenCaseCount}}
+						<a id="navbar-moderation" class="{{if .PageIsModeration}}active {{end}}item" href="{{AppSubUrl}}/-/moderation">
+							{{svg "octicon-shield"}}
+							{{ctx.Locale.Tr "moderation.nav"}}
+							{{if $modCount}}<span class="ui small label tw-ml-auto" data-tooltip-content="{{ctx.Locale.Tr "moderation.nav_count" $modCount}}">{{CountFmt $modCount}}</span>{{end}}
+						</a>
+					{{end}}
 					{{/* #386 item 10: no Help entry — it led to the external Gitea docs,
 					     which are not Forkana's documentation */}}
 					<div class="divider"></div>

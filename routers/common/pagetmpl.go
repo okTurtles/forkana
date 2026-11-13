@@ -11,9 +11,11 @@ import (
 	activities_model "code.gitea.io/gitea/models/activities"
 	"code.gitea.io/gitea/models/db"
 	issues_model "code.gitea.io/gitea/models/issues"
+	moderation_model "code.gitea.io/gitea/models/moderation"
 	"code.gitea.io/gitea/models/unit"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/services/context"
+	moderation_service "code.gitea.io/gitea/services/moderation"
 )
 
 // StopwatchTmplInfo is a view on a stopwatch specifically for template rendering
@@ -83,6 +85,33 @@ func openReceivedChangeRequestCount(ctx *context.Context) int64 {
 	return count
 }
 
+func isModerator(ctx *context.Context) bool {
+	ok, err := moderation_service.IsModerator(ctx, ctx.Doer)
+	if err != nil {
+		if !errors.Is(err, goctx.Canceled) {
+			log.Warn("Unable to check whether user:%-v is a moderator: %v", ctx.Doer, err)
+		}
+		return false
+	}
+	return ok
+}
+
+// moderatorOpenCaseCount is the badge beside the account menu's Moderation entry: the open
+// cases assigned to the signed-in moderator, which can differ from the queue's total.
+func moderatorOpenCaseCount(ctx *context.Context, isModerator func() bool) int64 {
+	if !isModerator() {
+		return 0
+	}
+	count, err := moderation_model.CountOpenAssignedCases(ctx, ctx.Doer.ID)
+	if err != nil {
+		if !errors.Is(err, goctx.Canceled) {
+			log.Warn("Unable to count the open cases assigned to user:%-v: %v", ctx.Doer, err)
+		}
+		return 0
+	}
+	return count
+}
+
 type pageGlobalDataType struct {
 	IsSigned    bool
 	IsSiteAdmin bool
@@ -90,6 +119,11 @@ type pageGlobalDataType struct {
 	GetNotificationUnreadCount        func() int64
 	GetActiveStopwatch                func() *StopwatchTmplInfo
 	GetOpenReceivedChangeRequestCount func() int64
+
+	// IsModerator and GetModeratorOpenCaseCount drive the account menu's Moderation entry and
+	// its badge. Both are false/0 without a query while moderation is off.
+	IsModerator               func() bool
+	GetModeratorOpenCaseCount func() int64
 }
 
 func PageGlobalData(ctx *context.Context) {
@@ -99,5 +133,7 @@ func PageGlobalData(ctx *context.Context) {
 	data.GetNotificationUnreadCount = sync.OnceValue(func() int64 { return notificationUnreadCount(ctx) })
 	data.GetActiveStopwatch = sync.OnceValue(func() *StopwatchTmplInfo { return getActiveStopwatch(ctx) })
 	data.GetOpenReceivedChangeRequestCount = sync.OnceValue(func() int64 { return openReceivedChangeRequestCount(ctx) })
+	data.IsModerator = sync.OnceValue(func() bool { return isModerator(ctx) })
+	data.GetModeratorOpenCaseCount = sync.OnceValue(func() int64 { return moderatorOpenCaseCount(ctx, data.IsModerator) })
 	ctx.Data["PageGlobalData"] = data
 }

@@ -92,7 +92,23 @@ func (r *GlodmarkRender) highlightingRenderer(w util.BufWriter, c highlighting.C
 		// include language-x class as part of commonmark spec, "chroma" class is used to highlight the code
 		// the "display" class is used by "js/markup/math.ts" to render the code element as a block
 		// the "math.ts" strictly depends on the structure: <pre class="code-block is-loading"><code class="language-math display">...</code></pre>
-		err := r.ctx.RenderInternal.FormatWithSafeAttrs(w, `<div class="code-block-container code-overflow-scroll"><pre class="%s"><code class="chroma language-%s display">`, preClasses, languageStr)
+		// a moderation source range (RenderOptions.SourceRanges) goes on the <pre>, the
+		// highlighter writing its own HTML rather than the node's attributes.
+		// Attributes() is nil when the block has none (source ranges off, no info-string attributes).
+		sourceRange := ""
+		if attrs := c.Attributes(); attrs != nil {
+			if v, ok := attrs.GetString(SourceRangeAttr); ok {
+				if b, isBytes := v.([]byte); isBytes {
+					sourceRange = string(b)
+				}
+			}
+		}
+		var err error
+		if sourceRange != "" {
+			err = r.ctx.RenderInternal.FormatWithSafeAttrs(w, `<div class="code-block-container code-overflow-scroll"><pre class="%s" data-source-range="%s"><code class="chroma language-%s display">`, preClasses, sourceRange, languageStr)
+		} else {
+			err = r.ctx.RenderInternal.FormatWithSafeAttrs(w, `<div class="code-block-container code-overflow-scroll"><pre class="%s"><code class="chroma language-%s display">`, preClasses, languageStr)
+		}
 		if err != nil {
 			return
 		}
