@@ -22,6 +22,7 @@ import (
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/markup/markdown"
 	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/modules/util"
 
 	"github.com/google/uuid"
@@ -38,10 +39,11 @@ const (
 
 // Case priorities, stored in Issue.Priority for the queue's sort (higher first).
 const (
-	PriorityNormal      = 0
-	PriorityHigh        = 1 // three or more submissions
-	PriorityChildSafety = 2 // any child-safety report: reviewed first
-	highPrioritySubmits = 3
+	PriorityNormal         = 0
+	PriorityHigh           = 1 // three or more submissions
+	PriorityDeadlinePassed = 2 // Request sources, and the deadline passed: back on top for its moderator
+	PriorityChildSafety    = 3 // any child-safety report: reviewed first
+	highPrioritySubmits    = 3
 )
 
 // ReasonInput is one ticked reason with its explanation.
@@ -204,7 +206,7 @@ func SubmitReport(ctx context.Context, in ReportInput) (*ReportResult, error) {
 		if err := syncCaseLabels(ctx, caseIssue, c, labels, in.Reporter); err != nil {
 			return err
 		}
-		if err := updateCasePriority(ctx, caseIssue); err != nil {
+		if err := updateCasePriority(ctx, caseIssue, c); err != nil {
 			return err
 		}
 
@@ -566,17 +568,21 @@ func syncCaseLabels(ctx context.Context, issue *issues_model.Issue, c *moderatio
 	return nil
 }
 
-// updateCasePriority recalculates the case's priority: child safety first, then cases with
-// three or more submissions; reports on hold don't count.
-func updateCasePriority(ctx context.Context, issue *issues_model.Issue) error {
+// updateCasePriority recalculates the case's priority: child safety first, then open
+// Request sources cases whose deadline passed, then cases with three or more submissions;
+// reports on hold don't count.
+func updateCasePriority(ctx context.Context, issue *issues_model.Issue, c *moderation_model.Case) error {
 	reasons, err := moderation_model.CaseReasons(ctx, issue.ID)
 	if err != nil {
 		return fmt.Errorf("get case reasons: %w", err)
 	}
 	priority := PriorityNormal
-	if slices.Contains(reasons, moderation_model.ReasonChildSafety) {
+	switch {
+	case slices.Contains(reasons, moderation_model.ReasonChildSafety):
 		priority = PriorityChildSafety
-	} else {
+	case deadlinePassed(issue, c, timeutil.TimeStampNow()):
+		priority = PriorityDeadlinePassed
+	default:
 		n, err := moderation_model.CountCaseSubmissions(ctx, issue.ID)
 		if err != nil {
 			return fmt.Errorf("count case submissions: %w", err)
@@ -594,6 +600,12 @@ func updateCasePriority(ctx context.Context, issue *issues_model.Issue) error {
 	}
 	log.Trace("moderation case %d priority %d", issue.ID, priority)
 	return nil
+}
+
+// deadlinePassed reports whether an open Request sources case is past its deadline.
+func deadlinePassed(issue *issues_model.Issue, c *moderation_model.Case, now timeutil.TimeStamp) bool {
+	return !issue.IsClosed && c.Decision == moderation_model.DecisionSourcesRequested &&
+		issue.DeadlineUnix > 0 && issue.DeadlineUnix <= now
 }
 
 func reasonList(reasons []moderation_model.Reason) string {

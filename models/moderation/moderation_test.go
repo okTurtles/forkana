@@ -9,6 +9,7 @@ import (
 	issues_model "code.gitea.io/gitea/models/issues"
 	moderation_model "code.gitea.io/gitea/models/moderation"
 	"code.gitea.io/gitea/models/unittest"
+	"code.gitea.io/gitea/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,4 +87,36 @@ func TestModerationRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.NotZero(t, entries[0].CreatedUnix)
+}
+
+func TestCaseDecisionsMatchLabels(t *testing.T) {
+	for _, d := range []string{moderation_model.DecisionDismissed, moderation_model.DecisionSourcesRequested, moderation_model.DecisionRemoved, moderation_model.DecisionEscalated} {
+		found := false
+		for _, l := range moderation_model.CoreLabels() {
+			found = found || l.Name == "decision/"+d
+		}
+		assert.True(t, found, "decision %q has a label", d)
+	}
+}
+
+func TestCaseWaitAndReopen(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := t.Context()
+
+	require.NoError(t, moderation_model.InsertCase(ctx, &moderation_model.Case{IssueID: 1, Kind: moderation_model.CaseKindArticle, TargetRepoID: 1, AssignedUnix: 100}))
+	require.NoError(t, moderation_model.SetWaitingOnOwner(ctx, 1, true, 500))
+	c, err := moderation_model.GetCase(ctx, 1)
+	require.NoError(t, err)
+	assert.True(t, c.WaitingOnOwner)
+	assert.Equal(t, timeutil.TimeStamp(100), c.AssignedUnix, "starting the wait keeps the timer")
+
+	require.NoError(t, moderation_model.SetWaitingOnOwner(ctx, 1, false, 900))
+	c, err = moderation_model.GetCase(ctx, 1)
+	require.NoError(t, err)
+	assert.False(t, c.WaitingOnOwner)
+	assert.Equal(t, timeutil.TimeStamp(900), c.AssignedUnix, "ending the wait restarts the 48h timer")
+
+	assert.False(t, (&moderation_model.Case{DecidedUnix: 10}).IsReexamining())
+	assert.True(t, (&moderation_model.Case{DecidedUnix: 10, ReopenedUnix: 20}).IsReexamining())
+	assert.False(t, (&moderation_model.Case{DecidedUnix: 30, ReopenedUnix: 20}).IsReexamining(), "decided again after the reopen")
 }

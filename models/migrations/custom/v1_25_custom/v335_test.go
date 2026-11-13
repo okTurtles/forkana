@@ -24,7 +24,7 @@ func Test_CreateModerationTables(t *testing.T) {
 	tables, err := x.DBMetas()
 	assert.NoError(t, err)
 	want := map[string][]string{
-		"moderation_case":       {"issue_id", "kind", "target_repo_id", "target_user_id", "decision", "resolution", "needs_admin", "decided_by", "reopened_count"},
+		"moderation_case":       {"issue_id", "kind", "target_repo_id", "target_user_id", "decision", "resolution", "needs_admin", "decided_by", "reopened_count", "reopened_unix", "waiting_on_owner"},
 		"moderation_submission": {"id", "reporter_id", "client_token", "case_issue_id", "commit_sha", "source_start", "source_end", "quote", "section_anchor", "anchor_status"},
 		"moderation_report":     {"issue_id", "submission_id", "case_issue_id", "reporter_id", "reason", "verdict", "verdict_note", "on_hold"},
 		"moderation_audit":      {"id", "created_unix", "actor_id", "actor_role", "action", "case_issue_id", "summary"},

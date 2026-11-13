@@ -33,7 +33,8 @@ func casesRepoIDCond() *builder.Builder {
 // CountOpenAssignedCases counts the open cases (type/case issues of the cases repository)
 // assigned to the user: the badge beside the account menu's Moderation entry. It is one query,
 // because the account menu is on every page. Subqueries rather than joins, so that an issue
-// is counted once whatever its labels and assignees.
+// is counted once whatever its labels and assignees. A case waiting on its owner after Request
+// sources still counts (foundations decisions 12).
 func CountOpenAssignedCases(ctx context.Context, userID int64) (int64, error) {
 	if userID <= 0 {
 		return 0, nil

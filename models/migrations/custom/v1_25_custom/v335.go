@@ -33,7 +33,9 @@ func CreateModerationTables(x *xorm.Engine) error {
 		DecidedBy           int64              `xorm:"INDEX NOT NULL DEFAULT 0"`
 		DecidedUnix         timeutil.TimeStamp `xorm:"INDEX"`
 		ReopenedCount       int                `xorm:"NOT NULL DEFAULT 0"`
-		PreviousCaseIssueID int64              `xorm:"NOT NULL DEFAULT 0"`
+		ReopenedUnix        timeutil.TimeStamp
+		PreviousCaseIssueID int64 `xorm:"NOT NULL DEFAULT 0"`
+		WaitingOnOwner      bool  `xorm:"INDEX NOT NULL DEFAULT false"`
 
 		CreatedUnix timeutil.TimeStamp `xorm:"INDEX created"`
 		UpdatedUnix timeutil.TimeStamp `xorm:"updated"`

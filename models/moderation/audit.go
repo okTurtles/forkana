@@ -31,6 +31,7 @@ const (
 	AuditAssigned        AuditAction = "assigned"
 	AuditTaken           AuditAction = "taken"
 	AuditReturnedToQueue AuditAction = "returned_to_queue"
+	AuditDeadlinePassed  AuditAction = "deadline_passed" // automatic: the sources deadline passed; nothing is removed
 	AuditDecided         AuditAction = "decided"
 	AuditWarned          AuditAction = "warned"
 	AuditReopened        AuditAction = "reopened"

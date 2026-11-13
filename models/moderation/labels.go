@@ -148,7 +148,7 @@ func CoreLabels() []CoreLabel {
 		CoreLabel{LabelDecisionEscalated, true, colorOrange, "Sent to a site administrator"},
 
 		CoreLabel{LabelResolutionSourcesAdded, true, colorGreen, "The owner added the requested sources"},
-		CoreLabel{LabelResolutionRemovedAfterDeadline, true, colorRed, "Removed automatically when the sources deadline passed"},
+		CoreLabel{LabelResolutionRemovedAfterDeadline, true, colorRed, "Removed by a moderator after the sources deadline passed"},
 		CoreLabel{LabelResolutionOverturned, true, colorOrange, "The decision was overturned"},
 
 		CoreLabel{LabelStatusNeedsAdmin, false, colorOrange, "Waiting for a site administrator"},

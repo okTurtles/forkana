@@ -22,6 +22,14 @@ const (
 	CaseKindSubject CaseKind = "subject"
 )
 
+// Case decisions, stored in Case.Decision; the decision/* label of the same name mirrors it.
+const (
+	DecisionDismissed        = "dismissed"
+	DecisionSourcesRequested = "sources-requested"
+	DecisionRemoved          = "removed"
+	DecisionEscalated        = "escalated"
+)
+
 // LabelName returns the name of the kind's label.
 func (k CaseKind) LabelName() string {
 	return "kind/" + string(k)
@@ -48,8 +56,15 @@ type Case struct {
 	TakenUnix           timeutil.TimeStamp
 	DecidedBy           int64              `xorm:"INDEX NOT NULL DEFAULT 0"`
 	DecidedUnix         timeutil.TimeStamp `xorm:"INDEX"`
-	ReopenedCount       int                `xorm:"NOT NULL DEFAULT 0"`
+	ReopenedCount       int                `xorm:"NOT NULL DEFAULT 0"` // incremented by each reopen
+	ReopenedUnix        timeutil.TimeStamp // set by each reopen; see IsReexamining
 	PreviousCaseIssueID int64              `xorm:"NOT NULL DEFAULT 0"`
+
+	// WaitingOnOwner is set by Request sources (foundations decisions 12): the case stays
+	// assigned and counts toward the moderator's limit, but the 48h return skips it until
+	// the owner responds (a message in the case conversation, or a change to the article)
+	// or the deadline passes. The case is never removed automatically at the deadline.
+	WaitingOnOwner bool `xorm:"INDEX NOT NULL DEFAULT false"`
 
 	CreatedUnix timeutil.TimeStamp `xorm:"INDEX created"`
 	UpdatedUnix timeutil.TimeStamp `xorm:"updated"`
@@ -93,4 +108,25 @@ func FindOpenCaseByTargetRepo(ctx context.Context, repoID int64) (*Case, error) 
 		return nil, err
 	}
 	return c, nil
+}
+
+// IsReexamining reports whether the case was reopened after its last decision: the earlier
+// verdicts stay in place, and reporters are shown that the case is being re-examined, until
+// the new decision.
+func (c *Case) IsReexamining() bool {
+	return c.ReopenedUnix > c.DecidedUnix
+}
+
+// SetWaitingOnOwner starts or ends the wait on the owner after Request sources. Ending it
+// restarts the 48h timer at now, so the moderator has the usual time to look at the owner's
+// response (or at the passed deadline).
+func SetWaitingOnOwner(ctx context.Context, caseIssueID int64, waiting bool, now timeutil.TimeStamp) error {
+	c := &Case{WaitingOnOwner: waiting}
+	cols := []string{"waiting_on_owner"}
+	if !waiting {
+		c.AssignedUnix = now
+		cols = append(cols, "assigned_unix")
+	}
+	_, err := db.GetEngine(ctx).ID(caseIssueID).Cols(cols...).Update(c)
+	return err
 }

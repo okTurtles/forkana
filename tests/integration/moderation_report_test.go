@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"code.gitea.io/gitea/models/db"
 	issues_model "code.gitea.io/gitea/models/issues"
 	moderation_model "code.gitea.io/gitea/models/moderation"
 	repo_model "code.gitea.io/gitea/models/repo"
@@ -19,6 +20,7 @@ import (
 	"code.gitea.io/gitea/modules/markup/markdown"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/test"
+	"code.gitea.io/gitea/modules/timeutil"
 	routers_moderation "code.gitea.io/gitea/routers/web/moderation"
 	moderation_service "code.gitea.io/gitea/services/moderation"
 	"code.gitea.io/gitea/tests"
@@ -226,6 +228,22 @@ func TestModerationReport(t *testing.T) {
 		// three submissions or more: High
 		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: before.IssueID})
 		assert.Equal(t, moderation_service.PriorityHigh, caseIssue.Priority)
+	})
+
+	t.Run("DeadlinePassedStaysOnTop", func(t *testing.T) {
+		// Request sources was applied and its deadline passed (the decision service is 1.6)
+		c := openCase(t)
+		_, err := db.GetEngine(t.Context()).ID(c.IssueID).Cols("decision").Update(&moderation_model.Case{Decision: moderation_model.DecisionSourcesRequested})
+		require.NoError(t, err)
+		_, err = db.GetEngine(t.Context()).ID(c.IssueID).Cols("deadline_unix").Update(&issues_model.Issue{DeadlineUnix: timeutil.TimeStampNow() - 60})
+		require.NoError(t, err)
+
+		post(t, otherSession, reportBody{
+			ClientToken: uuid.NewString(), Anchor: "whole",
+			Reasons: []reportReason{{"something-else", "Still unsourced."}},
+		}, http.StatusOK)
+		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: c.IssueID})
+		assert.Equal(t, moderation_service.PriorityDeadlinePassed, caseIssue.Priority, "a new report doesn't lower it")
 	})
 
 	t.Run("ChildSafetyFirst", func(t *testing.T) {
