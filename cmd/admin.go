@@ -30,6 +30,7 @@ var (
 			subcmdAuth,
 			subcmdSendMail,
 			microcmdBackfillArticleAttachments,
+			subcmdModeration,
 		},
 	}
 
