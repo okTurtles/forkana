@@ -27,6 +27,7 @@
 #   PR_BRANCH       the translations branch (default: chore/translations)
 #   BASE_BRANCH     the PR's base branch (default: master)
 #   REMOTE          the git remote of $PR_BRANCH (default: origin)
+#   GH              the GitHub CLI (default: gh; a fake one for tests)
 #   RUN_URL         the workflow run, linked from the PR (apply, publish)
 #   PR_SHA          the commit of $PR_BRANCH that prepare read, empty if none:
 #                   publish's force-push lease (apply, publish)
@@ -42,6 +43,7 @@ TRANSLATE_TIMEOUT=${TRANSLATE_TIMEOUT:-10m}
 PR_BRANCH=${PR_BRANCH:-chore/translations}
 BASE_BRANCH=${BASE_BRANCH:-master}
 REMOTE=${REMOTE:-origin}
+GH=${GH:-gh}
 TOOL="$WORK/bin/forkana-locales"
 # Languages whose translations were the least sure in #508.
 REVIEW_LANGUAGES="tr-TR, fi-FI, is-IS and ga-IE"
@@ -110,7 +112,7 @@ sync_pr_branch() {
   local open sha
   # Not knowing whether a PR is open must not lead to starting from the base
   # branch, and then force-pushing over the PR's translations: fail.
-  open=$(gh pr list --head "$PR_BRANCH" --base "$BASE_BRANCH" --state open --json number --jq length) ||
+  open=$("$GH" pr list --head "$PR_BRANCH" --base "$BASE_BRANCH" --state open --json number --jq length) ||
     die "could not list the open $PR_BRANCH PRs"
   restarted=false
   if [ "$open" != 1 ]; then
@@ -559,11 +561,10 @@ cmd_apply() {
 cmd_publish() {
   local title remote tree number
   title=$(cat "$WORK/pr-title.txt")
-  git config user.name "github-actions[bot]"
-  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
   git checkout -q -B "$PR_BRANCH"
   git add custom/translations custom/options/locale
-  git commit -q -m "$title" -m "Translated by ${MODEL_DISPLAY:-an LLM} via ${PROVIDER_DISPLAY:-crush} in ${RUN_URL:-the cron-forkana-translations workflow}."
+  # -c, not `git config`: a local run must not change the checkout's identity.
+  git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "$title" -m "Translated by ${MODEL_DISPLAY:-an LLM} via ${PROVIDER_DISPLAY:-crush} in ${RUN_URL:-the cron-forkana-translations workflow}."
 
   # The PR is one commit on top of the base branch, so it is force-pushed.
   # The lease is the commit "prepare" read (PR_SHA; empty: the branch didn't
@@ -583,12 +584,12 @@ cmd_publish() {
     git push --force-with-lease="refs/heads/$PR_BRANCH:${PR_SHA:-}" "$REMOTE" "HEAD:refs/heads/$PR_BRANCH" || die "$moved"
   fi
 
-  number=$(gh pr list --head "$PR_BRANCH" --base "$BASE_BRANCH" --state open --json number --jq '.[0].number // empty')
+  number=$("$GH" pr list --head "$PR_BRANCH" --base "$BASE_BRANCH" --state open --json number --jq '.[0].number // empty')
   if [ -n "$number" ]; then
-    gh pr edit "$number" --title "$title" --body-file "$WORK/pr-body.md"
+    "$GH" pr edit "$number" --title "$title" --body-file "$WORK/pr-body.md"
     echo "Updated PR #$number"
   else
-    gh pr create --base "$BASE_BRANCH" --head "$PR_BRANCH" --title "$title" --body-file "$WORK/pr-body.md"
+    "$GH" pr create --base "$BASE_BRANCH" --head "$PR_BRANCH" --title "$title" --body-file "$WORK/pr-body.md"
   fi
 }
 
