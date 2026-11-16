@@ -7,7 +7,8 @@
    Table view and the Article view's Read, Edit and History tabs are a 640px
    column centred in it (Table view 7368:260448 Frame 742; Article view
    7368:264676 Frame 759, 7368:264887 Frame 965, 7368:263253 Frame 965), so
-   neither the header nor the Read / Edit / History row moves between them. */
+   neither the header nor the Read / Edit / History row moves between them. #476: the
+   column is 800px from a 1280px window (--article-column-width, base.css). */
 .ui.container.subject-views-container {
   width: auto;
   max-width: none;
@@ -38,7 +39,7 @@
    640px reading column ("Frame 742" 7368:260457, #469), centred, and shrinks with
    the window. */
 .history-table {
-  max-width: 640px;
+  max-width: var(--article-column-width);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -414,7 +415,7 @@
    reading column (figma "Notes – Width system" 7368:275653: Table view and Article
    Read / Edit / History are 640), not the full width of the page. */
 .history-view-section--article > :is([data-role="article-empty"], [data-role="article-loader"], [data-role="article-error"]) {
-  max-width: 640px;
+  max-width: var(--article-column-width);
   margin-left: auto;
   margin-right: auto;
 }

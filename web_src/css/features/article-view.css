@@ -11,9 +11,10 @@
    640px column (Frame 759 7368:264687, Frame 965 7368:264897 and 7368:263261), so the
    Read / Edit / History row stays still between them, and the subject header above is
    the one of every other view, Follow and Compare included (repo/header.css): nothing
-   above the content moves when the view or the tab changes. */
+   above the content moves when the view or the tab changes. #476: 800px from a 1280px
+   window, as every other view's column (--article-column-width, base.css). */
 #article-view-root {
-  max-width: 640px;
+  max-width: var(--article-column-width);
   margin-inline: auto;
 }
 
@@ -514,6 +515,24 @@
   font-size: 16px;
   line-height: 24px;
   font-weight: var(--font-weight-semibold);
+}
+
+/* #476: the article's text is 16px on 24px lines (the design system's 1.5), its
+   paragraphs too: base.css gives every <p> 1.4285 (22.86px at 16px). */
+.file-view.article-content.markup p {
+  line-height: 24px;
+}
+
+/* #476: the article's pictures fill the column and keep their proportions (a 16:9 one is
+   800×450 in the 800px column), the narrower ones stretched to it too. Not the emoji, nor
+   the pictures in a list or a table: imported articles have 20px icons in lists ("Science
+   portal") and 60px ones in tables (the "does not cite any sources" box), which would
+   become 800px wide. */
+.file-view.article-content.markup img:not(.emoji, :is(li, table) img) {
+  display: block;
+  width: 100%;
+  height: auto;
+  box-sizing: border-box;
 }
 
 /* ── Edit ───────────────────────────────────────────────────────────────────

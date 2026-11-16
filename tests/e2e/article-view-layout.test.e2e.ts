@@ -34,6 +34,52 @@ test.describe('Article view layout (signed out)', () => {
     });
   }
 
+  // #476: a picture fills the column (800px from a 1280px window, 640 below) and keeps its
+  // proportions, a narrower one stretched to it too; an icon in a list or a table keeps
+  // its own size. (Pictures put into the rendered article: what matters is the CSS.)
+  for (const {width, column} of [{width: 1440, column: 800}, {width: 1100, column: 640}]) {
+    test(`at ${width}px: pictures fill the ${column}px column`, async ({page}) => {
+      await page.setViewportSize({width, height: 900});
+      await page.goto(`${article}?mode=read`);
+      const content = page.locator('#article-view-root .file-view.article-content');
+      await expect(content).toBeVisible();
+      await content.evaluate((el) => {
+        const image = (name: string, w: number, h: number) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const img = document.createElement('img');
+          img.setAttribute('data-test', name);
+          img.alt = '';
+          img.src = canvas.toDataURL();
+          return img;
+        };
+        const paragraph = document.createElement('p');
+        const link = document.createElement('a');
+        link.href = '#';
+        link.append(image('picture', 160, 90));
+        paragraph.append(link);
+        const list = document.createElement('ul');
+        const item = document.createElement('li');
+        item.append(image('icon', 20, 20), ' Portal');
+        list.append(item);
+        el.append(paragraph, list);
+      });
+      await page.waitForFunction(() => Array.from(document.querySelectorAll<HTMLImageElement>('img[data-test]')).every((img) => img.complete));
+      const picture = await page.locator('img[data-test="picture"]').boundingBox();
+      expect(picture.width).toBeCloseTo(column, 0);
+      expect(picture.height).toBeCloseTo(column * 9 / 16, 0);
+      const icon = await page.locator('img[data-test="icon"]').boundingBox();
+      expect([icon.width, icon.height]).toEqual([20, 20]);
+      // the article's text: 16px on 24px lines (the design system's 1.5)
+      const text = await content.evaluate((el) => {
+        const style = getComputedStyle(el.querySelector('p') ?? el);
+        return [style.fontSize, style.lineHeight];
+      });
+      expect(text).toEqual(['16px', '24px']);
+    });
+  }
+
   test('Read tab: tokens, Watch, path, no placeholders', async ({page}) => {
     await page.goto(`${article}?mode=read`);
     await expect(page.locator('#article-view-root[data-article-mode="read"]')).toBeVisible();

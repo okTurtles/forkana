@@ -32,6 +32,11 @@
   /* side margins of a subject page's header and views (#469, figma "Notes – Width
      system" 7368:275653): 48px on a desktop, 24 on a tablet, 16 on a phone */
   --subject-margin-x: 48px;
+  /* the subject page's reading column (#469, #476): the Table view and the Article view's
+     Read, Edit, History and Settings tabs. 640px, and 800px from a 1280px window (below
+     the media queries), so that every view and tab widens together and nothing moves
+     when one switches between them. It shrinks with narrower windows, as a max-width. */
+  --article-column-width: 640px;
   --page-space-bottom: 64px; /* space between last page element and footer */
 
   /* z-index */
@@ -83,6 +88,12 @@
   --color-dialog-backdrop: #c8d1da66;
   --color-dialog-shadow: #25292e3d; /* Dialog 7619:68568: #25292e 24% */
   --color-menu-shadow: #1a1f262e; /* Overlay 7645:75728: #1a1f26 18% */
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --article-column-width: 800px;
+  }
 }
 
 @media (min-width: 768px) and (max-width: 1200px) {
