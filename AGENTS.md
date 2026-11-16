@@ -234,6 +234,8 @@ To add or change a string:
    3. `go run build/forkana-locales.go merge /tmp/forkana-todo` merges them into `custom/translations/` and regenerates the locale files. A value still equal to its English is left out and listed as untranslated; a translation that really is the English word ("Fork", "URL") goes into `custom/translations/` by hand.
    4. `make lint-locale-forkana-strict`.
 
+   Otherwise, `.github/workflows/cron-forkana-translations.yml` does this translation pass after each push to `master` that changes custom en-US, and weekly: an LLM (crush, as in `pull-review-crush.yml`) translates the `todo` files (at most 300 strings per run, `todo -max`), the strict check runs, and the result goes into a single `chore/translations` PR, updated in place until it is merged. Its steps are in `build/forkana-translate.sh`.
+
 After merging upstream Gitea (new `options/locale/` files), run `make generate-locale-forkana` and `make lint-locale-forkana`. If upstream en-US changed, bring the changes into custom en-US first: a key whose upstream wording changed but custom en-US kept the old one counts as a Forkana key.
 
 ## Configuration

@@ -1,0 +1,238 @@
+# Keeps Forkana's translations up to date (#512): translates the new and
+# reworded strings of custom/options/locale/locale_en-US.ini into the other
+# languages with an LLM (crush), and opens or updates a single
+# `chore/translations` PR with them. See "Translations" in AGENTS.md; the
+# steps themselves are in build/forkana-translate.sh.
+#
+# Repository setup:
+#   - Settings → Actions → General → Workflow permissions: enable "Allow
+#     GitHub Actions to create and approve pull requests", or the PR step
+#     fails: the PR is opened with GITHUB_TOKEN.
+#   - CI doesn't run by itself on a PR opened or pushed with GITHUB_TOKEN
+#     (GitHub's rule against workflow loops): to run it on the translations
+#     PR, push a commit to `chore/translations`, or close and reopen the PR.
+#   - The secrets and variables of pull-review-crush.yml are reused:
+#     OPENROUTER_API_KEY / ZAI_API_KEY, and the REVIEW_PROVIDER / REVIEW_MODEL
+#     / REVIEW_SMALL_MODEL variables, unless TRANSLATE_PROVIDER /
+#     TRANSLATE_MODEL / TRANSLATE_SMALL_MODEL are set. TRANSLATE_MAX_STRINGS
+#     sets the cap per run (default: 300).
+#
+# Security: the LLM runs in the `translate` job, whose GITHUB_TOKEN is
+# read-only, inside a bubblewrap sandbox that hides it anyway (see
+# setup_sandbox in build/forkana-translate.sh). Only the `pull-request` job
+# can push and open PRs, and it never runs the LLM: it takes nothing from
+# the `translate` job but its translation files, which it validates and
+# regenerates with the repository's own tools before committing them.
+
+name: Forkana translations
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - custom/options/locale/locale_en-US.ini
+  schedule:
+    - cron: "23 4 * * 1" # every Monday at 04:23 UTC, as a safety net
+  workflow_dispatch:
+    inputs:
+      max_strings:
+        description: "Strings to translate at most in this run (0: no cap)"
+        # A string, so that "0" isn't falsy in the MAX_STRINGS expression.
+        type: string
+        default: "300"
+      provider:
+        description: "crush provider (openrouter or zai-coding-plan); empty: the repository's default"
+        type: string
+        default: ""
+      model:
+        description: "Model of that provider; empty: the repository's default"
+        type: string
+        default: ""
+
+# Two runs never overlap: a run that starts while another one is translating
+# waits for it (it isn't cancelled mid-push), and then continues its PR.
+concurrency:
+  group: forkana-translations
+  cancel-in-progress: false
+
+env:
+  # Node must use the system CA bundle that fix-ubuntu-ca-roots fixes. See
+  # https://github.com/okTurtles/libcheloniajs/blob/main/.github/actions/fix-ubuntu-ca-roots/action.yml
+  NODE_OPTIONS: --use-openssl-ca
+  PR_BRANCH: chore/translations
+  BASE_BRANCH: master
+  MAX_STRINGS: ${{ inputs.max_strings || vars.TRANSLATE_MAX_STRINGS || '300' }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  translate:
+    name: Translate new strings
+    # Not on forks, where the schedule would run without the secrets.
+    if: github.repository == 'okTurtles/forkana'
+    # WARNING: the sandbox of "Translate" assumes a throwaway GitHub-hosted
+    # VM. On a self-hosted runner, replace its `--ro-bind / /` (it shows the
+    # networked agent every file the runner user can read) and provision
+    # bwrap and crush on the host instead of "Install crush and bubblewrap".
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      todo: ${{ steps.prepare.outputs.todo }}
+      base_sha: ${{ steps.base.outputs.sha }}
+      model: ${{ steps.provider.outputs.model }}
+      provider_display: ${{ steps.provider.outputs.provider_display }}
+    env:
+      TRANSLATE_PROVIDER: ${{ inputs.provider || vars.TRANSLATE_PROVIDER || vars.REVIEW_PROVIDER || 'openrouter' }}
+      TRANSLATE_MODEL: ${{ inputs.model || vars.TRANSLATE_MODEL || vars.REVIEW_MODEL || '' }}
+      TRANSLATE_SMALL_MODEL: ${{ vars.TRANSLATE_SMALL_MODEL || vars.REVIEW_SMALL_MODEL || '' }}
+    steps:
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+          # The history lets "Prepare" squash-merge the open translations PR.
+          fetch-depth: 0
+          # Don't persist the token into .git/config: the checkout is
+          # readable inside the sandbox. The repository is public, so the
+          # fetch of the PR branch in "Prepare" works without it.
+          persist-credentials: false
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Base commit
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Writes the strings to translate (at most MAX_STRINGS) to
+      # ~/forkana-translate/todo, starting from the open translations PR if
+      # there is one. The token (read-only) only lists PRs.
+      - name: Prepare
+        id: prepare
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: build/forkana-translate.sh prepare
+
+      - name: Resolve provider settings
+        id: provider
+        if: steps.prepare.outputs.todo == 'true'
+        run: |
+          if ! [[ "$TRANSLATE_PROVIDER" =~ ^[a-zA-Z0-9_-]+$ ]] || ! [[ "$TRANSLATE_MODEL$TRANSLATE_SMALL_MODEL" =~ ^[a-zA-Z0-9_./-]*$ ]]; then
+            echo "::error::Invalid provider or model name"
+            exit 1
+          fi
+          # The default models of pull-review-crush.yml.
+          case "$TRANSLATE_PROVIDER" in
+            openrouter)
+              PREFIX=openrouter
+              DISPLAY=OpenRouter
+              MODEL=${TRANSLATE_MODEL:-stepfun/step-3.5-flash}
+              SMALL_MODEL=${TRANSLATE_SMALL_MODEL:-deepseek/deepseek-v4-flash-0731}
+              ;;
+            zai-coding-plan)
+              PREFIX=zai
+              DISPLAY=Z.AI
+              MODEL=${TRANSLATE_MODEL:-glm-5}
+              SMALL_MODEL=${TRANSLATE_SMALL_MODEL:-glm-5.1}
+              ;;
+            *)
+              echo "::error::Unknown provider '$TRANSLATE_PROVIDER' (supported: openrouter, zai-coding-plan)"
+              exit 1
+              ;;
+          esac
+          {
+            echo "CRUSH_MODEL=$PREFIX/$MODEL"
+            echo "SMALL_MODEL=$PREFIX/$SMALL_MODEL"
+          } >> "$GITHUB_ENV"
+          {
+            echo "model=$MODEL"
+            echo "provider_display=$DISPLAY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install crush and bubblewrap
+        if: steps.prepare.outputs.todo == 'true'
+        run: |
+          # ripgrep speeds up crush's grep tool, which the translator uses to
+          # look up upstream translations.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap ripgrep
+
+          # Ubuntu 24.04 restricts unprivileged user namespaces with
+          # AppArmor, which blocks bwrap: lift the restriction only if bwrap
+          # doesn't work as-is (see pull-review-crush.yml).
+          if ! bwrap --unshare-all --die-with-parent --ro-bind / / --dev /dev --proc /proc -- true; then
+            echo "bwrap blocked by AppArmor userns restriction; lifting kernel.apparmor_restrict_unprivileged_userns"
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+            bwrap --unshare-all --die-with-parent --ro-bind / / --dev /dev --proc /proc -- true
+          fi
+
+          npm install -g @charmland/crush
+
+      # Translates each language in the sandbox, merges, runs the strict
+      # locale check, and retries the failing languages once.
+      - name: Translate
+        if: steps.prepare.outputs.todo == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+        run: build/forkana-translate.sh translate
+
+      - name: Upload translations
+        if: steps.prepare.outputs.todo == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: forkana-translations
+          path: custom/translations/locale_*.ini
+          if-no-files-found: error
+          retention-days: 7
+
+  pull-request:
+    name: Open or update the translations PR
+    needs: translate
+    if: needs.translate.outputs.todo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      MODEL_DISPLAY: ${{ needs.translate.outputs.model }}
+      PROVIDER_DISPLAY: ${{ needs.translate.outputs.provider_display }}
+    steps:
+      - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
+
+      # The commit the translations were made on, so that the PR is based on
+      # it even if the base branch moved meanwhile.
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.translate.outputs.base_sha }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Download translations
+        uses: actions/download-artifact@v4
+        with:
+          name: forkana-translations
+          path: ${{ runner.temp }}/forkana-translations
+
+      # Copies the translation files in (only those of known languages),
+      # regenerates the locale files, and writes the PR title and body.
+      - name: Apply translations
+        id: apply
+        run: build/forkana-translate.sh apply "$RUNNER_TEMP/forkana-translations"
+
+      - name: Push and open or update the PR
+        if: steps.apply.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: build/forkana-translate.sh publish

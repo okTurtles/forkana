@@ -216,6 +216,39 @@ func TestTodoMergeFormat(t *testing.T) {
 	assert.Zero(t, n)
 }
 
+func TestLimitTodo(t *testing.T) {
+	fk := testForkana(t)
+	todo := map[string][]Entry{
+		"de-DE": TodoEntries(fk, mustParse(t, germanTranslations)), // repo.pulls, repo.pulls.closed_at, citation.references
+		"fr-FR": TodoEntries(fk, mustParse(t, "")),                 // all 6 keys
+	}
+	keys := func(todo map[string][]Entry) map[string][]string {
+		out := map[string][]string{}
+		for lang, entries := range todo {
+			for _, e := range entries {
+				out[lang] = append(out[lang], e.FullKey())
+			}
+		}
+		return out
+	}
+
+	assert.Equal(t, todo, LimitTodo(fk, todo, 0), "no limit")
+	assert.Equal(t, todo, LimitTodo(fk, todo, 9), "a limit above the total")
+
+	// new_repo (fr-FR) + repo.pulls (de-DE, fr-FR) = 3; repo.pulls.closed_at would make 5.
+	assert.Equal(t, map[string][]string{
+		"de-DE": {"repo.pulls"},
+		"fr-FR": {"new_repo", "repo.pulls"},
+	}, keys(LimitTodo(fk, todo, 4)))
+
+	// The first key is kept even when it alone exceeds the limit.
+	only := map[string][]Entry{"de-DE": todo["de-DE"], "fr-FR": todo["fr-FR"][1:2]}
+	assert.Equal(t, map[string][]string{
+		"de-DE": {"repo.pulls"},
+		"fr-FR": {"repo.pulls"},
+	}, keys(LimitTodo(fk, only, 1)))
+}
+
 func TestMergeLeavesOutUntranslated(t *testing.T) {
 	fk := testForkana(t)
 	tr := mustParse(t, "[repo]\n# en: Pull Requests\npulls = Pull-Requests\n")
