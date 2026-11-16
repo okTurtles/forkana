@@ -21,12 +21,16 @@
 #   MAX_STRINGS     strings to translate per run, whole English strings at a
 #                   time (default: 300; 0: no cap)
 #   TRANSLATE_JOBS  languages translated at the same time (default: 4)
-#   TRANSLATE_TIMEOUT  time limit of one crush run (default: 20m)
+#   TRANSLATE_TIMEOUT  time limit of one crush run (default: 10m)
 #   CRUSH_MODEL, SMALL_MODEL  crush's models, as provider/model (translate)
 #   MODEL_DISPLAY, PROVIDER_DISPLAY  the model and provider named in the PR (apply)
 #   PR_BRANCH       the translations branch (default: chore/translations)
 #   BASE_BRANCH     the PR's base branch (default: master)
+#   REMOTE          the git remote of $PR_BRANCH (default: origin)
 #   RUN_URL         the workflow run, linked from the PR (apply, publish)
+#   PR_SHA          the commit of $PR_BRANCH that prepare read, empty if none:
+#                   publish's force-push lease (apply, publish)
+#   RESTARTED       true when prepare couldn't keep the open PR's changes (apply)
 #   GITHUB_OUTPUT   where step outputs are written, when set
 
 set -euo pipefail
@@ -34,9 +38,10 @@ set -euo pipefail
 WORK=${WORK:-$HOME/forkana-translate}
 MAX_STRINGS=${MAX_STRINGS:-300}
 TRANSLATE_JOBS=${TRANSLATE_JOBS:-4}
-TRANSLATE_TIMEOUT=${TRANSLATE_TIMEOUT:-20m}
+TRANSLATE_TIMEOUT=${TRANSLATE_TIMEOUT:-10m}
 PR_BRANCH=${PR_BRANCH:-chore/translations}
 BASE_BRANCH=${BASE_BRANCH:-master}
+REMOTE=${REMOTE:-origin}
 TOOL="$WORK/bin/forkana-locales"
 # Languages whose translations were the least sure in #508.
 REVIEW_LANGUAGES="tr-TR, fi-FI, is-IS and ga-IE"
@@ -95,28 +100,52 @@ safe_file() {
 # is continued by the next one, and so that the PR, force-pushed as one
 # commit on top of the base branch, keeps the translations it already has.
 # On a conflict, start over from the base branch.
+#
+# Outputs pr_sha, the commit of $PR_BRANCH this run read (empty when the
+# branch doesn't exist): publish force-pushes with it as lease, so that a
+# commit pushed to the branch meanwhile (a native speaker's correction) makes
+# the push fail instead of being overwritten. Also outputs restarted=true
+# when the open PR's translations could not be kept.
 sync_pr_branch() {
-  local open
-  open=$(gh pr list --head "$PR_BRANCH" --base "$BASE_BRANCH" --state open --json number --jq length 2>/dev/null) || {
-    warn "could not list the open $PR_BRANCH PRs; starting from $BASE_BRANCH"
-    return
-  }
+  local open sha
+  # Not knowing whether a PR is open must not lead to starting from the base
+  # branch, and then force-pushing over the PR's translations: fail.
+  open=$(gh pr list --head "$PR_BRANCH" --base "$BASE_BRANCH" --state open --json number --jq length) ||
+    die "could not list the open $PR_BRANCH PRs"
+  restarted=false
   if [ "$open" != 1 ]; then
+    # A branch left by a closed PR is overwritten, at the commit read here.
+    sha=$(git ls-remote "$REMOTE" "refs/heads/$PR_BRANCH" | cut -f 1)
+    output pr_sha "$sha"
     echo "No open $PR_BRANCH PR: starting from $BASE_BRANCH"
     return
   fi
-  git fetch -q --no-tags origin "refs/heads/$PR_BRANCH"
-  if git -c user.name=forkana-translate -c user.email=forkana-translate@localhost merge -q --squash FETCH_HEAD; then
+  git fetch -q --no-tags "$REMOTE" "refs/heads/$PR_BRANCH"
+  output pr_sha "$(git rev-parse FETCH_HEAD)"
+  local git_id=(-c user.name=forkana-translate -c user.email=forkana-translate@localhost)
+  if git "${git_id[@]}" merge -q --squash FETCH_HEAD; then
     echo "Continuing the open $PR_BRANCH PR"
-  else
-    warn "$PR_BRANCH conflicts with $BASE_BRANCH: starting over from $BASE_BRANCH"
-    git reset -q --hard HEAD
+    return
   fi
+  # On a conflict, keep the base branch's side of the conflicting hunks and
+  # the PR's other changes. The generated locale files are left as on the
+  # base branch: merge and generate rebuild them from the translations.
+  git reset -q --hard HEAD
+  if git "${git_id[@]}" merge -q --squash -X ours FETCH_HEAD; then
+    git checkout HEAD -- "custom/options/locale"
+    warn "$PR_BRANCH conflicts with $BASE_BRANCH: continuing it, with $BASE_BRANCH's side of the conflicting lines"
+    return
+  fi
+  warn "$PR_BRANCH can't be merged with $BASE_BRANCH: starting over from $BASE_BRANCH"
+  git reset -q --hard HEAD
+  restarted=true
 }
 
 cmd_prepare() {
+  local restarted=false
   build_tool
   sync_pr_branch
+  output restarted "$restarted"
   rm -rf "$WORK/todo"
   "$TOOL" todo -max "$MAX_STRINGS" "$WORK/todo" | tee "$WORK/todo.log"
   if grep -q '^warning: -max' "$WORK/todo.log"; then
@@ -484,6 +513,10 @@ cmd_apply() {
     echo "Review is optional: native speakers are welcome to comment on their language, especially $REVIEW_LANGUAGES, the least sure ones in #508."
     echo ""
     echo "CI doesn't start by itself on a PR that a workflow pushed with \`GITHUB_TOKEN\`: push a commit to \`$PR_BRANCH\`, or close and reopen this PR, to run it."
+    if [ "${RESTARTED:-false}" = true ]; then
+      echo ""
+      echo "**This PR was restarted from \`$BASE_BRANCH\`**: its previous commit couldn't be merged with \`$BASE_BRANCH\`, so the translations and corrections it held were dropped. They are still in that commit, ${PR_SHA:-in the history of this PR}."
+    fi
     if [ "$strict_ok" = false ] || [ "$remaining" -gt 0 ]; then
       echo ""
       echo "### Remaining problems"
@@ -532,18 +565,22 @@ cmd_publish() {
   git add custom/translations custom/options/locale
   git commit -q -m "$title" -m "Translated by ${MODEL_DISPLAY:-an LLM} via ${PROVIDER_DISPLAY:-crush} in ${RUN_URL:-the cron-forkana-translations workflow}."
 
-  # The PR is one commit on top of the base branch, so it is force-pushed;
-  # the lease makes the push fail rather than overwrite a commit pushed to
-  # the branch since this run read it.
-  remote=$(git ls-remote origin "refs/heads/$PR_BRANCH" | cut -f 1)
+  # The PR is one commit on top of the base branch, so it is force-pushed.
+  # The lease is the commit "prepare" read (PR_SHA; empty: the branch didn't
+  # exist), not the branch's current one: a commit pushed to the branch since
+  # then, such as a native speaker's correction, makes the push fail instead
+  # of being overwritten, and the next run continues from it.
+  local moved="$PR_BRANCH changed since this run read it: not overwriting it. The next run continues from the new commit."
+  remote=$(git ls-remote "$REMOTE" "refs/heads/$PR_BRANCH" | cut -f 1)
+  [ "$remote" = "${PR_SHA:-}" ] || die "$moved (read: ${PR_SHA:-no branch}, now: ${remote:-no branch})"
   if [ -n "$remote" ]; then
-    git fetch -q --no-tags origin "refs/heads/$PR_BRANCH"
+    git fetch -q --no-tags "$REMOTE" "refs/heads/$PR_BRANCH"
     tree=$(git rev-parse "FETCH_HEAD^{tree}")
   fi
   if [ -n "$remote" ] && [ "$tree" = "$(git rev-parse 'HEAD^{tree}')" ]; then
     echo "$PR_BRANCH already has these translations: not pushing"
   else
-    git push --force-with-lease="refs/heads/$PR_BRANCH:$remote" origin "HEAD:refs/heads/$PR_BRANCH"
+    git push --force-with-lease="refs/heads/$PR_BRANCH:${PR_SHA:-}" "$REMOTE" "HEAD:refs/heads/$PR_BRANCH" || die "$moved"
   fi
 
   number=$(gh pr list --head "$PR_BRANCH" --base "$BASE_BRANCH" --state open --json number --jq '.[0].number // empty')

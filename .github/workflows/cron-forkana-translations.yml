@@ -74,13 +74,19 @@ jobs:
     # networked agent every file the runner user can read) and provision
     # bwrap and crush on the host instead of "Install crush and bubblewrap".
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Worst case: 28 languages, 4 at a time, 10 minutes each (TRANSLATE_TIMEOUT
+    # in build/forkana-translate.sh), all retried: 140 minutes, plus setup.
+    timeout-minutes: 180
     permissions:
       contents: read
       pull-requests: read
     outputs:
       todo: ${{ steps.prepare.outputs.todo }}
       base_sha: ${{ steps.base.outputs.sha }}
+      # The commit of chore/translations the run started from: the lease of
+      # the force-push (see cmd_publish).
+      pr_sha: ${{ steps.prepare.outputs.pr_sha }}
+      restarted: ${{ steps.prepare.outputs.restarted }}
       model: ${{ steps.provider.outputs.model }}
       provider_display: ${{ steps.provider.outputs.provider_display }}
     env:
@@ -204,6 +210,8 @@ jobs:
     env:
       MODEL_DISPLAY: ${{ needs.translate.outputs.model }}
       PROVIDER_DISPLAY: ${{ needs.translate.outputs.provider_display }}
+      PR_SHA: ${{ needs.translate.outputs.pr_sha }}
+      RESTARTED: ${{ needs.translate.outputs.restarted }}
     steps:
       - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
 
