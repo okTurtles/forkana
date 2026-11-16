@@ -149,6 +149,13 @@
   #navbar .item.ui.dropdown:hover {
     background: var(--color-nav-hover-bg);
   }
+
+  /* the badge's ring takes the hovered item's colour, opaque so that it still cuts the
+     badge out of the bell under it */
+  #navbar a.item:hover .notification_count,
+  #navbar a.item:hover .header-stopwatch-dot {
+    border-color: var(--color-nav-hover-bg-solid);
+  }
 }
 
 /* ── #94, #532: the counter on "Change requests" ─────────────────────────────

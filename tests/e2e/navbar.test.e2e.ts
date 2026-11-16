@@ -5,7 +5,7 @@ import type {Locator, Page} from '@playwright/test';
 
 // The navbar's states (#532, Figma "Navbar – how it works (for dev)" 40001058:1049 in the
 // Design System file). Fixtures: user2 owns repo1, which receives the open change requests
-// issue2, issue3 and pull5.
+// #2, #3 and #5 (/pulls/<index>; issue ids 2, 3 and 11).
 
 async function api_as(user: string) {
   return request.newContext({

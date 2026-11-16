@@ -25,6 +25,9 @@
      control/transparent/bgColor/hover, #818b98 at 10%: Figma "Navbar – how it works
      (for dev)" 40001058:1049, Button 40001058:1071), the only background in the nav */
   --color-nav-hover-bg: #818b981a;
+  /* the same hover laid over the navbar's background, opaque: the ring of the bell's
+     badge on a hovered item, which must hide the icon under it */
+  --color-nav-hover-bg-solid: color-mix(in srgb, #818b98 10%, var(--color-body));
   /* CounterLabel primary (18959:64968): bgColor/neutral/emphasis under a white number */
   --color-counter-primary-bg: #59636e;
   --color-counter-primary-fg: #ffffff;

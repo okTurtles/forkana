@@ -48,6 +48,7 @@
   --color-secondary-nav-bg: #181c20;
   /* #532: Primer's dark control/transparent/bgColor/hover (#656c76 at 20%) */
   --color-nav-hover-bg: #656c7633;
+  --color-nav-hover-bg-solid: color-mix(in srgb, #656c76 20%, var(--color-body));
   /* CounterLabel primary: Primer's dark bgColor/neutral/emphasis under a white number
      (the design system has no dark value) */
   --color-counter-primary-bg: #656c76;
@@ -188,6 +189,7 @@
     --color-secondary-nav-bg: #181c20;
     /* #532: Primer's dark control/transparent/bgColor/hover (#656c76 at 20%) */
     --color-nav-hover-bg: #656c7633;
+    --color-nav-hover-bg-solid: color-mix(in srgb, #656c76 20%, var(--color-body));
     /* CounterLabel primary: Primer's dark bgColor/neutral/emphasis under a white number
        (the design system has no dark value) */
     --color-counter-primary-bg: #656c76;
