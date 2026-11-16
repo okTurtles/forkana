@@ -36,8 +36,8 @@
 /* ── Table view ──────────────────────────────────────────────────────────────
    figma "Table view / Articles" (641:61176, now 7368:260448) and "Table view /
    Comparing articles" (641:61039, now 7368:260309). Figma px; the table is the
-   640px reading column ("Frame 742" 7368:260457, #469), centred, and shrinks with
-   the window. */
+   reading column ("Frame 742" 7368:260457, #469: 640px, and 800px from a 1280px window,
+   #476: --article-column-width), centred, and shrinks with the window. */
 .history-table {
   max-width: var(--article-column-width);
   margin: 0 auto;
@@ -163,7 +163,7 @@
    Last edited 240, Owner 88 and the chevron 52, so that the labels start at 32, 268
    and 508 as figma's do. Contributors and Owner are a share of the table's width
    (228 and 88 of 640) and Last edited takes the rest, so a narrower table keeps the
-   same proportions. */
+   same proportions, and an 800px one (#476) too. */
 .history-table-col-check { width: 32px; }
 .history-table-col-count { width: 35.625%; }
 .history-table-col-owner { width: 13.75%; }
@@ -411,9 +411,9 @@
 
 /* #469: with no article chosen, the Article view's section holds the "Please select an
    article" box, the loader and the error message directly (the placeholder section in
-   explore/repo_history.tmpl), not in #article-view-root: they are the same 640px
-   reading column (figma "Notes – Width system" 7368:275653: Table view and Article
-   Read / Edit / History are 640), not the full width of the page. */
+   explore/repo_history.tmpl), not in #article-view-root: they are the same reading
+   column (figma "Notes – Width system" 7368:275653: Table view and Article Read / Edit /
+   History are 640; 800 from a 1280px window, #476), not the full width of the page. */
 .history-view-section--article > :is([data-role="article-empty"], [data-role="article-loader"], [data-role="article-error"]) {
   max-width: var(--article-column-width);
   margin-left: auto;

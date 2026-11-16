@@ -35,8 +35,10 @@ test.describe('Article view layout (signed out)', () => {
   }
 
   // #476: a picture fills the column (800px from a 1280px window, 640 below) and keeps its
-  // proportions, a narrower one stretched to it too; an icon in a list or a table keeps
-  // its own size. (Pictures put into the rendered article: what matters is the CSS.)
+  // proportions, a narrower one stretched to it too; an icon in a list or a table, a
+  // picture given a width and a custom emoji (an <img> in a span.emoji) keep their own
+  // size, the emoji in its line. (Pictures put into the rendered article: what matters
+  // is the CSS.)
   for (const {width, column} of [{width: 1440, column: 800}, {width: 1100, column: 640}]) {
     test(`at ${width}px: pictures fill the ${column}px column`, async ({page}) => {
       await page.setViewportSize({width, height: 900});
@@ -63,7 +65,16 @@ test.describe('Article view layout (signed out)', () => {
         const item = document.createElement('li');
         item.append(image('icon', 20, 20), ' Portal');
         list.append(item);
-        el.append(paragraph, list);
+        const sized = document.createElement('p');
+        const fixed = image('sized', 160, 90);
+        fixed.setAttribute('width', '120');
+        sized.append(fixed);
+        const line = document.createElement('p');
+        const emoji = document.createElement('span');
+        emoji.className = 'emoji';
+        emoji.append(image('emoji', 32, 32));
+        line.append('Forkana is ', emoji, ' powered');
+        el.append(paragraph, list, sized, line);
       });
       await page.waitForFunction(() => Array.from(document.querySelectorAll<HTMLImageElement>('img[data-test]')).every((img) => img.complete));
       const picture = await page.locator('img[data-test="picture"]').boundingBox();
@@ -71,6 +82,9 @@ test.describe('Article view layout (signed out)', () => {
       expect(picture.height).toBeCloseTo(column * 9 / 16, 0);
       const icon = await page.locator('img[data-test="icon"]').boundingBox();
       expect([icon.width, icon.height]).toEqual([20, 20]);
+      const sized = await page.locator('img[data-test="sized"]').boundingBox();
+      expect([sized.width, sized.height]).toEqual([120, 67.5]);
+      expect(await page.locator('img[data-test="emoji"]').evaluate((img) => getComputedStyle(img).display)).not.toBe('block');
       // the article's text: 16px on 24px lines (the design system's 1.5)
       const text = await content.evaluate((el) => {
         const style = getComputedStyle(el.querySelector('p') ?? el);
