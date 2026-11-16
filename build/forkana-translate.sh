@@ -127,6 +127,7 @@ sync_pr_branch() {
   local git_id=(-c user.name=forkana-translate -c user.email=forkana-translate@localhost)
   if git "${git_id[@]}" merge -q --squash FETCH_HEAD; then
     echo "Continuing the open $PR_BRANCH PR"
+    warn_dropped
     return
   fi
   # On a conflict, keep the base branch's side of the conflicting hunks and
@@ -136,11 +137,23 @@ sync_pr_branch() {
   if git "${git_id[@]}" merge -q --squash -X ours FETCH_HEAD; then
     git checkout HEAD -- "custom/options/locale"
     warn "$PR_BRANCH conflicts with $BASE_BRANCH: continuing it, with $BASE_BRANCH's side of the conflicting lines"
+    warn_dropped
     return
   fi
   warn "$PR_BRANCH can't be merged with $BASE_BRANCH: starting over from $BASE_BRANCH"
   git reset -q --hard HEAD
   restarted=true
+}
+
+# publish rebuilds the branch as one commit of translation files only (the
+# job that pushes takes nothing else from this one): say so when the PR
+# branch changes other files, which the next push drops.
+warn_dropped() {
+  local other
+  other=$(git diff --cached --name-only HEAD -- . ':!custom/translations' ':!custom/options/locale' | tr '\n' ' ')
+  if [ -n "$other" ]; then
+    warn "$PR_BRANCH changes files other than translations, which this run drops from it: ${other% }"
+  fi
 }
 
 cmd_prepare() {
@@ -211,9 +224,15 @@ EOF
 # tools are restricted with `disabled_tools` (see pull-review-crush.yml). A
 # translator only reads files and edits one, so bash, the network tools,
 # sub-agents, LSP, MCP and crush's own tools are all disabled.
+#
+# The config is written to $CRUSH_CONFIG_DIR and mounted over
+# ~/.config/crush inside the sandbox only, so that a local run leaves the
+# user's own crush config alone (and crush doesn't see it).
+CRUSH_CONFIG_DIR="$WORK/crush-config"
 write_crush_config() {
-  mkdir -p "$HOME/.config/crush" "$HOME/.local/share/crush"
-  cat > "$HOME/.config/crush/crush.json" << 'EOF'
+  # Mount points of the sandbox; creating them changes no existing file.
+  mkdir -p "$HOME/.config/crush" "$HOME/.local/share/crush" "$CRUSH_CONFIG_DIR"
+  cat > "$CRUSH_CONFIG_DIR/crush.json" << 'EOF'
 {
   "$schema": "https://charm.land/crush.json",
   "options": {
@@ -238,7 +257,8 @@ EOF
 #     LLM, and only takes the translation files from this one;
 #   - a read-only view of the filesystem, except a private /tmp (crush's
 #     data dir), a private crush state dir, and the one directory holding
-#     the file it translates;
+#     the file it translates; ~/.config/crush is replaced by this script's
+#     crush config;
 #   - tmpfs over the runner temp dir (step scripts, GITHUB_ENV) and over the
 #     runner agent install dirs (registration credentials, when on disk);
 #   - network access, for the inference API.
@@ -269,6 +289,7 @@ setup_sandbox() {
   done
   BWRAP+=(
     --tmpfs "$HOME/.local/share/crush"
+    --ro-bind "$CRUSH_CONFIG_DIR" "$HOME/.config/crush"
     --clearenv
     --setenv PATH "$PATH"
     --setenv HOME "$HOME"
@@ -317,25 +338,32 @@ cmd_translate_one() {
       crush run -q -m "$CRUSH_MODEL" --small-model "$SMALL_MODEL" -D /tmp/crush-data \
       < "$WORK/log/$lang.prompt.txt" > "$log" 2>&1 || status=$?
   fi
-  {
-    echo "::group::$lang: translator output"
-    cat "$log"
-    echo "::endgroup::"
-  }
+  # Workers run in parallel: their warnings go to a file, which
+  # translate_languages prints with the log once they are all done.
+  : > "$log.warnings"
   if [ "$status" -ne 0 ]; then
-    warn "$lang: the translator exited with code $status"
+    warn "$lang: the translator exited with code $status" 2>> "$log.warnings"
   fi
   # The sandbox is gone once crush exits (--die-with-parent, PID
   # namespace), so the file can't change after this check.
   if safe_file "$file"; then
     cp "$file" "$todo"
   else
-    warn "$lang: no usable translated file; keeping the previous one"
+    warn "$lang: no usable translated file; keeping the previous one" 2>> "$log.warnings"
   fi
 }
 
+# Translate the languages, TRANSLATE_JOBS at a time, then print each one's
+# log in turn: groups printed by parallel workers would interleave.
 translate_languages() {
+  local lang
   printf '%s\n' "$@" | xargs -P "$TRANSLATE_JOBS" -n 1 "$0" translate-one
+  for lang in "$@"; do
+    echo "::group::$lang: translator output"
+    cat "$WORK/log/$lang.txt" 2>/dev/null || true
+    echo "::endgroup::"
+    cat "$WORK/log/$lang.txt.warnings" >&2 2>/dev/null || true
+  done
 }
 
 # Merge each language on its own, so that a file the translator broke only
@@ -483,15 +511,17 @@ cmd_apply() {
   echo "Copied $copied translation file(s)"
   "$TOOL" generate
 
-  if git diff --quiet -- custom/; then
+  # Count translations, not files: generated files that differ from HEAD on
+  # their own (only when HEAD's are stale) don't make a translations PR.
+  local changes keys translations langs all remaining strict_ok=true
+  changes=$(changed_keys)
+  if [ -z "$changes" ]; then
     echo "No translation changed"
     output changed false
     return
   fi
   output changed true
 
-  local changes keys translations langs all remaining strict_ok=true
-  changes=$(changed_keys)
   keys=$(cut -f 1 <<< "$changes" | uniq | wc -l | tr -d ' ')
   translations=$(wc -l <<< "$changes" | tr -d ' ')
   langs=$(cut -f 2 <<< "$changes" | sort -u | wc -l | tr -d ' ')
@@ -515,6 +545,8 @@ cmd_apply() {
     echo "Review is optional: native speakers are welcome to comment on their language, especially $REVIEW_LANGUAGES, the least sure ones in #508."
     echo ""
     echo "CI doesn't start by itself on a PR that a workflow pushed with \`GITHUB_TOKEN\`: push a commit to \`$PR_BRANCH\`, or close and reopen this PR, to run it."
+    echo ""
+    echo "Corrections pushed to \`$PR_BRANCH\` are kept: each run rebuilds the branch as one commit on \`$BASE_BRANCH\` that carries over its translation files (\`custom/translations/\`), and only those. Changes to other files are dropped, so make them in another PR."
     if [ "${RESTARTED:-false}" = true ]; then
       echo ""
       echo "**This PR was restarted from \`$BASE_BRANCH\`**: its previous commit couldn't be merged with \`$BASE_BRANCH\`, so the translations and corrections it held were dropped. They are still in that commit, ${PR_SHA:-in the history of this PR}."
