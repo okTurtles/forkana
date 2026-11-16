@@ -95,10 +95,13 @@
     padding: 6px 12px;
   }
 
-  /* Navbar 8190:187611: the logo's group (Frame 569, 114px) is 24px before the items,
-     whose labels start 12px inside them; the items touch (Frame 572, gap 0) */
+  /* Navbar 8190:187611: the nav items start 24px after the logo group (Frame 569),
+     114px wide from the logo's left edge, i.e. from the logo item's left padding; the
+     items touch (Frame 572, gap 0) */
   #navbar #navbar-logo {
-    margin-right: calc(114px + 24px - 95px - var(--navbar-item-padding-x) - var(--navbar-item-gap));
+    box-sizing: border-box;
+    min-width: calc(var(--navbar-item-padding-x) + 114px);
+    margin-right: calc(24px - var(--navbar-item-gap));
   }
 
   #navbar .navbar-nav-item + .navbar-nav-item {
@@ -171,6 +174,6 @@
 }
 
 #navbar-change-requests .navbar-counter-primary {
-  background: var(--color-muted-text);
-  color: var(--color-body);
+  background: var(--color-counter-primary-bg);
+  color: var(--color-counter-primary-fg);
 }
