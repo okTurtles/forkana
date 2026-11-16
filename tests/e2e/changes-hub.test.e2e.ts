@@ -32,7 +32,7 @@ test.describe('Change requests hub (#94)', () => {
 
     const entry = page.locator('#navbar-change-requests');
     await expect(entry).toHaveAttribute('href', '/pulls');
-    await expect(entry.locator('.navbar-item-label')).toHaveText('Change request');
+    await expect(entry.locator('.navbar-item-label')).toHaveText('Change requests');
     await expect(entry.locator('.navbar-counter')).toHaveText(/^[1-9]\d*$/);
     await expect(entry).not.toHaveClass(/navbar-item-current/);
 

@@ -46,6 +46,8 @@
   --color-primary-hover: #6558FB;
   --color-primary-active: #7C73FC;
   --color-secondary-nav-bg: #181c20;
+  /* #532: Primer's dark control/transparent/bgColor/hover (#656c76 at 20%) */
+  --color-nav-hover-bg: #656c7633;
 
   --color-hover: #4E40FA19;
   --color-muted: #1f2428;
@@ -180,6 +182,8 @@
     --color-primary-hover: #6558FB;
     --color-primary-active: #7C73FC;
     --color-secondary-nav-bg: #181c20;
+    /* #532: Primer's dark control/transparent/bgColor/hover (#656c76 at 20%) */
+    --color-nav-hover-bg: #656c7633;
 
     --color-hover: #4E40FA19;
     --color-muted: #1f2428;

@@ -14,18 +14,6 @@
 
 /* ── #386: navbar polish ────────────────────────────────────────────────── */
 
-/* Item 18: the layout sets EVERY entry in the left navigation — Change
-   Requests and Explore alike — in semibold, not regular. */
-#navbar .navbar-left > .item {
-  font-weight: var(--font-weight-semibold);
-}
-
-/* Item 19: the "+" link and the profile dropdown take the same grey hover as
-   every other navbar item instead of staying white. */
-#navbar .item.ui.dropdown:hover {
-  background: var(--color-nav-hover-bg);
-}
-
 /* Item 20: the profile picture is a circle, as in the layout, with a thin
    grey ring so it keeps an edge on light backgrounds. */
 #navbar .ui.avatar {
@@ -65,35 +53,124 @@
   border-radius: 8px;
 }
 
-/* ── #94: the "Change request" entry ───────────────────────────────────────
-   Figma "09 · Changes hub" (Received 7368:274516): Button 7368:274543 puts its
-   CounterLabel (6484:44075) 8px after the Inter 600 14/20 label — an 18px pill,
-   0 6px, #818b98 at 12% under a #25292e number — and, on the hub, underlines
-   the label with a 1px rule right under its 20px line (Frame 1, I7368:274543;
-   40000504:108946, a 109×21 box with a 1px bottom stroke) instead of filling
-   the item. The counter is the open change requests to the user's articles. */
-#navbar-change-requests {
+/* ── #532: the states of the navbar's items ───────────────────────────────
+   Figma "Navbar – how it works (for dev)" (Design System file, 40001058:1049) and
+   the Navbar variants (8190:187611 Change requests + unread, 40000262:251 + read,
+   8190:187738 Explore, 8359:51063 none, 8494:3283 signed out).
+   Change requests and Explore are invisible Buttons (component 30258:5961): 32px
+   tall, 6px 12px, 8px between label and counter, 6px corners, Inter 14/20.
+   - Normal (Button 40001058:1053): fgColor/muted, regular, no background.
+   - Hover (40001058:1071): the grey --color-nav-hover-bg, the text turns
+     fgColor/default. No hover on touch screens.
+   - Keyboard focus (40001058:1091, focus variant 30258:5996): a 2px #b3a9ff ring
+     inside the item and a 1px line under the label (its "Frame 8"), always visible.
+   - Current page (40001058:1109): Inter 600 fgColor/default, no background and no
+     line under it (the nav has no line, so it never looks like the page's tabs);
+     aria-current="page" in the template. Current + hover: the same grey.
+   On a phone the open menu's current page is bold too. */
+#navbar .navbar-nav-item {
   gap: 8px;
-}
-
-#navbar-change-requests .navbar-item-label {
+  color: var(--color-muted-text);
+  font-size: 14px;
+  font-weight: var(--font-weight-normal);
   line-height: 20px;
+  border-radius: 6px;
 }
 
-#navbar-change-requests.navbar-item-current .navbar-item-label {
-  box-shadow: inset 0 -1px 0 currentcolor;
-  padding-bottom: 1px;
+#navbar .navbar-nav-item.navbar-item-current {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
 }
 
+@media (hover: hover) {
+  #navbar a.navbar-nav-item:hover {
+    color: var(--color-text-primary);
+  }
+}
+
+@media (min-width: 768px) {
+  #navbar .navbar-nav-item {
+    min-height: 32px;
+    height: 32px;
+    padding: 6px 12px;
+  }
+
+  /* Navbar 8190:187611: the logo's group (Frame 569, 114px) is 24px before the items,
+     whose labels start 12px inside them; the items touch (Frame 572, gap 0) */
+  #navbar #navbar-logo {
+    margin-right: calc(114px + 24px - 95px - var(--navbar-item-padding-x) - var(--navbar-item-gap));
+  }
+
+  #navbar .navbar-nav-item + .navbar-nav-item {
+    margin-left: calc(-1 * var(--navbar-item-gap));
+  }
+}
+
+/* the focus ring of every navbar item: Button focus 30258:5996 (#b3a9ff 2px inside,
+   the theme's --color-button-focus-ring) */
+#navbar .navbar-left > .item:focus-visible,
+#navbar .navbar-right > .item:focus-visible,
+#navbar .navbar-mobile-right > .item:focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+#navbar #navbar-explore:focus-visible,
+#navbar #navbar-change-requests:focus-visible .navbar-item-label {
+  text-decoration: underline 1px;
+  text-underline-offset: 4px;
+}
+
+/* the logo has no hover effect */
+#navbar #navbar-logo:hover {
+  background: none;
+}
+
+/* Bell, + and avatar are invisible IconButtons (component 30468:6042, hover
+   30468:5874 in "IconButton – invisible" 40001049:126): 32px, 6px corners, the same
+   grey on hover as the nav items. Each has a tooltip (data-tooltip-content). */
+@media (min-width: 768px) {
+  #navbar .navbar-right > .item {
+    --navbar-item-height: 32px;
+    border-radius: 6px;
+  }
+
+  #navbar .navbar-right > a.item:not(.navbar-auth-item) {
+    justify-content: center;
+    padding: 8px;
+  }
+}
+
+@media (hover: hover) {
+  #navbar .item.ui.dropdown:hover {
+    background: var(--color-nav-hover-bg);
+  }
+}
+
+/* ── #94, #532: the counter on "Change requests" ─────────────────────────────
+   The open change requests to the user's articles, as the design system's
+   CounterLabel, unchanged (18px pill, 0 6px, Inter 600 12/18): primary
+   (18959:64968, #59636e, white number) when one of them has an unread notification
+   ("something new"), secondary (18959:64969, #818b98 at 12%, #1f2328 number)
+   otherwise. Hover doesn't change it; no counter at 0 (the template). */
 #navbar-change-requests .navbar-counter {
   display: inline-flex;
   align-items: center;
   height: 18px;
   padding: 0 6px;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--color-button-text-disabled) 12%, transparent);
-  color: var(--color-button-text);
-  font-size: 14px;
+  font-size: 12px;
   line-height: 18px;
   font-weight: var(--font-weight-semibold);
+}
+
+#navbar-change-requests .navbar-counter-secondary {
+  background: color-mix(in srgb, var(--color-button-text-disabled) 12%, transparent);
+  color: var(--color-text-primary);
+}
+
+#navbar-change-requests .navbar-counter-primary {
+  background: var(--color-muted-text);
+  color: var(--color-body);
 }

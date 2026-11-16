@@ -87,15 +87,24 @@
   border-radius: 4px;
 }
 
-#navbar .item.active {
+/* #532: no background marks the current page or an open item, the hover is the only
+   background in the nav (custom/public/assets/css/navbar.custom.css marks the current
+   page), and there is no hover on touch screens */
+#navbar .ui.dropdown .menu > .item.active {
   background: var(--color-active);
 }
 
 #navbar a.item:hover,
 #navbar button.item:hover {
-  background: var(--color-nav-hover-bg);
-  color: var(--color-nav-text);
   text-decoration: none;
+}
+
+@media (hover: hover) {
+  #navbar a.item:hover,
+  #navbar button.item:hover {
+    background: var(--color-nav-hover-bg);
+    color: var(--color-nav-text);
+  }
 }
 
 /* Sign In / Sign Up buttons in the signed-out navbar */
@@ -184,11 +193,6 @@
   #navbar #mobile-notifications-icon {
     margin-right: 6px;
   }
-}
-
-#navbar a.item:hover .notification_count,
-#navbar a.item:hover .header-stopwatch-dot {
-  border-color: var(--color-nav-hover-bg);
 }
 
 #navbar a.item .notification_count,

@@ -83,6 +83,23 @@ func openReceivedChangeRequestCount(ctx *context.Context) int64 {
 	return count
 }
 
+// hasUnreadReceivedChangeRequest tells whether the navbar's "Change requests" counter
+// shows "something new" (#532): one of the change requests it counts has an unread
+// notification for the user. Then the counter is CounterLabel primary, else secondary.
+func hasUnreadReceivedChangeRequest(ctx *context.Context) bool {
+	if ctx.Doer == nil || unit.TypePullRequests.UnitGlobalDisabled() {
+		return false
+	}
+	unread, err := HasUnreadReceivedChangeRequests(ctx, ctx.Doer)
+	if err != nil {
+		if !errors.Is(err, goctx.Canceled) {
+			log.Warn("Unable to look for unread change requests received by user:%-v: %v", ctx.Doer, err)
+		}
+		return false
+	}
+	return unread
+}
+
 type pageGlobalDataType struct {
 	IsSigned    bool
 	IsSiteAdmin bool
@@ -90,6 +107,7 @@ type pageGlobalDataType struct {
 	GetNotificationUnreadCount        func() int64
 	GetActiveStopwatch                func() *StopwatchTmplInfo
 	GetOpenReceivedChangeRequestCount func() int64
+	GetHasUnreadReceivedChangeRequest func() bool
 }
 
 func PageGlobalData(ctx *context.Context) {
@@ -99,5 +117,6 @@ func PageGlobalData(ctx *context.Context) {
 	data.GetNotificationUnreadCount = sync.OnceValue(func() int64 { return notificationUnreadCount(ctx) })
 	data.GetActiveStopwatch = sync.OnceValue(func() *StopwatchTmplInfo { return getActiveStopwatch(ctx) })
 	data.GetOpenReceivedChangeRequestCount = sync.OnceValue(func() int64 { return openReceivedChangeRequestCount(ctx) })
+	data.GetHasUnreadReceivedChangeRequest = sync.OnceValue(func() bool { return hasUnreadReceivedChangeRequest(ctx) })
 	ctx.Data["PageGlobalData"] = data
 }

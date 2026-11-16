@@ -21,6 +21,10 @@
   --color-primary-hover: #3C2EED;
   --color-primary-active: #3328D8;
   --color-secondary-nav-bg: #fff;
+  /* #532: the hover of the navbar's items, logo excepted (the design system's
+     control/transparent/bgColor/hover, #818b98 at 10%: Figma "Navbar – how it works
+     (for dev)" 40001058:1049, Button 40001058:1071), the only background in the nav */
+  --color-nav-hover-bg: #818b981a;
 
   --color-hover: #E9E7FF66;
   --color-muted: #F6F8FA;
