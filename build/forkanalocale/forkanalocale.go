@@ -360,6 +360,12 @@ func FormatTranslations(lang string, fk *Forkana, translations *File) []byte {
 // Todo returns a fragment to translate: the Forkana keys whose translation is
 // missing or stale (its English changed), with the English as value.
 func Todo(fk *Forkana, translations *File) ([]byte, int) {
+	entries := TodoEntries(fk, translations)
+	return Fragment(entries), len(entries)
+}
+
+// TodoEntries returns the entries of Todo's fragment, in en-US order.
+func TodoEntries(fk *Forkana, translations *File) []Entry {
 	var entries []Entry
 	for _, k := range fk.Keys {
 		if t, ok := translations.Get(k.FullKey()); ok && t.Value != "" && t.English == k.Value {
@@ -367,9 +373,54 @@ func Todo(fk *Forkana, translations *File) ([]byte, int) {
 		}
 		entries = append(entries, Entry{Section: k.Section, Key: k.Key, Value: k.Value, English: k.Value})
 	}
+	return entries
+}
+
+// Fragment writes entries the way Todo does: grouped by section, each with
+// its "# en:" line.
+func Fragment(entries []Entry) []byte {
 	var out bytes.Buffer
 	writeKeys(&out, entries)
-	return out.Bytes(), len(entries)
+	return out.Bytes()
+}
+
+// LimitTodo keeps at most limit strings of the per-language todo entries
+// (limit <= 0 keeps them all). It goes key by key in en-US order and keeps
+// every language of a key, so that a kept English string gets translated in
+// all languages at once. The first key is always kept, even when its
+// languages alone exceed limit, so that a translation pass always progresses.
+func LimitTodo(fk *Forkana, todo map[string][]Entry, limit int) map[string][]Entry {
+	if limit <= 0 {
+		return todo
+	}
+	need := map[string]int{} // full key -> number of languages to translate it into
+	for _, entries := range todo {
+		for _, e := range entries {
+			need[e.FullKey()]++
+		}
+	}
+	kept := map[string]bool{}
+	n := 0
+	for _, k := range fk.Keys {
+		langs := need[k.FullKey()]
+		if langs == 0 {
+			continue
+		}
+		if n > 0 && n+langs > limit {
+			break
+		}
+		kept[k.FullKey()] = true
+		n += langs
+	}
+	limited := map[string][]Entry{}
+	for lang, entries := range todo {
+		for _, e := range entries {
+			if kept[e.FullKey()] {
+				limited[lang] = append(limited[lang], e)
+			}
+		}
+	}
+	return limited
 }
 
 // Merge returns translations with the entries of a translated fragment (as
@@ -403,7 +454,11 @@ func Merge(fk *Forkana, translations, fragment *File) (merged *File, untranslate
 var (
 	// A format verb: %s, %d, %[1]s, %-5d, %04[1]X (Go also takes the index after the width).
 	placeholderRe = regexp.MustCompile(`%(?:\[\d+\])?[-+#0]*\d*(?:\.\d+)?(?:\[\d+\])?[a-zA-Z%]`)
-	tagRe         = regexp.MustCompile(`</?[a-zA-Z][a-zA-Z0-9]*`)
+	// A whole HTML tag, attributes included, up to its ">" (or the end of the
+	// string, for a tag left open): Gitea renders some strings as HTML
+	// (TrHTML), so a translation must not add an attribute (onclick, href...)
+	// to a tag of the English, nor change one.
+	tagRe = regexp.MustCompile(`</?[a-zA-Z][a-zA-Z0-9]*[^>]*>?`)
 )
 
 // Placeholders returns the format verbs (%s, %[1]d, ...) of a string: the
@@ -422,7 +477,8 @@ func Placeholders(s string) []string {
 	return append(positional, indexed...)
 }
 
-// Tags returns the sorted HTML tag openings and closings (<a, </a, ...) of a string.
+// Tags returns the sorted HTML tags of a string, with their attributes
+// (<a href="%s">, </a>, ...).
 func Tags(s string) []string {
 	m := tagRe.FindAllString(s, -1)
 	sort.Strings(m)

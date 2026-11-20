@@ -160,30 +160,40 @@ func (r *Repository) Check() (errs, warnings []string, err error) {
 }
 
 // Todo writes <dir>/locale_<lang>.ini for every language with strings to
-// translate, and returns how many each has.
-func (r *Repository) Todo(dir string) (map[string]int, error) {
+// translate, and returns how many each has. It writes at most limit strings in
+// all (see LimitTodo; limit <= 0 writes them all). total is how many strings
+// there are to translate, written or not.
+func (r *Repository) Todo(dir string, limit int) (counts map[string]int, total int, err error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	counts := map[string]int{}
+	todo := map[string][]Entry{}
 	for _, lang := range r.Languages {
 		tr, err := r.Translations(lang)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		fragment, n := Todo(r.Forkana, tr)
+		if entries := TodoEntries(r.Forkana, tr); len(entries) > 0 {
+			todo[lang] = entries
+			total += len(entries)
+		}
+	}
+	todo = LimitTodo(r.Forkana, todo, limit)
+	counts = map[string]int{}
+	for _, lang := range r.Languages {
 		path := filepath.Join(dir, FileName(lang))
-		if n == 0 {
+		entries := todo[lang]
+		if len(entries) == 0 {
 			_ = os.Remove(path)
 			continue
 		}
-		counts[lang] = n
+		counts[lang] = len(entries)
 		header := fmt.Sprintf("# Translate each value into %s, keeping the \"# en:\" lines. Then run: go run build/forkana-locales.go merge %s\n", lang, dir)
-		if err := os.WriteFile(path, append([]byte(header), fragment...), 0o644); err != nil {
-			return nil, err
+		if err := os.WriteFile(path, append([]byte(header), Fragment(entries)...), 0o644); err != nil {
+			return nil, 0, err
 		}
 	}
-	return counts, nil
+	return counts, total, nil
 }
 
 // Merge merges the translated <dir>/locale_<lang>.ini fragments into
