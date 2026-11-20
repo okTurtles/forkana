@@ -11,11 +11,12 @@
 #   - CI doesn't run by itself on a PR opened or pushed with GITHUB_TOKEN
 #     (GitHub's rule against workflow loops): to run it on the translations
 #     PR, push a commit to `chore/translations`, or close and reopen the PR.
-#   - The secrets and variables of pull-review-crush.yml are reused:
-#     OPENROUTER_API_KEY / ZAI_API_KEY, and the REVIEW_PROVIDER / REVIEW_MODEL
-#     / REVIEW_SMALL_MODEL variables, unless TRANSLATE_PROVIDER /
-#     TRANSLATE_MODEL / TRANSLATE_SMALL_MODEL are set. TRANSLATE_MAX_STRINGS
-#     sets the cap per run (default: 300).
+#   - The secrets and variables of the AI review (pr-review.yml, which calls
+#     https://github.com/okTurtles/libcheloniajs/blob/main/.github/workflows/pull-review-crush.yml)
+#     are reused: OPENROUTER_API_KEY / ZAI_API_KEY, and the REVIEW_PROVIDER /
+#     REVIEW_MODEL variables, unless TRANSLATE_PROVIDER / TRANSLATE_MODEL /
+#     TRANSLATE_SMALL_MODEL are set. TRANSLATE_MAX_STRINGS sets the cap per
+#     run (default: 300). The kimi provider of the review isn't supported here.
 #
 # Security: the LLM runs in the `translate` job, whose GITHUB_TOKEN is
 # read-only, inside a bubblewrap sandbox that hides it anyway (see
@@ -125,6 +126,29 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: build/forkana-translate.sh prepare
 
+      # crush loads config and skills from the directory it runs in
+      # (lookupConfigs and ProjectSkillsDir in crush's internal/config/load.go):
+      # .crushrc and crushrc are Bash that runs at startup; .crush.json,
+      # crush.json and .crush/crush.json merge over our config; skills in
+      # .agents, .crush, .claude and .cursor replace global skills of the same
+      # name. The repository has none of these files, so any that is here came
+      # from a merged branch: stop before crush runs with the API keys. Our own
+      # crush config is outside the checkout, and git ls-files lists only
+      # tracked files, so the check does not touch it. Inline, not a script in
+      # the repository, because chore/translations could change that script.
+      - name: Refuse crush config files
+        run: |
+          found=$(git ls-files -- \
+            ':(glob)**/.crushrc' ':(glob)**/crushrc' \
+            ':(glob)**/.crush.json' ':(glob)**/crush.json' \
+            ':(glob)**/.crush' ':(glob)**/.crush/**' \
+            ':(glob)**/.agents/skills/**' ':(glob)**/.claude/skills/**' ':(glob)**/.cursor/skills/**')
+          if [ -n "$found" ]; then
+            echo "::error::Files that crush would load as config or skills; refusing to run crush. Remove them:"
+            echo "$found"
+            exit 1
+          fi
+
       - name: Resolve provider settings
         id: provider
         if: steps.prepare.outputs.todo == 'true'
@@ -133,7 +157,8 @@ jobs:
             echo "::error::Invalid provider or model name"
             exit 1
           fi
-          # The default models of pull-review-crush.yml.
+          # The default models of libcheloniajs's pull-review-crush.yml
+          # (https://github.com/okTurtles/libcheloniajs/blob/main/.github/workflows/pull-review-crush.yml).
           case "$TRANSLATE_PROVIDER" in
             openrouter)
               PREFIX=openrouter
@@ -171,7 +196,8 @@ jobs:
 
           # Ubuntu 24.04 restricts unprivileged user namespaces with
           # AppArmor, which blocks bwrap: lift the restriction only if bwrap
-          # doesn't work as-is (see pull-review-crush.yml).
+          # doesn't work as-is (see "Install crush and bubblewrap" in
+          # https://github.com/okTurtles/libcheloniajs/blob/main/.github/workflows/pull-review-crush.yml).
           if ! bwrap --unshare-all --die-with-parent --ro-bind / / --dev /dev --proc /proc -- true; then
             echo "bwrap blocked by AppArmor userns restriction; lifting kernel.apparmor_restrict_unprivileged_userns"
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0

@@ -221,8 +221,9 @@ EOF
 }
 
 # Tool access: `crush run` auto-approves every permission request, so the
-# tools are restricted with `disabled_tools` (see pull-review-crush.yml). A
-# translator only reads files and edits one, so bash, the network tools,
+# tools are restricted with `disabled_tools` (see libcheloniajs's
+# pull-review-crush.yml, linked below). A translator only reads files and
+# edits one, so bash, the network tools,
 # sub-agents, LSP, MCP and crush's own tools are all disabled.
 #
 # The config is written to $CRUSH_CONFIG_DIR and mounted over
@@ -248,7 +249,8 @@ EOF
 }
 
 # The sandbox of every crush run (see "Run agentic review" in
-# pull-review-crush.yml, which this follows). The strings to translate come
+# https://github.com/okTurtles/libcheloniajs/blob/main/.github/workflows/pull-review-crush.yml,
+# which this follows). The strings to translate come
 # from the base branch, but a merged en-US string could still carry a prompt
 # injection, so crush (and anything it spawns) gets:
 #   - an environment with ONLY the variables below (--clearenv): no GitHub
@@ -261,6 +263,10 @@ EOF
 #     crush config;
 #   - tmpfs over the runner temp dir (step scripts, GITHUB_ENV) and over the
 #     runner agent install dirs (registration credentials, when on disk);
+#   - a tmpfs over /run (and so /var/run, a link to it), as in the shared
+#     review workflow: the runner user is in the docker group, and a
+#     read-only mount doesn't stop a connection to /run/docker.sock, which
+#     gives root on the runner. Only the DNS config file is bound back;
 #   - network access, for the inference API.
 # OPENROUTER_API_KEY / ZAI_API_KEY are passed in, because crush reads its
 # provider's key from the environment, so their exfiltration stays possible
@@ -276,7 +282,15 @@ setup_sandbox() {
     --ro-bind / /
     --dev /dev --proc /proc
     --tmpfs /tmp
+    --tmpfs /run
   )
+  # crush needs DNS, and on Ubuntu /etc/resolv.conf links to the
+  # systemd-resolved stub file in /run: bind that one file back, read-only.
+  local resolv_conf
+  resolv_conf=$(readlink -f /etc/resolv.conf)
+  case "$resolv_conf" in
+    /run/*) BWRAP+=(--ro-bind "$resolv_conf" "$resolv_conf") ;;
+  esac
   if [ -n "${RUNNER_TEMP:-}" ]; then
     BWRAP+=(--tmpfs "$RUNNER_TEMP")
   fi
@@ -309,6 +323,9 @@ preflight_sandbox() {
     [ -z "$GH_TOKEN" ] && [ -z "$GITHUB_TOKEN" ] || { echo "a GitHub token is visible inside the sandbox"; fail=1; }
     if git config --get http.https://github.com/.extraheader >/dev/null 2>&1; then
       echo "persisted git credentials visible inside the sandbox"; fail=1
+    fi
+    if [ -e /run/docker.sock ] || [ -e /var/run/docker.sock ]; then
+      echo "the docker socket is reachable inside the sandbox"; fail=1
     fi
     for dir in "$@"; do
       if [ -e "$dir/.credentials" ] || [ -e "$dir/.credentials_rsaparams" ]; then
