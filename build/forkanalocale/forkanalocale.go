@@ -454,7 +454,11 @@ func Merge(fk *Forkana, translations, fragment *File) (merged *File, untranslate
 var (
 	// A format verb: %s, %d, %[1]s, %-5d, %04[1]X (Go also takes the index after the width).
 	placeholderRe = regexp.MustCompile(`%(?:\[\d+\])?[-+#0]*\d*(?:\.\d+)?(?:\[\d+\])?[a-zA-Z%]`)
-	tagRe         = regexp.MustCompile(`</?[a-zA-Z][a-zA-Z0-9]*`)
+	// A whole HTML tag, attributes included, up to its ">" (or the end of the
+	// string, for a tag left open): Gitea renders some strings as HTML
+	// (TrHTML), so a translation must not add an attribute (onclick, href...)
+	// to a tag of the English, nor change one.
+	tagRe = regexp.MustCompile(`</?[a-zA-Z][a-zA-Z0-9]*[^>]*>?`)
 )
 
 // Placeholders returns the format verbs (%s, %[1]d, ...) of a string: the
@@ -473,7 +477,8 @@ func Placeholders(s string) []string {
 	return append(positional, indexed...)
 }
 
-// Tags returns the sorted HTML tag openings and closings (<a, </a, ...) of a string.
+// Tags returns the sorted HTML tags of a string, with their attributes
+// (<a href="%s">, </a>, ...).
 func Tags(s string) []string {
 	m := tagRe.FindAllString(s, -1)
 	sort.Strings(m)
