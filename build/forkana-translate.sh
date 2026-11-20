@@ -398,6 +398,57 @@ merge_and_check() {
   done
 }
 
+# drop_keys <keys file> < fragment: the fragment without the entries (and
+# their "# en:" lines) of the full keys listed in keys file.
+drop_keys() {
+  awk '
+    NR == FNR { drop[$0] = 1; next }
+    /^\[.*\]$/ { section = substr($0, 2, length($0) - 2); print; next }
+    /^# en: / { held = $0; next }
+    {
+      i = index($0, " = ")
+      if (i) {
+        key = substr($0, 1, i - 1)
+        if ((section == "" ? key : section "." key) in drop) { held = ""; next }
+      }
+      if (held != "") print held
+      held = ""
+      print
+    }
+  ' "$1" -
+}
+
+# After the retry, a translation the check still rejects (placeholders, HTML,
+# quotes...) must not stay merged: its "# en:" line is the current English,
+# so todo would never list it again, and the PR's locale check would fail.
+# Put back each language's translation file as it was before this run, and
+# merge its fragment again without the rejected keys: they stay missing or
+# stale, so the next run translates them again. When the check still fails
+# for a language after that (a problem not tied to one key), leave the
+# language's translation file as it was before this run.
+drop_rejected() {
+  local lang keys fragment
+  "$TOOL" check > "$WORK/check.log" 2>&1 || true
+  for lang in "$@"; do
+    grep "^error: $lang: " "$WORK/check.log" | sed -E "s/^error: $lang: ([^: ]+): .*/\\1/" | sort -u > "$WORK/rejected-$lang.txt" || true
+    [ -s "$WORK/rejected-$lang.txt" ] || continue
+    keys=$(tr '\n' ' ' < "$WORK/rejected-$lang.txt")
+    warn "$lang: leaving out the translations the check still rejects after the retry, for the next run: ${keys% }"
+    fragment="$WORK/merge/$lang/locale_$lang.ini"
+    drop_keys "$WORK/rejected-$lang.txt" < "$WORK/todo/locale_$lang.ini" > "$fragment"
+    cp "$WORK/before/locale_$lang.ini" "custom/translations/locale_$lang.ini"
+    "$TOOL" merge "$WORK/merge/$lang" > /dev/null 2>&1 || true
+  done
+  "$TOOL" check > "$WORK/check.log" 2>&1 || true
+  for lang in "$@"; do
+    if grep -q "^error: $lang: " "$WORK/check.log"; then
+      warn "$lang: the check still fails; leaving this language as it was before this run"
+      cp "$WORK/before/locale_$lang.ini" "custom/translations/locale_$lang.ini"
+    fi
+  done
+  "$TOOL" generate > /dev/null
+}
+
 cmd_translate() {
   [ -x "$TOOL" ] || build_tool
   local langs retry lang
@@ -413,7 +464,12 @@ cmd_translate() {
     setup_sandbox
     preflight_sandbox
   fi
-  rm -rf "$WORK/problems"
+  rm -rf "$WORK/problems" "$WORK/before"
+  # The translation files as this run found them, for drop_rejected.
+  mkdir -p "$WORK/before"
+  for lang in "${langs[@]}"; do
+    cp "custom/translations/locale_$lang.ini" "$WORK/before/"
+  done
   echo "Translating $(strings_in "$WORK/todo"/locale_*.ini) string(s) into ${#langs[@]} language(s)"
   translate_languages "${langs[@]}"
   merge_and_check "${langs[@]}"
@@ -434,6 +490,7 @@ cmd_translate() {
       warn "$lang: problems left after the retry (listed in the PR)"
     fi
   done
+  drop_rejected "${langs[@]}"
   if ! "$TOOL" check -strict > "$WORK/check-strict.log" 2>&1; then
     warn "the strict locale check still fails; the PR lists the problems"
   fi
