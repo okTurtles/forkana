@@ -371,3 +371,36 @@
   line-height: 20px;
   text-align: center;
 }
+
+/* The sign in / sign up card in the theme's colours (Sign in/up 7368:264604; its dark
+   counterpart in the "#336 Dark mode WIP" page, 5629:47688): the title Inter 700 20/32,
+   the card a 1px --color-card-border with 12px corners on the page's surface, the labels
+   Inter 600 14/20, the inputs .forkana-input and the submit .forkana-btn-primary (40px).
+   They were white-on-white text and a white card in the dark theme. */
+.auth-title,
+.auth-label {
+  color: var(--color-text-primary);
+}
+
+.auth-muted {
+  color: var(--color-muted-text);
+}
+
+.auth-card {
+  border: 1px solid var(--color-card-border);
+  background: var(--color-surface);
+}
+
+.auth-or {
+  background: var(--color-surface);
+  color: var(--color-muted-text);
+}
+
+.auth-or-rule {
+  background: var(--color-border-light);
+}
+
+/* a field the server refused (Err_UserName, Err_Password…): Primer's danger border */
+.error > .forkana-input.forkana-input {
+  border-color: var(--color-danger-fg);
+}

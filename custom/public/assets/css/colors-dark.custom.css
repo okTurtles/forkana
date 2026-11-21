@@ -96,6 +96,8 @@
   --color-button-primary-border: #f0f6fc1a;
   /* the landing title in the dark Landing frame (Figma 5629:47735) */
   --color-home-title: #f0f6fc;
+  /* the sign-in card of the dark Sign in/up frame (5629:47704, #3d444d): the dark border */
+  --color-card-border: #30363d;
 
   /* Border colors */
   --color-border: #30363d;
@@ -237,6 +239,7 @@
     --color-button-primary-border: #f0f6fc1a;
     /* the landing title in the dark Landing frame (Figma 5629:47735) */
     --color-home-title: #f0f6fc;
+    --color-card-border: #30363d;
 
     /* Border colors */
     --color-border: #30363d;

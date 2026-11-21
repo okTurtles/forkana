@@ -83,6 +83,9 @@
   --color-button-primary-border: #1f232826;
   /* the landing title "What's on your mind?" (Figma 6313:56405) */
   --color-home-title: #000000;
+  /* the border of the sign in / sign up card (Sign in/up 7368:264604: #d1d9e0 at 70%) and of
+     the other one-card pages that follow it (web_src/css/user.css) */
+  --color-card-border: #d1d9e0b3;
 
   /* Border colors */
   --color-border: #d0d7de;
