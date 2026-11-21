@@ -404,3 +404,149 @@
 .error > .forkana-input.forkana-input {
   border-color: var(--color-danger-fg);
 }
+
+/* ── The other one-card auth pages, in the sign-in card's look ────────────────
+   Forgot password, reset password, activate, prohibited login, two-factor and its
+   scratch code, the passkey prompt and the forced password change have no Figma frame.
+   They keep Gitea's markup (a ".ui.top.attached.header" over a ".ui.attached.segment")
+   and take the look of the designed sign-in page (Sign in/up 7368:264604): the title
+   centred above the card in Inter 700 20/32, 16px over a 378px card with 12px corners,
+   24px inside, a --color-card-border outline; .forkana-input fields under Inter 600
+   14/20 labels and the 40px .forkana-btn-primary. The custom sign in / sign up templates
+   use none of these Fomantic classes, so they are not touched. */
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.page.grid > .column {
+  max-width: calc(378px + 2 * 16px);
+  margin: 0 auto;
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) form.ui.form,
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.page.grid > .column > .ui.top.attached.header {
+  max-width: none;
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.top.attached.header {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 20px;
+  line-height: 32px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  text-align: center;
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.top.attached.header + .ui.attached.segment {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 24px;
+  border: 1px solid var(--color-card-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+/* Fomantic spaces the fields with margins; the card's gap does it instead */
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment > :is(.field, p, .ui.message, .flash-message, details) {
+  margin: 0;
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment > .divider {
+  display: none;
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment .center {
+  color: var(--color-muted-text);
+  text-align: center;
+}
+
+/* the labels (FormControl.Label 641:53417): above the field, Inter 600 14/20 */
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.form .field > label {
+  display: block;
+  width: auto;
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+/* the fields (TextInput 641:53408), as .forkana-input */
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.form .field > input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.form details input:not([type="checkbox"], [type="radio"], [type="hidden"]) {
+  width: 100%;
+  height: 32px;
+  padding: 0 7px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: inset 0 1px 0 #1f23280a;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.form .field > input:focus {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.form .field.error > input {
+  border-color: var(--color-danger-fg);
+  background: var(--color-surface);
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.form .field > input:disabled {
+  background: var(--color-input-readonly-bg);
+  box-shadow: none;
+  opacity: 1;
+}
+
+/* the actions: the full-width primary button of the sign-in card (Button 7368:264638,
+   40px), a link beside it (use a scratch code) centred under it */
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment > .inline.field:has(> .ui.primary.button) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment .ui.primary.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 40px;
+  margin: 0;
+  padding: 0 15px;
+  border: 1px solid var(--color-button-primary-border);
+  border-radius: 6px;
+  background: var(--color-primary);
+  box-shadow: 0 1px 0 #1f23280a;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-contrast);
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment .ui.primary.button:hover {
+  background: var(--color-primary-hover);
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment .ui.primary.button:active {
+  background: var(--color-primary-active);
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment .ui.primary.button:focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: -2px;
+}
+
+.page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment a:not(.ui.button) {
+  color: var(--color-primary);
+}
