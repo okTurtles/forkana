@@ -31,6 +31,7 @@ import (
 	"code.gitea.io/gitea/routers/web/explore"
 	"code.gitea.io/gitea/routers/web/feed"
 	"code.gitea.io/gitea/routers/web/healthcheck"
+	"code.gitea.io/gitea/routers/web/help"
 	"code.gitea.io/gitea/routers/web/misc"
 	"code.gitea.io/gitea/routers/web/org"
 	org_setting "code.gitea.io/gitea/routers/web/org/setting"
@@ -605,6 +606,8 @@ func registerWebRoutes(m *web.Router) {
 	}, reqSignIn)
 
 	m.Get("/feeds", reqSignIn, user.Feeds)
+	// #541: Forkana's help pages; "help" is a reserved username for them
+	m.Get("/help/what-can-be-reported", optSignIn, help.WhatCanBeReported)
 	// #94: the navbar's "Change request" entry opens the change requests hub
 	// (Received / Sent / Mentions) in place of Gitea's pull request dashboard
 	m.Get("/pulls", reqSignIn, user.ChangeRequests)

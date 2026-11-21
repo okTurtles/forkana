@@ -1,0 +1,22 @@
+{{/* "Example / Content warning" (8159:1011): an article excerpt whose image is blurred behind a
+     warning until the reader shows it, for this visit only (help-page.ts). Figma draws the
+     excerpt hidden (8159:1013) and shown (8159:1026); here they are the two states of one example. */}}
+<div class="help-cw-example">
+	<div class="help-cw-label">{{ctx.Locale.Tr "help.report.example_label"}}</div>
+	<div class="help-cw-excerpt">
+		<p>{{ctx.Locale.Tr "help.report.example_text"}}</p>
+		<div class="help-cw">
+			{{/* public domain, U.S. National Archives 531187 (via Wikimedia Commons) */}}
+			<img class="help-cw-image" src="{{AssetUrlPrefix}}/img/help/omaha-beach-wounded-1944.jpg" alt="{{ctx.Locale.Tr "help.report.example_alt"}}" loading="lazy">
+			<div class="help-cw-warning">
+				{{svg "octicon-eye-closed" 24}}
+				<div class="help-cw-warning-title">{{ctx.Locale.Tr "help.report.example_warning_title"}}</div>
+				<div class="help-cw-warning-reason">{{ctx.Locale.Tr "help.report.example_warning_reason"}}</div>
+				<button type="button" class="forkana-btn forkana-btn-secondary forkana-btn-sm" data-global-click="onHelpContentWarningShow">{{ctx.Locale.Tr "help.report.show_image"}}</button>
+			</div>
+			<button type="button" class="help-cw-hide forkana-btn forkana-btn-secondary forkana-btn-sm" data-global-click="onHelpContentWarningHide">{{svg "octicon-eye-closed"}}{{ctx.Locale.Tr "help.report.hide_image"}}</button>
+		</div>
+		<p class="help-cw-caption">{{ctx.Locale.Tr "help.report.example_caption"}}</p>
+	</div>
+	<p class="help-cw-note">{{ctx.Locale.Tr "help.report.example_note"}}</p>
+</div>
