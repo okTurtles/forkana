@@ -1,0 +1,22 @@
+{{/* The 404 page has no Figma frame. It takes the empty state ("blankslate") of the
+     designed Notifications page, "You're all caught up" (List 7895:6442 in "12 ·
+     Moderation: what users see"): a bordered box with a round icon, a title, a line of
+     text and one link. See .status-page-blankslate in web_src/css/base.css. */}}
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content {{if .IsRepo}}repository{{end}}">
+	{{if .IsRepo}}{{template "repo/header" .}}{{end}}
+	<div class="ui container">
+		{{template "base/alert" .}}
+		<div class="status-page-error status-page-blankslate">
+			<div class="status-page-blankslate-icon">{{svg "octicon-search" 24}}</div>
+			<h1 class="status-page-error-title">{{ctx.Locale.Tr "page_not_found"}}</h1>
+			<p class="status-page-blankslate-text">{{if .NotFoundPrompt}}{{.NotFoundPrompt}}{{else}}{{ctx.Locale.Tr "error404"}}{{end}}</p>
+			{{if .NotFoundGoBackURL}}
+				<a class="status-page-blankslate-link" href="{{.NotFoundGoBackURL}}">{{ctx.Locale.Tr "go_back"}}</a>
+			{{else}}
+				<a class="status-page-blankslate-link" href="{{AppSubUrl}}/">{{ctx.Locale.Tr "error404_go_home"}}</a>
+			{{end}}
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}

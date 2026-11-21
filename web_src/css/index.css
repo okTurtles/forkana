@@ -50,6 +50,7 @@
 @import "./features/subject-compare.css";
 @import "./features/changes-hub.css";
 @import "./features/user-settings.css";
+@import "./features/status-pages.css";
 
 @import "./markup/content.css";
 @import "./markup/codecopy.css";
