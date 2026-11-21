@@ -1,0 +1,333 @@
+/* The account settings (/user/settings/*). They have no Figma frame, so they borrow the
+   designed pages' parts, keeping Gitea's markup and forms:
+   - the layout and the side menu from the Help page (#541, "D4 · Community guidelines"
+     8159:873): a 1080px column 32px under the navbar, a 204px menu 36px from the content;
+     the menu a 1px #d1d9e0 box with 6px corners, its title on #f6f8fa (8px, Inter 600
+     16/24 #59636e), each entry 12px 8px under a 70% rule (Inter 400 14/20 #1f2328), the
+     current one on #f6f8fa in Inter 600;
+   - the sections from the article settings' boxes (#477, "Box / General" 7581:68929,
+     .forkana-box): a 1px #d1d9e0 box with 6px corners, the header on #f6f8fa (8px 16px,
+     Inter 600 14/20) over a rule, the body 16px, 24px between boxes;
+   - the fields from .forkana-field / .forkana-input (TextInput 7581:68933): the label
+     Inter 600 14/20 4px above a 32px input with 6px corners;
+   - the buttons from .forkana-btn (modules/button.css): primary for the main action,
+     secondary for the others, secondary with a red label for the destructive ones (Delete
+     article, Button 7581:68971).
+   Everything is in theme tokens, so the dark theme follows. */
+
+.page-content.user.settings {
+  --color-settings-rule: color-mix(in srgb, var(--color-border-light) 70%, transparent);
+}
+
+/* ── Layout (Page 8159:875) ──────────────────────────────────────────────────── */
+.page-content.user.settings > .ui.container.flex-container {
+  gap: 36px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(1080px + 2 * 16px);
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+}
+
+/* ── The menu (Help nav 8159:880) ────────────────────────────────────────────── */
+.page-content.user.settings .flex-container-nav {
+  flex-shrink: 0;
+  width: 204px;
+}
+
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu {
+  width: 100%;
+  margin: 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu > .header.item {
+  margin: 0;
+  padding: 8px;
+  background: var(--color-surface-muted);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-muted-text);
+}
+
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu > .item:not(.header),
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu > details.item > summary,
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu > details.item > .menu > .item {
+  padding: 12px 8px;
+  border-radius: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-primary);
+}
+
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu > .item:not(.header) {
+  border-top: 1px solid var(--color-settings-rule);
+}
+
+/* Fomantic draws its own 1px rule above every item: the border above replaces it */
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu > .item::before {
+  display: none;
+}
+
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu > details.item {
+  padding: 0;
+}
+
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu > details.item > .menu {
+  margin: 0;
+}
+
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu > details.item > .menu > .item {
+  padding-left: 20px;
+  border-top: 1px solid var(--color-settings-rule);
+}
+
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu :is(a.item, summary):hover {
+  background: var(--color-button-hover);
+  color: var(--color-text-primary);
+}
+
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu .active.item,
+.page-content.user.settings .flex-container-nav > .ui.vertical.menu .active.item:hover {
+  background: var(--color-surface-muted);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* ── Sections (Box / General 7581:68929) ─────────────────────────────────────── */
+.page-content.user.settings .user-setting-content > .ui.top.attached.header,
+.page-content.user.settings .flex-container-main > .ui.top.attached.header,
+.page-content.user.settings .user-setting-content > .ui.form > .ui.top.attached.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 8px 15px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px 6px 0 0;
+  background: var(--color-surface-muted);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* a box after another one: 24px between them (the settings' 24px gaps, 7581:68629) */
+.page-content.user.settings :is(.user-setting-content, .flex-container-main) .ui.attached.segment + .ui.top.attached.header,
+.page-content.user.settings :is(.user-setting-content, .flex-container-main) .ui.attached.table + .ui.top.attached.header,
+.page-content.user.settings :is(.user-setting-content, .flex-container-main) .ui.attached.segment + .ui.form > .ui.top.attached.header {
+  margin-top: 24px;
+}
+
+.page-content.user.settings :is(.user-setting-content, .flex-container-main) .ui.attached.segment {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 16px;
+  border-color: var(--color-border-light);
+  background: var(--color-surface);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.page-content.user.settings :is(.user-setting-content, .flex-container-main) .ui.attached.segment:last-child,
+.page-content.user.settings :is(.user-setting-content, .flex-container-main) .ui.bottom.attached.segment {
+  border-radius: 0 0 6px 6px;
+}
+
+/* a section's sub-headings and the rules between its parts */
+.page-content.user.settings .ui.attached.segment .ui.dividing.header,
+.page-content.user.settings .ui.attached.segment h4.ui.header {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-settings-rule);
+}
+
+.page-content.user.settings .ui.attached.segment .divider:not(.vertical, .horizontal) {
+  border-top-color: var(--color-settings-rule);
+}
+
+.page-content.user.settings .ui.attached.segment > .ui.list > .item,
+.page-content.user.settings .ui.attached.segment > .flex-list > .flex-item {
+  border-color: var(--color-settings-rule);
+}
+
+/* the delete-your-account box: neutral like the others, its title and border in the
+   danger colours of the article settings' Delete (Primer fgColor-danger / borderColor-
+   danger-muted) */
+.page-content.user.settings .user-setting-content > .ui.top.attached.error.header {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+}
+
+.page-content.user.settings .user-setting-content > .ui.attached.error.segment {
+  border-color: var(--color-danger-border);
+  background: var(--color-surface);
+}
+
+/* ── Fields (TextInput 7581:68933) ───────────────────────────────────────────────
+   The outline is --color-border-input: #d1d7dd in the light theme (the figma's #d1d9e0
+   to the eye) and #30363d in the dark one, where --color-border-light (#21262d) is
+   almost the colour of the page. */
+.page-content.user.settings .ui.form .field > label,
+.page-content.user.settings .ui.form .fields > label {
+  margin-bottom: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.page-content.user.settings .ui.form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="hidden"], [type="color"], [type="submit"], [type="button"]), textarea) {
+  min-height: 32px;
+  padding: 5px 7px;
+  border: 1px solid var(--color-border-input);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: inset 0 1px 0 #1f23280a;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.page-content.user.settings .ui.form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="hidden"], [type="color"], [type="submit"], [type="button"]), textarea)::placeholder {
+  color: var(--color-muted-text);
+  opacity: 1;
+}
+
+.page-content.user.settings .ui.form :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="hidden"], [type="color"], [type="submit"], [type="button"]), textarea):focus {
+  border-color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+.page-content.user.settings .ui.form :is(input, textarea):is([readonly], :disabled) {
+  background: var(--color-input-readonly-bg);
+  box-shadow: none;
+}
+
+.page-content.user.settings .ui.form .field.error :is(input, textarea) {
+  border-color: var(--color-danger-fg);
+  background: var(--color-surface);
+}
+
+.page-content.user.settings .ui.selection.dropdown {
+  min-height: 32px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  border-color: var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  box-shadow: 0 1px 0 #1f23280a;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-button-text);
+}
+
+/* the file input of the avatar */
+.page-content.user.settings .ui.form input[type="file"] {
+  padding: 4px;
+  border: 1px solid var(--color-border-input);
+  border-radius: 6px;
+  background: var(--color-surface);
+  font-size: 14px;
+}
+
+/* ── Buttons (.forkana-btn, modules/button.css) ──────────────────────────────── */
+.page-content.user.settings .flex-container-main .ui.button:not(.dropdown, .icon.only) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 32px;
+  margin: 0;
+  padding: 5px 11px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  box-shadow: 0 1px 0 #1f23280a;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-button-text);
+}
+
+.page-content.user.settings .flex-container-main .ui.button:not(.dropdown, .icon.only):hover {
+  background: var(--color-button-secondary-hover-bg);
+  color: var(--color-button-text);
+}
+
+.page-content.user.settings .flex-container-main .ui.button:not(.dropdown, .icon.only):active {
+  background: var(--color-button-secondary-active-bg);
+}
+
+.page-content.user.settings .flex-container-main .ui.button:not(.dropdown, .icon.only):focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: -2px;
+}
+
+.page-content.user.settings .flex-container-main .ui.tiny.button:not(.dropdown, .icon.only),
+.page-content.user.settings .flex-container-main .ui.small.button:not(.dropdown, .icon.only),
+.page-content.user.settings .flex-container-main .ui.mini.button:not(.dropdown, .icon.only) {
+  min-height: 26px;
+  padding: 3px 7px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.page-content.user.settings .flex-container-main .ui.primary.button:not(.dropdown, .icon.only) {
+  border-color: var(--color-button-primary-border);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.page-content.user.settings .flex-container-main .ui.primary.button:not(.dropdown, .icon.only):hover {
+  background: var(--color-primary-hover);
+  color: var(--color-primary-contrast);
+}
+
+.page-content.user.settings .flex-container-main .ui.primary.button:not(.dropdown, .icon.only):active {
+  background: var(--color-primary-active);
+}
+
+.page-content.user.settings .flex-container-main .ui.red.button:not(.dropdown, .icon.only),
+.page-content.user.settings .flex-container-main .ui.red.button:not(.dropdown, .icon.only):hover {
+  color: var(--color-danger-fg);
+}
+
+.page-content.user.settings .flex-container-main .ui.button:not(.dropdown, .icon.only):disabled,
+.page-content.user.settings .flex-container-main .ui.disabled.button:not(.dropdown, .icon.only) {
+  opacity: var(--opacity-disabled);
+}
+
+/* ── Phone (.only-mobile / .not-mobile switch at 767.98px) ───────────────────── */
+@media (max-width: 767.98px) {
+  .page-content.user.settings > .ui.container.flex-container {
+    gap: 24px;
+    padding-top: 16px;
+  }
+
+  .page-content.user.settings .flex-container-nav {
+    width: auto;
+  }
+
+  /* 40px rows instead of 44px, so the menu above the section stays short */
+  .page-content.user.settings .flex-container-nav > .ui.vertical.menu > .item:not(.header),
+  .page-content.user.settings .flex-container-nav > .ui.vertical.menu > details.item > summary,
+  .page-content.user.settings .flex-container-nav > .ui.vertical.menu > details.item > .menu > .item {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
