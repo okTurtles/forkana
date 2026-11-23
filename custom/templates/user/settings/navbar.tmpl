@@ -1,0 +1,34 @@
+{{/* Forkana: the account settings menu without Gitea's developer tabs (Applications, SSH / GPG
+     Keys, Actions, Packages, Webhooks, Organizations, Repositories). Their pages still answer at
+     /user/settings/{applications,keys,actions/…,packages,hooks,organization,repos}: only the
+     menu entries are gone. Forkana edits articles in the browser, so no one needs a git key
+     or a webhook; an API token (article-creator) is an operator's tool, reachable by URL. */}}
+<div class="flex-container-nav">
+	<div class="ui fluid vertical menu">
+		<div class="header item">{{ctx.Locale.Tr "user.settings"}}</div>
+		<a class="{{if .PageIsSettingsProfile}}active {{end}}item" href="{{AppSubUrl}}/user/settings">
+			{{ctx.Locale.Tr "settings.profile"}}
+		</a>
+		{{if not ($.UserDisabledFeatures.Contains "manage_credentials" "deletion")}}
+		<a class="{{if .PageIsSettingsAccount}}active {{end}}item" href="{{AppSubUrl}}/user/settings/account">
+			{{ctx.Locale.Tr "settings.account"}}
+		</a>
+		{{end}}
+		{{if $.EnableNotifyMail}}
+		<a class="{{if .PageIsSettingsNotifications}}active {{end}}item" href="{{AppSubUrl}}/user/settings/notifications">
+			{{ctx.Locale.Tr "notifications"}}
+		</a>
+		{{end}}
+		<a class="{{if .PageIsSettingsAppearance}}active {{end}}item" href="{{AppSubUrl}}/user/settings/appearance">
+			{{ctx.Locale.Tr "settings.appearance"}}
+		</a>
+		{{if not ($.UserDisabledFeatures.Contains "manage_mfa" "manage_credentials")}}
+		<a class="{{if .PageIsSettingsSecurity}}active {{end}}item" href="{{AppSubUrl}}/user/settings/security">
+			{{ctx.Locale.Tr "settings.security"}}
+		</a>
+		{{end}}
+		<a class="{{if .PageIsSettingsBlockedUsers}}active {{end}}item" href="{{AppSubUrl}}/user/settings/blocked_users">
+			{{ctx.Locale.Tr "user.block.list"}}
+		</a>
+	</div>
+</div>
