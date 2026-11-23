@@ -41,6 +41,7 @@ import {initArticleEditor} from './features/article-editor.ts';
 import {initArticleSummary} from './features/article-summary.ts';
 import {initArticleSettings} from './features/article-settings.ts';
 import {initArticleWatchMenu} from './features/article-watch-menu.ts';
+import {initUserSettingsMenu} from './features/user-settings-menu.ts';
 import {initCompSearchUserBox} from './features/comp/SearchUserBox.ts';
 import {initInstall} from './features/install.ts';
 import {initCompWebHookEditor} from './features/comp/WebHookEditor.ts';
@@ -145,6 +146,7 @@ const initPerformanceTracer = callInitFunctions([
   initArticleSummary,
   initArticleSettings,
   initArticleWatchMenu,
+  initUserSettingsMenu,
   initRepoGraphGit,
   initRepoIssueContentHistory,
   initRepoIssueList,
