@@ -244,6 +244,16 @@
   font-size: 14px;
 }
 
+/* the block form, in the "Block a user" box under its explanation: the TextInput caption
+   (Inter 400 12/18, muted) 4px under its field, Block after the fields */
+.page-content.user.settings .block-user-box .ui.form .help {
+  margin-top: 4px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-muted-text);
+}
+
 /* ── Buttons (.forkana-btn, modules/button.css) ──────────────────────────────── */
 .page-content.user.settings .flex-container-main .ui.button:not(.dropdown, .icon.only) {
   display: inline-flex;
