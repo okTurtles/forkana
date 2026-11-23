@@ -394,3 +394,37 @@
     display: none;
   }
 }
+
+/* ── Access token permissions (Applications) ─────────────────────────────────────
+   One row per scope: its name, then No Access / Read / Read and Write. A choice never wraps
+   inside itself; on a phone the name sits above its three choices, which share one line. */
+.page-content.user.settings.applications .ui.table td:first-child {
+  font-weight: var(--font-weight-semibold);
+}
+
+.page-content.user.settings.applications .ui.table .gt-checkbox {
+  white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+  .page-content.user.settings.applications .ui.table tr {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    justify-content: start;
+    gap: 4px 16px;
+    padding: 8px 12px;
+  }
+
+  .page-content.user.settings.applications .ui.table tr + tr {
+    border-top: 1px solid var(--color-settings-rule);
+  }
+
+  .page-content.user.settings.applications .ui.table td {
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  .page-content.user.settings.applications .ui.table td:first-child {
+    grid-column: 1 / -1;
+  }
+}
