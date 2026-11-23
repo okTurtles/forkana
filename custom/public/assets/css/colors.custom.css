@@ -95,7 +95,7 @@
   /* Border colors */
   --color-border: #d0d7de;
   --color-border-light: #d1d9e0;
-  --color-border-input: #d1d7dd;
+  --color-border-input: #d1d9e0; /* TextInput stroke (7581:68933); was #d1d7dd */
   --color-border-muted: #eee;
 
   /* Surface colors */

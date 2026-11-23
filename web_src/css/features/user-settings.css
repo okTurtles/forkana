@@ -178,9 +178,8 @@
 }
 
 /* ── Fields (TextInput 7581:68933) ───────────────────────────────────────────────
-   The outline is --color-border-input: #d1d7dd in the light theme (the figma's #d1d9e0
-   to the eye) and #30363d in the dark one, where --color-border-light (#21262d) is
-   almost the colour of the page. */
+   The outline is --color-border-input, the TextInput stroke: #d1d9e0 in the light theme,
+   #3d444d in the dark one (#336, 5629:47706). */
 .page-content.user.settings .ui.form .field > label,
 .page-content.user.settings .ui.form .fields > label {
   margin-bottom: 4px;
