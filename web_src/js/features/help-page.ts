@@ -23,7 +23,12 @@ export function initHelpPage() {
 
   // a link to one reason (the report form's, or "Jump to:") opens it on a phone
   const openTarget = () => {
-    const id = decodeURIComponent(window.location.hash.slice(1));
+    let id: string;
+    try {
+      id = decodeURIComponent(window.location.hash.slice(1));
+    } catch {
+      return; // a malformed hash (e.g. "#%") is the reader's input: it opens nothing
+    }
     if (id) setReasonOpen(document.querySelector(`.help-reason[id="${CSS.escape(id)}"]`), true);
   };
   if (document.querySelector('.help-page')) {

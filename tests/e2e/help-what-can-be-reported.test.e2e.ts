@@ -61,4 +61,17 @@ test.describe('What can be reported (#541)', () => {
     await page.goto('/help/what-can-be-reported#off-topic-or-spam');
     await expect(page.locator('#off-topic-or-spam .help-reason-body')).toBeVisible();
   });
+
+  test('a malformed hash leaves the page working', async ({page}) => {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    await page.setViewportSize({width: 375, height: 812});
+    await page.goto('/help/what-can-be-reported#%');
+
+    // the accordion still answers, so the page's start-up ran to the end
+    const toggle = page.locator('#doxxing').getByRole('button', {name: 'Doxxing'});
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(errors).toEqual([]);
+  });
 });
