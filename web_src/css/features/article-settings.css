@@ -195,7 +195,7 @@
   padding: 0 7px;
   border: 1px solid var(--color-border-light);
   border-radius: 6px;
-  background: var(--color-surface);
+  background: var(--color-input-background);
   box-shadow: inset 0 1px 0 #1f23280a;
   font-family: inherit;
   font-size: 14px;

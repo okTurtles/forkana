@@ -86,6 +86,11 @@
   /* the border of the sign in / sign up card (Sign in/up 7368:264604: #d1d9e0 at 70%) and of
      the other one-card pages that follow it (web_src/css/user.css) */
   --color-card-border: #d1d9e0b3;
+  /* the secondary button's fill (Button 30258:5582: #f6f8fa); a token of its own since the dark
+     theme (#336, 5629:47722) fills it #212830, not the muted surface */
+  --color-button-secondary-bg: #f6f8fa;
+  /* the unavailable primary button (View Tab 641:65671: #dad5ff); dark: 5629:49603 */
+  --color-primary-unavailable-bg: #dad5ff;
 
   /* Border colors */
   --color-border: #d0d7de;
