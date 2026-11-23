@@ -1,8 +1,12 @@
 import {test, expect} from '@playwright/test';
-import {load_logged_in_context} from './utils_e2e.ts';
+import {login_user, load_logged_in_context} from './utils_e2e.ts';
 
 // The account settings menu (custom/templates/user/settings/navbar.tmpl): Forkana's tabs only,
 // and on a phone one "Settings · <section>" row that opens the list in place.
+
+test.beforeAll(async ({browser}, workerInfo) => {
+  await login_user(browser, workerInfo, 'user2');
+});
 
 test('the menu lists Forkana tabs only', async ({browser}, workerInfo) => {
   const context = await load_logged_in_context(browser, workerInfo, 'user2');
