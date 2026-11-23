@@ -1,0 +1,440 @@
+/* The notifications list (/notifications, custom/templates/user/notification/notification_div.tmpl),
+   after Figma "477/461 · Invited person – notification" (desktop 7648:74304, mobile 7648:74435)
+   and "1.7a · F3 · Notifications: all caught up" (7895:6430). Values are Figma px; Figma draws
+   strokes inside the box, so a CSS padding next to a 1px border is the Figma padding minus 1px. */
+
+/* Container 7648:74306: 1104px, 32px under the navbar, 48px above the footer, its parts 16px
+   apart. A phone (Body 7648:74437): 24px 16px 32px. */
+.notifications-page .notifications-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(1104px + 2 * 16px);
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+}
+
+/* Title row 7648:74307: the title block, 16px, Mark all as read */
+.notifications-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.notifications-title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* "Notifications" 7648:74309: Inter 600 24/32 #1f2328; its line 7648:74310: Inter 400 14/20
+   #59636e */
+.notifications-title h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.notifications-title p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted-text);
+}
+
+.notifications-mark-all {
+  margin: 0;
+}
+
+/* Toolbar 7648:74312: the SegmentedControl (.forkana-segmented), the Type menu at the end */
+.notifications-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notifications-toolbar .forkana-segmented-item:hover {
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.notifications-toolbar .forkana-segmented-item.active:hover {
+  color: var(--color-primary);
+}
+
+/* ActionMenu / Status 7648:74315: a secondary button, "Type: All" in Inter 600 14/20 #59636e and
+   a 16px triangle; its menu an Overlay (7645:75728: 12px corners, the menu shadow) */
+.notifications-type-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+/* (the doubled class outweighs .forkana-btn.forkana-btn-secondary's label colour) */
+.notifications-type-menu > summary.forkana-btn.forkana-btn {
+  list-style: none;
+  color: var(--color-muted-text);
+  gap: 4px;
+}
+
+.notifications-type-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.notifications-type-menu > summary.forkana-btn.forkana-btn:hover {
+  color: var(--color-muted-text);
+}
+
+.notifications-type-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 192px;
+  padding: 8px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px var(--color-menu-shadow);
+}
+
+.notifications-type-options > a {
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.notifications-type-options > a:hover {
+  background: var(--color-nav-hover-bg);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.notifications-type-options > a.active {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* List 7648:74316: a 1px #d1d9e0 box with 6px corners (the id outweighs Gitea's
+   #notification_table in web_src/css/user.css) */
+#notification_table.notifications-list {
+  overflow: hidden;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+/* Group: Today 7648:74317: #f6f8fa, 8px 16px, a rule under it, Inter 600 12/18 #59636e */
+.notifications-group {
+  padding: 8px 16px 7px;
+  border-bottom: 1px solid var(--color-border-light);
+  background: var(--color-surface-muted);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-muted-text);
+}
+
+/* Notification 7648:74319: 14px 16px, 12px between the dot, the icon, the text and the meta, a
+   rule under each row but the last */
+.notifications-list .notifications-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 13px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.notifications-list .notifications-item:last-child {
+  padding-bottom: 14px;
+  border-bottom: 0;
+}
+
+.notifications-list .notifications-item:hover {
+  background: var(--color-hover);
+}
+
+/* the 8px unread dot in #4e40fa (7648:74320); a pinned row shows a pin in its place */
+.notifications-dot {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  color: var(--color-muted-text);
+}
+
+.notifications-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-primary);
+}
+
+/* Icon 7648:74321: 32px, round, a 16px icon. Invites on #fff8c5 (7648:74321), a change request
+   on #dafbe1 (7648:74474), a comment on #dad5ff (7648:74463), anything else on #f6f8fa
+   (7648:74341) */
+.notifications-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-primary);
+}
+
+.notifications-icon.notifications-icon-invites {
+  background: var(--color-warning-bg);
+}
+
+.notifications-icon.notifications-icon-change_requests.is-pull {
+  background: var(--color-success-bg);
+}
+
+/* the brand tint at 21% (#dad5ff), the same as the unavailable primary button's fill */
+.notifications-icon.notifications-icon-change_requests:not(.is-pull) {
+  background: var(--color-primary-unavailable-bg);
+}
+
+/* Text 7648:74323: the title Inter 600 14/20 #1f2328 and 2px under it the detail, Inter 400
+   12/16 #59636e */
+.notifications-link {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notifications-link:hover {
+  text-decoration: none;
+}
+
+.notifications-text-title {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.notifications-link:hover .notifications-text-title {
+  text-decoration: underline;
+}
+
+.notifications-text-detail {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-muted-text);
+}
+
+.notifications-actor {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Meta 7648:74326: the Label and the time, 12px apart */
+.notifications-meta {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Label 7648:74327 / 7648:74337: 20px, 1px 7px, a 1px border, 100px corners, Inter 600 12/18;
+   Invites in #4e40fa, the others #d1d9e0 and #1f2328 */
+.notifications-label {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 100px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.notifications-label.notifications-label-invites {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* the time (7648:74328): Inter 400 12/16 #59636e */
+.notifications-updated {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-muted-text);
+  white-space: nowrap;
+}
+
+/* Gitea's pin / mark as read / mark as unread, in place of the time while the row is hovered
+   or focused (the frame has no such state); always shown on a touch screen */
+.notifications-list .notifications-buttons {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+
+.notifications-list .notifications-item:is(:hover, :focus-within) .notifications-buttons {
+  display: flex;
+}
+
+.notifications-list .notifications-item:is(:hover, :focus-within) .notifications-updated {
+  display: none;
+}
+
+@media (hover: none) {
+  .notifications-list .notifications-buttons {
+    display: flex;
+  }
+}
+
+.notifications-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-muted-text);
+  cursor: pointer;
+}
+
+.notifications-action:hover {
+  background: var(--color-nav-hover-bg);
+  color: var(--color-text-primary);
+}
+
+.notifications-action:focus-visible {
+  outline: 2px solid var(--color-button-focus-ring);
+  outline-offset: -2px;
+}
+
+/* the empty state (List 7895:6442): 64px 24px inside, centred, 8px apart: a 56px round icon on
+   #dafbe1 (7895:6443), the title Inter 600 20/28, a line of Inter 400 14/20 #59636e, a link Inter
+   600 14/20 #4e40fa */
+.notifications-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.notifications-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 8px;
+  border-radius: 28px;
+  background: var(--color-surface-muted);
+  color: var(--color-muted-text);
+}
+
+.notifications-empty-icon.is-caught-up {
+  background: var(--color-success-bg);
+  color: var(--color-green);
+}
+
+.notifications-empty h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.notifications-empty p {
+  max-width: 607px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted-text);
+}
+
+.notifications-empty a {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+}
+
+/* ── A phone (7648:74435) ────────────────────────────────────────────────────────
+   Body 7648:74437: 24px 16px 32px; the title, the toolbar, then Mark all as read as a link
+   (7648:74445, Inter 600 14/20 #4e40fa), then the list. Each row keeps the dot and the icon at
+   the top (the dot 12px down) and puts the Label and the time under the text (Meta 7648:74457:
+   4px above, 8px apart). */
+@media (max-width: 767.98px) {
+  .notifications-page .notifications-container {
+    padding: 24px 16px 32px;
+  }
+
+  .notifications-title-row {
+    display: contents;
+  }
+
+  .notifications-title {
+    order: 1;
+  }
+
+  .notifications-toolbar {
+    order: 2;
+  }
+
+  .notifications-mark-all {
+    order: 3;
+    align-self: flex-start;
+  }
+
+  .notifications-mark-all .notifications-mark-all-link {
+    --btn-height: 20px;
+    --btn-pad-x: 0;
+    border: 0;
+  }
+
+  .notifications-list {
+    order: 4;
+  }
+
+  .notifications-page .notifications-container > :is(.pagination, .page.buttons, .center) {
+    order: 5;
+  }
+
+  .notifications-list .notifications-item {
+    display: grid;
+    grid-template-columns: 8px 32px minmax(0, 1fr);
+    align-items: start;
+    gap: 0 12px;
+  }
+
+  .notifications-dot {
+    padding-top: 12px;
+  }
+
+  .notifications-meta {
+    grid-column: 3;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 4px;
+  }
+}

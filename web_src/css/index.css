@@ -51,6 +51,7 @@
 @import "./features/changes-hub.css";
 @import "./features/user-settings.css";
 @import "./features/status-pages.css";
+@import "./features/notifications.css";
 
 @import "./markup/content.css";
 @import "./markup/codecopy.css";

@@ -1,0 +1,131 @@
+{{/* The notifications list, after Figma "477/461 · Invited person – notification" (desktop
+     7648:74304, mobile 7648:74435) and its empty state "1.7a · F3 · Notifications: all caught
+     up" (7895:6430). Gitea's behaviour is kept: Unread / Read, pin, mark as read or unread on
+     each row (htmx, re-rendering #notification_div), mark all as read, the links, and the live
+     refresh (web_src/js/features/notification.ts keeps #notification_div and its
+     data-sequence-number). The rows are grouped by day and filtered by type in
+     routers/web/user/notification_forkana.go. See web_src/css/features/notifications.css. */}}
+<div role="main" aria-label="{{.Title}}" class="page-content user notification notifications-page" id="notification_div" data-sequence-number="{{.SequenceNumber}}">
+	{{$statusUnread := 1}}{{$statusRead := 2}}{{$statusPinned := 3}}
+	{{$notificationUnreadCount := call .PageGlobalData.GetNotificationUnreadCount}}
+	{{$pageTypeIsRead := eq $.PageType "read"}}
+	{{$pageType := Iif $pageTypeIsRead "read" "unread"}}
+	{{$source := .NotificationSource}}
+	<div class="notifications-container">
+		{{template "base/alert" .}}
+		{{/* Title row 7648:74307: the title and its line, Mark all as read at the end */}}
+		<div class="notifications-title-row">
+			<div class="notifications-title">
+				<h1>{{ctx.Locale.Tr "notification.notifications"}}</h1>
+				<p>{{ctx.Locale.Tr "notification.page_subtitle"}}</p>
+			</div>
+			{{if and (not $pageTypeIsRead) $notificationUnreadCount}}
+				<form class="notifications-mark-all" action="{{AppSubUrl}}/notifications/purge" method="post">
+					{{$.CsrfTokenHtml}}
+					<button class="forkana-btn forkana-btn-secondary not-mobile">{{svg "octicon-checklist"}}{{ctx.Locale.Tr "notification.mark_all_as_read"}}</button>
+					<button class="forkana-btn forkana-btn-tertiary forkana-btn-primary-text notifications-mark-all-link only-mobile">{{ctx.Locale.Tr "notification.mark_all_as_read"}}</button>
+				</form>
+			{{end}}
+		</div>
+
+		{{/* Toolbar 7648:74312: the SegmentedControl, then the Type menu at the end */}}
+		<div class="notifications-toolbar">
+			<nav class="forkana-segmented" aria-label="{{ctx.Locale.Tr "notification.notifications"}}">
+				<a class="forkana-segmented-item{{if not $pageTypeIsRead}} active{{end}}" href="{{AppSubUrl}}/notifications?type=unread{{if $source}}&source={{$source}}{{end}}"{{if not $pageTypeIsRead}} aria-current="page"{{end}}>
+					{{ctx.Locale.Tr "notification.unread"}}<span class="notifications-unread-count{{if not $notificationUnreadCount}} tw-hidden{{end}}">&nbsp;({{$notificationUnreadCount}})</span>
+				</a>
+				<a class="forkana-segmented-item{{if $pageTypeIsRead}} active{{end}}" href="{{AppSubUrl}}/notifications?type=read{{if $source}}&source={{$source}}{{end}}"{{if $pageTypeIsRead}} aria-current="page"{{end}}>
+					{{ctx.Locale.Tr "notification.read"}}
+				</a>
+			</nav>
+			<details class="notifications-type-menu">
+				<summary class="forkana-btn forkana-btn-secondary">
+					<span>{{ctx.Locale.Tr "notification.type_filter" (ctx.Locale.Tr (print "notification.type_" (or $source "all")))}}</span>
+					{{svg "octicon-triangle-down"}}
+				</summary>
+				<div class="notifications-type-options" role="menu">
+					<a role="menuitem" class="{{if not $source}}active{{end}}" href="{{AppSubUrl}}/notifications?type={{$pageType}}">{{ctx.Locale.Tr "notification.type_all"}}</a>
+					{{range .NotificationTypeKeys}}
+						<a role="menuitem" class="{{if eq . $source}}active{{end}}" href="{{AppSubUrl}}/notifications?type={{$pageType}}&source={{.}}">{{ctx.Locale.Tr (print "notification.type_" .)}}</a>
+					{{end}}
+				</div>
+			</details>
+		</div>
+
+		<div id="notification_table" class="notifications-list">
+			{{range $group := .NotificationGroups}}
+				{{/* Group: Today 7648:74317 */}}
+				<div class="notifications-group">{{ctx.Locale.Tr (print "notification.group_" $group.Key)}}</div>
+				{{range $one := $group.Notifications}}
+					{{$actor := index $.NotificationActors $one.UpdatedBy}}
+					{{$kind := "change_requests"}}
+					{{if $one.IsArticleCollaboratorInvite}}{{$kind = "invites"}}{{else if or $one.IsRepoTransferPending $one.IsRepoTransferRejected}}{{$kind = "transfers"}}{{end}}
+					{{/* Notification 7648:74319 */}}
+					<div class="notifications-item{{if eq $one.Status $statusUnread}} unread{{end}}" id="notification_{{$one.ID}}" data-status="{{$one.Status}}">
+						<span class="notifications-dot">
+							{{if eq $one.Status $statusPinned}}{{svg "octicon-pin" 12}}{{else if eq $one.Status $statusUnread}}<span class="notifications-unread-dot" aria-label="{{ctx.Locale.Tr "notification.unread"}}"></span>{{end}}
+						</span>
+						<span class="notifications-icon notifications-icon-{{$kind}}{{if $one.Issue}}{{if $one.Issue.IsPull}} is-pull{{end}}{{end}}">
+							{{if eq $kind "invites"}}{{svg "octicon-person-add"}}
+							{{else if eq $kind "transfers"}}{{svg "octicon-arrow-switch"}}
+							{{else if $one.Issue}}{{if $one.Issue.IsPull}}{{svg "octicon-git-pull-request"}}{{else}}{{svg "octicon-comment-discussion"}}{{end}}
+							{{else}}{{svg "octicon-repo"}}{{end}}
+						</span>
+						<a class="notifications-link" href="{{$one.Link ctx}}">
+							<span class="notifications-text-title">
+								{{if $one.Issue}}
+									{{$one.Issue.Title | ctx.RenderUtils.RenderIssueSimpleTitle}}
+								{{else if $one.IsArticleCollaboratorInvite}}
+									{{ctx.Locale.Tr "notification.article_collaborator_invite"}}
+								{{else if $one.IsRepoTransferRejected}}
+									{{ctx.Locale.Tr "notification.transfer_rejected"}}
+								{{else if $one.IsRepoTransferPending}}
+									{{ctx.Locale.Tr "notification.transfer_pending"}}
+								{{else}}
+									{{$one.Repository.FullName}}
+								{{end}}
+							</span>
+							<span class="notifications-text-detail">
+								{{if $actor}}<span class="notifications-actor">{{$actor.GetDisplayName}}</span> · {{end}}{{$one.Repository.OwnerName}} / {{$one.Repository.Name}}{{if $one.Issue}} #{{$one.Issue.Index}}{{end}}
+							</span>
+						</a>
+						<div class="notifications-meta">
+							<span class="notifications-label notifications-label-{{$kind}}">{{ctx.Locale.Tr (print "notification.type_" $kind)}}</span>
+							<span class="notifications-updated">{{DateUtils.TimeSince $one.UpdatedUnix}}</span>
+							<form class="notifications-buttons" action="{{AppSubUrl}}/notifications/status?type={{$.PageType}}{{if $source}}&source={{$source}}{{end}}&page={{$.Page.Paginater.Current}}&perPage={{$.Page.Paginater.PagingNum}}" method="post"
+										hx-boost="true" hx-target="#notification_div" hx-swap="outerHTML"
+							>
+								{{$.CsrfTokenHtml}}
+								<input type="hidden" name="notification_id" value="{{$one.ID}}">
+								{{if ne $one.Status $statusPinned}}
+									<button class="notifications-action" data-tooltip-content="{{ctx.Locale.Tr "notification.pin"}}" aria-label="{{ctx.Locale.Tr "notification.pin"}}" name="notification_action" value="pin">{{svg "octicon-pin"}}</button>
+								{{end}}
+								{{if or (eq $one.Status $statusUnread) (eq $one.Status $statusPinned)}}
+									<button class="notifications-action" data-tooltip-content="{{ctx.Locale.Tr "notification.mark_as_read"}}" aria-label="{{ctx.Locale.Tr "notification.mark_as_read"}}" name="notification_action" value="mark_as_read">{{svg "octicon-check"}}</button>
+								{{else if eq $one.Status $statusRead}}
+									<button class="notifications-action" data-tooltip-content="{{ctx.Locale.Tr "notification.mark_as_unread"}}" aria-label="{{ctx.Locale.Tr "notification.mark_as_unread"}}" name="notification_action" value="mark_as_unread">{{svg "octicon-bell"}}</button>
+								{{end}}
+							</form>
+						</div>
+					</div>
+				{{end}}
+			{{else}}
+				{{/* List 7895:6442: "You're all caught up" */}}
+				<div class="notifications-empty">
+					{{if $pageTypeIsRead}}
+						<span class="notifications-empty-icon">{{svg "octicon-inbox" 24}}</span>
+						<h2>{{ctx.Locale.Tr "notification.no_read"}}</h2>
+						<p>{{ctx.Locale.Tr "notification.nothing_read_desc"}}</p>
+						<a href="{{AppSubUrl}}/notifications?type=unread">{{ctx.Locale.Tr "notification.view_unread"}}</a>
+					{{else}}
+						<span class="notifications-empty-icon is-caught-up">{{svg "octicon-check-circle" 24}}</span>
+						<h2>{{ctx.Locale.Tr "notification.all_caught_up"}}</h2>
+						<p>{{ctx.Locale.Tr "notification.all_caught_up_desc"}}</p>
+						<a href="{{AppSubUrl}}/notifications?type=read">{{ctx.Locale.Tr "notification.view_read"}}</a>
+					{{end}}
+				</div>
+			{{end}}
+		</div>
+		{{template "base/paginate" .}}
+	</div>
+</div>
