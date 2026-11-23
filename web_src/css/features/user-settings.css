@@ -103,6 +103,7 @@
 /* ── Sections (Box / General 7581:68929) ─────────────────────────────────────── */
 .page-content.user.settings .user-setting-content > .ui.top.attached.header,
 .page-content.user.settings .flex-container-main > .ui.top.attached.header,
+.page-content.user.settings .user-setting-content > .runner-container > .ui.top.attached.header,
 .page-content.user.settings .user-setting-content > .ui.form > .ui.top.attached.header {
   display: flex;
   align-items: center;
@@ -427,4 +428,42 @@
   .page-content.user.settings.applications .ui.table td:first-child {
     grid-column: 1 / -1;
   }
+}
+
+/* ── Lists with a search and a table (Actions runners, secrets, variables) ─────────
+   A header with an action at its end: the title wraps, the action keeps its size. */
+.page-content.user.settings .user-setting-content .ui.top.attached.header,
+.page-content.user.settings .flex-container-main .ui.top.attached.header {
+  flex-wrap: wrap;
+}
+
+.page-content.user.settings .flex-container-main .ui.top.attached.header > .ui.right {
+  position: static;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* the search: one 32px TextInput, its search button joined at its end */
+.page-content.user.settings .flex-container-main .ui.form .ui.action.input > input {
+  border-radius: 6px 0 0 6px;
+}
+
+.page-content.user.settings .flex-container-main .ui.form .ui.action.input > .ui.icon.button {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--color-border-input);
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+  box-shadow: none;
+  color: var(--color-muted-text);
+}
+
+/* a table wider than its box scrolls inside it; its column titles stay on one line */
+.page-content.user.settings .flex-container-main .ui.attached.table.segment {
+  overflow-x: auto;
+}
+
+.page-content.user.settings .flex-container-main .ui.attached.table.segment th {
+  white-space: nowrap;
 }
