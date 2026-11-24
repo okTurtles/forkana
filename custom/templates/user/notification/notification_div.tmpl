@@ -19,7 +19,8 @@
 				<h1>{{ctx.Locale.Tr "notification.notifications"}}</h1>
 				<p>{{ctx.Locale.Tr "notification.page_subtitle"}}</p>
 			</div>
-			{{if and (not $pageTypeIsRead) $notificationUnreadCount}}
+			{{/* not with a Type filter on: purge marks every type as read, not only the ones listed */}}
+			{{if and (not $pageTypeIsRead) $notificationUnreadCount (not $source)}}
 				<form class="notifications-mark-all" action="{{AppSubUrl}}/notifications/purge" method="post">
 					{{$.CsrfTokenHtml}}
 					<button class="forkana-btn forkana-btn-secondary not-mobile">{{svg "octicon-checklist"}}{{ctx.Locale.Tr "notification.mark_all_as_read"}}</button>
@@ -43,10 +44,10 @@
 					<span>{{ctx.Locale.Tr "notification.type_filter" (ctx.Locale.Tr (print "notification.type_" (or $source "all")))}}</span>
 					{{svg "octicon-triangle-down"}}
 				</summary>
-				<div class="notifications-type-options" role="menu">
-					<a role="menuitem" class="{{if not $source}}active{{end}}" href="{{AppSubUrl}}/notifications?type={{$pageType}}">{{ctx.Locale.Tr "notification.type_all"}}</a>
+				<div class="notifications-type-options">
+					<a class="{{if not $source}}active{{end}}" href="{{AppSubUrl}}/notifications?type={{$pageType}}"{{if not $source}} aria-current="true"{{end}}>{{ctx.Locale.Tr "notification.type_all"}}</a>
 					{{range .NotificationTypeKeys}}
-						<a role="menuitem" class="{{if eq . $source}}active{{end}}" href="{{AppSubUrl}}/notifications?type={{$pageType}}&source={{.}}">{{ctx.Locale.Tr (print "notification.type_" .)}}</a>
+						<a class="{{if eq . $source}}active{{end}}"{{if eq . $source}} aria-current="true"{{end}} href="{{AppSubUrl}}/notifications?type={{$pageType}}&source={{.}}">{{ctx.Locale.Tr (print "notification.type_" .)}}</a>
 					{{end}}
 				</div>
 			</details>
@@ -112,7 +113,13 @@
 			{{else}}
 				{{/* List 7895:6442: "You're all caught up" */}}
 				<div class="notifications-empty">
-					{{if $pageTypeIsRead}}
+					{{if $source}}
+						{{/* with a Type filter on, other types may still be there: say what is hidden */}}
+						<span class="notifications-empty-icon">{{svg "octicon-filter" 24}}</span>
+						<h2>{{ctx.Locale.Tr (Iif $pageTypeIsRead "notification.no_read" "notification.no_unread")}}</h2>
+						<p>{{ctx.Locale.Tr "notification.filtered_desc" (ctx.Locale.Tr (print "notification.type_" $source))}}</p>
+						<a href="{{AppSubUrl}}/notifications?type={{$pageType}}">{{ctx.Locale.Tr "notification.show_all_types"}}</a>
+					{{else if $pageTypeIsRead}}
 						<span class="notifications-empty-icon">{{svg "octicon-inbox" 24}}</span>
 						<h2>{{ctx.Locale.Tr "notification.no_read"}}</h2>
 						<p>{{ctx.Locale.Tr "notification.nothing_read_desc"}}</p>

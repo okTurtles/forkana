@@ -1,7 +1,7 @@
 {{/* The 404 page has no Figma frame. It takes the empty state ("blankslate") of the
      designed Notifications page, "You're all caught up" (List 7895:6442 in "12 ·
      Moderation: what users see"): a bordered box with a round icon, a title, a line of
-     text and one link. See .status-page-blankslate in web_src/css/base.css. */}}
+     text and one link. See .status-page-blankslate in web_src/css/features/status-pages.css. */}}
 {{template "base/head" .}}
 <div role="main" aria-label="{{.Title}}" class="page-content {{if .IsRepo}}repository{{end}}">
 	{{if .IsRepo}}{{template "repo/header" .}}{{end}}

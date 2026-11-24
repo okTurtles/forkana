@@ -43,8 +43,8 @@
 [data-theme="gitea-dark-protanopia-deuteranopia"] {
   --color-primary: #8e85f9; /* #336 primary Button 5629:47721, links 5629:47712 */
   --color-primary-contrast: #ffffff;
-  --color-primary-hover: #a39cfa; /* #336 no hover in the frames: #8e85f9 12% toward white */
-  --color-primary-active: #b5b0fb; /* #336 no pressed state in the frames: #8e85f9 22% toward white */
+  --color-primary-hover: #7d75db; /* #336 no hover in the frames: #8e85f9 12% toward black, so the white label keeps its contrast */
+  --color-primary-active: #6f68c2; /* #336 no pressed state in the frames: #8e85f9 22% toward black */
   --color-secondary-nav-bg: #161b22; /* #336 Navbar 5629:47691 */
   /* #532: Primer's dark control/transparent/bgColor/hover (#656c76 at 20%) */
   --color-nav-hover-bg: #656c7633;
@@ -150,7 +150,7 @@
   /* Fork modal */
   --color-fork-text: #9198a1; /* #336 muted text 5629:47716 */
   --color-fork-btn-primary: #8e85f9; /* #336 primary Button 5629:47721 */
-  --color-fork-btn-primary-hover: #a39cfa; /* #336 as --color-primary-hover */
+  --color-fork-btn-primary-hover: #7d75db; /* #336 as --color-primary-hover */
   --color-fork-btn-cancel-bg: #212830; /* #336 secondary Button 5629:47722 */
   --color-fork-btn-cancel-text: #f0f6fc; /* #336 Button label 5629:47722 */
   --color-fork-btn-cancel-border: #3d444d; /* #336 Button stroke 5629:47722 */
@@ -202,8 +202,8 @@
   [data-theme="gitea-auto-protanopia-deuteranopia"] {
     --color-primary: #8e85f9; /* #336 primary Button 5629:47721, links 5629:47712 */
     --color-primary-contrast: #ffffff;
-    --color-primary-hover: #a39cfa; /* #336 no hover in the frames: #8e85f9 12% toward white */
-    --color-primary-active: #b5b0fb; /* #336 no pressed state in the frames: #8e85f9 22% toward white */
+    --color-primary-hover: #7d75db; /* #336 no hover in the frames: #8e85f9 12% toward black, so the white label keeps its contrast */
+    --color-primary-active: #6f68c2; /* #336 no pressed state in the frames: #8e85f9 22% toward black */
     --color-secondary-nav-bg: #161b22; /* #336 Navbar 5629:47691 */
     /* #532: Primer's dark control/transparent/bgColor/hover (#656c76 at 20%) */
     --color-nav-hover-bg: #656c7633;
@@ -308,7 +308,7 @@
     /* Fork modal */
     --color-fork-text: #9198a1; /* #336 muted text 5629:47716 */
     --color-fork-btn-primary: #8e85f9; /* #336 primary Button 5629:47721 */
-    --color-fork-btn-primary-hover: #a39cfa; /* #336 as --color-primary-hover */
+    --color-fork-btn-primary-hover: #7d75db; /* #336 as --color-primary-hover */
     --color-fork-btn-cancel-bg: #212830; /* #336 secondary Button 5629:47722 */
     --color-fork-btn-cancel-text: #f0f6fc; /* #336 Button label 5629:47722 */
     --color-fork-btn-cancel-border: #3d444d; /* #336 Button stroke 5629:47722 */

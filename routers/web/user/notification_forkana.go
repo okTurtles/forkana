@@ -17,12 +17,9 @@ import (
 // notificationTypeSources maps the "Type" filter (?source=) to the notification sources it shows.
 // An unknown or empty value shows every type.
 var notificationTypeSources = map[string][]activities_model.NotificationSource{
-	"change_requests": {
-		activities_model.NotificationSourcePullRequest,
-		activities_model.NotificationSourceIssue,
-		activities_model.NotificationSourceCommit,
-	},
-	"invites": {activities_model.NotificationSourceArticleCollaboratorInvite},
+	// no commit: Gitea never creates commit notifications, and the list has no row for them
+	"change_requests": {activities_model.NotificationSourcePullRequest, activities_model.NotificationSourceIssue},
+	"invites":         {activities_model.NotificationSourceArticleCollaboratorInvite},
 	"transfers": {
 		activities_model.NotificationSourceRepository,
 		activities_model.NotificationSourceRepoTransferRejected,

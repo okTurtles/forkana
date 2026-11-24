@@ -450,6 +450,18 @@
   color: var(--color-text-primary);
 }
 
+/* signin_openid.tmpl's "Back to sign in" is a header segment of its own, under the card: a link,
+   not a second title */
+.page-content.user.signin.openid .ui.attached.segment.header.top:has(> a:only-child) {
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
 /* Fomantic spaces the fields with margins; the card's gap does it instead */
 .page-content.user:is(.signin, .signup, .activate, .forgot.password, .reset.password) .ui.attached.segment > :is(.field, p, .ui.message, .flash-message, details) {
   margin: 0;

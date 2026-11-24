@@ -48,6 +48,44 @@ test('the list: title, toolbar, day groups and rows', async ({browser}, workerIn
   await context.close();
 });
 
+test('the Type menu closes on Escape and on a click outside it', async ({browser}, workerInfo) => {
+  const context = await load_logged_in_context(browser, workerInfo, 'user2');
+  const page = await context.newPage();
+  await page.goto('/notifications');
+  const menu = page.locator('.notifications-type-menu');
+  const options = menu.locator('.notifications-type-options');
+
+  await menu.locator('> summary').click();
+  await expect(options).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(options).toBeHidden();
+  await expect(menu.locator('> summary')).toBeFocused();
+
+  await menu.locator('> summary').click();
+  await expect(options).toBeVisible();
+  await page.locator('.notifications-title h1').click();
+  await expect(options).toBeHidden();
+  await context.close();
+});
+
+test('with a Type filter on: no Mark all as read, and an empty list says it is filtered', async ({browser}, workerInfo) => {
+  // user2 has unread notifications, none of them invites
+  const context = await load_logged_in_context(browser, workerInfo, 'user2');
+  const page = await context.newPage();
+  await page.goto('/notifications');
+  await expect(page.locator('.notifications-mark-all')).toHaveCount(1);
+
+  await page.goto('/notifications?type=unread&source=invites');
+  await expect(page.locator('.notifications-mark-all')).toHaveCount(0);
+  const empty = page.locator('.notifications-empty');
+  await expect(empty.locator('h2')).toHaveText('No unread notifications.');
+  await expect(empty.locator('p')).toContainText('Invites');
+  await empty.locator('a').click();
+  await expect(page).not.toHaveURL(/source=/);
+  await expect(page.locator('#notification_table .notifications-item').first()).toBeVisible();
+  await context.close();
+});
+
 test('the empty state: all caught up', async ({browser}, workerInfo) => {
   const context = await load_logged_in_context(browser, workerInfo, 'user5');
   const page = await context.newPage();

@@ -16,6 +16,7 @@ import {initAdminUserListSearchForm} from './features/admin/users.ts';
 import {initAdminConfigs} from './features/admin/config.ts';
 import {initMarkupAnchors} from './markup/anchors.ts';
 import {initNotificationCount} from './features/notification.ts';
+import {initNotificationTypeMenu} from './features/notification-type-menu.ts';
 import {initRepoIssueContentHistory} from './features/repo-issue-content.ts';
 import {initStopwatch} from './features/stopwatch.ts';
 import {initFindFileInRepo} from './features/repo-findfile.ts';
@@ -131,6 +132,7 @@ const initPerformanceTracer = callInitFunctions([
   initHomeSearchValidation,
 
   initNotificationCount,
+  initNotificationTypeMenu,
 
   initOrgTeam,
 
