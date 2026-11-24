@@ -13,11 +13,14 @@ test.describe('What can be reported (#541)', () => {
     await expect(show).toBeVisible();
     await expect(hide).toBeHidden();
     await expect(warning.locator('.help-cw-image')).toHaveCSS('filter', /blur/);
+    // screen readers don't read the image's description before the warning
+    await expect(warning.locator('.help-cw-image')).toHaveAttribute('aria-hidden', 'true');
 
     await show.click();
     await expect(hide).toBeVisible();
     await expect(hide).toBeFocused();
     await expect(warning.locator('.help-cw-image')).toHaveCSS('filter', 'none');
+    await expect(warning.locator('.help-cw-image')).not.toHaveAttribute('aria-hidden');
 
     await hide.click();
     await expect(show).toBeVisible();
@@ -43,6 +46,7 @@ test.describe('What can be reported (#541)', () => {
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})));
     await expect(warning.getByRole('button', {name: 'Show image'})).toBeVisible();
     await expect(warning.locator('.help-cw-image')).toHaveCSS('filter', /blur/);
+    await expect(warning.locator('.help-cw-image')).toHaveAttribute('aria-hidden', 'true');
   });
 
   test('on a desktop every reason is shown, with the Help sidebar', async ({page}) => {
@@ -73,9 +77,21 @@ test.describe('What can be reported (#541)', () => {
     await toggle.click();
     await expect(doxxing.locator('.help-reason-body')).toBeHidden();
 
-    // a link to a reason opens it
+    // a link to a reason on this page opens it (hashchange)
     await page.goto('/help/what-can-be-reported#off-topic-or-spam');
     await expect(page.locator('#off-topic-or-spam .help-reason-body')).toBeVisible();
+  });
+
+  test('on a phone a link from another page opens its reason', async ({page}) => {
+    // the report form's links: the page loads with the hash already set
+    await page.setViewportSize({width: 375, height: 812});
+    await page.goto('/help/what-can-be-reported?redirect_to=%2Fexplore%2Fsubjects#doxxing');
+    await expect(page.locator('#doxxing .help-reason-body')).toBeVisible();
+
+    // Back leads to the report form, as the phone has no sidebar
+    const back = page.locator('a.help-back');
+    await expect(back).toBeVisible();
+    await expect(back).toHaveAttribute('href', '/explore/subjects');
   });
 
   test('a malformed hash leaves the page working', async ({page}) => {

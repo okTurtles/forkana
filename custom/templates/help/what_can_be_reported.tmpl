@@ -4,10 +4,10 @@
 {{template "base/head" .}}
 <div role="main" aria-label="{{.Title}}" class="page-content help-page">
 	<div class="help-container">
-		{{/* desktop: back to the page that linked here, usually the report form (?redirect_to=);
-		     phone: up to Help, as the sidebar is not shown there */}}
-		<a href="{{.BackLink}}" class="help-back not-mobile">{{svg "octicon-chevron-left"}}{{ctx.Locale.Tr "help.back"}}</a>
-		<a href="{{AppSubUrl}}/help" class="help-back only-mobile">{{svg "octicon-chevron-left"}}{{ctx.Locale.Tr "help.title"}}</a>
+		{{/* back to the page that linked here, usually the report form (?redirect_to=). The phone
+		     frame has "‹ Help" (up to Help) instead: that waits for a /help page, as the phone has no
+		     other way back to the report form */}}
+		<a href="{{.BackLink}}" class="help-back">{{svg "octicon-chevron-left"}}{{ctx.Locale.Tr "help.back"}}</a>
 
 		<div class="help-columns">
 			<nav class="help-nav not-mobile" aria-label="{{ctx.Locale.Tr "help.title"}}">

@@ -45,7 +45,7 @@ func TestHelpBackLink(t *testing.T) {
 
 	back := func(query string) string {
 		resp := MakeRequest(t, NewRequest(t, "GET", "/help/what-can-be-reported"+query), http.StatusOK)
-		return NewHTMLParser(t, resp.Body).Find("a.help-back.not-mobile").AttrOr("href", "")
+		return NewHTMLParser(t, resp.Body).Find("a.help-back").AttrOr("href", "")
 	}
 	assert.Equal(t, "/", back(""))
 	assert.Equal(t, "/subject/example-subject/user2", back("?redirect_to=%2Fsubject%2Fexample-subject%2Fuser2"))

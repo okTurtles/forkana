@@ -417,6 +417,11 @@ a.help-reason-label:hover {
   top: 12px;
   right: 12px;
   z-index: 1;
+}
+
+/* not just "display: none" on .help-cw-hide: .forkana-btn's display would win if button.css were
+   imported after this file */
+.help-cw:not(.revealed) .help-cw-hide {
   display: none;
 }
 
@@ -428,10 +433,6 @@ a.help-reason-label:hover {
 .help-cw.revealed::after,
 .help-cw.revealed .help-cw-warning {
   display: none;
-}
-
-.help-cw.revealed .help-cw-hide {
-  display: inline-flex;
 }
 
 /* the toggle that opens a reason on a phone; a heading on a desktop */

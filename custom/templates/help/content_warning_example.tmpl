@@ -6,13 +6,14 @@
 	<div class="help-cw-excerpt">
 		<p>{{ctx.Locale.Tr "help.report.example_text"}}</p>
 		<div class="help-cw">
-			{{/* public domain, U.S. National Archives 531187 (via Wikimedia Commons) */}}
-			<img class="help-cw-image" src="{{AssetUrlPrefix}}/img/help/omaha-beach-wounded-1944.jpg" alt="{{ctx.Locale.Tr "help.report.example_alt"}}" loading="lazy">
+			{{/* public domain, U.S. National Archives 531187 (via Wikimedia Commons). Hidden from screen
+			     readers too while blurred, so its description isn't read before the warning */}}
+			<img class="help-cw-image" src="{{AssetUrlPrefix}}/img/help/omaha-beach-wounded-1944.jpg" alt="{{ctx.Locale.Tr "help.report.example_alt"}}" loading="lazy" aria-hidden="true">
 			<div class="help-cw-warning">
 				{{svg "octicon-eye-closed" 24}}
 				<div class="help-cw-warning-title">{{ctx.Locale.Tr "help.report.example_warning_title"}}</div>
 				<div class="help-cw-warning-reason">{{ctx.Locale.Tr "help.report.example_warning_reason"}}</div>
-				<button type="button" class="forkana-btn forkana-btn-secondary forkana-btn-sm" data-global-click="onHelpContentWarningShow">{{ctx.Locale.Tr "help.report.show_image"}}</button>
+				<button type="button" class="help-cw-show forkana-btn forkana-btn-secondary forkana-btn-sm" data-global-click="onHelpContentWarningShow">{{ctx.Locale.Tr "help.report.show_image"}}</button>
 			</div>
 			<button type="button" class="help-cw-hide forkana-btn forkana-btn-secondary forkana-btn-sm" data-global-click="onHelpContentWarningHide">{{svg "octicon-eye-closed"}}{{ctx.Locale.Tr "help.report.hide_image"}}</button>
 		</div>
