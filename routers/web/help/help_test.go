@@ -8,15 +8,16 @@ import (
 	"strings"
 	"testing"
 
+	"code.gitea.io/gitea/modules/setting"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/ini.v1"
 )
 
 // TestReasonExampleCounts: the example counts given to reason() match the en-US strings. Too high
 // shows a raw key as an example, too low drops one.
 func TestReasonExampleCounts(t *testing.T) {
-	locale, err := ini.Load("../../../custom/options/locale/locale_en-US.ini")
+	locale, err := setting.NewConfigProviderFromFile("../../../custom/options/locale/locale_en-US.ini")
 	require.NoError(t, err)
 	help := locale.Section("help")
 	has := func(key string) bool { return help.HasKey(strings.TrimPrefix(key, "help.")) }
