@@ -34,6 +34,12 @@ export function initHelpPage() {
   if (document.querySelector('.help-page')) {
     openTarget();
     window.addEventListener('hashchange', openTarget);
+    // Back and Forward may restore this page as it was left (the bfcache, kept on purpose by
+    // initPageShowBfcacheReload): blur the images again as the reader leaves, so coming back
+    // hides them as a reload does
+    window.addEventListener('pagehide', () => {
+      for (const warning of document.querySelectorAll('.help-cw.revealed')) warning.classList.remove('revealed');
+    });
   }
 }
 

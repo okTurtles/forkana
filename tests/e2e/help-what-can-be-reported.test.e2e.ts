@@ -29,6 +29,22 @@ test.describe('What can be reported (#541)', () => {
     await expect(warning.getByRole('button', {name: 'Show image'})).toBeVisible();
   });
 
+  test('leaving the page blurs the image again, for a return through Back', async ({page}) => {
+    // Back and Forward may restore the page from the back/forward cache, as it was left. The
+    // headless browsers don't reliably use that cache, so this sends the event leaving the page
+    // fires ("pagehide", persisted as when the page goes into the cache) and checks what the
+    // cached page would show.
+    await page.setViewportSize({width: 1440, height: 900});
+    await page.goto('/help/what-can-be-reported');
+    const warning = page.locator('#graphic-violence .help-cw');
+    await warning.getByRole('button', {name: 'Show image'}).click();
+    await expect(warning.locator('.help-cw-image')).toHaveCSS('filter', 'none');
+
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})));
+    await expect(warning.getByRole('button', {name: 'Show image'})).toBeVisible();
+    await expect(warning.locator('.help-cw-image')).toHaveCSS('filter', /blur/);
+  });
+
   test('on a desktop every reason is shown, with the Help sidebar', async ({page}) => {
     await page.setViewportSize({width: 1440, height: 900});
     await page.goto('/help/what-can-be-reported');
