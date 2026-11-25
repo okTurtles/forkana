@@ -1,0 +1,100 @@
+/* The error pages (404 in custom/templates/status/404.tmpl, 500 in templates/status/500.tmpl)
+   have no Figma frame. They take the empty state of the designed Notifications page, "You're
+   all caught up" (List 7895:6442, in "12 · Moderation: what users see" 7895:4184): a box with
+   a 1px #d1d9e0 border and 6px corners, 64px 24px inside, its parts centred 8px apart: a 56px
+   round icon (a 24px octicon), the title Inter 600 20/28 #1f2328, a line of Inter 400 14/20
+   #59636e and a link Inter 600 14/20 #4e40fa. Here the box sits in the 1080px column of the
+   designed pages (Container 7895:6432: 32px under the navbar). */
+.status-page-error.status-page-blankslate,
+.status-page-500 .status-page-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 1080px;
+  margin: 32px auto 48px;
+  padding: 63px 23px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface);
+  text-align: center;
+}
+
+/* the icon (Icon 7895:6443): 56px, round, the icon 24px. The figma's is the success green of
+   "all caught up"; a missing page is not a success, so it is the brand's tint instead */
+.status-page-blankslate-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 8px;
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+  color: var(--color-primary);
+}
+
+.status-page-blankslate .status-page-error-title,
+.status-page-500 .status-page-error-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.status-page-blankslate-text {
+  max-width: 607px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted-text);
+}
+
+.status-page-blankslate-text strong {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.status-page-blankslate-link {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+}
+
+.status-page-blankslate-link:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+
+/* 500: the error and the version lines in the same muted text, the error's details in a
+   box like the settings' read-only fields */
+.status-page-500 .status-page-error :is(p, .tw-mt-8) {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-muted-text);
+}
+
+.status-page-500 .status-page-error pre {
+  max-width: 100%;
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  color: var(--color-text-primary);
+}
+
+/* a phone: the page's 16px gutter, less air inside */
+@media (max-width: 767.98px) {
+  .status-page-error.status-page-blankslate,
+  .status-page-500 .status-page-error {
+    /* the container already keeps 8px from the edges */
+    margin: 16px 8px 32px;
+    padding: 39px 15px;
+  }
+}

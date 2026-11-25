@@ -16,6 +16,7 @@ import {initAdminUserListSearchForm} from './features/admin/users.ts';
 import {initAdminConfigs} from './features/admin/config.ts';
 import {initMarkupAnchors} from './markup/anchors.ts';
 import {initNotificationCount} from './features/notification.ts';
+import {initNotificationTypeMenu} from './features/notification-type-menu.ts';
 import {initRepoIssueContentHistory} from './features/repo-issue-content.ts';
 import {initStopwatch} from './features/stopwatch.ts';
 import {initFindFileInRepo} from './features/repo-findfile.ts';
@@ -41,6 +42,7 @@ import {initArticleEditor} from './features/article-editor.ts';
 import {initArticleSummary} from './features/article-summary.ts';
 import {initArticleSettings} from './features/article-settings.ts';
 import {initArticleWatchMenu} from './features/article-watch-menu.ts';
+import {initUserSettingsMenu} from './features/user-settings-menu.ts';
 import {initCompSearchUserBox} from './features/comp/SearchUserBox.ts';
 import {initInstall} from './features/install.ts';
 import {initCompWebHookEditor} from './features/comp/WebHookEditor.ts';
@@ -130,6 +132,7 @@ const initPerformanceTracer = callInitFunctions([
   initHomeSearchValidation,
 
   initNotificationCount,
+  initNotificationTypeMenu,
 
   initOrgTeam,
 
@@ -145,6 +148,7 @@ const initPerformanceTracer = callInitFunctions([
   initArticleSummary,
   initArticleSettings,
   initArticleWatchMenu,
+  initUserSettingsMenu,
   initRepoGraphGit,
   initRepoIssueContentHistory,
   initRepoIssueList,

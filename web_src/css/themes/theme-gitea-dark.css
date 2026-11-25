@@ -275,3 +275,9 @@ gitea-theme-meta-info {
 img[src$="/assets/img/logo-forkana.svg"] {
   content: url("/assets/img/logo-forkana-dark.svg");
 }
+
+/* the round logo (sign in / sign up, landing, footer) is #8e85f9 in the dark frames of
+   "#336 Dark mode WIP (testing)" (Sign in/up 5629:47697) */
+img[src$="/assets/img/logo.svg"] {
+  content: url("/assets/img/logo-dark.svg");
+}

@@ -41,11 +41,11 @@
 
 [data-theme="gitea-dark"],
 [data-theme="gitea-dark-protanopia-deuteranopia"] {
-  --color-primary: #4E40FA;
+  --color-primary: #8e85f9; /* #336 primary Button 5629:47721, links 5629:47712 */
   --color-primary-contrast: #ffffff;
-  --color-primary-hover: #6558FB;
-  --color-primary-active: #7C73FC;
-  --color-secondary-nav-bg: #181c20;
+  --color-primary-hover: #7d75db; /* #336 no hover in the frames: #8e85f9 12% toward black, so the white label keeps its contrast */
+  --color-primary-active: #6f68c2; /* #336 no pressed state in the frames: #8e85f9 22% toward black */
+  --color-secondary-nav-bg: #161b22; /* #336 Navbar 5629:47691 */
   /* #532: Primer's dark control/transparent/bgColor/hover (#656c76 at 20%) */
   --color-nav-hover-bg: #656c7633;
   --color-nav-hover-bg-solid: color-mix(in srgb, #656c76 20%, var(--color-body));
@@ -54,10 +54,10 @@
   --color-counter-primary-bg: #656c76;
   --color-counter-primary-fg: #ffffff;
 
-  --color-hover: #4E40FA19;
+  --color-hover: #8e85f91a; /* #336 the brand tint of a hovered row, from the new primary */
   --color-muted: #1f2428;
-  --color-muted-text: #8d96a0;
-  --color-text-light-3: #8d96a0;
+  --color-muted-text: #9198a1; /* #336 placeholder and muted text 5629:47706, 5629:47716 */
+  --color-text-light-3: #9198a1; /* #336 muted text 5629:47716 */
   --color-muted-1: #ffffff0f;
 
   --color-warning-border: #bb9d0066;
@@ -67,11 +67,11 @@
   --color-success-border: #458a5766;
   --color-success-bg: #1a3a28;
 
-  --color-box-header: #1a1d1f;
-  --color-diff-removed-linenum-bg: #f851494d;
-  --color-diff-removed-row-bg: #f851491a;
-  --color-diff-added-linenum-bg: #0c2d6b;
-  --color-diff-added-row-bg: #388bfd1a;
+  --color-box-header: #151b23; /* #336 Toolbar background 5629:49928 */
+  --color-diff-removed-linenum-bg: #311708; /* #336 removed text 5629:46877 (light #ffe7d1) */
+  --color-diff-removed-row-bg: #311708; /* #336 removed text 5629:46877 (light #ffe7d1) */
+  --color-diff-added-linenum-bg: #1b183f; /* #336 Rectangle 53 5629:50602 (light #e5e9ff, 5629:50446) */
+  --color-diff-added-row-bg: #1b183f; /* #336 Rectangle 53 5629:50602 (light #e5e9ff, 5629:50446) */
 
   /* Green colors */
   --color-green: #57ab5a;
@@ -81,32 +81,50 @@
   --color-green-dark-2: #3d7b42;
 
   /* Text colors */
-  --color-text-primary: #e6edf3;
-  --color-text-secondary: #8d96a0;
+  --color-text-primary: #f0f6fc; /* #336 text 5629:47702, 5629:47706 */
+  --color-text-secondary: #9198a1; /* #336 muted text 5629:47716 */
   --color-text-tertiary: #6e7681;
   --color-radio-border: #6e7681;
-  --color-button-text: #e6edf3;
-  --color-button-hover: #30363d;
+  --color-button-text: #f0f6fc; /* #336 Button label 5629:47722 */
+  --color-button-hover: #262c36; /* #336 hovered Button I5629:52747;36329:8527 */
   --color-button-text-disabled: #6e7681;
   --color-button-border-disabled: #6e76811a;
-  --color-button-secondary-hover-bg: #30363d;
-  --color-button-secondary-active-bg: #282e33;
+  --color-button-secondary-hover-bg: #262c36; /* #336 hovered Button I5629:52747;36329:8527 */
+  --color-button-secondary-active-bg: #2a313c; /* #336 pressed Button I5629:46884;8546:7584 */
   /* the dark "Outline focus" of the Design System file (STYLES > Dark mode, node 40000080:133320) */
   --color-button-focus-ring: #3b2fd4;
-  --color-button-primary-border: #f0f6fc1a;
+  --color-button-primary-border: #ffffff1a; /* #336 primary Button stroke 5629:47721 */
   /* the landing title in the dark Landing frame (Figma 5629:47735) */
   --color-home-title: #f0f6fc;
+  /* the sign-in card of the dark Sign in/up frame (5629:47704, #3d444d): the dark border */
+  --color-card-border: #3d444d; /* #336 sign-in card stroke 5629:47704 */
+  /* #336 Dark mode WIP (testing), Figma 5432:41310 as cached on Oct 26: new tokens and
+     Gitea base tokens the dark frames fix */
+  --color-button-secondary-bg: #212830; /* secondary Button fill 5629:47722 */
+  --color-primary-unavailable-bg: #2c23a8; /* unavailable primary Button I5629:49603;8356:68208 */
+  --color-body: #161b22; /* page fill 5629:47689 / Bubble view 5629:48326 */
+  --color-nav-bg: #161b22; /* Navbar fill 5629:47691 */
+  --color-box-body: #161b22; /* box fill 5629:47704 */
+  --color-text: #f0f6fc; /* text 5629:47702 */
+  --color-text-dark: #f0f6fc; /* text 5629:47702 */
+  --color-input-background: #0d1117; /* TextInput fill 5629:47706 */
+  --color-input-border: #3d444d; /* TextInput stroke 5629:47706 */
+  --color-secondary: #3d444d; /* borders 5629:47704 */
+  --color-light-border: #3d444db3; /* Navbar stroke #3d444d @0.70 5629:47691 */
+  --color-menu: #161b22; /* overlay fill, as the page 5629:47689 */
+  --color-card: #161b22; /* card fill 5629:47704 */
+  --color-button: #212830; /* secondary Button fill 5629:47722 */
 
   /* Border colors */
-  --color-border: #30363d;
-  --color-border-light: #21262d;
-  --color-border-input: #30363d;
-  --color-border-muted: #21262d;
+  --color-border: #3d444d; /* #336 borders 5629:47704, 5629:47706 */
+  --color-border-light: #3d444d; /* #336 box and button strokes 5629:47722, 5629:48914 */
+  --color-border-input: #3d444d; /* #336 TextInput stroke 5629:47706 */
+  --color-border-muted: #3d444db3; /* #336 rules: Navbar stroke #3d444d @0.70 5629:47691 */
 
   /* Surface colors */
-  --color-surface: #1b1f23;
-  --color-surface-muted: #161b22;
-  --color-surface-subtle: #21262d;
+  --color-surface: #161b22; /* #336 page and card fill 5629:47689, 5629:47704 */
+  --color-surface-muted: #151b23; /* #336 Toolbar background 5629:49928 */
+  --color-surface-subtle: #212830; /* #336 secondary Button 5629:47722 */
   --color-surface-toolbar: #13161a;
 
   /* Overlay & shadow */
@@ -114,14 +132,14 @@
   --color-shadow-medium: rgba(0, 0, 0, 0.4);
 
   /* Info banner (dark purple-tinted) */
-  --color-banner-bg: #1a1730;
-  --color-banner-border: #312a5e;
-  --color-banner-text: #c4b5fd;
+  --color-banner-bg: #2c23a8; /* #336 Announcement 5629:52638 */
+  --color-banner-border: #b3a9ff66; /* #336 Announcement stroke 5629:52638 */
+  --color-banner-text: #f0f6fc; /* #336 Announcement title I5629:52638;38494:155069 */
   --color-banner-hover: rgba(196, 181, 253, 0.1);
 
   /* Diff word highlight */
   --color-diff-del-word-bg: #f8514966;
-  --color-diff-add-num-bg: #0c2d6b;
+  --color-diff-add-num-bg: #1b183f; /* #336 Rectangle 53 5629:50602 */
 
   /* Warning theme */
   --color-warning-theme-bg: #2a2108;
@@ -130,16 +148,16 @@
   --color-warning-icon: #d29922;
 
   /* Fork modal */
-  --color-fork-text: #8d96a0;
-  --color-fork-btn-primary: #4E40FA;
-  --color-fork-btn-primary-hover: #6558fb;
-  --color-fork-btn-cancel-bg: #21262d;
-  --color-fork-btn-cancel-text: #c9d1d9;
-  --color-fork-btn-cancel-border: #30363d;
+  --color-fork-text: #9198a1; /* #336 muted text 5629:47716 */
+  --color-fork-btn-primary: #8e85f9; /* #336 primary Button 5629:47721 */
+  --color-fork-btn-primary-hover: #7d75db; /* #336 as --color-primary-hover */
+  --color-fork-btn-cancel-bg: #212830; /* #336 secondary Button 5629:47722 */
+  --color-fork-btn-cancel-text: #f0f6fc; /* #336 Button label 5629:47722 */
+  --color-fork-btn-cancel-border: #3d444d; /* #336 Button stroke 5629:47722 */
 
   /* Tab colors */
   --color-tab-inactive: #6e7681;
-  --color-tab-active-text: #e6edf3;
+  --color-tab-active-text: #f0f6fc; /* #336 text 5629:47702 */
 
   --color-white: #FFFFFF;
   --color-red: #f85149;
@@ -148,8 +166,8 @@
   --color-danger-bg: #f851491a;
   --color-danger-border: #f8514966;
   --color-attention-fg: #d29922;
-  --color-input-readonly-bg: #21262d;
-  --color-segmented-bg: #21262d;
+  --color-input-readonly-bg: #212830; /* #336 Tabnav-extra/button fill I5629:49689 */
+  --color-segmented-bg: #212830; /* #336 Tabnav-extra/button fill I5629:49689 */
   --color-dialog-backdrop: #010409a6;
   --color-dialog-shadow: #010409cc;
   --color-menu-shadow: #01040999;
@@ -182,11 +200,11 @@
 @media (prefers-color-scheme: dark) {
   [data-theme="gitea-auto"],
   [data-theme="gitea-auto-protanopia-deuteranopia"] {
-    --color-primary: #4E40FA;
+    --color-primary: #8e85f9; /* #336 primary Button 5629:47721, links 5629:47712 */
     --color-primary-contrast: #ffffff;
-    --color-primary-hover: #6558FB;
-    --color-primary-active: #7C73FC;
-    --color-secondary-nav-bg: #181c20;
+    --color-primary-hover: #7d75db; /* #336 no hover in the frames: #8e85f9 12% toward black, so the white label keeps its contrast */
+    --color-primary-active: #6f68c2; /* #336 no pressed state in the frames: #8e85f9 22% toward black */
+    --color-secondary-nav-bg: #161b22; /* #336 Navbar 5629:47691 */
     /* #532: Primer's dark control/transparent/bgColor/hover (#656c76 at 20%) */
     --color-nav-hover-bg: #656c7633;
     --color-nav-hover-bg-solid: color-mix(in srgb, #656c76 20%, var(--color-body));
@@ -195,10 +213,10 @@
     --color-counter-primary-bg: #656c76;
     --color-counter-primary-fg: #ffffff;
 
-    --color-hover: #4E40FA19;
+    --color-hover: #8e85f91a; /* #336 the brand tint of a hovered row, from the new primary */
     --color-muted: #1f2428;
-    --color-muted-text: #8d96a0;
-    --color-text-light-3: #8d96a0;
+    --color-muted-text: #9198a1; /* #336 placeholder and muted text 5629:47706, 5629:47716 */
+    --color-text-light-3: #9198a1; /* #336 muted text 5629:47716 */
     --color-muted-1: #ffffff0f;
 
     --color-warning-border: #bb9d0066;
@@ -208,11 +226,11 @@
     --color-success-border: #458a5766;
     --color-success-bg: #1a3a28;
 
-    --color-box-header: #1a1d1f;
-    --color-diff-removed-linenum-bg: #f851494d;
-    --color-diff-removed-row-bg: #f851491a;
-    --color-diff-added-linenum-bg: #0c2d6b;
-    --color-diff-added-row-bg: #388bfd1a;
+    --color-box-header: #151b23; /* #336 Toolbar background 5629:49928 */
+    --color-diff-removed-linenum-bg: #311708; /* #336 removed text 5629:46877 (light #ffe7d1) */
+    --color-diff-removed-row-bg: #311708; /* #336 removed text 5629:46877 (light #ffe7d1) */
+    --color-diff-added-linenum-bg: #1b183f; /* #336 Rectangle 53 5629:50602 (light #e5e9ff, 5629:50446) */
+    --color-diff-added-row-bg: #1b183f; /* #336 Rectangle 53 5629:50602 (light #e5e9ff, 5629:50446) */
 
     /* Green colors */
     --color-green: #57ab5a;
@@ -222,32 +240,49 @@
     --color-green-dark-2: #3d7b42;
 
     /* Text colors */
-    --color-text-primary: #e6edf3;
-    --color-text-secondary: #8d96a0;
+    --color-text-primary: #f0f6fc; /* #336 text 5629:47702, 5629:47706 */
+    --color-text-secondary: #9198a1; /* #336 muted text 5629:47716 */
     --color-text-tertiary: #6e7681;
     --color-radio-border: #6e7681;
-    --color-button-text: #e6edf3;
-    --color-button-hover: #30363d;
+    --color-button-text: #f0f6fc; /* #336 Button label 5629:47722 */
+    --color-button-hover: #262c36; /* #336 hovered Button I5629:52747;36329:8527 */
     --color-button-text-disabled: #6e7681;
     --color-button-border-disabled: #6e76811a;
-    --color-button-secondary-hover-bg: #30363d;
-    --color-button-secondary-active-bg: #282e33;
+    --color-button-secondary-hover-bg: #262c36; /* #336 hovered Button I5629:52747;36329:8527 */
+    --color-button-secondary-active-bg: #2a313c; /* #336 pressed Button I5629:46884;8546:7584 */
     /* the dark "Outline focus" of the Design System file (STYLES > Dark mode, node 40000080:133320) */
     --color-button-focus-ring: #3b2fd4;
-    --color-button-primary-border: #f0f6fc1a;
+    --color-button-primary-border: #ffffff1a; /* #336 primary Button stroke 5629:47721 */
     /* the landing title in the dark Landing frame (Figma 5629:47735) */
     --color-home-title: #f0f6fc;
+    --color-card-border: #3d444d; /* #336 sign-in card stroke 5629:47704 */
+    /* #336 Dark mode WIP (testing), Figma 5432:41310 as cached on Oct 26: new tokens and
+       Gitea base tokens the dark frames fix */
+    --color-button-secondary-bg: #212830; /* secondary Button fill 5629:47722 */
+    --color-primary-unavailable-bg: #2c23a8; /* unavailable primary Button I5629:49603;8356:68208 */
+    --color-body: #161b22; /* page fill 5629:47689 / Bubble view 5629:48326 */
+    --color-nav-bg: #161b22; /* Navbar fill 5629:47691 */
+    --color-box-body: #161b22; /* box fill 5629:47704 */
+    --color-text: #f0f6fc; /* text 5629:47702 */
+    --color-text-dark: #f0f6fc; /* text 5629:47702 */
+    --color-input-background: #0d1117; /* TextInput fill 5629:47706 */
+    --color-input-border: #3d444d; /* TextInput stroke 5629:47706 */
+    --color-secondary: #3d444d; /* borders 5629:47704 */
+    --color-light-border: #3d444db3; /* Navbar stroke #3d444d @0.70 5629:47691 */
+    --color-menu: #161b22; /* overlay fill, as the page 5629:47689 */
+    --color-card: #161b22; /* card fill 5629:47704 */
+    --color-button: #212830; /* secondary Button fill 5629:47722 */
 
     /* Border colors */
-    --color-border: #30363d;
-    --color-border-light: #21262d;
-    --color-border-input: #30363d;
-    --color-border-muted: #21262d;
+    --color-border: #3d444d; /* #336 borders 5629:47704, 5629:47706 */
+    --color-border-light: #3d444d; /* #336 box and button strokes 5629:47722, 5629:48914 */
+    --color-border-input: #3d444d; /* #336 TextInput stroke 5629:47706 */
+    --color-border-muted: #3d444db3; /* #336 rules: Navbar stroke #3d444d @0.70 5629:47691 */
 
     /* Surface colors */
-    --color-surface: #1b1f23;
-    --color-surface-muted: #161b22;
-    --color-surface-subtle: #21262d;
+    --color-surface: #161b22; /* #336 page and card fill 5629:47689, 5629:47704 */
+    --color-surface-muted: #151b23; /* #336 Toolbar background 5629:49928 */
+    --color-surface-subtle: #212830; /* #336 secondary Button 5629:47722 */
     --color-surface-toolbar: #13161a;
 
     /* Overlay & shadow */
@@ -255,14 +290,14 @@
     --color-shadow-medium: rgba(0, 0, 0, 0.4);
 
     /* Info banner (dark purple-tinted) */
-    --color-banner-bg: #1a1730;
-    --color-banner-border: #312a5e;
-    --color-banner-text: #c4b5fd;
+    --color-banner-bg: #2c23a8; /* #336 Announcement 5629:52638 */
+    --color-banner-border: #b3a9ff66; /* #336 Announcement stroke 5629:52638 */
+    --color-banner-text: #f0f6fc; /* #336 Announcement title I5629:52638;38494:155069 */
     --color-banner-hover: rgba(196, 181, 253, 0.1);
 
     /* Diff word highlight */
     --color-diff-del-word-bg: #f8514966;
-    --color-diff-add-num-bg: #0c2d6b;
+    --color-diff-add-num-bg: #1b183f; /* #336 Rectangle 53 5629:50602 */
 
     /* Warning theme */
     --color-warning-theme-bg: #2a2108;
@@ -271,16 +306,16 @@
     --color-warning-icon: #d29922;
 
     /* Fork modal */
-    --color-fork-text: #8d96a0;
-    --color-fork-btn-primary: #4E40FA;
-    --color-fork-btn-primary-hover: #6558fb;
-    --color-fork-btn-cancel-bg: #21262d;
-    --color-fork-btn-cancel-text: #c9d1d9;
-    --color-fork-btn-cancel-border: #30363d;
+    --color-fork-text: #9198a1; /* #336 muted text 5629:47716 */
+    --color-fork-btn-primary: #8e85f9; /* #336 primary Button 5629:47721 */
+    --color-fork-btn-primary-hover: #7d75db; /* #336 as --color-primary-hover */
+    --color-fork-btn-cancel-bg: #212830; /* #336 secondary Button 5629:47722 */
+    --color-fork-btn-cancel-text: #f0f6fc; /* #336 Button label 5629:47722 */
+    --color-fork-btn-cancel-border: #3d444d; /* #336 Button stroke 5629:47722 */
 
     /* Tab colors */
     --color-tab-inactive: #6e7681;
-    --color-tab-active-text: #e6edf3;
+    --color-tab-active-text: #f0f6fc; /* #336 text 5629:47702 */
 
     --color-white: #FFFFFF;
     --color-red: #f85149;
@@ -289,8 +324,8 @@
     --color-danger-bg: #f851491a;
     --color-danger-border: #f8514966;
     --color-attention-fg: #d29922;
-    --color-input-readonly-bg: #21262d;
-    --color-segmented-bg: #21262d;
+    --color-input-readonly-bg: #212830; /* #336 Tabnav-extra/button fill I5629:49689 */
+    --color-segmented-bg: #212830; /* #336 Tabnav-extra/button fill I5629:49689 */
     --color-dialog-backdrop: #010409a6;
     --color-dialog-shadow: #010409cc;
     --color-menu-shadow: #01040999;
