@@ -6,6 +6,7 @@ package markdown
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -232,10 +233,10 @@ func ParseSourceRange(s string) (start, end int, ok bool) {
 	if !found {
 		return 0, 0, false
 	}
-	if _, err := fmt.Sscanf(before+" "+after, "%d %d", &start, &end); err != nil {
-		return 0, 0, false
-	}
-	if fmt.Sprintf("%d-%d", start, end) != s || start < 0 || end <= start {
+	start, err1 := strconv.Atoi(before)
+	end, err2 := strconv.Atoi(after)
+	// The round trip refuses signs and leading zeros: only the renderer's own form is a range.
+	if err1 != nil || err2 != nil || strconv.Itoa(start)+"-"+strconv.Itoa(end) != s || start < 0 || end <= start {
 		return 0, 0, false
 	}
 	return start, end, true

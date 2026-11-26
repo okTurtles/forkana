@@ -67,6 +67,9 @@ type RenderOptions struct {
 	// SourceRanges gives the blocks of a Markdown article a "data-source-range" attribute,
 	// their byte range in the README, so that a moderation report can anchor to a block
 	// (markdown.SourceRangeAttr). Off everywhere by default; only moderation pages set it.
+	// With it off, an author can still write the attribute, in raw HTML or a code block's info
+	// string: the sanitizer keeps only a well-formed range, and the server re-checks every
+	// reported range against its own parse of the README.
 	SourceRanges bool
 }
 

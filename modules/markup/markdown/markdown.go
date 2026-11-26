@@ -103,12 +103,11 @@ func (r *GlodmarkRender) highlightingRenderer(w util.BufWriter, c highlighting.C
 				}
 			}
 		}
-		var err error
+		rangeAttr := template.HTML("")
 		if sourceRange != "" {
-			err = r.ctx.RenderInternal.FormatWithSafeAttrs(w, `<div class="code-block-container code-overflow-scroll"><pre class="%s" data-source-range="%s"><code class="chroma language-%s display">`, preClasses, sourceRange, languageStr)
-		} else {
-			err = r.ctx.RenderInternal.FormatWithSafeAttrs(w, `<div class="code-block-container code-overflow-scroll"><pre class="%s"><code class="chroma language-%s display">`, preClasses, languageStr)
+			rangeAttr = htmlutil.HTMLFormat(` data-source-range="%s"`, sourceRange)
 		}
+		err := r.ctx.RenderInternal.FormatWithSafeAttrs(w, `<div class="code-block-container code-overflow-scroll"><pre class="%s"%s><code class="chroma language-%s display">`, preClasses, rangeAttr, languageStr)
 		if err != nil {
 			return
 		}

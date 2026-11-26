@@ -108,6 +108,11 @@ func TestSourceRangeSanitizer(t *testing.T) {
 	assert.Contains(t, out, `data-source-range="2-8"`, "the heading line, up to the attribute block")
 	assert.NotContains(t, out, `data-source-range="1-2"`)
 
+	// nor on a fenced code block, through its info string
+	out = renderWithSourceRanges(t, "```go {data-source-range=\"1-2\"}\nx\n```\n", true)
+	assert.Contains(t, out, `<pre class="code-block" data-source-range="32-34">`, "the renderer's range: the code's bytes")
+	assert.NotContains(t, out, `data-source-range="1-2"`)
+
 	// raw HTML keeps a well-formed range (the server re-checks it) and loses anything else
 	out = renderWithSourceRanges(t, "<p data-source-range=\"3-9\">a</p>\n\n<p data-source-range=\"x\">b</p>\n\n<span data-source-range=\"3-9\">c</span>\n", false)
 	assert.Contains(t, out, `<p data-source-range="3-9">a</p>`)
