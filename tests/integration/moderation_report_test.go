@@ -41,6 +41,7 @@ type reportBody struct {
 	CommitSHA   string         `json:"commit_sha,omitempty"`
 	Range       string         `json:"range,omitempty"`
 	Quote       string         `json:"quote,omitempty"`
+	Section     string         `json:"section,omitempty"`
 	Reasons     []reportReason `json:"reasons"`
 }
 
@@ -227,18 +228,26 @@ func TestModerationReport(t *testing.T) {
 	})
 
 	t.Run("ConcurrentSubmissionsLandOnOneCase", func(t *testing.T) {
+		// The requests are built here and checked after Wait: require (FailNow) may only be
+		// called from the test's goroutine.
+		sessions := []*TestSession{readerSession, otherSession}
+		reqs := make([]*RequestWrapper, len(sessions))
+		for i, s := range sessions {
+			reqs[i] = NewRequestWithJSON(t, "POST", reportURL, reportBody{
+				ClientToken: uuid.NewString(), Anchor: "whole",
+				Reasons: []reportReason{{"off-topic-or-spam", "Advertising."}},
+			})
+			reqs[i].SetHeader("X-Csrf-Token", GetUserCSRFToken(t, s))
+		}
+		codes := make([]int, len(sessions))
 		var wg sync.WaitGroup
-		for _, s := range []*TestSession{readerSession, otherSession} {
-			wg.Add(1)
-			go func(s *TestSession) {
-				defer wg.Done()
-				post(t, s, reportBody{
-					ClientToken: uuid.NewString(), Anchor: "whole",
-					Reasons: []reportReason{{"off-topic-or-spam", "Advertising."}},
-				}, http.StatusOK)
-			}(s)
+		for i, s := range sessions {
+			wg.Go(func() {
+				codes[i] = s.MakeRequest(t, reqs[i], NoExpectedStatus).Code
+			})
 		}
 		wg.Wait()
+		assert.Equal(t, []int{http.StatusOK, http.StatusOK}, codes)
 		assert.Equal(t, 1, unittest.GetCount(t, &moderation_model.Case{
 			TargetRepoID: article.ID, SectionAnchor: moderation_model.SectionWholeArticle, Reason: moderation_model.ReasonOffTopicOrSpam,
 		}))
@@ -288,6 +297,7 @@ func TestModerationReport(t *testing.T) {
 		assert.Equal(t, moderation_service.PriorityChildSafety, caseIssue.Priority)
 	})
 
+	// ChangePart works on the cases the subtests above filed: it can't run on its own.
 	t.Run("ChangePart", func(t *testing.T) {
 		ctx := t.Context()
 		violence := openCase(t, blockSection, moderation_model.ReasonGraphicViolence)
@@ -361,6 +371,53 @@ func TestModerationReport(t *testing.T) {
 			})
 		}
 		assert.Equal(t, before, countIssues(t))
+	})
+
+	t.Run("QuoteOnly", func(t *testing.T) {
+		out := post(t, readerSession, reportBody{
+			ClientToken: uuid.NewString(), Anchor: "quote_only", CommitSHA: commitSHA,
+			Quote: "  a passage\n in a table  ", Section: "user-content-no-such-heading",
+			Reasons: []reportReason{{"hate-or-harassment", "Targets a person."}},
+		}, http.StatusOK)
+		assert.Equal(t, "filed", out.Status)
+		sub, err := moderation_model.GetSubmission(t.Context(), out.SubmissionID)
+		require.NoError(t, err)
+		assert.Equal(t, moderation_model.AnchorQuoteOnly, sub.AnchorStatus)
+		assert.Equal(t, "a passage in a table", sub.Quote, "whitespace collapsed")
+		assert.Empty(t, sub.SectionAnchor, "a section the article doesn't have is dropped")
+		assert.NotNil(t, openCase(t, moderation_model.SectionIntro, moderation_model.ReasonHateOrHarassment), "filed under the introduction")
+	})
+
+	t.Run("PrivateArticleIs404", func(t *testing.T) {
+		_, err := db.GetEngine(t.Context()).ID(article.ID).Cols("is_private").Update(&repo_model.Repository{IsPrivate: true})
+		require.NoError(t, err)
+		defer func() {
+			_, err := db.GetEngine(t.Context()).ID(article.ID).Cols("is_private").Update(&repo_model.Repository{IsPrivate: false})
+			require.NoError(t, err)
+		}()
+		before := countIssues(t)
+		post(t, readerSession, reportBody{
+			ClientToken: uuid.NewString(), Anchor: "whole",
+			Reasons: []reportReason{{"doxxing", "x"}},
+		}, http.StatusNotFound)
+		assert.Equal(t, before, countIssues(t))
+	})
+
+	t.Run("ReportersCantReadTheCasesRepository", func(t *testing.T) {
+		c := openCase(t, blockSection, moderation_model.ReasonNoSource)
+		require.NotNil(t, c)
+		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: c.IssueID})
+		require.Equal(t, reader.ID, caseIssue.PosterID, "the reporter opened the case")
+		reports, err := moderation_model.FindReportsByCase(t.Context(), c.IssueID)
+		require.NoError(t, err)
+		require.NotEmpty(t, reports)
+		reasonIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: reports[0].IssueID})
+		adminSession := loginUser(t, admin.Name)
+		for _, index := range []int64{caseIssue.Index, reasonIssue.Index} {
+			issueURL := fmt.Sprintf("/%s/%s/issues/%d", casesRepo.OwnerName, casesRepo.Name, index)
+			adminSession.MakeRequest(t, NewRequest(t, "GET", issueURL), http.StatusOK)
+			readerSession.MakeRequest(t, NewRequest(t, "GET", issueURL), http.StatusNotFound)
+		}
 	})
 
 	t.Run("CrossReferencesAreNotCreated", func(t *testing.T) {

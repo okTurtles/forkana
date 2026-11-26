@@ -112,7 +112,7 @@ func TestModerationAccess(t *testing.T) {
 			p, err := access_model.GetUserRepoPermission(t.Context(), repo, tc.user)
 			require.NoError(t, err)
 			assert.Equal(t, tc.readIssues, p.CanRead(unit.TypeIssues), "user %s", tc.user.Name)
-			assert.False(t, p.CanRead(unit.TypeCode) && !tc.user.IsAdmin, "no code unit for %s", tc.user.Name)
+			assert.False(t, p.CanRead(unit.TypeCode), "no code unit, so no code for %s", tc.user.Name)
 		}
 		p, err := access_model.GetUserRepoPermission(t.Context(), repo, moderator)
 		require.NoError(t, err)

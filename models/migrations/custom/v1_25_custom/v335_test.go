@@ -9,6 +9,7 @@ import (
 	"code.gitea.io/gitea/models/migrations/base"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test_CreateModerationTables tests the v335 migration that creates the moderation tables.
@@ -19,15 +20,15 @@ func Test_CreateModerationTables(t *testing.T) {
 		return
 	}
 
-	assert.NoError(t, CreateModerationTables(x))
+	require.NoError(t, CreateModerationTables(x))
 
 	tables, err := x.DBMetas()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	want := map[string][]string{
 		"moderation_case":       {"issue_id", "kind", "target_repo_id", "section_anchor", "section_title", "reason", "target_user_id", "decision", "resolution", "needs_admin", "decided_by", "reopened_count", "reopened_unix", "waiting_on", "attention", "remove_scope", "reporter_note", "merged_into_issue_id"},
 		"moderation_submission": {"id", "reporter_id", "client_token", "target_repo_id", "commit_sha", "source_start", "source_end", "quote", "section_anchor", "anchor_status"},
 		"moderation_report":     {"issue_id", "submission_id", "case_issue_id", "reporter_id", "reason", "verdict", "on_hold"},
-		"moderation_audit":      {"id", "created_unix", "actor_id", "actor_role", "action", "case_issue_id", "summary"},
+		"moderation_audit":      {"id", "created_unix", "actor_id", "actor_role", "action", "case_issue_id", "conversation_issue_id", "target_user_id", "target_repo_id", "reason", "comment_id", "summary"},
 	}
 	for _, table := range tables {
 		cols, ok := want[table.Name]
