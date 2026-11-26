@@ -100,7 +100,12 @@ test('initPassageRoot highlights and selects', () => {
   const root = setup();
   root.setAttribute('data-passage-highlight', '110-113');
   root.setAttribute('data-passage-select', '');
-  Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? (() => {});
+  // jsdom has no scrollIntoView
+  const scrollIntoView = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = vi.fn();
+  onTestFinished(() => {
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
   initPassageRoot(root);
   expect(root.querySelector('h2').classList.contains('moderation-passage-highlight')).toBe(true);
 
@@ -113,4 +118,17 @@ test('initPassageRoot highlights and selects', () => {
   strong.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
   expect(picked).toEqual([{anchor: 'exact', range: '35-80', quote: 'O açaí é popular — 東京'}]);
   expect(root.querySelector('p').classList.contains('moderation-passage-highlight')).toBe(true);
+});
+
+test('a selection reaching outside the article picks nothing', () => {
+  const root = setup();
+  root.setAttribute('data-passage-select', '');
+  initPassageRoot(root);
+  const picked: Passage[] = [];
+  root.addEventListener('moderation:passage', (e) => picked.push((e as CustomEvent<Passage>).detail));
+  const outside = document.body.lastElementChild;
+  const strong = root.querySelector('strong');
+  select(strong.firstChild, 1, outside.firstChild, 3); // the outside block comes after the article
+  strong.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+  expect(picked).toEqual([]);
 });

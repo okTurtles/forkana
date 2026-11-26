@@ -47,8 +47,9 @@ export function findPassageBlock(node: Node | null, root: Element): HTMLElement 
   return block;
 }
 
-// sectionOf returns the id of the nearest heading before the element in root (without the
-// renderer's "user-content-" prefix kept or removed: as rendered), or ''.
+// sectionOf returns the id of the nearest heading before the element in root, as rendered:
+// "user-content-" prefix included, the same value as the server's SourceBlock.SectionAnchor.
+// It returns '' before the first heading.
 function sectionOf(el: Element, root: Element): string {
   let section = '';
   for (const h of root.querySelectorAll<HTMLElement>('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]')) {
@@ -117,8 +118,11 @@ export function initPassageRoot(root: HTMLElement) {
     hovered = null;
   });
   root.addEventListener('mouseup', (e) => {
-    const selected = passageFromSelection(window.getSelection(), root);
+    const sel = window.getSelection();
+    const selected = passageFromSelection(sel, root);
     if (selected) return pick(selected);
+    // A selection that can't be anchored (it starts outside the article): don't guess a block.
+    if (sel && !sel.isCollapsed) return;
     const block = findPassageBlock(e.target as Node, root);
     if (block) pick(passageFromBlock(block));
   });
