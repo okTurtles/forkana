@@ -43,8 +43,14 @@ func TestIssueWarning(t *testing.T) {
 
 	// issues 1 and 2 stand in for case issues: nothing here reads the issue
 	for _, id := range []int64{1, 2} {
-		require.NoError(t, moderation_model.InsertCase(ctx, &moderation_model.Case{IssueID: id, Kind: moderation_model.CaseKindArticle, TargetRepoID: 1, TargetUserID: owner.ID}))
+		require.NoError(t, moderation_model.InsertCase(ctx, &moderation_model.Case{IssueID: id, Kind: moderation_model.CaseKindArticle, TargetRepoID: 1, TargetUserID: owner.ID, Reason: moderation_model.ReasonDoxxing}))
 	}
+	require.NoError(t, moderation_model.InsertCase(ctx, &moderation_model.Case{IssueID: 3, Kind: moderation_model.CaseKindArticle, TargetRepoID: 1, TargetUserID: owner.ID, Reason: moderation_model.ReasonDoxxing, Resolution: moderation_model.ResolutionMerged, MergedIntoIssueID: 1}))
+
+	t.Run("MergedCasesDontWarn", func(t *testing.T) {
+		_, err := IssueWarning(ctx, WarningOptions{Doer: moderator, CaseIssueID: 3})
+		require.ErrorIs(t, err, util.ErrInvalidArgument)
+	})
 
 	t.Run("ReadersCantWarn", func(t *testing.T) {
 		_, err := IssueWarning(ctx, WarningOptions{Doer: reader, CaseIssueID: 1})
@@ -72,6 +78,7 @@ func TestIssueWarning(t *testing.T) {
 		assert.Equal(t, moderation_model.AuditWarned, audit[0].Action)
 		assert.Equal(t, moderation_model.ActorModerator, audit[0].ActorRole)
 		assert.Equal(t, owner.ID, audit[0].TargetUserID)
+		assert.Equal(t, moderation_model.ReasonDoxxing, audit[0].Reason)
 		assert.Equal(t, "until:"+ends.UTC().Format(time.DateOnly), audit[0].Summary)
 
 		unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: owner.ID, ProhibitLogin: false})

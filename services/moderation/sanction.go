@@ -31,7 +31,8 @@ type WarningOptions struct {
 // IssueWarning warns the owner of a case's target: a warning sanction in force for
 // WarningMonths calendar months, and its "warned" audit entry, in one transaction
 // (foundations decisions 6–7). A warning only records: it never changes the user.
-// It refuses doers who aren't moderators, and a second warning in force from the same case.
+// It refuses doers who aren't moderators, merged cases, and a second warning in force from the
+// same case.
 func IssueWarning(ctx context.Context, opts WarningOptions) (*moderation_model.Sanction, error) {
 	isModerator, err := IsModerator(ctx, opts.Doer)
 	if err != nil {
@@ -46,6 +47,12 @@ func IssueWarning(ctx context.Context, opts WarningOptions) (*moderation_model.S
 	}
 	if c == nil || c.TargetUserID == 0 {
 		return nil, util.NewNotExistErrorf("case %d has no user to warn", opts.CaseIssueID)
+	}
+	// A merged case's reports are in the case it was merged into, which warns instead: one
+	// offence, one warning. Whether a closed case can still warn is the decision service's
+	// rule (1.6).
+	if c.MergedIntoIssueID != 0 {
+		return nil, util.NewInvalidArgumentErrorf("case %d was merged into case %d", c.IssueID, c.MergedIntoIssueID)
 	}
 
 	// Two moderators warning from one case at once: one warning.
@@ -88,6 +95,7 @@ func IssueWarning(ctx context.Context, opts WarningOptions) (*moderation_model.S
 			ConversationIssueID: opts.ConversationIssueID,
 			TargetUserID:        c.TargetUserID,
 			TargetRepoID:        c.TargetRepoID,
+			Reason:              c.Reason,
 			Summary:             "until:" + sanction.EndsUnix.AsTime().UTC().Format(time.DateOnly),
 		})
 	})
