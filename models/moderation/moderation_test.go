@@ -140,6 +140,13 @@ func TestCaseDecisionsMatchLabels(t *testing.T) {
 		}
 		assert.True(t, found, "decision %q has a label", d)
 	}
+	for _, r := range []string{moderation_model.ResolutionMerged, moderation_model.ResolutionArticleRemoved} {
+		found := false
+		for _, l := range moderation_model.CoreLabels() {
+			found = found || l.Name == "resolution/"+r
+		}
+		assert.True(t, found, "resolution %q has a label", r)
+	}
 }
 
 func TestCaseWaitAndReopen(t *testing.T) {

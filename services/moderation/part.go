@@ -141,6 +141,12 @@ func moveCase(ctx context.Context, doer *user_model.User, role moderation_model.
 	return nil
 }
 
+// mergeCase moves a case's reports into the open case for the same reason on the new part,
+// then closes it as merged. The merged case's own state (WaitingOn, Attention, Decision and
+// ReporterNote) isn't carried over: the open case it joins already has its own, and the
+// merged case stays readable. A reporter can then have two pending reports for the reason in
+// that case. The close is the model-level one, without notifications: the cases repository
+// is unwatched, and the indexer is updated after the commit.
 func mergeCase(ctx context.Context, doer *user_model.User, role moderation_model.ActorRole, c *moderation_model.Case, issue *issues_model.Issue, into *moderation_model.Case, result **ChangePartResult) error {
 	intoIssue, err := issues_model.GetIssueByID(ctx, into.IssueID)
 	if err != nil {
@@ -150,13 +156,17 @@ func mergeCase(ctx context.Context, doer *user_model.User, role moderation_model
 	if err != nil {
 		return fmt.Errorf("find case reports: %w", err)
 	}
+	reportIssueIDs := make([]int64, len(reports))
+	for i, r := range reports {
+		reportIssueIDs[i] = r.IssueID
+	}
+	reportIssues, err := issues_model.GetIssuesByIDs(ctx, reportIssueIDs)
+	if err != nil {
+		return fmt.Errorf("get report issues: %w", err)
+	}
 	// The case dependencies follow the reports: the merged case can then close, and the case
 	// it was merged into can't close before they are decided.
-	for _, r := range reports {
-		reportIssue, err := issues_model.GetIssueByID(ctx, r.IssueID)
-		if err != nil {
-			return fmt.Errorf("get report issue: %w", err)
-		}
+	for _, reportIssue := range reportIssues {
 		if err := issues_model.RemoveIssueDependency(ctx, doer, issue, reportIssue, issues_model.DependencyTypeBlockedBy); err != nil && !issues_model.IsErrDependencyNotExists(err) {
 			return fmt.Errorf("unlink report from case: %w", err)
 		}
@@ -169,6 +179,17 @@ func mergeCase(ctx context.Context, doer *user_model.User, role moderation_model
 	}
 	if err := moderation_model.MarkMerged(ctx, c.IssueID, into.IssueID); err != nil {
 		return fmt.Errorf("mark case merged: %w", err)
+	}
+	if err := issue.LoadRepo(ctx); err != nil {
+		return fmt.Errorf("load cases repository: %w", err)
+	}
+	labels, err := coreLabelsByName(ctx, issue.Repo.OwnerID)
+	if err != nil {
+		return err
+	}
+	// The label projection of Resolution (foundations decisions 1.2).
+	if err := issues_model.NewIssueLabel(ctx, issue, labels[moderation_model.LabelResolutionMerged], doer); err != nil {
+		return fmt.Errorf("set merged label: %w", err)
 	}
 	if _, err := issues_model.CloseIssue(ctx, issue, doer); err != nil {
 		return fmt.Errorf("close merged case: %w", err)
