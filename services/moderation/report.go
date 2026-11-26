@@ -445,7 +445,7 @@ func loadOrCreateCase(ctx context.Context, casesRepo *repo_model.Repository, in 
 	issue := &issues_model.Issue{
 		RepoID:   casesRepo.ID,
 		Repo:     casesRepo,
-		Title:    caseTitle(in.Repo, section, sectionTitle, reason),
+		Title:    "case",
 		PosterID: in.Reporter.ID,
 		Poster:   in.Reporter,
 	}
@@ -455,6 +455,12 @@ func loadOrCreateCase(ctx context.Context, casesRepo *repo_model.Repository, in 
 	}
 	if err := issues_model.NewIssue(ctx, casesRepo, issue, labelIDs, nil); err != nil {
 		return nil, nil, fmt.Errorf("create case issue: %w", err)
+	}
+	// The title is set afterwards: NewIssue adds cross-references from the title as well as
+	// the content (foundations decisions 8), and the title quotes the article's heading.
+	issue.Title = caseTitle(in.Repo, section, sectionTitle, reason)
+	if err := issues_model.UpdateIssueCols(ctx, issue, "name"); err != nil {
+		return nil, nil, fmt.Errorf("set case title: %w", err)
 	}
 
 	previous, err := previousCaseIssueID(ctx, in.Repo.ID, section, reason)

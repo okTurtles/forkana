@@ -360,6 +360,23 @@ func TestModerationReport(t *testing.T) {
 			Reasons: []reportReason{{"plagiarism-or-copyright", "Copied, see user2/repo1#1 and #1."}},
 		}, http.StatusOK)
 		assert.Equal(t, before, unittest.GetCount(t, &issues_model.Comment{IssueID: 1}), "no reference comment on a public issue")
+
+		// The case title quotes the article's subject and headings, which authors write. The
+		// service is called directly: the report URL is looked up by the subject's name.
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: article.ID})
+		require.NoError(t, repo.LoadOwner(t.Context()))
+		require.NoError(t, repo.LoadSubject(t.Context()))
+		repo.SubjectRelation.Name = "See user2/repo1#1 and #1"
+		_, err := moderation_service.SubmitReport(t.Context(), moderation_service.ReportInput{
+			Reporter: other, Repo: repo, ClientToken: uuid.NewString(), Anchor: moderation_model.AnchorWhole,
+			Reasons: []moderation_service.ReasonInput{{Reason: moderation_model.ReasonNoSource, Explanation: "No sources."}},
+		})
+		require.NoError(t, err)
+		c := openCase(t, moderation_model.SectionWholeArticle, moderation_model.ReasonNoSource)
+		require.NotNil(t, c)
+		assert.Contains(t, unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: c.IssueID}).Title, "user2/repo1#1")
+		assert.Equal(t, before, unittest.GetCount(t, &issues_model.Comment{IssueID: 1}), "no reference comment from the case title")
+		unittest.AssertNotExistsBean(t, &issues_model.Comment{RefIssueID: c.IssueID})
 	})
 }
 
