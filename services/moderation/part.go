@@ -77,6 +77,9 @@ func ChangeCasePart(ctx context.Context, doer *user_model.User, caseIssueID int6
 		if err != nil {
 			return fmt.Errorf("get case %d: %w", caseIssueID, err)
 		}
+		if c == nil {
+			return util.NewNotExistErrorf("case %d no longer exists", caseIssueID)
+		}
 		issue, err := issues_model.GetIssueByID(ctx, c.IssueID)
 		if err != nil {
 			return fmt.Errorf("get case issue: %w", err)

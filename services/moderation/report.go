@@ -145,9 +145,9 @@ func SubmitReport(ctx context.Context, in ReportInput) (*ReportResult, error) {
 
 	section := caseSection(in.Anchor, anchor.section)
 	var result *ReportResult
-	var newIssueIDs []int64
+	var indexIssueIDs []int64
 	err = db.WithTx(ctx, func(ctx context.Context) error {
-		result, newIssueIDs = &ReportResult{}, nil
+		result, indexIssueIDs = &ReportResult{}, nil
 
 		// The open case of each ticked reason, if any, and the reasons to file.
 		cases := make(map[moderation_model.Reason]*moderation_model.Case, len(in.Reasons))
@@ -198,14 +198,13 @@ func SubmitReport(ctx context.Context, in ReportInput) (*ReportResult, error) {
 			if err != nil {
 				return err
 			}
-			if cases[r.Reason] == nil {
-				newIssueIDs = append(newIssueIDs, caseIssue.ID)
-			}
+			// A new case, or an existing one whose labels and priority fileReport may change.
+			indexIssueIDs = append(indexIssueIDs, caseIssue.ID)
 			issue, err := fileReport(ctx, casesRepo, in, sub, c, caseIssue, r, labels)
 			if err != nil {
 				return err
 			}
-			newIssueIDs = append(newIssueIDs, issue.ID)
+			indexIssueIDs = append(indexIssueIDs, issue.ID)
 		}
 		return nil
 	})
@@ -220,7 +219,7 @@ func SubmitReport(ctx context.Context, in ReportInput) (*ReportResult, error) {
 
 	// After the commit only: the indexer, so the queue's label filters find the issues. No
 	// mention parsing and no stock notifications (foundations decisions 8).
-	for _, id := range newIssueIDs {
+	for _, id := range indexIssueIDs {
 		issue_indexer.UpdateIssueIndexer(ctx, id)
 	}
 	return result, nil
