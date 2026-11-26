@@ -11,6 +11,7 @@ import (
 	moderation_model "code.gitea.io/gitea/models/moderation"
 	repo_model "code.gitea.io/gitea/models/repo"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/markup/markdown"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -20,7 +21,7 @@ import (
 func TestSectionLengths(t *testing.T) {
 	long := strings.Repeat("Very long heading ", 30) // 540 characters
 
-	title := headingTitle(t.Context(), []byte("# "+long+"\n\nText.\n"), "user-content-"+strings.TrimSuffix(strings.ReplaceAll(strings.ToLower(long), " ", "-"), "-"))
+	title := headingTitle(markdown.SourceBlocks(t.Context(), []byte("# "+long+"\n\nText.\n")), "user-content-"+strings.TrimSuffix(strings.ReplaceAll(strings.ToLower(long), " ", "-"), "-"))
 	assert.NotEmpty(t, title)
 	assert.LessOrEqual(t, utf8.RuneCountInString(title), moderation_model.MaxSectionLength)
 

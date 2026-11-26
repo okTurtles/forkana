@@ -16,6 +16,7 @@ import (
 	moderation_model "code.gitea.io/gitea/models/moderation"
 	repo_model "code.gitea.io/gitea/models/repo"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/globallock"
 	issue_indexer "code.gitea.io/gitea/modules/indexer/issues"
@@ -306,8 +307,9 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 	if err != nil {
 		return nil, err
 	}
+	blocks := markdown.SourceBlocks(ctx, raw)
 	if in.Anchor == moderation_model.AnchorExact {
-		block, ok := markdown.VerifySourceRange(ctx, raw, in.SourceStart, in.SourceEnd)
+		block, ok := markdown.FindSourceRange(blocks, len(raw), in.SourceStart, in.SourceEnd)
 		if !ok {
 			return nil, invalid("the passage isn't a block of the article at %s", in.CommitSHA)
 		}
@@ -317,7 +319,7 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 		return &resolvedAnchor{
 			commitSHA: in.CommitSHA, start: block.Start, end: block.End,
 			quote: block.Quote, section: block.SectionAnchor,
-			sectionTitle: headingTitle(ctx, raw, block.SectionAnchor),
+			sectionTitle: headingTitle(blocks, block.SectionAnchor),
 		}, nil
 	}
 
@@ -332,7 +334,7 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 	}
 	section, title := "", ""
 	if in.Section != "" && checkSectionAnchor(in.Section) == nil {
-		if title = headingTitle(ctx, raw, in.Section); title != "" {
+		if title = headingTitle(blocks, in.Section); title != "" {
 			section = in.Section
 		}
 	}
@@ -342,11 +344,11 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 // headingTitle returns the text of the article's heading with the id, or "" when there is
 // none (no id: the passage is before the first heading). It is shortened to fit
 // Case.SectionTitle and the case title.
-func headingTitle(ctx context.Context, raw []byte, id string) string {
+func headingTitle(blocks []markdown.SourceBlock, id string) string {
 	if id == "" {
 		return ""
 	}
-	for _, b := range markdown.SourceBlocks(ctx, raw) {
+	for _, b := range blocks {
 		if b.Kind == "heading" && b.SectionAnchor == id {
 			if b.Quote == "" {
 				return id
@@ -392,7 +394,8 @@ func isFullCommitID(sha string) bool {
 	return true
 }
 
-// readArticleAt reads the article's README at a commit of its repository.
+// readArticleAt reads the article's README at a commit of its repository. A commit or README
+// that doesn't exist is an invalid report; other failures are server errors.
 func readArticleAt(ctx context.Context, repo *repo_model.Repository, sha string) ([]byte, error) {
 	gitRepo, err := gitrepo.OpenRepository(ctx, repo)
 	if err != nil {
@@ -400,12 +403,25 @@ func readArticleAt(ctx context.Context, repo *repo_model.Repository, sha string)
 	}
 	defer gitRepo.Close()
 	commit, err := gitRepo.GetCommit(sha)
-	if err != nil {
+	if errors.Is(err, util.ErrNotExist) {
 		return nil, invalid("unknown commit %s", sha)
+	} else if err != nil {
+		return nil, fmt.Errorf("get commit %s: %w", sha, err)
 	}
+	return readArticleOf(commit)
+}
+
+// readArticleOf reads the article's README in a commit. A README larger than maxReadmeSize is
+// refused rather than cut, so that ranges past the cut aren't reported as unknown blocks.
+func readArticleOf(commit *git.Commit) ([]byte, error) {
 	blob, err := commit.Tree.GetBlobByPath(ArticleTreePath)
-	if err != nil {
-		return nil, invalid("the article has no %s at %s", ArticleTreePath, sha)
+	if errors.Is(err, util.ErrNotExist) {
+		return nil, invalid("the article has no %s at %s", ArticleTreePath, commit.ID)
+	} else if err != nil {
+		return nil, fmt.Errorf("get %s at %s: %w", ArticleTreePath, commit.ID, err)
+	}
+	if blob.Size() > maxReadmeSize {
+		return nil, invalid("the article at %s is too large to check a passage in", commit.ID)
 	}
 	raw, err := blob.GetBlobBytes(maxReadmeSize)
 	if err != nil {

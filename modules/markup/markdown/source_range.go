@@ -210,7 +210,15 @@ func VerifySourceRange(ctx context.Context, raw []byte, start, end int) (*Source
 	if start < 0 || end <= start || end > len(raw) {
 		return nil, false
 	}
-	for _, b := range SourceBlocks(ctx, raw) {
+	return FindSourceRange(SourceBlocks(ctx, raw), len(raw), start, end)
+}
+
+// FindSourceRange is VerifySourceRange over blocks already parsed from a README of rawLen bytes.
+func FindSourceRange(blocks []SourceBlock, rawLen, start, end int) (*SourceBlock, bool) {
+	if start < 0 || end <= start || end > rawLen {
+		return nil, false
+	}
+	for _, b := range blocks {
 		if b.Start == start && b.End == end {
 			return &b, true
 		}

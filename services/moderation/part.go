@@ -16,6 +16,7 @@ import (
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/globallock"
 	issue_indexer "code.gitea.io/gitea/modules/indexer/issues"
+	"code.gitea.io/gitea/modules/markup/markdown"
 	"code.gitea.io/gitea/modules/util"
 )
 
@@ -209,11 +210,11 @@ func partTitle(ctx context.Context, repo *repo_model.Repository, section string)
 	if err != nil {
 		return "", fmt.Errorf("get the article's %s: %w", repo.DefaultBranch, err)
 	}
-	raw, err := readArticleAt(ctx, repo, commit.ID.String())
+	raw, err := readArticleOf(commit)
 	if err != nil {
 		return "", err
 	}
-	title := headingTitle(ctx, raw, section)
+	title := headingTitle(markdown.SourceBlocks(ctx, raw), section)
 	if title == "" {
 		return "", invalid("the article has no section %q", section)
 	}
