@@ -67,6 +67,15 @@ func TestModerationAccess(t *testing.T) {
 		require.NoError(t, repo_service.RemoveRepositoryFromTeam(t.Context(), other, repo.ID))
 	})
 
+	t.Run("CantBeTransferredOrRenamed", func(t *testing.T) {
+		err := repo_service.StartRepositoryTransfer(t.Context(), admin, outsider, repo, nil)
+		require.ErrorIs(t, err, repo_service.ErrModerationCasesRepoFixed)
+		err = repo_service.ChangeRepositoryName(t.Context(), admin, repo, "renamed")
+		require.ErrorIs(t, err, repo_service.ErrModerationCasesRepoFixed)
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: repo.ID})
+		assert.True(t, repo.IsModerationCasesRepo(), "still in place")
+	})
+
 	t.Run("IsModerator", func(t *testing.T) {
 		for _, tc := range []struct {
 			user *user_model.User

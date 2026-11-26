@@ -262,11 +262,8 @@ func transferOwnership(ctx context.Context, doer *user_model.User, newOwnerName 
 		return fmt.Errorf("decrease old owner repository count: %w", err)
 	}
 
-	// The moderation cases repository stays unwatched: moderators get targeted alerts instead.
-	if !repo.IsModerationCasesRepo() {
-		if err := repo_model.WatchRepo(ctx, doer, repo, true); err != nil {
-			return fmt.Errorf("watchRepo: %w", err)
-		}
+	if err := repo_model.AutoWatchRepo(ctx, doer, repo); err != nil {
+		return fmt.Errorf("watchRepo: %w", err)
 	}
 
 	if oldOwner.IsOrganization() {
@@ -397,9 +394,28 @@ func changeRepositoryName(ctx context.Context, repo *repo_model.Repository, newR
 	})
 }
 
+// ErrModerationCasesRepoFixed is returned for a transfer or rename of the moderation cases
+// repository.
+var ErrModerationCasesRepoFixed = util.NewPermissionDeniedErrorf("the moderation cases repository can't be transferred or renamed")
+
+// checkNotModerationCasesRepo refuses to move the moderation cases repository. It is found by
+// [moderation] ORG and REPO, so a rename would silently make it an ordinary repository, and a
+// transfer would hand every report to the new owner and, out of an organization, delete the
+// organization's labels from its issues. To move it, change the settings and run setup.
+func checkNotModerationCasesRepo(repo *repo_model.Repository) error {
+	if repo.IsModerationCasesRepo() {
+		return ErrModerationCasesRepoFixed
+	}
+	return nil
+}
+
 // ChangeRepositoryName changes all corresponding setting from old repository name to new one.
 func ChangeRepositoryName(ctx context.Context, doer *user_model.User, repo *repo_model.Repository, newRepoName string) error {
 	log.Trace("ChangeRepositoryName: %s/%s -> %s", doer.Name, repo.Name, newRepoName)
+
+	if err := checkNotModerationCasesRepo(repo); err != nil {
+		return err
+	}
 
 	oldRepoName := repo.Name
 
@@ -428,6 +444,9 @@ func ChangeRepositoryName(ctx context.Context, doer *user_model.User, repo *repo
 // StartRepositoryTransfer transfer a repo from one owner to a new one.
 // it make repository into pending transfer state, if doer can not create repo for new owner.
 func StartRepositoryTransfer(ctx context.Context, doer, newOwner *user_model.User, repo *repo_model.Repository, teams []*organization.Team) error {
+	if err := checkNotModerationCasesRepo(repo); err != nil {
+		return err
+	}
 	releaser, err := globallock.Lock(ctx, getRepoWorkingLockKey(repo.ID))
 	if err != nil {
 		return fmt.Errorf("lock.Lock: %w", err)

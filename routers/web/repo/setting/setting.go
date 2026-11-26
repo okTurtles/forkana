@@ -205,6 +205,8 @@ func handleSettingsPostUpdate(ctx *context.Context) {
 				}
 			case db.IsErrNamePatternNotAllowed(err):
 				ctx.RenderWithErr(ctx.Tr("repo.form.name_pattern_not_allowed", err.(db.ErrNamePatternNotAllowed).Pattern), tplSettingsOptions, &form)
+			case errors.Is(err, repo_service.ErrModerationCasesRepoFixed):
+				ctx.RenderWithErr(ctx.Tr("repo.settings.moderation_cases_repo_fixed"), tplSettingsOptions, &form)
 			default:
 				ctx.ServerError("ChangeRepositoryName", err)
 			}
@@ -959,6 +961,8 @@ func handleArticleSettingsPostTransfer(ctx *context.Context) {
 			ctx.Flash.Error(ctx.TrN(limit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", limit))
 		case errors.Is(err, user_model.ErrBlockedUser):
 			ctx.Flash.Error(ctx.Tr("repo.settings.transfer.blocked_user"))
+		case errors.Is(err, repo_service.ErrModerationCasesRepoFixed):
+			ctx.Flash.Error(ctx.Tr("repo.settings.moderation_cases_repo_fixed"))
 		default:
 			ctx.ServerError("TransferOwnership", err)
 			return
@@ -1031,6 +1035,8 @@ func handleSettingsPostTransfer(ctx *context.Context) {
 			ctx.RenderWithErr(ctx.TrN(limit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", limit), tplSettingsOptions, nil)
 		} else if errors.Is(err, user_model.ErrBlockedUser) {
 			ctx.RenderWithErr(ctx.Tr("repo.settings.transfer.blocked_user"), tplSettingsOptions, nil)
+		} else if errors.Is(err, repo_service.ErrModerationCasesRepoFixed) {
+			ctx.RenderWithErr(ctx.Tr("repo.settings.moderation_cases_repo_fixed"), tplSettingsOptions, nil)
 		} else {
 			ctx.ServerError("TransferOwnership", err)
 		}

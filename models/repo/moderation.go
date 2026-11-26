@@ -4,6 +4,7 @@
 package repo
 
 import (
+	"context"
 	"strings"
 
 	user_model "code.gitea.io/gitea/models/user"
@@ -22,6 +23,17 @@ func (repo *Repository) IsModerationCasesRepo() bool {
 	return repo != nil &&
 		strings.EqualFold(repo.OwnerName, setting.Moderation.Org) &&
 		strings.EqualFold(repo.Name, setting.Moderation.Repo)
+}
+
+// AutoWatchRepo makes u watch repo, as Gitea does when a repository is created, transferred
+// or given to a team. It does nothing for the moderation cases repository, which stays
+// unwatched: moderators get targeted alerts, not a notification for every report. Every
+// automatic watch goes through it; a user watching the repository on purpose doesn't.
+func AutoWatchRepo(ctx context.Context, u *user_model.User, repo *Repository) error {
+	if repo.IsModerationCasesRepo() {
+		return nil
+	}
+	return WatchRepo(ctx, u, repo, true)
 }
 
 // notModerationCasesRepoCond excludes the moderation cases repository from a listing: its
