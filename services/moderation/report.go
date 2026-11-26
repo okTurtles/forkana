@@ -41,7 +41,7 @@ const (
 const (
 	PriorityNormal         = 0
 	PriorityHigh           = 1 // three or more submissions
-	PriorityDeadlinePassed = 2 // Request sources, and the deadline passed: back on top for its moderator
+	PriorityDeadlinePassed = 2 // Request sources, and the deadline passed: on top for its moderator, or of the Queue if nobody holds it
 	PriorityChildSafety    = 3 // any child-safety report: reviewed first
 	highPrioritySubmits    = 3
 )

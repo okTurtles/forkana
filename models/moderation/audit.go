@@ -31,17 +31,24 @@ const (
 	AuditAssigned        AuditAction = "assigned"
 	AuditTaken           AuditAction = "taken"
 	AuditReturnedToQueue AuditAction = "returned_to_queue"
-	AuditDeadlinePassed  AuditAction = "deadline_passed" // automatic: the sources deadline passed; nothing is removed
-	AuditDecided         AuditAction = "decided"
-	AuditWarned          AuditAction = "warned"
-	AuditReopened        AuditAction = "reopened"
-	AuditEscalated       AuditAction = "escalated"
+	// AuditReturnedToModerator: a waiting case came back to its moderator. Summary is the
+	// attention (needs_reply: actor user; deadline_passed: automatic; admin_decided: admin).
+	AuditReturnedToModerator AuditAction = "returned_to_moderator"
+	AuditDecided             AuditAction = "decided"
+	AuditWarned              AuditAction = "warned"
+	AuditReopened            AuditAction = "reopened"
+	AuditEscalated           AuditAction = "escalated"
 )
+
+// MaxAuditSummaryLength caps Summary, in characters, such as a reopen reason.
+const MaxAuditSummaryLength = 255
 
 // Audit is one entry of the moderation audit log. It is append-only: this package inserts and
 // reads entries, and has nothing to change or delete one. Entries are written by
 // services/moderation in the same transaction as the action they record. Summary is made by
-// the service from a fixed template: never text a person typed, an IP or an email address.
+// the service from a fixed template. The one exception is a reopen, whose Summary is the
+// reopening moderator's reason (at most MaxAuditSummaryLength). Never text from a reporter
+// or an owner, an IP or an email address.
 type Audit struct {
 	ID                  int64              `xorm:"pk autoincr"`
 	CreatedUnix         timeutil.TimeStamp `xorm:"INDEX created"`

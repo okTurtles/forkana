@@ -30,6 +30,19 @@ const (
 	DecisionEscalated        = "escalated"
 )
 
+// Who a case waits for (Case.WaitingOn).
+const (
+	WaitingOnOwner = "owner" // sources requested: the owner replies, or adds a source
+	WaitingOnAdmin = "admin" // escalated: a site admin decides
+)
+
+// Why a case came back to its moderator (Case.Attention).
+const (
+	AttentionNeedsReply     = "needs_reply"     // the owner replied or added a source; the moderator decides if it's enough
+	AttentionDeadlinePassed = "deadline_passed" // the sources deadline passed; nothing is removed automatically
+	AttentionAdminDecided   = "admin_decided"   // the site admin decided an escalated case
+)
+
 // LabelName returns the name of the kind's label.
 func (k CaseKind) LabelName() string {
 	return "kind/" + string(k)
@@ -57,14 +70,16 @@ type Case struct {
 	DecidedBy           int64              `xorm:"INDEX NOT NULL DEFAULT 0"`
 	DecidedUnix         timeutil.TimeStamp `xorm:"INDEX"`
 	ReopenedCount       int                `xorm:"NOT NULL DEFAULT 0"` // incremented by each reopen
-	ReopenedUnix        timeutil.TimeStamp // set by each reopen; see IsReexamining
+	ReopenedUnix        timeutil.TimeStamp // set by each reopen; the case shows "Reopened", see IsReexamining
 	PreviousCaseIssueID int64              `xorm:"NOT NULL DEFAULT 0"`
 
-	// WaitingOnOwner is set by Request sources (foundations decisions 12): the case stays
-	// assigned and counts toward the moderator's limit, but the 48h return skips it until
-	// the owner responds (a message in the case conversation, or a change to the article)
-	// or the deadline passes. The case is never removed automatically at the deadline.
-	WaitingOnOwner bool `xorm:"INDEX NOT NULL DEFAULT false"`
+	// WaitingOn is who the case waits for (foundations decisions 12): the owner after Request
+	// sources, a site admin after Escalate. The case keeps its moderator and counts toward
+	// their limit, but the 48h return skips it while it waits.
+	WaitingOn string `xorm:"VARCHAR(16) INDEX NOT NULL DEFAULT ''"`
+	// Attention is why the case came back to its moderator (ReturnToModerator), shown on the
+	// case until the moderator acts on it.
+	Attention string `xorm:"VARCHAR(24) INDEX NOT NULL DEFAULT ''"`
 
 	CreatedUnix timeutil.TimeStamp `xorm:"INDEX created"`
 	UpdatedUnix timeutil.TimeStamp `xorm:"updated"`
@@ -117,16 +132,24 @@ func (c *Case) IsReexamining() bool {
 	return c.ReopenedUnix > c.DecidedUnix
 }
 
-// SetWaitingOnOwner starts or ends the wait on the owner after Request sources. Ending it
-// restarts the 48h timer at now, so the moderator has the usual time to look at the owner's
-// response (or at the passed deadline).
-func SetWaitingOnOwner(ctx context.Context, caseIssueID int64, waiting bool, now timeutil.TimeStamp) error {
-	c := &Case{WaitingOnOwner: waiting}
-	cols := []string{"waiting_on_owner"}
-	if !waiting {
-		c.AssignedUnix = now
-		cols = append(cols, "assigned_unix")
-	}
-	_, err := db.GetEngine(ctx).ID(caseIssueID).Cols(cols...).Update(c)
+// StartWaiting marks the case as waiting for the owner or a site admin. The 48h return skips
+// it until ReturnToModerator.
+func StartWaiting(ctx context.Context, caseIssueID int64, on string) error {
+	_, err := db.GetEngine(ctx).ID(caseIssueID).Cols("waiting_on", "attention").Update(&Case{WaitingOn: on})
+	return err
+}
+
+// ReturnToModerator ends the wait and gives the case back to its moderator with why it came
+// back. The 48h timer restarts at now. A case nobody holds stays in the Queue, where the
+// deadline-passed priority puts it on top.
+func ReturnToModerator(ctx context.Context, caseIssueID int64, attention string, now timeutil.TimeStamp) error {
+	_, err := db.GetEngine(ctx).ID(caseIssueID).Cols("waiting_on", "attention", "assigned_unix").
+		Update(&Case{Attention: attention, AssignedUnix: now})
+	return err
+}
+
+// ClearAttention is called by the moderator's next action on the case.
+func ClearAttention(ctx context.Context, caseIssueID int64) error {
+	_, err := db.GetEngine(ctx).ID(caseIssueID).Cols("attention").Update(&Case{})
 	return err
 }
