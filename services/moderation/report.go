@@ -311,6 +311,9 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 		if !ok {
 			return nil, invalid("the passage isn't a block of the article at %s", in.CommitSHA)
 		}
+		if err := checkSectionAnchor(block.SectionAnchor); err != nil {
+			return nil, err
+		}
 		return &resolvedAnchor{
 			commitSHA: in.CommitSHA, start: block.Start, end: block.End,
 			quote: block.Quote, section: block.SectionAnchor,
@@ -328,7 +331,7 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 		quote = string([]rune(quote)[:markdown.MaxSourceBlockQuote])
 	}
 	section, title := "", ""
-	if in.Section != "" {
+	if in.Section != "" && checkSectionAnchor(in.Section) == nil {
 		if title = headingTitle(ctx, raw, in.Section); title != "" {
 			section = in.Section
 		}
@@ -337,7 +340,8 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 }
 
 // headingTitle returns the text of the article's heading with the id, or "" when there is
-// none (no id: the passage is before the first heading).
+// none (no id: the passage is before the first heading). It is shortened to fit
+// Case.SectionTitle and the case title.
 func headingTitle(ctx context.Context, raw []byte, id string) string {
 	if id == "" {
 		return ""
@@ -347,10 +351,20 @@ func headingTitle(ctx context.Context, raw []byte, id string) string {
 			if b.Quote == "" {
 				return id
 			}
-			return b.Quote
+			return util.EllipsisDisplayString(b.Quote, moderation_model.MaxSectionLength)
 		}
 	}
 	return ""
+}
+
+// checkSectionAnchor refuses a heading id that doesn't fit Case.SectionAnchor. Ids are slugs
+// of the whole heading, so a very long heading has one; it isn't shortened, because the case
+// key compares it with the article's ids. The whole article can still be reported.
+func checkSectionAnchor(id string) error {
+	if utf8.RuneCountInString(id) > moderation_model.MaxSectionLength {
+		return invalid("the passage's section heading is too long; report the whole article instead")
+	}
+	return nil
 }
 
 // caseSection is the part of the article a report is filed under (Case.SectionAnchor): the
@@ -496,7 +510,8 @@ func caseTitle(repo *repo_model.Repository, section, sectionTitle string, reason
 	case moderation_model.SectionIntro:
 		part = "introduction"
 	}
-	return article + " · " + part + " · " + string(reason)
+	// Issue titles are VARCHAR(255) too.
+	return util.EllipsisDisplayString(article+" · "+part+" · "+string(reason), 255)
 }
 
 // fileReport files one reason of a submission in its case: the reason issue, the report,

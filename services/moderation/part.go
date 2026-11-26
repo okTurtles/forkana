@@ -197,6 +197,9 @@ func partTitle(ctx context.Context, repo *repo_model.Repository, section string)
 	if section == moderation_model.SectionWholeArticle || section == moderation_model.SectionIntro {
 		return "", nil
 	}
+	if err := checkSectionAnchor(section); err != nil {
+		return "", err
+	}
 	gitRepo, err := gitrepo.OpenRepository(ctx, repo)
 	if err != nil {
 		return "", fmt.Errorf("open repository: %w", err)

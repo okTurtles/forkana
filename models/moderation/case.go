@@ -75,6 +75,10 @@ func (k CaseKind) LabelName() string {
 // one target (foundations decisions 13). An article can have several open cases, one per
 // section and reason. Its fields are authoritative; the case issue's labels are projections of
 // them (foundations decisions 1.2).
+// MaxSectionLength is the length, in characters, of the section_anchor and section_title
+// columns of moderation_case and moderation_submission (VARCHAR(255)).
+const MaxSectionLength = 255
+
 type Case struct {
 	IssueID      int64    `xorm:"pk"`
 	Kind         CaseKind `xorm:"VARCHAR(16) INDEX NOT NULL"`
