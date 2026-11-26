@@ -42,6 +42,7 @@ const (
 const (
 	ResolutionMerged         = "merged"          // Change part moved it onto an open case with the same key: Case.MergedIntoIssueID
 	ResolutionArticleRemoved = "article-removed" // another case on the article removed the whole article
+	ResolutionOverturned     = "overturned"      // the case's decision was reversed
 )
 
 // SectionWholeArticle and SectionIntro are the two Case.SectionAnchor values that aren't a
@@ -183,7 +184,8 @@ func FindOpenCasesByTargetRepo(ctx context.Context, repoID int64) ([]*Case, erro
 }
 
 // HasPriorRemoval reports whether a closed case on the repository removed a section or the
-// whole article: the case page's "Removed before" marker.
+// whole article: the case page's "Removed before" marker. A removal that was overturned
+// doesn't count.
 func HasPriorRemoval(ctx context.Context, repoID int64) (bool, error) {
 	return db.GetEngine(ctx).Table("moderation_case").
 		Join("INNER", "issue", "issue.id = moderation_case.issue_id").
@@ -191,7 +193,7 @@ func HasPriorRemoval(ctx context.Context, repoID int64) (bool, error) {
 			"moderation_case.target_repo_id": repoID,
 			"moderation_case.decision":       DecisionRemoved,
 			"issue.is_closed":                true,
-		}).
+		}.And(builder.Neq{"moderation_case.resolution": ResolutionOverturned})).
 		Exist()
 }
 
@@ -218,7 +220,7 @@ func (c *Case) IsReexamining() bool {
 }
 
 // StartWaiting marks the case as waiting for the owner or a site admin. The 48h return skips
-// it until ReturnToModerator.
+// it until ReturnToModerator. It clears Attention: the moderator has acted on it.
 func StartWaiting(ctx context.Context, caseIssueID int64, on string) error {
 	_, err := db.GetEngine(ctx).ID(caseIssueID).Cols("waiting_on", "attention").Update(&Case{WaitingOn: on})
 	return err

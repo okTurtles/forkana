@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package moderation holds the data of Forkana's moderation: the cases repository it lives in,
-// the labels its issues carry and, later, its own tables.
+// the labels its issues carry and its own tables.
 package moderation
 
 // CoreLabel is one of the org labels the moderation issues carry. A label whose scope is
@@ -69,8 +69,8 @@ const (
 	ReasonSomethingElse      Reason = "something-else"
 )
 
-// reasonDescriptions holds every reason, in form order, with the one-line copy the report form
-// shows under it.
+// reasonDescriptions holds every reason, in form order, with the description of its label.
+// The report form takes its text from the locale, not from here.
 var reasonDescriptions = []struct {
 	Reason      Reason
 	Description string
@@ -85,15 +85,6 @@ var reasonDescriptions = []struct {
 	{ReasonPlagiarism, "Copied from somewhere else without credit or permission."},
 	{ReasonOffTopicOrSpam, "Unrelated to the subject, advertising, or repeated content."},
 	{ReasonSomethingElse, "Anything not listed above."},
-}
-
-// Reasons returns every report reason, in form order.
-func Reasons() []Reason {
-	reasons := make([]Reason, len(reasonDescriptions))
-	for i, r := range reasonDescriptions {
-		reasons[i] = r.Reason
-	}
-	return reasons
 }
 
 // IsValid reports whether r is one of the report reasons.

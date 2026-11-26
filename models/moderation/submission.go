@@ -29,8 +29,8 @@ const (
 // Submission is one send of the report form: one reporter, one anchor, one or more reasons
 // (each a Report). Each reason files into the case for that reason on that part, so one
 // submission can span several cases: Report.CaseIssueID is the link. The source offsets are
-// bytes into the README at CommitSHA after
-// end-of-line normalisation, front matter included; they are 0 unless the anchor is exact.
+// bytes into the README at CommitSHA after end-of-line normalisation, front matter included;
+// they are 0 unless the anchor is exact.
 type Submission struct {
 	ID          int64  `xorm:"pk autoincr"`
 	ReporterID  int64  `xorm:"UNIQUE(reporter_client_token) NOT NULL"` // the unique index also serves lookups by reporter

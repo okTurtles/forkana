@@ -21,7 +21,7 @@ const (
 	SanctionBan        SanctionKind = "ban"        // Story 3
 )
 
-// SanctionStatus is where a sanction stands. An expired sanction keeps StatusActive: the
+// SanctionStatus is where a sanction stands. An expired sanction keeps SanctionActive: the
 // active queries compare EndsUnix with now, and no cron rewrites rows.
 type SanctionStatus string
 

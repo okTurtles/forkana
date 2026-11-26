@@ -6,6 +6,7 @@ package moderation_test
 import (
 	"testing"
 
+	"code.gitea.io/gitea/models/db"
 	issues_model "code.gitea.io/gitea/models/issues"
 	moderation_model "code.gitea.io/gitea/models/moderation"
 	"code.gitea.io/gitea/models/unittest"
@@ -39,6 +40,13 @@ func TestModerationRecords(t *testing.T) {
 	removedBefore, err = moderation_model.HasPriorRemoval(ctx, 43)
 	require.NoError(t, err)
 	assert.False(t, removedBefore)
+	_, err = db.GetEngine(ctx).ID(closed.ID).Cols("resolution").Update(&moderation_model.Case{Resolution: moderation_model.ResolutionOverturned})
+	require.NoError(t, err)
+	removedBefore, err = moderation_model.HasPriorRemoval(ctx, 42)
+	require.NoError(t, err)
+	assert.False(t, removedBefore, "an overturned removal doesn't count")
+	_, err = db.GetEngine(ctx).ID(closed.ID).Cols("resolution").Update(&moderation_model.Case{})
+	require.NoError(t, err)
 
 	require.NoError(t, moderation_model.InsertCase(ctx, &moderation_model.Case{
 		IssueID: open.ID, Kind: moderation_model.CaseKindArticle, TargetRepoID: 42, TargetUserID: 2,
@@ -140,7 +148,7 @@ func TestCaseDecisionsMatchLabels(t *testing.T) {
 		}
 		assert.True(t, found, "decision %q has a label", d)
 	}
-	for _, r := range []string{moderation_model.ResolutionMerged, moderation_model.ResolutionArticleRemoved} {
+	for _, r := range []string{moderation_model.ResolutionMerged, moderation_model.ResolutionArticleRemoved, moderation_model.ResolutionOverturned} {
 		found := false
 		for _, l := range moderation_model.CoreLabels() {
 			found = found || l.Name == "resolution/"+r
