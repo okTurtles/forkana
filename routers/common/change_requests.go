@@ -7,6 +7,8 @@ import (
 	"context"
 	"strconv"
 
+	activities_model "code.gitea.io/gitea/models/activities"
+	"code.gitea.io/gitea/models/db"
 	issues_model "code.gitea.io/gitea/models/issues"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unit"
@@ -102,4 +104,22 @@ func CountOpenReceivedChangeRequests(ctx context.Context, doer *user_model.User)
 		Doer:       doer,
 		RepoCond:   builder.In("issue.repo_id", builder.Select("id").From("repository").Where(changeRequestsRepoCond(doer))),
 	})
+}
+
+// HasUnreadReceivedChangeRequests reports whether one of the open change requests the
+// navbar counts (CountOpenReceivedChangeRequests) has an unread notification for the
+// user: the "something new" that turns the navbar's counter into CounterLabel primary
+// (#532, Figma "Navbar – how it works (for dev)" 40001058:1049). One query, an EXISTS
+// over the user's unread notifications on those change requests' issues.
+func HasUnreadReceivedChangeRequests(ctx context.Context, doer *user_model.User) (bool, error) {
+	openReceived := builder.Select("issue.id").From("issue").Where(builder.And(
+		builder.Eq{"issue.is_pull": true},
+		builder.Eq{"issue.is_closed": false},
+		builder.In("issue.repo_id", builder.Select("id").From("repository").Where(changeRequestsRepoCond(doer))),
+	))
+	return db.GetEngine(ctx).Where(builder.And(
+		builder.Eq{"notification.user_id": doer.ID},
+		builder.Eq{"notification.status": activities_model.NotificationStatusUnread},
+		builder.In("notification.issue_id", openReceived),
+	)).Exist(new(activities_model.Notification))
 }

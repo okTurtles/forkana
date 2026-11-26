@@ -30,10 +30,10 @@ func assertNavbar(t *testing.T, doc *HTMLDoc) {
 		AssertHTMLElement(t, doc, ".menu a[href='/user/settings/security']", true)
 	}
 
-	if setting.Admin.UserDisabledFeatures.Contains(setting.UserFeatureManageSSHKeys, setting.UserFeatureManageGPGKeys) {
-		AssertHTMLElement(t, doc, ".menu a[href='/user/settings/keys']", false)
-	} else {
-		AssertHTMLElement(t, doc, ".menu a[href='/user/settings/keys']", true)
+	// Forkana hides Gitea's developer tabs from the menu (custom/templates/user/settings/navbar.tmpl);
+	// their pages still answer by URL
+	for _, href := range []string{"applications", "keys", "actions/runners", "packages", "hooks", "organization", "repos"} {
+		AssertHTMLElement(t, doc, ".menu a[href='/user/settings/"+href+"']", false)
 	}
 }
 

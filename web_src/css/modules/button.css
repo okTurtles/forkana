@@ -467,7 +467,7 @@ It needs some tricks to tweak the left/right borders with active state */
 /* Secondary (30258:5583 rest, 30258:5667 hover, 30258:5646 pressed) */
 .forkana-btn.forkana-btn-secondary {
   color: var(--color-button-text);
-  background: var(--color-surface-muted);
+  background: var(--color-button-secondary-bg);
   border-color: var(--color-border-light);
   box-shadow: 0 1px 0 #1f23280a;
 }
@@ -546,7 +546,7 @@ It needs some tricks to tweak the left/right borders with active state */
    `forkana-btn-primary forkana-btn-unavailable` instead of a standalone variant. */
 .forkana-btn.forkana-btn-unavailable {
   color: var(--color-button-text-disabled);
-  background: var(--color-surface-muted);
+  background: var(--color-button-secondary-bg);
   border-color: var(--color-button-border-disabled);
 }
 
@@ -554,8 +554,8 @@ It needs some tricks to tweak the left/right borders with active state */
 :is(#article-settings-root, .ui.modal.forkana-dialog) .forkana-btn.forkana-btn-primary:disabled {
   opacity: 1;
   color: rgb(255 255 255 / 80%);
-  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
-  border-color: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+  background: var(--color-primary-unavailable-bg);
+  border-color: var(--color-primary-unavailable-bg);
 }
 
 /* A secondary button with a red label: the article settings' Transfer, Archive and Delete
@@ -598,7 +598,7 @@ It needs some tricks to tweak the left/right borders with active state */
   font-size: 14px;
   line-height: 20px;
   font-weight: var(--font-weight-semibold);
-  background: var(--color-surface-muted);
+  background: var(--color-button-secondary-bg);
   border: 1px solid var(--color-border-light);
 }
 

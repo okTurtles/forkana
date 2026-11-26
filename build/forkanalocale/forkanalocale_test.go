@@ -186,7 +186,7 @@ gone = Weg
 	assert.NotContains(t, string(out), "fork_article=")
 
 	p = Check("de-DE", fk, mustParse(t, "# en: New Subject\nnew_repo = Neues <b>Thema</b>\n"))
-	assert.Equal(t, []string{"de-DE: new_repo: HTML tags [</b <b], English has []"}, p.Errors)
+	assert.Equal(t, []string{"de-DE: new_repo: HTML tags [</b> <b>], English has []"}, p.Errors)
 	out, err = Generate("locale_de-DE.ini", []byte(upstreamGerman), fk, mustParse(t, "# en: New Subject\nnew_repo = Neues <b>Thema</b>\n"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(out), "new_repo=", "a broken translation is left out")
@@ -214,6 +214,39 @@ func TestTodoMergeFormat(t *testing.T) {
 
 	_, n = Todo(fk, mustParse(t, string(formatted)))
 	assert.Zero(t, n)
+}
+
+func TestLimitTodo(t *testing.T) {
+	fk := testForkana(t)
+	todo := map[string][]Entry{
+		"de-DE": TodoEntries(fk, mustParse(t, germanTranslations)), // repo.pulls, repo.pulls.closed_at, citation.references
+		"fr-FR": TodoEntries(fk, mustParse(t, "")),                 // all 6 keys
+	}
+	keys := func(todo map[string][]Entry) map[string][]string {
+		out := map[string][]string{}
+		for lang, entries := range todo {
+			for _, e := range entries {
+				out[lang] = append(out[lang], e.FullKey())
+			}
+		}
+		return out
+	}
+
+	assert.Equal(t, todo, LimitTodo(fk, todo, 0), "no limit")
+	assert.Equal(t, todo, LimitTodo(fk, todo, 9), "a limit above the total")
+
+	// new_repo (fr-FR) + repo.pulls (de-DE, fr-FR) = 3; repo.pulls.closed_at would make 5.
+	assert.Equal(t, map[string][]string{
+		"de-DE": {"repo.pulls"},
+		"fr-FR": {"new_repo", "repo.pulls"},
+	}, keys(LimitTodo(fk, todo, 4)))
+
+	// The first key is kept even when it alone exceeds the limit.
+	only := map[string][]Entry{"de-DE": todo["de-DE"], "fr-FR": todo["fr-FR"][1:2]}
+	assert.Equal(t, map[string][]string{
+		"de-DE": {"repo.pulls"},
+		"fr-FR": {"repo.pulls"},
+	}, keys(LimitTodo(fk, only, 1)))
 }
 
 func TestMergeLeavesOutUntranslated(t *testing.T) {
@@ -266,6 +299,18 @@ func TestStructuralProblems(t *testing.T) {
 	ok("`closed this <a>%[1]s</a>`", "`hat <a>%[1]s</a> geschlossen`")
 	bad("`closed this <a>%[1]s</a>`", "hat <a>%[1]s</a> geschlossen", "quoting")
 	bad("Fork", "Forken <b>jetzt</b>", "HTML tags")
+	// Attributes count too: Gitea renders some strings as HTML (TrHTML).
+	ok(`See <a href="%s" target="_blank">the docs</a>`, `Siehe <a href="%s" target="_blank">die Doku</a>`)
+	bad(`See <a href="%s">the docs</a>`, `Siehe <a href="%s" onclick="alert(1)">die Doku</a>`, "HTML tags")
+	bad(`See <a href="%s">the docs</a>`, `Siehe <a href="https://evil.example">die Doku</a>`, "HTML tags")
+	bad("<b>Fork</b>", "<b onmouseover=alert(1)>Forken</b>", "HTML tags")
+	bad("<b>Fork</b>", "<b>Forken</b><img src=x onerror=alert(1)", "HTML tags")
+}
+
+func TestTags(t *testing.T) {
+	assert.Equal(t, []string{"</a>", "<a href=\"%s\" class=\"x\">", "<br/>"}, Tags(`a <a href="%s" class="x">b</a> c<br/>`))
+	assert.Equal(t, []string{"<img src=x"}, Tags("<img src=x"), "a tag left open runs to the end")
+	assert.Empty(t, Tags("1 < 2 and 3 > 2"))
 }
 
 func TestReadsAs(t *testing.T) {
