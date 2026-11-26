@@ -48,6 +48,8 @@ func TestEnsureSetup(t *testing.T) {
 	admin := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
 	require.True(t, admin.IsAdmin)
 	nLabels := len(moderation_model.CoreLabels())
+	// organization, team, repository, repository units and team repository, then the labels
+	const nNonLabels = 5
 
 	t.Run("NeedsAnAdminOwner", func(t *testing.T) {
 		_, err := EnsureSetup(t.Context(), SetupOptions{})
@@ -61,16 +63,18 @@ func TestEnsureSetup(t *testing.T) {
 	})
 
 	t.Run("DryRunWritesNothing", func(t *testing.T) {
-		result, err := EnsureSetup(t.Context(), SetupOptions{Owner: admin, DryRun: true})
-		require.NoError(t, err)
-		assert.Equal(t, 4+nLabels, countCreated(result))
-		unittest.AssertNotExistsBean(t, &user_model.User{LowerName: "test-moderation"})
+		for _, owner := range []*user_model.User{admin, nil} {
+			result, err := EnsureSetup(t.Context(), SetupOptions{Owner: owner, DryRun: true})
+			require.NoError(t, err, "a dry run needs no owner")
+			assert.Equal(t, nNonLabels+nLabels, countCreated(result))
+			unittest.AssertNotExistsBean(t, &user_model.User{LowerName: "test-moderation"})
+		}
 	})
 
 	t.Run("CreatesEverything", func(t *testing.T) {
 		result, err := EnsureSetup(t.Context(), SetupOptions{Owner: admin})
 		require.NoError(t, err)
-		assert.Equal(t, 4+nLabels, countCreated(result))
+		assert.Equal(t, nNonLabels+nLabels, countCreated(result))
 		assert.Zero(t, result.Unwatched, "the creator doesn't auto-watch the cases repository")
 
 		org, err := organization.GetOrgByName(t.Context(), "test-moderation")
@@ -128,6 +132,27 @@ func TestEnsureSetup(t *testing.T) {
 		require.NoError(t, err, "nothing to create: no owner needed")
 		assert.Zero(t, countCreated(result))
 		assert.Zero(t, result.Unwatched)
+	})
+
+	t.Run("RepairsTheRepositoryUnits", func(t *testing.T) {
+		// As a run that failed after creating the repository leaves it: the default units.
+		org, err := organization.GetOrgByName(t.Context(), "test-moderation")
+		require.NoError(t, err)
+		repo, err := repo_model.GetRepositoryByName(t.Context(), org.ID, "cases")
+		require.NoError(t, err)
+		require.NoError(t, repo_service.UpdateRepositoryUnits(t.Context(), repo, []repo_model.RepoUnit{
+			{RepoID: repo.ID, Type: unit.TypeIssues, Config: &repo_model.IssuesConfig{}},
+			{RepoID: repo.ID, Type: unit.TypeWiki, Config: new(repo_model.UnitConfig)},
+		}, nil))
+
+		result, err := EnsureSetup(t.Context(), SetupOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, 1, countCreated(result))
+		repo, err = repo_model.GetRepositoryByName(t.Context(), org.ID, "cases")
+		require.NoError(t, err)
+		require.NoError(t, repo.LoadUnits(t.Context()))
+		require.Len(t, repo.Units, 1)
+		assert.True(t, repo.Units[0].IssuesConfig().EnableDependencies)
 	})
 
 	t.Run("RefusesAPublicRepository", func(t *testing.T) {

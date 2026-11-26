@@ -35,7 +35,7 @@ type SetupOptions struct {
 
 // SetupItem is one thing EnsureSetup looked for.
 type SetupItem struct {
-	Kind    string // "organization", "team", "repository", "team repository" or "label"
+	Kind    string // "organization", "team", "repository", "repository units", "team repository" or "label"
 	Name    string
 	Created bool // created by this run (or, in a dry run, would be)
 }
@@ -77,19 +77,21 @@ func EnsureSetup(ctx context.Context, opts SetupOptions) (*SetupResult, error) {
 		return nil, fmt.Errorf("get organization %q: %w", cfg.Org, err)
 	}
 	if org == nil {
-		if err := needOwner(); err != nil {
-			return nil, err
-		}
 		result.add("organization", cfg.Org, true)
 		if opts.DryRun {
-			// Nothing below can exist without the organization.
+			// Nothing below can exist without the organization. A dry run needs no owner:
+			// it lists what a run with one would create.
 			result.add("team", cfg.Team, true)
 			result.add("repository", cfg.Org+"/"+cfg.Repo, true)
+			result.add("repository units", casesRepoUnitsName, true)
 			result.add("team repository", cfg.Team+" → "+cfg.Repo, true)
 			for _, l := range moderation_model.CoreLabels() {
 				result.add("label", l.Name, true)
 			}
 			return result, nil
+		}
+		if err := needOwner(); err != nil {
+			return nil, err
 		}
 		org = &organization.Organization{
 			Name:        cfg.Org,
@@ -154,6 +156,18 @@ func EnsureSetup(ctx context.Context, opts SetupOptions) (*SetupResult, error) {
 		result.add("repository", cfg.Org+"/"+cfg.Repo, false)
 	}
 
+	// Checked on every run, not only when the repository is created: a run that failed after
+	// creating it, or a repository made by hand, may still have the default units.
+	if repo != nil {
+		changed, err := ensureCasesRepoUnits(ctx, repo, opts.DryRun)
+		if err != nil {
+			return nil, err
+		}
+		result.add("repository units", casesRepoUnitsName, changed)
+	} else {
+		result.add("repository units", casesRepoUnitsName, true)
+	}
+
 	if team != nil && repo != nil {
 		has := repo_service.HasRepository(ctx, team, repo.ID)
 		result.add("team repository", cfg.Team+" → "+cfg.Repo, !has)
@@ -178,8 +192,10 @@ func EnsureSetup(ctx context.Context, opts SetupOptions) (*SetupResult, error) {
 	return result, nil
 }
 
-// createCasesRepo creates the private cases repository with the Issues unit only (with
-// dependencies on: a case depends on its reports).
+// casesRepoUnitsName names the cases repository's units in the setup result.
+const casesRepoUnitsName = "Issues only, with dependencies"
+
+// createCasesRepo creates the private cases repository. EnsureSetup then cuts its units down.
 func createCasesRepo(ctx context.Context, doer *user_model.User, org *organization.Organization) (*repo_model.Repository, error) {
 	repo, err := repo_service.CreateRepositoryDirectly(ctx, doer, org.AsUser(), repo_service.CreateRepoOptions{
 		Name:        setting.Moderation.Repo,
@@ -189,15 +205,29 @@ func createCasesRepo(ctx context.Context, doer *user_model.User, org *organizati
 	if err != nil {
 		return nil, fmt.Errorf("create repository %q: %w", setting.Moderation.Repo, err)
 	}
+	return repo, nil
+}
 
+// ensureCasesRepoUnits leaves the cases repository with the Issues unit only, with
+// dependencies on (a case depends on its reports), and reports whether it had to change it.
+func ensureCasesRepoUnits(ctx context.Context, repo *repo_model.Repository, dryRun bool) (bool, error) {
 	if err := repo.LoadUnits(ctx); err != nil {
-		return nil, fmt.Errorf("load units: %w", err)
+		return false, fmt.Errorf("load units: %w", err)
 	}
 	var deleteTypes []unit.Type
+	dependencies := false
 	for _, u := range repo.Units {
-		if u.Type != unit.TypeIssues {
+		if u.Type == unit.TypeIssues {
+			dependencies = u.IssuesConfig().EnableDependencies
+		} else {
 			deleteTypes = append(deleteTypes, u.Type)
 		}
+	}
+	if dependencies && len(deleteTypes) == 0 {
+		return false, nil
+	}
+	if dryRun {
+		return true, nil
 	}
 	issues := repo_model.RepoUnit{
 		RepoID: repo.ID,
@@ -205,23 +235,21 @@ func createCasesRepo(ctx context.Context, doer *user_model.User, org *organizati
 		Config: &repo_model.IssuesConfig{EnableDependencies: true},
 	}
 	if err := repo_service.UpdateRepositoryUnits(ctx, repo, []repo_model.RepoUnit{issues}, deleteTypes); err != nil {
-		return nil, fmt.Errorf("keep only the Issues unit: %w", err)
+		return false, fmt.Errorf("keep only the Issues unit: %w", err)
 	}
-	return repo, nil
+	return true, nil
 }
 
 // ensureCoreLabels creates, as org labels, the core labels not there yet. Labels are matched by
 // name only: one an admin changed keeps its changes.
 func ensureCoreLabels(ctx context.Context, orgID int64, dryRun bool, result *SetupResult) error {
-	existing := map[string]bool{}
-	if orgID > 0 {
-		labels, err := issues_model.GetLabelsByOrgID(ctx, orgID, "", db.ListOptionsAll)
-		if err != nil {
-			return fmt.Errorf("get organization labels: %w", err)
-		}
-		for _, l := range labels {
-			existing[l.Name] = true
-		}
+	labels, err := issues_model.GetLabelsByOrgID(ctx, orgID, "", db.ListOptionsAll)
+	if err != nil {
+		return fmt.Errorf("get organization labels: %w", err)
+	}
+	existing := make(map[string]bool, len(labels))
+	for _, l := range labels {
+		existing[l.Name] = true
 	}
 	for _, l := range moderation_model.CoreLabels() {
 		if existing[l.Name] {
