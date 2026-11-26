@@ -916,8 +916,9 @@ func registerWebRoutes(m *web.Router) {
 
 	// ***** START: Moderation *****
 	// The moderation workspace: site administrators and moderators team members, only while
-	// [moderation] ENABLED is on. Everyone else gets a 404.
-	// The flag is checked before signing in, so that a signed-out visitor gets the 404 too.
+	// [moderation] ENABLED is on. Signed-in non-moderators get a 404. The flag is checked before
+	// signing in, so that while it is off a signed-out visitor gets the 404 too; while it is
+	// on, a signed-out visitor is sent to sign in, like on any other signed-in page.
 	reqModerator := moderation.RequireModerator
 	m.Group("/-/moderation", func() {
 		m.Get("", moderation.Queue)

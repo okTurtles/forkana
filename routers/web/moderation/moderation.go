@@ -30,8 +30,9 @@ func RequireEnabled(ctx *context.Context) {
 	}
 }
 
-// RequireModerator lets only moderators through. Everyone else gets a 404, so the workspace's
-// existence isn't revealed. Signing in is checked before, by the route's reqSignIn.
+// RequireModerator lets only moderators through. Other signed-in users get a 404, so the
+// workspace's existence isn't revealed to them. Signing in is checked before, by the route's
+// reqSignIn.
 func RequireModerator(ctx *context.Context) {
 	ok, err := moderation_service.IsModerator(ctx, ctx.Doer)
 	if err != nil {

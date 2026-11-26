@@ -298,7 +298,10 @@ type resolvedAnchor struct {
 }
 
 // resolveAnchor checks the anchor against the README at the revision the reader saw. The
-// browser's range is never trusted: the quote and the section come from the server's parse.
+// browser's range is never trusted: for an exact passage the quote and the section come from
+// the server's parse. A quote-only passage keeps the reader's quote (whitespace collapsed and
+// capped, not checked against the article), so whatever shows Submission.Quote must treat it
+// as the reader's text; its section is kept only if it is one of the article's headings.
 func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error) {
 	if in.Anchor == moderation_model.AnchorWhole {
 		return &resolvedAnchor{}, nil

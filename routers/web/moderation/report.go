@@ -16,8 +16,9 @@ import (
 	moderation_service "code.gitea.io/gitea/services/moderation"
 )
 
-// maxReportBody caps the request body: ten explanations of MaxExplanationLength runes and a quote.
-const maxReportBody = 128 << 10
+// maxReportBody caps the request body: ten explanations of MaxExplanationLength runes and a
+// quote, with room for a JSON encoder that escapes every non-ASCII rune (up to 12 bytes each).
+const maxReportBody = 512 << 10
 
 // ReportRequest is the body of POST {article}/-/report.
 type ReportRequest struct {
