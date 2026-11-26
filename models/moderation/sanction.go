@@ -35,9 +35,9 @@ const (
 // Sanction is one warning, suspension or ban of a user (foundations decisions 7).
 type Sanction struct {
 	ID                  int64              `xorm:"pk autoincr"`
-	UserID              int64              `xorm:"INDEX NOT NULL"`
-	Kind                SanctionKind       `xorm:"VARCHAR(16) INDEX NOT NULL"`
-	Status              SanctionStatus     `xorm:"VARCHAR(24) INDEX NOT NULL"`
+	UserID              int64              `xorm:"INDEX(user_kind_status) NOT NULL"` // the composite index serves activeCond
+	Kind                SanctionKind       `xorm:"VARCHAR(16) INDEX(user_kind_status) NOT NULL"`
+	Status              SanctionStatus     `xorm:"VARCHAR(24) INDEX(user_kind_status) NOT NULL"`
 	EndsUnix            timeutil.TimeStamp `xorm:"INDEX NOT NULL DEFAULT 0"` // 0: no end
 	CaseIssueID         int64              `xorm:"INDEX NOT NULL DEFAULT 0"` // 0: from the user record
 	ConversationIssueID int64              `xorm:"NOT NULL DEFAULT 0"`

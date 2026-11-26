@@ -32,6 +32,12 @@ func Test_CreateModerationSanctionTable(t *testing.T) {
 		for _, col := range []string{"id", "user_id", "kind", "status", "ends_unix", "case_issue_id", "conversation_issue_id", "created_by", "approved_by", "created_unix", "updated_unix"} {
 			assert.NotNil(t, table.GetColumn(col), "moderation_sanction.%s should exist", col)
 		}
+		// the warnings in force are looked up by user, kind and status
+		var composite bool
+		for _, idx := range table.Indexes {
+			composite = composite || len(idx.Cols) == 3 && idx.Cols[0] == "user_id" && idx.Cols[1] == "kind" && idx.Cols[2] == "status"
+		}
+		assert.True(t, composite, "moderation_sanction has the (user_id, kind, status) index")
 	}
 	assert.True(t, found, "moderation_sanction should exist")
 

@@ -33,7 +33,7 @@ const (
 // end-of-line normalisation, front matter included; they are 0 unless the anchor is exact.
 type Submission struct {
 	ID          int64  `xorm:"pk autoincr"`
-	ReporterID  int64  `xorm:"UNIQUE(reporter_client_token) INDEX NOT NULL"`
+	ReporterID  int64  `xorm:"UNIQUE(reporter_client_token) NOT NULL"` // the unique index also serves lookups by reporter
 	ClientToken string `xorm:"UNIQUE(reporter_client_token) VARCHAR(36) NOT NULL"`
 	// TargetRepoID is the reported article. A retried token is checked against it.
 	TargetRepoID int64 `xorm:"INDEX NOT NULL"`

@@ -14,9 +14,9 @@ import (
 func CreateModerationSanctionTable(x *xorm.Engine) error {
 	type ModerationSanction struct {
 		ID                  int64              `xorm:"pk autoincr"`
-		UserID              int64              `xorm:"INDEX NOT NULL"`
-		Kind                string             `xorm:"VARCHAR(16) INDEX NOT NULL"`
-		Status              string             `xorm:"VARCHAR(24) INDEX NOT NULL"`
+		UserID              int64              `xorm:"INDEX(user_kind_status) NOT NULL"`
+		Kind                string             `xorm:"VARCHAR(16) INDEX(user_kind_status) NOT NULL"`
+		Status              string             `xorm:"VARCHAR(24) INDEX(user_kind_status) NOT NULL"`
 		EndsUnix            timeutil.TimeStamp `xorm:"INDEX NOT NULL DEFAULT 0"`
 		CaseIssueID         int64              `xorm:"INDEX NOT NULL DEFAULT 0"`
 		ConversationIssueID int64              `xorm:"NOT NULL DEFAULT 0"`

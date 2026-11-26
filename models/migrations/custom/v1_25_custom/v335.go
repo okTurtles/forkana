@@ -54,7 +54,7 @@ func CreateModerationTables(x *xorm.Engine) error {
 	// reasons can file into several cases.
 	type ModerationSubmission struct {
 		ID           int64  `xorm:"pk autoincr"`
-		ReporterID   int64  `xorm:"UNIQUE(reporter_client_token) INDEX NOT NULL"`
+		ReporterID   int64  `xorm:"UNIQUE(reporter_client_token) NOT NULL"`
 		ClientToken  string `xorm:"UNIQUE(reporter_client_token) VARCHAR(36) NOT NULL"`
 		TargetRepoID int64  `xorm:"INDEX NOT NULL"`
 
