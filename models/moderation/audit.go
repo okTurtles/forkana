@@ -38,6 +38,14 @@ const (
 	AuditWarned              AuditAction = "warned"
 	AuditReopened            AuditAction = "reopened"
 	AuditEscalated           AuditAction = "escalated"
+	// AuditPartChanged: Change part moved the case to another part. Summary: from:<section>.
+	AuditPartChanged AuditAction = "part_changed"
+	// AuditMerged: Change part merged the case into the open case with the same key, which
+	// takes its reports. Summary: into:<case issue id>. Written on the merged case.
+	AuditMerged AuditAction = "merged"
+	// AuditClosedWithArticle: another case removed the whole article, so this one closed.
+	// Summary: by:<case issue id>.
+	AuditClosedWithArticle AuditAction = "closed_with_article"
 )
 
 // MaxAuditSummaryLength caps Summary, in characters, such as a reopen reason.

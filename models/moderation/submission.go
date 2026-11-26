@@ -27,13 +27,16 @@ const (
 )
 
 // Submission is one send of the report form: one reporter, one anchor, one or more reasons
-// (each a Report). The source offsets are bytes into the README at CommitSHA after
+// (each a Report). Each reason files into the case for that reason on that part, so one
+// submission can span several cases: Report.CaseIssueID is the link. The source offsets are
+// bytes into the README at CommitSHA after
 // end-of-line normalisation, front matter included; they are 0 unless the anchor is exact.
 type Submission struct {
 	ID          int64  `xorm:"pk autoincr"`
 	ReporterID  int64  `xorm:"UNIQUE(reporter_client_token) INDEX NOT NULL"`
 	ClientToken string `xorm:"UNIQUE(reporter_client_token) VARCHAR(36) NOT NULL"`
-	CaseIssueID int64  `xorm:"INDEX NOT NULL"`
+	// TargetRepoID is the reported article. A retried token is checked against it.
+	TargetRepoID int64 `xorm:"INDEX NOT NULL"`
 
 	CommitSHA     string       `xorm:"VARCHAR(64) NOT NULL DEFAULT ''"`
 	TreePath      string       `xorm:"VARCHAR(255) NOT NULL DEFAULT ''"`
@@ -78,18 +81,20 @@ func GetSubmission(ctx context.Context, id int64) (*Submission, error) {
 	return s, nil
 }
 
-// FindSubmissionsByCase returns a case's submissions, oldest first.
+// FindSubmissionsByCase returns the submissions of a case's reports, oldest first.
 func FindSubmissionsByCase(ctx context.Context, caseIssueID int64) ([]*Submission, error) {
 	subs := make([]*Submission, 0, 4)
-	return subs, db.GetEngine(ctx).Where(builder.Eq{"case_issue_id": caseIssueID}).Asc("id").Find(&subs)
+	return subs, db.GetEngine(ctx).
+		Where(builder.In("id", builder.Select("submission_id").From("moderation_report").
+			Where(builder.Eq{"case_issue_id": caseIssueID}))).
+		Asc("id").Find(&subs)
 }
 
-// CountCaseSubmissions counts a case's submissions that have a report not on hold: the
-// "three or more reports" priority rule counts submissions, not reasons.
+// CountCaseSubmissions counts the submissions with a report not on hold in a case: the "three
+// or more reports" priority rule. A case has one reason, so this is one per reporter's send.
 func CountCaseSubmissions(ctx context.Context, caseIssueID int64) (int64, error) {
 	return db.GetEngine(ctx).Table("moderation_submission").
-		Where(builder.Eq{"case_issue_id": caseIssueID}).
-		And(builder.In("id", builder.Select("submission_id").From("moderation_report").
+		Where(builder.In("id", builder.Select("submission_id").From("moderation_report").
 			Where(builder.Eq{"case_issue_id": caseIssueID, "on_hold": false}))).
 		Count()
 }

@@ -25,17 +25,47 @@ func TestModerationRecords(t *testing.T) {
 	closed := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 5})
 	require.True(t, closed.IsClosed)
 
-	require.NoError(t, moderation_model.InsertCase(ctx, &moderation_model.Case{IssueID: closed.ID, Kind: moderation_model.CaseKindArticle, TargetRepoID: 42, TargetUserID: 2}))
-	c, err := moderation_model.FindOpenCaseByTargetRepo(ctx, 42)
+	doxxing := moderation_model.ReasonDoxxing
+	require.NoError(t, moderation_model.InsertCase(ctx, &moderation_model.Case{
+		IssueID: closed.ID, Kind: moderation_model.CaseKindArticle, TargetRepoID: 42, TargetUserID: 2,
+		SectionAnchor: "history", Reason: doxxing, Decision: moderation_model.DecisionRemoved,
+	}))
+	c, err := moderation_model.FindOpenCase(ctx, 42, "history", doxxing)
 	require.NoError(t, err)
 	assert.Nil(t, c, "a closed case isn't the open case")
+	removedBefore, err := moderation_model.HasPriorRemoval(ctx, 42)
+	require.NoError(t, err)
+	assert.True(t, removedBefore)
+	removedBefore, err = moderation_model.HasPriorRemoval(ctx, 43)
+	require.NoError(t, err)
+	assert.False(t, removedBefore)
 
-	require.NoError(t, moderation_model.InsertCase(ctx, &moderation_model.Case{IssueID: open.ID, Kind: moderation_model.CaseKindArticle, TargetRepoID: 42, TargetUserID: 2}))
-	c, err = moderation_model.FindOpenCaseByTargetRepo(ctx, 42)
+	require.NoError(t, moderation_model.InsertCase(ctx, &moderation_model.Case{
+		IssueID: open.ID, Kind: moderation_model.CaseKindArticle, TargetRepoID: 42, TargetUserID: 2,
+		SectionAnchor: "history", Reason: doxxing,
+	}))
+	c, err = moderation_model.FindOpenCase(ctx, 42, "history", doxxing)
 	require.NoError(t, err)
 	require.NotNil(t, c)
 	assert.Equal(t, open.ID, c.IssueID)
 	assert.Equal(t, "kind/article", c.Kind.LabelName())
+	for _, other := range []struct {
+		section string
+		reason  moderation_model.Reason
+	}{{"history", moderation_model.ReasonNoSource}, {moderation_model.SectionWholeArticle, doxxing}, {moderation_model.SectionIntro, doxxing}} {
+		c, err = moderation_model.FindOpenCase(ctx, 42, other.section, other.reason)
+		require.NoError(t, err)
+		assert.Nil(t, c, "another part or reason is another case: %q %s", other.section, other.reason)
+	}
+	all, err := moderation_model.FindOpenCasesByTargetRepo(ctx, 42)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Equal(t, open.ID, all[0].IssueID)
+
+	require.NoError(t, moderation_model.SetCasePart(ctx, open.ID, moderation_model.SectionIntro, ""))
+	c, err = moderation_model.FindOpenCase(ctx, 42, moderation_model.SectionIntro, doxxing)
+	require.NoError(t, err)
+	require.NotNil(t, c, "Change part moves the case")
 
 	got, err := moderation_model.GetCase(ctx, open.ID)
 	require.NoError(t, err)
@@ -45,10 +75,10 @@ func TestModerationRecords(t *testing.T) {
 	assert.Nil(t, got)
 
 	// submissions: the client token is unique per reporter
-	sub := &moderation_model.Submission{ReporterID: 4, ClientToken: "0b7a6b54-0d5f-4c1e-8f5e-2a1f3c4d5e6f", CaseIssueID: open.ID, AnchorStatus: moderation_model.AnchorWhole}
+	sub := &moderation_model.Submission{ReporterID: 4, ClientToken: "0b7a6b54-0d5f-4c1e-8f5e-2a1f3c4d5e6f", TargetRepoID: 42, AnchorStatus: moderation_model.AnchorWhole}
 	require.NoError(t, moderation_model.InsertSubmission(ctx, sub))
-	require.Error(t, moderation_model.InsertSubmission(ctx, &moderation_model.Submission{ReporterID: 4, ClientToken: sub.ClientToken, CaseIssueID: open.ID}))
-	require.NoError(t, moderation_model.InsertSubmission(ctx, &moderation_model.Submission{ReporterID: 5, ClientToken: sub.ClientToken, CaseIssueID: open.ID}))
+	require.Error(t, moderation_model.InsertSubmission(ctx, &moderation_model.Submission{ReporterID: 4, ClientToken: sub.ClientToken, TargetRepoID: 42}))
+	require.NoError(t, moderation_model.InsertSubmission(ctx, &moderation_model.Submission{ReporterID: 5, ClientToken: sub.ClientToken, TargetRepoID: 42}))
 
 	byToken, err := moderation_model.GetSubmissionByToken(ctx, 4, sub.ClientToken)
 	require.NoError(t, err)
@@ -59,19 +89,32 @@ func TestModerationRecords(t *testing.T) {
 
 	// reports
 	require.NoError(t, moderation_model.InsertReport(ctx, &moderation_model.Report{IssueID: 2, SubmissionID: sub.ID, CaseIssueID: open.ID, ReporterID: 4, Reason: moderation_model.ReasonDoxxing}))
-	require.NoError(t, moderation_model.InsertReport(ctx, &moderation_model.Report{IssueID: 3, SubmissionID: sub.ID, CaseIssueID: open.ID, ReporterID: 4, Reason: moderation_model.ReasonNoReliableSource}))
+	require.NoError(t, moderation_model.InsertReport(ctx, &moderation_model.Report{IssueID: 3, SubmissionID: sub.ID, CaseIssueID: open.ID, ReporterID: 4, Reason: moderation_model.ReasonNoSource}))
 	reports, err := moderation_model.FindReportsBySubmission(ctx, sub.ID)
 	require.NoError(t, err)
 	require.Len(t, reports, 2)
 	assert.Equal(t, moderation_model.VerdictPending, reports[0].Verdict)
 
-	reasons, err := moderation_model.CaseReasons(ctx, open.ID)
+	subs, err := moderation_model.FindSubmissionsByCase(ctx, open.ID)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []moderation_model.Reason{moderation_model.ReasonDoxxing, moderation_model.ReasonNoReliableSource}, reasons)
+	require.Len(t, subs, 1, "found through the case's reports")
+	assert.Equal(t, sub.ID, subs[0].ID)
 
 	n, err := moderation_model.CountCaseSubmissions(ctx, open.ID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), n, "the submission without reports isn't counted")
+
+	// a merge moves the reports
+	require.NoError(t, moderation_model.MoveReports(ctx, open.ID, 77))
+	moved, err := moderation_model.FindReportsByCase(ctx, 77)
+	require.NoError(t, err)
+	assert.Len(t, moved, 2)
+	require.NoError(t, moderation_model.MoveReports(ctx, 77, open.ID))
+	require.NoError(t, moderation_model.MarkMerged(ctx, closed.ID, open.ID))
+	got, err = moderation_model.GetCase(ctx, closed.ID)
+	require.NoError(t, err)
+	assert.Equal(t, moderation_model.ResolutionMerged, got.Resolution)
+	assert.Equal(t, open.ID, got.MergedIntoIssueID)
 
 	pending, err := moderation_model.FindPendingSubmissionsForReason(ctx, open.ID, 4, moderation_model.ReasonDoxxing)
 	require.NoError(t, err)
@@ -90,7 +133,7 @@ func TestModerationRecords(t *testing.T) {
 }
 
 func TestCaseDecisionsMatchLabels(t *testing.T) {
-	for _, d := range []string{moderation_model.DecisionDismissed, moderation_model.DecisionSourcesRequested, moderation_model.DecisionRemoved, moderation_model.DecisionEscalated} {
+	for _, d := range []string{moderation_model.DecisionDismissed, moderation_model.DecisionResolved, moderation_model.DecisionSourcesRequested, moderation_model.DecisionRemoved, moderation_model.DecisionEscalated} {
 		found := false
 		for _, l := range moderation_model.CoreLabels() {
 			found = found || l.Name == "decision/"+d

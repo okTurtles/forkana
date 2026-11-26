@@ -19,9 +19,13 @@ const (
 	VerdictPending   Verdict = "pending"
 	VerdictUpheld    Verdict = "upheld"
 	VerdictDismissed Verdict = "dismissed"
+	// VerdictClosed: the case closed without a decision on it, because another case removed
+	// the whole article (ResolutionArticleRemoved). The reporter is told the article was removed.
+	VerdictClosed Verdict = "closed"
 )
 
-// Report is the moderation data of a reason issue: one reason of one submission.
+// Report is the moderation data of a reason issue: one reason of one submission. The text the
+// reporter is told about the verdict is the case's ReporterNote.
 type Report struct {
 	IssueID      int64  `xorm:"pk"`
 	SubmissionID int64  `xorm:"INDEX NOT NULL"`
@@ -30,7 +34,6 @@ type Report struct {
 	Reason       Reason `xorm:"VARCHAR(32) INDEX NOT NULL"`
 
 	Verdict     Verdict `xorm:"VARCHAR(16) INDEX NOT NULL DEFAULT 'pending'"`
-	VerdictNote string  `xorm:"TEXT"` // the reporter-facing explanation; required when dismissed
 	VerdictBy   int64   `xorm:"NOT NULL DEFAULT 0"`
 	VerdictUnix timeutil.TimeStamp
 	OnHold      bool `xorm:"INDEX NOT NULL DEFAULT false"` // Story 2.7
@@ -76,11 +79,9 @@ func FindPendingSubmissionsForReason(ctx context.Context, caseIssueID, reporterI
 		Find(&subs)
 }
 
-// CaseReasons returns the distinct reasons of a case's reports that aren't on hold.
-func CaseReasons(ctx context.Context, caseIssueID int64) ([]Reason, error) {
-	reasons := make([]Reason, 0, 4)
-	return reasons, db.GetEngine(ctx).Table("moderation_report").
-		Where(builder.Eq{"case_issue_id": caseIssueID, "on_hold": false}).
-		Distinct("reason").
-		Find(&reasons)
+// MoveReports moves every report of a case to another case (a merge).
+func MoveReports(ctx context.Context, fromCaseIssueID, intoCaseIssueID int64) error {
+	_, err := db.GetEngine(ctx).Where(builder.Eq{"case_issue_id": fromCaseIssueID}).
+		Cols("case_issue_id").Update(&Report{CaseIssueID: intoCaseIssueID})
+	return err
 }

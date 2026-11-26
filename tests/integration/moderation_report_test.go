@@ -91,9 +91,14 @@ func TestModerationReport(t *testing.T) {
 		DecodeJSON(t, resp, &out)
 		return &out
 	}
-	openCase := func(t *testing.T) *moderation_model.Case {
+	// the part an exact report on block files under
+	blockSection := block.SectionAnchor
+	if blockSection == "" {
+		blockSection = moderation_model.SectionIntro
+	}
+	openCase := func(t *testing.T, section string, reason moderation_model.Reason) *moderation_model.Case {
 		t.Helper()
-		c, err := moderation_model.FindOpenCaseByTargetRepo(t.Context(), article.ID)
+		c, err := moderation_model.FindOpenCase(t.Context(), article.ID, section, reason)
 		require.NoError(t, err)
 		return c
 	}
@@ -115,23 +120,19 @@ func TestModerationReport(t *testing.T) {
 	})
 
 	token := uuid.NewString()
-	t.Run("FilesOneIssuePerReason", func(t *testing.T) {
+	t.Run("FilesOneCasePerReason", func(t *testing.T) {
 		out := post(t, readerSession, reportBody{
 			ClientToken: token, Anchor: "exact", CommitSHA: commitSHA, Range: blockRange,
-			Reasons: []reportReason{{"doxxing", "Shares a home address."}, {"no-reliable-source", "No source for the claim."}},
+			Reasons: []reportReason{{"doxxing", "Shares a home address."}, {"no-source", "No source for the claim."}},
 		}, http.StatusOK)
 		assert.Equal(t, "filed", out.Status)
-		assert.Equal(t, []string{"doxxing", "no-reliable-source"}, out.Filed)
-
-		c := openCase(t)
-		require.NotNil(t, c)
-		assert.Equal(t, moderation_model.CaseKindArticle, c.Kind)
-		assert.Equal(t, article.OwnerID, c.TargetUserID)
-		assert.Equal(t, 3, countIssues(t), "the case and two reason issues")
+		assert.Equal(t, []string{"doxxing", "no-source"}, out.Filed)
+		assert.Equal(t, 4, countIssues(t), "two cases and two reason issues")
 
 		sub, err := moderation_model.GetSubmission(t.Context(), out.SubmissionID)
 		require.NoError(t, err)
 		assert.Equal(t, moderation_model.AnchorExact, sub.AnchorStatus)
+		assert.Equal(t, article.ID, sub.TargetRepoID)
 		assert.Equal(t, int64(block.Start), sub.SourceStart)
 		assert.Equal(t, block.Quote, sub.Quote, "the quote comes from the server's parse")
 
@@ -139,30 +140,37 @@ func TestModerationReport(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, reports, 2)
 		for _, r := range reports {
+			c := openCase(t, blockSection, r.Reason)
+			require.NotNil(t, c, "a case for %s", r.Reason)
+			assert.Equal(t, c.IssueID, r.CaseIssueID)
+			assert.Equal(t, moderation_model.CaseKindArticle, c.Kind)
+			assert.Equal(t, article.OwnerID, c.TargetUserID)
+
 			issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: r.IssueID})
 			assert.Equal(t, reader.ID, issue.PosterID)
 			require.NoError(t, issue.LoadLabels(t.Context()))
-			names := labelNames(issue.Labels)
-			assert.ElementsMatch(t, []string{"type/report", r.Reason.LabelName()}, names)
+			assert.ElementsMatch(t, []string{"type/report", r.Reason.LabelName()}, labelNames(issue.Labels))
 			unittest.AssertExistsAndLoadBean(t, &issues_model.IssueDependency{IssueID: c.IssueID, DependencyID: r.IssueID})
+
+			caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: c.IssueID})
+			require.NoError(t, caseIssue.LoadLabels(t.Context()))
+			assert.ElementsMatch(t, []string{"type/case", "kind/article", "source/reader", r.Reason.LabelName()}, labelNames(caseIssue.Labels))
+			assert.Equal(t, moderation_service.PriorityNormal, caseIssue.Priority)
+			assert.Contains(t, caseIssue.Title, string(r.Reason))
+
+			audit, err := moderation_model.FindAuditByCase(t.Context(), c.IssueID)
+			require.NoError(t, err)
+			require.Len(t, audit, 1, "one entry per case")
+			assert.Equal(t, moderation_model.AuditReportFiled, audit[0].Action)
+			assert.Equal(t, moderation_model.ActorUser, audit[0].ActorRole)
+			assert.Equal(t, r.Reason, audit[0].Reason)
+			assert.Equal(t, string(r.Reason), audit[0].Summary)
+			assert.NotContains(t, audit[0].Summary, "home address", "no typed text in the audit log")
 		}
-
-		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: c.IssueID})
-		require.NoError(t, caseIssue.LoadLabels(t.Context()))
-		assert.ElementsMatch(t, []string{"type/case", "kind/article", "source/reader", "reason/doxxing", "reason/no-reliable-source"}, labelNames(caseIssue.Labels))
-		assert.Equal(t, moderation_service.PriorityNormal, caseIssue.Priority)
-
-		audit, err := moderation_model.FindAuditByCase(t.Context(), c.IssueID)
-		require.NoError(t, err)
-		require.Len(t, audit, 1, "one entry per submission")
-		assert.Equal(t, moderation_model.AuditReportFiled, audit[0].Action)
-		assert.Equal(t, moderation_model.ActorUser, audit[0].ActorRole)
-		assert.Equal(t, "doxxing, no-reliable-source", audit[0].Summary)
-		assert.NotContains(t, audit[0].Summary, "home address", "no typed text in the audit log")
 	})
 
 	t.Run("CasePageHighlightsThePassage", func(t *testing.T) {
-		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: openCase(t).IssueID})
+		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: openCase(t, blockSection, moderation_model.ReasonDoxxing).IssueID})
 		resp := loginUser(t, admin.Name).MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/-/moderation/cases/%d", caseIssue.Index)), http.StatusOK)
 		doc := NewHTMLParser(t, resp.Body)
 		root := doc.Find(".moderation-passage-root")
@@ -178,7 +186,7 @@ func TestModerationReport(t *testing.T) {
 			Reasons: []reportReason{{"something-else", "Changed my mind about the content."}},
 		}, http.StatusOK)
 		assert.Equal(t, "existing", out.Status)
-		assert.Equal(t, []string{"doxxing", "no-reliable-source"}, out.Filed, "the first send wins")
+		assert.Equal(t, []string{"doxxing", "no-source"}, out.Filed, "the first send wins")
 		assert.Equal(t, before, countIssues(t))
 	})
 
@@ -198,18 +206,20 @@ func TestModerationReport(t *testing.T) {
 		assert.Equal(t, "filed", out.Status)
 		assert.Equal(t, []string{"graphic-violence"}, out.Filed)
 		assert.Equal(t, []string{"doxxing"}, out.Repeated)
-		assert.Equal(t, before+1, countIssues(t))
+		assert.Equal(t, before+2, countIssues(t), "a new case for the new reason, and its report")
 
-		// the whole article isn't the same passage
+		// the whole article is another part: the same reason opens another case
 		out = post(t, readerSession, reportBody{
 			ClientToken: uuid.NewString(), Anchor: "whole",
 			Reasons: []reportReason{{"doxxing", "The whole article."}},
 		}, http.StatusOK)
 		assert.Equal(t, "filed", out.Status)
+		whole := openCase(t, moderation_model.SectionWholeArticle, moderation_model.ReasonDoxxing)
+		require.NotNil(t, whole)
+		assert.NotEqual(t, openCase(t, blockSection, moderation_model.ReasonDoxxing).IssueID, whole.IssueID)
 	})
 
 	t.Run("ConcurrentSubmissionsLandOnOneCase", func(t *testing.T) {
-		before := openCase(t)
 		var wg sync.WaitGroup
 		for _, s := range []*TestSession{readerSession, otherSession} {
 			wg.Add(1)
@@ -222,17 +232,31 @@ func TestModerationReport(t *testing.T) {
 			}(s)
 		}
 		wg.Wait()
-		assert.Equal(t, 1, unittest.GetCount(t, &moderation_model.Case{TargetRepoID: article.ID}))
-		assert.Equal(t, before.IssueID, openCase(t).IssueID)
+		assert.Equal(t, 1, unittest.GetCount(t, &moderation_model.Case{
+			TargetRepoID: article.ID, SectionAnchor: moderation_model.SectionWholeArticle, Reason: moderation_model.ReasonOffTopicOrSpam,
+		}))
+		c := openCase(t, moderation_model.SectionWholeArticle, moderation_model.ReasonOffTopicOrSpam)
+		require.NotNil(t, c)
+		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: c.IssueID})
+		assert.Equal(t, moderation_service.PriorityNormal, caseIssue.Priority, "two submissions")
 
-		// three submissions or more: High
-		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: before.IssueID})
+		// three submissions on the case: High. Reports on the article's other cases don't count.
+		post(t, loginUser(t, admin.Name), reportBody{
+			ClientToken: uuid.NewString(), Anchor: "whole",
+			Reasons: []reportReason{{"off-topic-or-spam", "Advertising."}},
+		}, http.StatusOK)
+		caseIssue = unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: c.IssueID})
 		assert.Equal(t, moderation_service.PriorityHigh, caseIssue.Priority)
 	})
 
 	t.Run("DeadlinePassedStaysOnTop", func(t *testing.T) {
+		post(t, readerSession, reportBody{
+			ClientToken: uuid.NewString(), Anchor: "whole",
+			Reasons: []reportReason{{"something-else", "Unsourced."}},
+		}, http.StatusOK)
 		// Request sources was applied and its deadline passed (the decision service is 1.6)
-		c := openCase(t)
+		c := openCase(t, moderation_model.SectionWholeArticle, moderation_model.ReasonSomethingElse)
+		require.NotNil(t, c)
 		_, err := db.GetEngine(t.Context()).ID(c.IssueID).Cols("decision").Update(&moderation_model.Case{Decision: moderation_model.DecisionSourcesRequested})
 		require.NoError(t, err)
 		_, err = db.GetEngine(t.Context()).ID(c.IssueID).Cols("deadline_unix").Update(&issues_model.Issue{DeadlineUnix: timeutil.TimeStampNow() - 60})
@@ -251,8 +275,63 @@ func TestModerationReport(t *testing.T) {
 			ClientToken: uuid.NewString(), Anchor: "whole",
 			Reasons: []reportReason{{"child-safety", "Endangers minors."}},
 		}, http.StatusOK)
-		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: openCase(t).IssueID})
+		c := openCase(t, moderation_model.SectionWholeArticle, moderation_model.ReasonChildSafety)
+		require.NotNil(t, c)
+		caseIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: c.IssueID})
 		assert.Equal(t, moderation_service.PriorityChildSafety, caseIssue.Priority)
+	})
+
+	t.Run("ChangePart", func(t *testing.T) {
+		ctx := t.Context()
+		violence := openCase(t, blockSection, moderation_model.ReasonGraphicViolence)
+		require.NotNil(t, violence)
+
+		_, err := moderation_service.ChangeCasePart(ctx, reader, violence.IssueID, moderation_model.SectionWholeArticle)
+		assert.Error(t, err, "only moderators")
+		_, err = moderation_service.ChangeCasePart(ctx, admin, violence.IssueID, "no-such-heading")
+		assert.Error(t, err, "a part the article doesn't have")
+
+		// no whole-article case for the reason: the case moves
+		res, err := moderation_service.ChangeCasePart(ctx, admin, violence.IssueID, moderation_model.SectionWholeArticle)
+		require.NoError(t, err)
+		assert.False(t, res.Merged)
+		assert.Equal(t, violence.IssueID, res.Case.IssueID)
+		assert.Nil(t, openCase(t, blockSection, moderation_model.ReasonGraphicViolence))
+		moved := openCase(t, moderation_model.SectionWholeArticle, moderation_model.ReasonGraphicViolence)
+		require.NotNil(t, moved)
+		assert.Equal(t, violence.IssueID, moved.IssueID)
+		unittest.AssertExistsAndLoadBean(t, &moderation_model.Audit{CaseIssueID: violence.IssueID, Action: moderation_model.AuditPartChanged})
+
+		// a whole-article doxxing case exists: the passage's doxxing case merges into it
+		doxxing := openCase(t, blockSection, moderation_model.ReasonDoxxing)
+		into := openCase(t, moderation_model.SectionWholeArticle, moderation_model.ReasonDoxxing)
+		require.NotNil(t, doxxing)
+		require.NotNil(t, into)
+		res, err = moderation_service.ChangeCasePart(ctx, admin, doxxing.IssueID, moderation_model.SectionWholeArticle)
+		require.NoError(t, err)
+		assert.True(t, res.Merged)
+		assert.Equal(t, into.IssueID, res.Case.IssueID)
+
+		merged, err := moderation_model.GetCase(ctx, doxxing.IssueID)
+		require.NoError(t, err)
+		assert.Equal(t, moderation_model.ResolutionMerged, merged.Resolution)
+		assert.Equal(t, into.IssueID, merged.MergedIntoIssueID)
+		assert.True(t, unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: doxxing.IssueID}).IsClosed)
+		left, err := moderation_model.FindReportsByCase(ctx, doxxing.IssueID)
+		require.NoError(t, err)
+		assert.Empty(t, left)
+		reports, err := moderation_model.FindReportsByCase(ctx, into.IssueID)
+		require.NoError(t, err)
+		assert.Len(t, reports, 2, "its own report and the merged one")
+		for _, r := range reports {
+			unittest.AssertExistsAndLoadBean(t, &issues_model.IssueDependency{IssueID: into.IssueID, DependencyID: r.IssueID})
+		}
+		unittest.AssertNotExistsBean(t, &issues_model.IssueDependency{IssueID: doxxing.IssueID})
+		unittest.AssertExistsAndLoadBean(t, &moderation_model.Audit{CaseIssueID: doxxing.IssueID, Action: moderation_model.AuditMerged})
+
+		// a closed case can't change part
+		_, err = moderation_service.ChangeCasePart(ctx, admin, doxxing.IssueID, blockSection)
+		assert.Error(t, err)
 	})
 
 	t.Run("InvalidReports", func(t *testing.T) {

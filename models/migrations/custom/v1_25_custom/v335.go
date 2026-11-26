@@ -14,11 +14,15 @@ import (
 // private cases repository; these tables hold what issues can't. Some columns are only filled
 // by later stories, so that they need no migration of their own.
 func CreateModerationTables(x *xorm.Engine) error {
-	// ModerationCase is the moderation data of a case issue (all the reports on one target).
+	// ModerationCase is the moderation data of a case issue: all the reports for one reason on
+	// one part (section, or the whole article) of one target.
 	type ModerationCase struct {
 		IssueID         int64  `xorm:"pk"`
 		Kind            string `xorm:"VARCHAR(16) INDEX NOT NULL"`
-		TargetRepoID    int64  `xorm:"INDEX NOT NULL DEFAULT 0"`
+		TargetRepoID    int64  `xorm:"INDEX(target_part) NOT NULL DEFAULT 0"`
+		SectionAnchor   string `xorm:"VARCHAR(255) INDEX(target_part) NOT NULL DEFAULT ''"`
+		SectionTitle    string `xorm:"VARCHAR(255) NOT NULL DEFAULT ''"`
+		Reason          string `xorm:"VARCHAR(32) INDEX(target_part) NOT NULL DEFAULT ''"`
 		TargetSubjectID int64  `xorm:"INDEX NOT NULL DEFAULT 0"`
 		TargetUserID    int64  `xorm:"INDEX NOT NULL DEFAULT 0"`
 		FlagDetail      string `xorm:"VARCHAR(255)"`
@@ -27,6 +31,10 @@ func CreateModerationTables(x *xorm.Engine) error {
 		Decision   string `xorm:"VARCHAR(32) INDEX NOT NULL DEFAULT ''"`
 		Resolution string `xorm:"VARCHAR(32) INDEX NOT NULL DEFAULT ''"`
 		NeedsAdmin bool   `xorm:"INDEX NOT NULL DEFAULT false"`
+
+		RemoveScope       string `xorm:"VARCHAR(16) NOT NULL DEFAULT ''"`
+		ReporterNote      string `xorm:"TEXT"`
+		MergedIntoIssueID int64  `xorm:"NOT NULL DEFAULT 0"`
 
 		AssignedUnix        timeutil.TimeStamp
 		TakenUnix           timeutil.TimeStamp
@@ -42,12 +50,13 @@ func CreateModerationTables(x *xorm.Engine) error {
 		UpdatedUnix timeutil.TimeStamp `xorm:"updated"`
 	}
 
-	// ModerationSubmission is one send of the report form: one reporter, one anchor.
+	// ModerationSubmission is one send of the report form: one reporter, one anchor. Its
+	// reasons can file into several cases.
 	type ModerationSubmission struct {
-		ID          int64  `xorm:"pk autoincr"`
-		ReporterID  int64  `xorm:"UNIQUE(reporter_client_token) INDEX NOT NULL"`
-		ClientToken string `xorm:"UNIQUE(reporter_client_token) VARCHAR(36) NOT NULL"`
-		CaseIssueID int64  `xorm:"INDEX NOT NULL"`
+		ID           int64  `xorm:"pk autoincr"`
+		ReporterID   int64  `xorm:"UNIQUE(reporter_client_token) INDEX NOT NULL"`
+		ClientToken  string `xorm:"UNIQUE(reporter_client_token) VARCHAR(36) NOT NULL"`
+		TargetRepoID int64  `xorm:"INDEX NOT NULL"`
 
 		CommitSHA     string `xorm:"VARCHAR(64) NOT NULL DEFAULT ''"`
 		TreePath      string `xorm:"VARCHAR(255) NOT NULL DEFAULT ''"`
@@ -69,7 +78,6 @@ func CreateModerationTables(x *xorm.Engine) error {
 		Reason       string `xorm:"VARCHAR(32) INDEX NOT NULL"`
 
 		Verdict     string `xorm:"VARCHAR(16) INDEX NOT NULL DEFAULT 'pending'"`
-		VerdictNote string `xorm:"TEXT"`
 		VerdictBy   int64  `xorm:"NOT NULL DEFAULT 0"`
 		VerdictUnix timeutil.TimeStamp
 		OnHold      bool `xorm:"INDEX NOT NULL DEFAULT false"`

@@ -26,6 +26,7 @@ import (
 	"code.gitea.io/gitea/modules/util"
 
 	"github.com/google/uuid"
+	"xorm.io/builder"
 )
 
 const (
@@ -40,9 +41,9 @@ const (
 // Case priorities, stored in Issue.Priority for the queue's sort (higher first).
 const (
 	PriorityNormal         = 0
-	PriorityHigh           = 1 // three or more submissions
+	PriorityHigh           = 1 // three or more submissions on the case
 	PriorityDeadlinePassed = 2 // Request sources, and the deadline passed: on top for its moderator, or of the Queue if nobody holds it
-	PriorityChildSafety    = 3 // any child-safety report: reviewed first
+	PriorityChildSafety    = 3 // a child-safety case: reviewed first
 	highPrioritySubmits    = 3
 )
 
@@ -71,6 +72,7 @@ type ReportInput struct {
 
 // ReportResult is what SubmitReport did.
 type ReportResult struct {
+	// Submission is nil when nothing was written (every reason was a repeat).
 	Submission *moderation_model.Submission
 	// Existing is set when the client token had already been used: nothing new was written.
 	Existing bool
@@ -90,8 +92,9 @@ func invalid(format string, args ...any) error {
 }
 
 // SubmitReport files a report on an article: one reason issue per ticked reason in the cases
-// repository, all in the article's open case (created when there is none), in one
-// transaction with its audit entry (foundations decisions 2–4, 6, 8).
+// repository, each in the open case for that reason on the reported part (created when there
+// is none), in one transaction with an audit entry per case (foundations decisions 2–4, 6, 8,
+// 13).
 //
 // A client token that was already used returns that submission unchanged. A ticked reason the
 // reporter already reported, still pending, on an overlapping anchor is dropped; when every
@@ -123,8 +126,10 @@ func SubmitReport(ctx context.Context, in ReportInput) (*ReportResult, error) {
 		return nil, err
 	}
 
-	// One open case per article: the lock serialises find-or-create across requests (and
-	// across processes with a redis global lock); the transaction re-checks.
+	// One open case per (article, part, reason): the lock serialises find-or-create across
+	// requests (and across processes with a redis global lock); the transaction re-checks. It
+	// is per article, not per case, because Change part and a whole-article removal touch
+	// several of the article's cases.
 	release, err := globallock.Lock(ctx, fmt.Sprintf("moderation:case:repo:%d", in.Repo.ID))
 	if err != nil {
 		return nil, fmt.Errorf("lock the article's case: %w", err)
@@ -137,35 +142,40 @@ func SubmitReport(ctx context.Context, in ReportInput) (*ReportResult, error) {
 		return existing, err
 	}
 
+	section := caseSection(in.Anchor, anchor.section)
 	var result *ReportResult
 	var newIssueIDs []int64
 	err = db.WithTx(ctx, func(ctx context.Context) error {
-		result, newIssueIDs = nil, nil
-		c, caseIssue, created, err := findOrCreateArticleCase(ctx, casesRepo, in, labels)
-		if err != nil {
-			return err
-		}
+		result, newIssueIDs = &ReportResult{}, nil
 
-		filed, repeated, err := dropRepeats(ctx, c.IssueID, in, anchor)
-		if err != nil {
-			return err
-		}
-		if len(filed) == 0 {
-			result = &ReportResult{Repeated: repeated}
-			if created {
-				// Not possible: a new case has no earlier reports. Keep the invariant anyway.
-				return errors.New("a new case had only repeated reasons")
+		// The open case of each ticked reason, if any, and the reasons to file.
+		cases := make(map[moderation_model.Reason]*moderation_model.Case, len(in.Reasons))
+		for _, r := range in.Reasons {
+			c, err := moderation_model.FindOpenCase(ctx, in.Repo.ID, section, r.Reason)
+			if err != nil {
+				return fmt.Errorf("find the %s case: %w", r.Reason, err)
 			}
-			return nil
+			if c != nil {
+				repeat, err := isRepeat(ctx, c.IssueID, in, r.Reason, anchor)
+				if err != nil {
+					return err
+				}
+				if repeat {
+					result.Repeated = append(result.Repeated, r.Reason)
+					continue
+				}
+			}
+			cases[r.Reason] = c
+			result.Filed = append(result.Filed, r.Reason)
 		}
-		if created {
-			newIssueIDs = append(newIssueIDs, caseIssue.ID)
+		if len(result.Filed) == 0 {
+			return nil
 		}
 
 		sub := &moderation_model.Submission{
 			ReporterID:    in.Reporter.ID,
 			ClientToken:   in.ClientToken,
-			CaseIssueID:   c.IssueID,
+			TargetRepoID:  in.Repo.ID,
 			CommitSHA:     anchor.commitSHA,
 			TreePath:      ArticleTreePath,
 			SourceStart:   int64(anchor.start),
@@ -177,56 +187,25 @@ func SubmitReport(ctx context.Context, in ReportInput) (*ReportResult, error) {
 		if err := moderation_model.InsertSubmission(ctx, sub); err != nil {
 			return fmt.Errorf("insert submission: %w", err)
 		}
+		result.Submission = sub
 
 		for _, r := range in.Reasons {
-			if !slices.Contains(filed, r.Reason) {
+			if !slices.Contains(result.Filed, r.Reason) {
 				continue
 			}
-			issue, err := createReasonIssue(ctx, casesRepo, in, r, labels)
+			c, caseIssue, err := loadOrCreateCase(ctx, casesRepo, in, cases[r.Reason], section, anchor.sectionTitle, r.Reason, labels)
+			if err != nil {
+				return err
+			}
+			if cases[r.Reason] == nil {
+				newIssueIDs = append(newIssueIDs, caseIssue.ID)
+			}
+			issue, err := fileReport(ctx, casesRepo, in, sub, c, caseIssue, r, labels)
 			if err != nil {
 				return err
 			}
 			newIssueIDs = append(newIssueIDs, issue.ID)
-			if err := moderation_model.InsertReport(ctx, &moderation_model.Report{
-				IssueID:      issue.ID,
-				SubmissionID: sub.ID,
-				CaseIssueID:  c.IssueID,
-				ReporterID:   in.Reporter.ID,
-				Reason:       r.Reason,
-			}); err != nil {
-				return fmt.Errorf("insert report: %w", err)
-			}
-			// The case is blocked by each of its reports: the native dependency sidebar, and
-			// the guard that stops a case closing before every report is decided.
-			if err := issues_model.CreateIssueDependency(ctx, in.Reporter, caseIssue, issue); err != nil {
-				return fmt.Errorf("link report to case: %w", err)
-			}
 		}
-
-		if err := syncCaseLabels(ctx, caseIssue, c, labels, in.Reporter); err != nil {
-			return err
-		}
-		if err := updateCasePriority(ctx, caseIssue, c); err != nil {
-			return err
-		}
-
-		audit := &moderation_model.Audit{
-			ActorID:      in.Reporter.ID,
-			ActorRole:    moderation_model.ActorUser,
-			Action:       moderation_model.AuditReportFiled,
-			CaseIssueID:  c.IssueID,
-			TargetUserID: c.TargetUserID,
-			TargetRepoID: c.TargetRepoID,
-			Summary:      reasonList(filed),
-		}
-		if len(filed) == 1 {
-			audit.Reason = filed[0]
-		}
-		if err := moderation_model.InsertAudit(ctx, audit); err != nil {
-			return fmt.Errorf("insert audit entry: %w", err)
-		}
-
-		result = &ReportResult{Submission: sub, Filed: filed, Repeated: repeated}
 		return nil
 	})
 	if err != nil {
@@ -291,11 +270,7 @@ func existingSubmission(ctx context.Context, in ReportInput) (*ReportResult, err
 	if err != nil || sub == nil {
 		return nil, err
 	}
-	c, err := moderation_model.GetCase(ctx, sub.CaseIssueID)
-	if err != nil {
-		return nil, err
-	}
-	if c == nil || c.TargetRepoID != in.Repo.ID {
+	if sub.TargetRepoID != in.Repo.ID {
 		return nil, ErrTokenReused
 	}
 	reports, err := moderation_model.FindReportsBySubmission(ctx, sub.ID)
@@ -314,6 +289,8 @@ type resolvedAnchor struct {
 	start, end int
 	quote      string
 	section    string
+	// sectionTitle is the text of the heading section names, for the case title.
+	sectionTitle string
 }
 
 // resolveAnchor checks the anchor against the README at the revision the reader saw. The
@@ -337,6 +314,7 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 		return &resolvedAnchor{
 			commitSHA: in.CommitSHA, start: block.Start, end: block.End,
 			quote: block.Quote, section: block.SectionAnchor,
+			sectionTitle: headingTitle(ctx, raw, block.SectionAnchor),
 		}, nil
 	}
 
@@ -349,16 +327,43 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 	if utf8.RuneCountInString(quote) > markdown.MaxSourceBlockQuote {
 		quote = string([]rune(quote)[:markdown.MaxSourceBlockQuote])
 	}
-	section := ""
+	section, title := "", ""
 	if in.Section != "" {
-		for _, b := range markdown.SourceBlocks(ctx, raw) {
-			if b.Kind == "heading" && b.SectionAnchor == in.Section {
-				section = in.Section
-				break
-			}
+		if title = headingTitle(ctx, raw, in.Section); title != "" {
+			section = in.Section
 		}
 	}
-	return &resolvedAnchor{commitSHA: in.CommitSHA, quote: quote, section: section}, nil
+	return &resolvedAnchor{commitSHA: in.CommitSHA, quote: quote, section: section, sectionTitle: title}, nil
+}
+
+// headingTitle returns the text of the article's heading with the id, or "" when there is
+// none (no id: the passage is before the first heading).
+func headingTitle(ctx context.Context, raw []byte, id string) string {
+	if id == "" {
+		return ""
+	}
+	for _, b := range markdown.SourceBlocks(ctx, raw) {
+		if b.Kind == "heading" && b.SectionAnchor == id {
+			if b.Quote == "" {
+				return id
+			}
+			return b.Quote
+		}
+	}
+	return ""
+}
+
+// caseSection is the part of the article a report is filed under (Case.SectionAnchor): the
+// whole article, the passage's section, or the introduction before the first heading.
+func caseSection(status moderation_model.AnchorStatus, passageSection string) string {
+	switch {
+	case status == moderation_model.AnchorWhole:
+		return moderation_model.SectionWholeArticle
+	case passageSection == "":
+		return moderation_model.SectionIntro
+	default:
+		return passageSection
+	}
 }
 
 func isFullCommitID(sha string) bool {
@@ -412,20 +417,16 @@ func coreLabelsByName(ctx context.Context, orgID int64) (map[string]*issues_mode
 	return byName, nil
 }
 
-// findOrCreateArticleCase returns the article's open case, creating it (and its issue) when
-// there is none. The caller holds the article's lock.
-func findOrCreateArticleCase(ctx context.Context, casesRepo *repo_model.Repository, in ReportInput, labels map[string]*issues_model.Label) (*moderation_model.Case, *issues_model.Issue, bool, error) {
-	c, err := moderation_model.FindOpenCaseByTargetRepo(ctx, in.Repo.ID)
-	if err != nil {
-		return nil, nil, false, fmt.Errorf("find the article's case: %w", err)
-	}
+// loadOrCreateCase returns the case issue of c, or creates the case for the reason on the
+// part when c is nil. The caller holds the article's lock and found c in its transaction.
+func loadOrCreateCase(ctx context.Context, casesRepo *repo_model.Repository, in ReportInput, c *moderation_model.Case, section, sectionTitle string, reason moderation_model.Reason, labels map[string]*issues_model.Label) (*moderation_model.Case, *issues_model.Issue, error) {
 	if c != nil {
 		issue, err := issues_model.GetIssueByID(ctx, c.IssueID)
 		if err != nil {
-			return nil, nil, false, fmt.Errorf("get case issue: %w", err)
+			return nil, nil, fmt.Errorf("get case issue: %w", err)
 		}
 		issue.Repo = casesRepo
-		return c, issue, false, nil
+		return c, issue, nil
 	}
 
 	kind := moderation_model.CaseKindArticle
@@ -433,14 +434,10 @@ func findOrCreateArticleCase(ctx context.Context, casesRepo *repo_model.Reposito
 		kind = moderation_model.CaseKindFork
 	}
 	if err := in.Repo.LoadOwner(ctx); err != nil {
-		return nil, nil, false, fmt.Errorf("load article owner: %w", err)
+		return nil, nil, fmt.Errorf("load article owner: %w", err)
 	}
 	if err := in.Repo.LoadSubject(ctx); err != nil {
-		return nil, nil, false, fmt.Errorf("load article subject: %w", err)
-	}
-	title := in.Repo.Owner.Name + " / " + in.Repo.Name
-	if in.Repo.SubjectRelation != nil {
-		title = in.Repo.Owner.Name + " / " + in.Repo.SubjectRelation.Name
+		return nil, nil, fmt.Errorf("load article subject: %w", err)
 	}
 
 	// The case's poster is the reporter who opened it: an issue needs one, and only
@@ -448,38 +445,109 @@ func findOrCreateArticleCase(ctx context.Context, casesRepo *repo_model.Reposito
 	issue := &issues_model.Issue{
 		RepoID:   casesRepo.ID,
 		Repo:     casesRepo,
-		Title:    title,
+		Title:    caseTitle(in.Repo, section, sectionTitle, reason),
 		PosterID: in.Reporter.ID,
 		Poster:   in.Reporter,
 	}
-	labelIDs := []int64{labels[moderation_model.LabelTypeCase].ID, labels[kind.LabelName()].ID, labels[moderation_model.LabelSourceReader].ID}
+	labelIDs := []int64{
+		labels[moderation_model.LabelTypeCase].ID, labels[kind.LabelName()].ID,
+		labels[moderation_model.LabelSourceReader].ID, labels[reason.LabelName()].ID,
+	}
 	if err := issues_model.NewIssue(ctx, casesRepo, issue, labelIDs, nil); err != nil {
-		return nil, nil, false, fmt.Errorf("create case issue: %w", err)
+		return nil, nil, fmt.Errorf("create case issue: %w", err)
 	}
 
-	previous, err := previousCaseIssueID(ctx, in.Repo.ID)
+	previous, err := previousCaseIssueID(ctx, in.Repo.ID, section, reason)
 	if err != nil {
-		return nil, nil, false, err
+		return nil, nil, err
 	}
 	c = &moderation_model.Case{
 		IssueID:             issue.ID,
 		Kind:                kind,
 		TargetRepoID:        in.Repo.ID,
+		SectionAnchor:       section,
+		SectionTitle:        sectionTitle,
+		Reason:              reason,
 		TargetUserID:        in.Repo.OwnerID,
 		PreviousCaseIssueID: previous,
 	}
 	if err := moderation_model.InsertCase(ctx, c); err != nil {
-		return nil, nil, false, fmt.Errorf("insert case: %w", err)
+		return nil, nil, fmt.Errorf("insert case: %w", err)
 	}
-	return c, issue, true, nil
+	return c, issue, nil
 }
 
-// previousCaseIssueID returns the newest closed case on the article, or 0.
-func previousCaseIssueID(ctx context.Context, repoID int64) (int64, error) {
+// caseTitle names a case in the stock issue list: the article, the part and the reason.
+func caseTitle(repo *repo_model.Repository, section, sectionTitle string, reason moderation_model.Reason) string {
+	article := repo.Owner.Name + " / " + repo.Name
+	if repo.SubjectRelation != nil {
+		article = repo.Owner.Name + " / " + repo.SubjectRelation.Name
+	}
+	part := sectionTitle
+	switch section {
+	case moderation_model.SectionWholeArticle:
+		part = "whole article"
+	case moderation_model.SectionIntro:
+		part = "introduction"
+	}
+	return article + " · " + part + " · " + string(reason)
+}
+
+// fileReport files one reason of a submission in its case: the reason issue, the report,
+// the case's dependency on it, the case's labels and priority, and the audit entry.
+func fileReport(ctx context.Context, casesRepo *repo_model.Repository, in ReportInput, sub *moderation_model.Submission, c *moderation_model.Case, caseIssue *issues_model.Issue, r ReasonInput, labels map[string]*issues_model.Label) (*issues_model.Issue, error) {
+	issue, err := createReasonIssue(ctx, casesRepo, in, r, labels)
+	if err != nil {
+		return nil, err
+	}
+	if err := moderation_model.InsertReport(ctx, &moderation_model.Report{
+		IssueID:      issue.ID,
+		SubmissionID: sub.ID,
+		CaseIssueID:  c.IssueID,
+		ReporterID:   in.Reporter.ID,
+		Reason:       r.Reason,
+	}); err != nil {
+		return nil, fmt.Errorf("insert report: %w", err)
+	}
+	// The case is blocked by each of its reports: the native dependency sidebar, and the
+	// guard that stops a case closing before every report is decided.
+	if err := issues_model.CreateIssueDependency(ctx, in.Reporter, caseIssue, issue); err != nil {
+		return nil, fmt.Errorf("link report to case: %w", err)
+	}
+	if err := syncCaseLabels(ctx, caseIssue, c, labels, in.Reporter); err != nil {
+		return nil, err
+	}
+	if err := updateCasePriority(ctx, caseIssue, c); err != nil {
+		return nil, err
+	}
+	// One entry per case the submission files into, which is one per reason.
+	if err := moderation_model.InsertAudit(ctx, &moderation_model.Audit{
+		ActorID:      in.Reporter.ID,
+		ActorRole:    moderation_model.ActorUser,
+		Action:       moderation_model.AuditReportFiled,
+		CaseIssueID:  c.IssueID,
+		TargetUserID: c.TargetUserID,
+		TargetRepoID: c.TargetRepoID,
+		Reason:       r.Reason,
+		Summary:      string(r.Reason),
+	}); err != nil {
+		return nil, fmt.Errorf("insert audit entry: %w", err)
+	}
+	return issue, nil
+}
+
+// previousCaseIssueID returns the newest closed case for the reason on the part, or 0. A case
+// merged into another isn't one: its reports live on in the case it was merged into.
+func previousCaseIssueID(ctx context.Context, repoID int64, section string, reason moderation_model.Reason) (int64, error) {
 	var id int64
 	_, err := db.GetEngine(ctx).Table("moderation_case").
 		Join("INNER", "issue", "issue.id = moderation_case.issue_id").
-		Where("moderation_case.target_repo_id = ? AND issue.is_closed = ?", repoID, true).
+		Where(builder.Eq{
+			"moderation_case.target_repo_id": repoID,
+			"moderation_case.section_anchor": section,
+			"moderation_case.reason":         reason,
+			"issue.is_closed":                true,
+		}.And(builder.Neq{"moderation_case.resolution": moderation_model.ResolutionMerged})).
 		Desc("moderation_case.issue_id").
 		Cols("moderation_case.issue_id").
 		Get(&id)
@@ -489,22 +557,14 @@ func previousCaseIssueID(ctx context.Context, repoID int64) (int64, error) {
 	return id, nil
 }
 
-// dropRepeats applies the duplicate rule (foundations decisions 4): it splits the ticked
-// reasons into the ones to file and the ones the reporter already reported, still pending,
-// on an overlapping anchor of the same case.
-func dropRepeats(ctx context.Context, caseIssueID int64, in ReportInput, a *resolvedAnchor) (filed, repeated []moderation_model.Reason, err error) {
-	for _, r := range in.Reasons {
-		earlier, err := moderation_model.FindPendingSubmissionsForReason(ctx, caseIssueID, in.Reporter.ID, r.Reason)
-		if err != nil {
-			return nil, nil, fmt.Errorf("find earlier reports: %w", err)
-		}
-		if slices.ContainsFunc(earlier, func(s *moderation_model.Submission) bool { return anchorsOverlap(s, in.Anchor, a) }) {
-			repeated = append(repeated, r.Reason)
-		} else {
-			filed = append(filed, r.Reason)
-		}
+// isRepeat applies the duplicate rule (foundations decisions 4) to one ticked reason: the
+// reporter already reported it, still pending, on an overlapping anchor in its open case.
+func isRepeat(ctx context.Context, caseIssueID int64, in ReportInput, reason moderation_model.Reason, a *resolvedAnchor) (bool, error) {
+	earlier, err := moderation_model.FindPendingSubmissionsForReason(ctx, caseIssueID, in.Reporter.ID, reason)
+	if err != nil {
+		return false, fmt.Errorf("find earlier reports: %w", err)
 	}
-	return filed, repeated, nil
+	return slices.ContainsFunc(earlier, func(s *moderation_model.Submission) bool { return anchorsOverlap(s, in.Anchor, a) }), nil
 }
 
 func anchorsOverlap(s *moderation_model.Submission, status moderation_model.AnchorStatus, a *resolvedAnchor) bool {
@@ -543,23 +603,15 @@ func createReasonIssue(ctx context.Context, casesRepo *repo_model.Repository, in
 }
 
 // syncCaseLabels writes the case's label projection (foundations decisions 1.2): type/case,
-// its kind, source/reader, and the reason labels of its reports not on hold.
+// its kind, source/reader and its reason. Any other reason label is removed.
 func syncCaseLabels(ctx context.Context, issue *issues_model.Issue, c *moderation_model.Case, labels map[string]*issues_model.Label, doer *user_model.User) error {
-	reasons, err := moderation_model.CaseReasons(ctx, c.IssueID)
-	if err != nil {
-		return fmt.Errorf("get case reasons: %w", err)
-	}
-	want := []*issues_model.Label{labels[moderation_model.LabelTypeCase], labels[c.Kind.LabelName()], labels[moderation_model.LabelSourceReader]}
-	wantReason := map[string]bool{}
-	for _, r := range reasons {
-		want = append(want, labels[r.LabelName()])
-		wantReason[r.LabelName()] = true
-	}
+	reasonLabel := c.Reason.LabelName()
+	want := []*issues_model.Label{labels[moderation_model.LabelTypeCase], labels[c.Kind.LabelName()], labels[moderation_model.LabelSourceReader], labels[reasonLabel]}
 	if err := issues_model.NewIssueLabels(ctx, issue, want, doer); err != nil {
 		return fmt.Errorf("set case labels: %w", err)
 	}
 	for _, l := range issue.Labels {
-		if strings.HasPrefix(l.Name, moderation_model.ReasonLabelPrefix) && !wantReason[l.Name] {
+		if strings.HasPrefix(l.Name, moderation_model.ReasonLabelPrefix) && l.Name != reasonLabel {
 			if err := issues_model.DeleteIssueLabel(ctx, issue, l, doer); err != nil {
 				return fmt.Errorf("remove case label %q: %w", l.Name, err)
 			}
@@ -568,28 +620,22 @@ func syncCaseLabels(ctx context.Context, issue *issues_model.Issue, c *moderatio
 	return nil
 }
 
-// updateCasePriority recalculates the case's priority: child safety first, then open
-// Request sources cases whose deadline passed, then cases with three or more submissions;
-// reports on hold don't count.
+// updateCasePriority recalculates the case's priority: child-safety cases first, then open
+// Request sources cases whose deadline passed, then cases with three or more submissions.
+// Reports on hold don't count: a child-safety case whose reports are all on hold is normal.
 func updateCasePriority(ctx context.Context, issue *issues_model.Issue, c *moderation_model.Case) error {
-	reasons, err := moderation_model.CaseReasons(ctx, issue.ID)
+	n, err := moderation_model.CountCaseSubmissions(ctx, issue.ID)
 	if err != nil {
-		return fmt.Errorf("get case reasons: %w", err)
+		return fmt.Errorf("count case submissions: %w", err)
 	}
 	priority := PriorityNormal
 	switch {
-	case slices.Contains(reasons, moderation_model.ReasonChildSafety):
+	case c.Reason == moderation_model.ReasonChildSafety && n > 0:
 		priority = PriorityChildSafety
 	case deadlinePassed(issue, c, timeutil.TimeStampNow()):
 		priority = PriorityDeadlinePassed
-	default:
-		n, err := moderation_model.CountCaseSubmissions(ctx, issue.ID)
-		if err != nil {
-			return fmt.Errorf("count case submissions: %w", err)
-		}
-		if n >= highPrioritySubmits {
-			priority = PriorityHigh
-		}
+	case n >= highPrioritySubmits:
+		priority = PriorityHigh
 	}
 	if issue.Priority == priority {
 		return nil
@@ -606,12 +652,4 @@ func updateCasePriority(ctx context.Context, issue *issues_model.Issue, c *moder
 func deadlinePassed(issue *issues_model.Issue, c *moderation_model.Case, now timeutil.TimeStamp) bool {
 	return !issue.IsClosed && c.Decision == moderation_model.DecisionSourcesRequested &&
 		issue.DeadlineUnix > 0 && issue.DeadlineUnix <= now
-}
-
-func reasonList(reasons []moderation_model.Reason) string {
-	s := make([]string, len(reasons))
-	for i, r := range reasons {
-		s[i] = string(r)
-	}
-	return strings.Join(s, ", ")
 }

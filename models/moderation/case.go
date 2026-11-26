@@ -25,9 +25,31 @@ const (
 // Case decisions, stored in Case.Decision; the decision/* label of the same name mirrors it.
 const (
 	DecisionDismissed        = "dismissed"
+	DecisionResolved         = "resolved" // the owner fixed it: the reports are upheld, nothing goes on the owner's record
 	DecisionSourcesRequested = "sources-requested"
-	DecisionRemoved          = "removed"
+	DecisionRemoved          = "removed" // Case.RemoveScope says what was removed
 	DecisionEscalated        = "escalated"
+)
+
+// What a Remove decision removed (Case.RemoveScope).
+const (
+	RemoveSection = "section" // the case's section
+	RemoveArticle = "article" // the whole article: the article's other open cases close with ResolutionArticleRemoved
+)
+
+// How a case ended without a decision of its own (Case.Resolution). The other resolutions
+// (sources added, removed after the deadline, overturned) follow a decision.
+const (
+	ResolutionMerged         = "merged"          // Change part moved it onto an open case with the same key: Case.MergedIntoIssueID
+	ResolutionArticleRemoved = "article-removed" // another case on the article removed the whole article
+)
+
+// SectionWholeArticle and SectionIntro are the two Case.SectionAnchor values that aren't a
+// heading's id: a report on the whole article, and a passage before the first heading. Heading
+// ids are slugs, which never contain a colon.
+const (
+	SectionWholeArticle = ""
+	SectionIntro        = ":intro"
 )
 
 // Who a case waits for (Case.WaitingOn).
@@ -38,7 +60,8 @@ const (
 
 // Why a case came back to its moderator (Case.Attention).
 const (
-	AttentionNeedsReply     = "needs_reply"     // the owner replied or added a source; the moderator decides if it's enough
+	AttentionNeedsReply     = "needs_reply"     // the owner replied; the moderator answers
+	AttentionSourceAdded    = "source_added"    // the owner added a source; the moderator decides if it's enough
 	AttentionDeadlinePassed = "deadline_passed" // the sources deadline passed; nothing is removed automatically
 	AttentionAdminDecided   = "admin_decided"   // the site admin decided an escalated case
 )
@@ -48,22 +71,36 @@ func (k CaseKind) LabelName() string {
 	return "kind/" + string(k)
 }
 
-// Case is the moderation data of a case issue: all the reports on one target. Its fields are
-// authoritative; the case issue's labels are projections of them (foundations decisions 1.2).
+// Case is the moderation data of a case issue: all the reports for one reason on one part of
+// one target (foundations decisions 13). An article can have several open cases, one per
+// section and reason. Its fields are authoritative; the case issue's labels are projections of
+// them (foundations decisions 1.2).
 type Case struct {
-	IssueID         int64    `xorm:"pk"`
-	Kind            CaseKind `xorm:"VARCHAR(16) INDEX NOT NULL"`
-	TargetRepoID    int64    `xorm:"INDEX NOT NULL DEFAULT 0"`
-	TargetSubjectID int64    `xorm:"INDEX NOT NULL DEFAULT 0"`
-	TargetUserID    int64    `xorm:"INDEX NOT NULL DEFAULT 0"`
-	FlagDetail      string   `xorm:"VARCHAR(255)"` // Story 2
-	FlaggedBlocks   string   `xorm:"TEXT"`         // JSON, written by the Request sources action
+	IssueID      int64    `xorm:"pk"`
+	Kind         CaseKind `xorm:"VARCHAR(16) INDEX NOT NULL"`
+	TargetRepoID int64    `xorm:"INDEX(target_part) NOT NULL DEFAULT 0"` // the composite index also serves lookups by article
+	// SectionAnchor is the reported part: a heading's id, SectionIntro or SectionWholeArticle.
+	// SectionTitle is that heading's text when the case was opened ("" for the other two).
+	SectionAnchor   string `xorm:"VARCHAR(255) INDEX(target_part) NOT NULL DEFAULT ''"`
+	SectionTitle    string `xorm:"VARCHAR(255) NOT NULL DEFAULT ''"`
+	Reason          Reason `xorm:"VARCHAR(32) INDEX(target_part) NOT NULL DEFAULT ''"`
+	TargetSubjectID int64  `xorm:"INDEX NOT NULL DEFAULT 0"`
+	TargetUserID    int64  `xorm:"INDEX NOT NULL DEFAULT 0"`
+	FlagDetail      string `xorm:"VARCHAR(255)"` // Story 2
+	FlaggedBlocks   string `xorm:"TEXT"`         // JSON, written by the Request sources action
 
 	// Decision, Resolution and NeedsAdmin are mirrored by the decision/*, resolution/* and
 	// status/needs-admin labels.
 	Decision   string `xorm:"VARCHAR(32) INDEX NOT NULL DEFAULT ''"`
 	Resolution string `xorm:"VARCHAR(32) INDEX NOT NULL DEFAULT ''"`
 	NeedsAdmin bool   `xorm:"INDEX NOT NULL DEFAULT false"`
+	// RemoveScope is RemoveSection or RemoveArticle when Decision is DecisionRemoved.
+	RemoveScope string `xorm:"VARCHAR(16) NOT NULL DEFAULT ''"`
+	// ReporterNote is what the decision tells the case's reporters; required for a dismissal.
+	// One note per case: every report in it is for the same reason on the same part.
+	ReporterNote string `xorm:"TEXT"`
+	// MergedIntoIssueID is the case this one was merged into (ResolutionMerged).
+	MergedIntoIssueID int64 `xorm:"NOT NULL DEFAULT 0"`
 
 	AssignedUnix        timeutil.TimeStamp // the 48h timer start
 	TakenUnix           timeutil.TimeStamp
@@ -110,19 +147,63 @@ func GetCase(ctx context.Context, issueID int64) (*Case, error) {
 	return c, nil
 }
 
-// FindOpenCaseByTargetRepo returns the open case of a repository target, or nil. Callers that
-// may create one hold the target's global lock and call it inside their transaction.
-func FindOpenCaseByTargetRepo(ctx context.Context, repoID int64) (*Case, error) {
+// openCasesOfRepo selects the open cases of a repository target; the query joins issue.
+func openCasesOfRepo(repoID int64) builder.Cond {
+	return builder.Eq{"moderation_case.target_repo_id": repoID, "issue.is_closed": false}
+}
+
+// FindOpenCase returns the open case for a reason on a part of a repository target, or nil.
+// Callers that may create one hold the target's global lock and call it inside their
+// transaction.
+func FindOpenCase(ctx context.Context, repoID int64, section string, reason Reason) (*Case, error) {
 	c := new(Case)
 	has, err := db.GetEngine(ctx).
 		Join("INNER", "issue", "issue.id = moderation_case.issue_id").
-		Where(builder.Eq{"moderation_case.target_repo_id": repoID, "issue.is_closed": false}).
+		Where(openCasesOfRepo(repoID).And(builder.Eq{"moderation_case.section_anchor": section, "moderation_case.reason": reason})).
 		Desc("moderation_case.issue_id").
 		Get(c)
 	if err != nil || !has {
 		return nil, err
 	}
 	return c, nil
+}
+
+// FindOpenCasesByTargetRepo returns every open case of a repository target, oldest first: the
+// case page's switcher, and the cases a whole-article removal closes.
+func FindOpenCasesByTargetRepo(ctx context.Context, repoID int64) ([]*Case, error) {
+	cases := make([]*Case, 0, 2)
+	return cases, db.GetEngine(ctx).
+		Join("INNER", "issue", "issue.id = moderation_case.issue_id").
+		Where(openCasesOfRepo(repoID)).
+		Asc("moderation_case.issue_id").Find(&cases)
+}
+
+// HasPriorRemoval reports whether a closed case on the repository removed a section or the
+// whole article: the case page's "Removed before" marker.
+func HasPriorRemoval(ctx context.Context, repoID int64) (bool, error) {
+	return db.GetEngine(ctx).Table("moderation_case").
+		Join("INNER", "issue", "issue.id = moderation_case.issue_id").
+		Where(builder.Eq{
+			"moderation_case.target_repo_id": repoID,
+			"moderation_case.decision":       DecisionRemoved,
+			"issue.is_closed":                true,
+		}).
+		Exist()
+}
+
+// SetCasePart moves a case to another part of its target (Change part). The caller holds the
+// target's lock and has checked that no other open case has the new key.
+func SetCasePart(ctx context.Context, caseIssueID int64, section, title string) error {
+	_, err := db.GetEngine(ctx).ID(caseIssueID).Cols("section_anchor", "section_title").
+		Update(&Case{SectionAnchor: section, SectionTitle: title})
+	return err
+}
+
+// MarkMerged records that a case was merged into another.
+func MarkMerged(ctx context.Context, caseIssueID, intoIssueID int64) error {
+	_, err := db.GetEngine(ctx).ID(caseIssueID).Cols("resolution", "merged_into_issue_id").
+		Update(&Case{Resolution: ResolutionMerged, MergedIntoIssueID: intoIssueID})
+	return err
 }
 
 // IsReexamining reports whether the case was reopened after its last decision: the earlier

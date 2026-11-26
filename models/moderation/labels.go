@@ -32,6 +32,7 @@ const (
 	LabelSourceForkana = "source/forkana"
 
 	LabelDecisionDismissed        = "decision/dismissed"
+	LabelDecisionResolved         = "decision/resolved"
 	LabelDecisionSourcesRequested = "decision/sources-requested"
 	LabelDecisionRemoved          = "decision/removed"
 	LabelDecisionEscalated        = "decision/escalated"
@@ -39,6 +40,8 @@ const (
 	LabelResolutionSourcesAdded         = "resolution/sources-added"
 	LabelResolutionRemovedAfterDeadline = "resolution/removed-after-deadline"
 	LabelResolutionOverturned           = "resolution/overturned"
+	LabelResolutionMerged               = "resolution/merged"
+	LabelResolutionArticleRemoved       = "resolution/article-removed"
 
 	LabelStatusNeedsAdmin = "status/needs-admin"
 
@@ -60,7 +63,7 @@ const (
 	ReasonGraphicViolence    Reason = "graphic-violence"
 	ReasonAdultSexualContent Reason = "adult-sexual-content"
 	ReasonIllegalInRegion    Reason = "illegal-in-region"
-	ReasonNoReliableSource   Reason = "no-reliable-source"
+	ReasonNoSource           Reason = "no-source"
 	ReasonPlagiarism         Reason = "plagiarism-or-copyright"
 	ReasonOffTopicOrSpam     Reason = "off-topic-or-spam"
 	ReasonSomethingElse      Reason = "something-else"
@@ -78,7 +81,7 @@ var reasonDescriptions = []struct {
 	{ReasonGraphicViolence, "Shows real gore or violence."},
 	{ReasonAdultSexualContent, "Sexually explicit text or images."},
 	{ReasonIllegalInRegion, "Breaks the law where you live. It may be hidden only there."},
-	{ReasonNoReliableSource, "A factual claim nobody else could go and check."},
+	{ReasonNoSource, "A factual claim nobody else could go and check."},
 	{ReasonPlagiarism, "Copied from somewhere else without credit or permission."},
 	{ReasonOffTopicOrSpam, "Unrelated to the subject, advertising, or repeated content."},
 	{ReasonSomethingElse, "Anything not listed above."},
@@ -122,7 +125,7 @@ const (
 // the automatic flags that set them (Story 2).
 func CoreLabels() []CoreLabel {
 	labels := []CoreLabel{
-		{LabelTypeCase, true, colorBlue, "All the reports on one target, and the moderator's decision on them"},
+		{LabelTypeCase, true, colorBlue, "All the reports for one reason on one part of a target, and the moderator's decision"},
 		{LabelTypeReport, true, colorBlue, "One reason a reader ticked in one report"},
 		{LabelTypeConversation, true, colorBlue, "Messages between moderators and one participant of a case"},
 
@@ -143,13 +146,16 @@ func CoreLabels() []CoreLabel {
 		CoreLabel{LabelSourceForkana, false, colorNeutral, "Flagged by Forkana"},
 
 		CoreLabel{LabelDecisionDismissed, true, colorGreen, "No violation: the article stays as it is"},
+		CoreLabel{LabelDecisionResolved, true, colorGreen, "The owner fixed it: nothing goes on their record"},
 		CoreLabel{LabelDecisionSourcesRequested, true, colorYellow, "The owner was asked to add sources before a deadline"},
-		CoreLabel{LabelDecisionRemoved, true, colorRed, "The article was removed"},
+		CoreLabel{LabelDecisionRemoved, true, colorRed, "The section, or the whole article, was removed"},
 		CoreLabel{LabelDecisionEscalated, true, colorOrange, "Sent to a site administrator"},
 
 		CoreLabel{LabelResolutionSourcesAdded, true, colorGreen, "The owner added the requested sources"},
 		CoreLabel{LabelResolutionRemovedAfterDeadline, true, colorRed, "Removed by a moderator after the sources deadline passed"},
 		CoreLabel{LabelResolutionOverturned, true, colorOrange, "The decision was overturned"},
+		CoreLabel{LabelResolutionMerged, true, colorNeutral, "Merged into the open case for the same reason on the same part"},
+		CoreLabel{LabelResolutionArticleRemoved, true, colorRed, "Closed because another case removed the whole article"},
 
 		CoreLabel{LabelStatusNeedsAdmin, false, colorOrange, "Waiting for a site administrator"},
 
