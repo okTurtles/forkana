@@ -64,15 +64,19 @@ func Case(ctx *context.Context) {
 		ctx.NotFoundOrServerError("GetIssueByIndex", issues_model.IsErrIssueNotExist, err)
 		return
 	}
-	ctx.Data["Title"] = ctx.Tr("moderation.case.title", issue.Index)
-	ctx.Data["CaseIndex"] = issue.Index
-
-	// Placeholder for the case review (1.6): the reported passage, highlighted.
 	c, err := moderation_model.GetCase(ctx, issue.ID)
 	if err != nil {
 		ctx.ServerError("GetCase", err)
 		return
 	}
+	if c == nil || issue.IsPull { // a reason issue, a conversation or a pull request
+		ctx.NotFound(nil)
+		return
+	}
+	ctx.Data["Title"] = ctx.Tr("moderation.case.title", issue.Index)
+	ctx.Data["CaseIndex"] = issue.Index
+
+	// Placeholder for the case review (1.6): the reported passage, highlighted.
 	passage, err := moderation_service.RenderCasePassage(ctx, c)
 	if err != nil {
 		ctx.ServerError("RenderCasePassage", err)

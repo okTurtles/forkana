@@ -177,6 +177,13 @@ func TestModerationReport(t *testing.T) {
 		require.Equal(t, 1, root.Length())
 		assert.Equal(t, blockRange, root.AttrOr("data-passage-highlight", ""))
 		assert.Equal(t, 1, root.Find(fmt.Sprintf(`[data-source-range="%s"]`, blockRange)).Length(), "the reported block is in the rendered article")
+
+		// a reason issue is in the cases repository too, but it isn't a case
+		reports, err := moderation_model.FindReportsByCase(t.Context(), caseIssue.ID)
+		require.NoError(t, err)
+		require.NotEmpty(t, reports)
+		reasonIssue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: reports[0].IssueID})
+		loginUser(t, admin.Name).MakeRequest(t, NewRequest(t, "GET", fmt.Sprintf("/-/moderation/cases/%d", reasonIssue.Index)), http.StatusNotFound)
 	})
 
 	t.Run("RetryReturnsTheSameSubmission", func(t *testing.T) {

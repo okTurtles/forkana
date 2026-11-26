@@ -46,6 +46,10 @@ func TestModerationWorkspace(t *testing.T) {
 	require.NoError(t, err)
 	caseIssue := &issues_model.Issue{RepoID: repo.ID, Repo: repo, Title: "owner / article", PosterID: admin.ID, Poster: admin}
 	require.NoError(t, issues_model.NewIssue(t.Context(), repo, caseIssue, []int64{caseLabel.ID}, nil))
+	require.NoError(t, moderation_model.InsertCase(t.Context(), &moderation_model.Case{
+		IssueID: caseIssue.ID, Kind: moderation_model.CaseKindArticle, TargetRepoID: 1,
+		SectionAnchor: moderation_model.SectionWholeArticle, Reason: moderation_model.ReasonDoxxing,
+	}))
 	_, _, err = issues_model.ToggleIssueAssignee(t.Context(), caseIssue, admin, moderator.ID)
 	require.NoError(t, err)
 	caseURL := fmt.Sprintf("/-/moderation/cases/%d", caseIssue.Index)

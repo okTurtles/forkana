@@ -5,6 +5,7 @@ package moderation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 
@@ -23,7 +24,7 @@ type CasePassage struct {
 }
 
 // RenderCasePassage renders the article of a case's first exact submission at the reported
-// revision, or returns nil when the case has none. Only moderators reach it: the case page
+// revision, or returns nil when the case has none or the article or revision is gone. Only moderators reach it: the case page
 // checks access, and the article is shown as it was when it was reported.
 func RenderCasePassage(ctx context.Context, c *moderation_model.Case) (*CasePassage, error) {
 	if c == nil || c.TargetRepoID == 0 {
@@ -43,12 +44,18 @@ func RenderCasePassage(ctx context.Context, c *moderation_model.Case) (*CasePass
 	if sub == nil {
 		return nil, nil
 	}
+	// The article or the reported revision can be gone (removed by a decision, or history
+	// rewritten): the case still shows, without the passage.
 	repo, err := repo_model.GetRepositoryByID(ctx, c.TargetRepoID)
-	if err != nil {
+	if repo_model.IsErrRepoNotExist(err) {
+		return nil, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("get case article: %w", err)
 	}
 	raw, err := readArticleAt(ctx, repo, sub.CommitSHA)
-	if err != nil {
+	if errors.Is(err, ErrInvalidReport) {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 	rctx := renderhelper.NewRenderContextRepoFile(ctx, repo, renderhelper.RepoFileOptions{
