@@ -139,7 +139,8 @@ func CoreLabels() []CoreLabel {
 		if r.Reason == ReasonChildSafety {
 			color = colorRed
 		}
-		labels = append(labels, CoreLabel{r.Reason.LabelName(), false, color, r.Description})
+		// Exclusive: a case and a report each have exactly one reason.
+		labels = append(labels, CoreLabel{r.Reason.LabelName(), true, color, r.Description})
 	}
 	return append(labels,
 		CoreLabel{LabelSourceReader, false, colorNeutral, "Reported by a reader"},

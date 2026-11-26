@@ -108,7 +108,8 @@ func TestEnsureSetup(t *testing.T) {
 		}
 		assert.True(t, byName[moderation_model.LabelTypeCase].Exclusive)
 		assert.Equal(t, "type", byName[moderation_model.LabelTypeCase].ExclusiveScope())
-		assert.False(t, byName[moderation_model.ReasonDoxxing.LabelName()].Exclusive)
+		assert.True(t, byName[moderation_model.ReasonDoxxing.LabelName()].Exclusive)
+		assert.Equal(t, "reason", byName[moderation_model.ReasonDoxxing.LabelName()].ExclusiveScope())
 	})
 
 	t.Run("SecondRunCreatesNothing", func(t *testing.T) {
