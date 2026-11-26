@@ -313,7 +313,10 @@ type SearchRepoOptions struct {
 	// Tombstoned articles are hidden from every listing unless this is set. They stay
 	// reachable by direct URL so that forks keep a resolvable ancestor.
 	IncludeTombstoned bool
-	// The moderation cases repository is hidden from every listing unless this is set.
+	// The moderation cases repository is hidden unless this is set, from every caller: the
+	// repository listings, and also the issue dashboards, issue search and doctor checks that
+	// find repositories through SearchRepository. Its issues are reached through the moderation
+	// pages. Only the admin panel sets it.
 	IncludeModerationCasesRepo bool
 }
 

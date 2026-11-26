@@ -36,14 +36,27 @@ func AutoWatchRepo(ctx context.Context, u *user_model.User, repo *Repository) er
 	return WatchRepo(ctx, u, repo, true)
 }
 
+// ModerationOrgIDCond selects the ID of the moderation organization ([moderation] ORG). Like
+// IsModerationCasesRepo it goes by name only: user and organization names share one namespace.
+func ModerationOrgIDCond() *builder.Builder {
+	return builder.Select("`user`.id").From("`user`").Where(builder.Eq{
+		"`user`.lower_name": strings.ToLower(setting.Moderation.Org),
+	})
+}
+
+// moderationCasesRepoCond matches the moderation cases repository ([moderation] ORG / REPO).
+func moderationCasesRepoCond() builder.Cond {
+	return builder.Eq{"repository.lower_name": strings.ToLower(setting.Moderation.Repo)}.
+		And(builder.In("repository.owner_id", ModerationOrgIDCond()))
+}
+
+// ModerationCasesRepoIDCond selects the ID of the moderation cases repository.
+func ModerationCasesRepoIDCond() *builder.Builder {
+	return builder.Select("repository.id").From("repository").Where(moderationCasesRepoCond())
+}
+
 // notModerationCasesRepoCond excludes the moderation cases repository from a listing: its
 // issues are reached through the moderation pages, never by browsing repositories.
 func notModerationCasesRepoCond() builder.Cond {
-	return builder.Not{builder.And(
-		builder.Eq{"repository.lower_name": strings.ToLower(setting.Moderation.Repo)},
-		builder.In("repository.owner_id", builder.Select("`user`.id").From("`user`").Where(builder.Eq{
-			"`user`.lower_name": strings.ToLower(setting.Moderation.Org),
-			"`user`.type":       user_model.UserTypeOrganization,
-		})),
-	)}
+	return builder.Not{moderationCasesRepoCond()}
 }
