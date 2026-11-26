@@ -210,8 +210,12 @@ func SubmitReport(ctx context.Context, in ReportInput) (*ReportResult, error) {
 	})
 	if err != nil {
 		// Two sends of one token racing: the loser's insert fails on the unique index. Its
-		// transaction is rolled back; answer with the winner's submission.
-		if existing, lookupErr := existingSubmission(ctx, in); lookupErr == nil && existing != nil {
+		// transaction is rolled back; answer with the winner's submission. The lock is per
+		// article, so the winner may have used the token on another article.
+		existing, lookupErr := existingSubmission(ctx, in)
+		if errors.Is(lookupErr, ErrTokenReused) {
+			return nil, lookupErr
+		} else if lookupErr == nil && existing != nil {
 			return existing, nil
 		}
 		return nil, err
