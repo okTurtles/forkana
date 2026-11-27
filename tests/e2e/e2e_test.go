@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
 
 	"code.gitea.io/gitea/cmd"
@@ -86,6 +87,7 @@ func TestE2e(t *testing.T) {
 	} else if len(paths) == 0 {
 		t.Fatal(fmt.Errorf("No e2e tests found in %s", searchGlob))
 	}
+	paths = e2eShard(t, paths)
 
 	runArgs := []string{"npx", "playwright", "test"}
 
@@ -124,4 +126,36 @@ func TestE2e(t *testing.T) {
 			})
 		})
 	}
+}
+
+// e2eShard returns the spec files of this CI shard when TEST_SHARD and TEST_TOTAL_SHARDS
+// are set (see the test-e2e matrix in .github/workflows/pull-e2e-tests.yml), or all of them.
+// The files are dealt round-robin in sorted order. Sharding happens here rather than with
+// Playwright's --shard because each spec file runs against its own Gitea in a subtest.
+func e2eShard(t *testing.T, paths []string) []string {
+	shardEnv, totalEnv := os.Getenv("TEST_SHARD"), os.Getenv("TEST_TOTAL_SHARDS")
+	if shardEnv == "" {
+		return paths
+	}
+	total, err := strconv.Atoi(totalEnv)
+	if err != nil || total < 1 {
+		t.Fatalf("TEST_TOTAL_SHARDS must be a positive integer, got: %q", totalEnv)
+	}
+	shard, err := strconv.Atoi(shardEnv)
+	if err != nil || shard < 1 || shard > total {
+		t.Fatalf("TEST_SHARD must be in [1, %d], got: %q", total, shardEnv)
+	}
+
+	sorted := slices.Sorted(slices.Values(paths))
+	var shardPaths []string
+	for i, path := range sorted {
+		if i%total == shard-1 {
+			shardPaths = append(shardPaths, path)
+		}
+	}
+	if len(shardPaths) == 0 {
+		t.Fatalf("shard %d/%d has no e2e tests assigned", shard, total)
+	}
+	fmt.Printf("Running e2e shard %d/%d (%d of %d spec files)\n", shard, total, len(shardPaths), len(sorted))
+	return shardPaths
 }

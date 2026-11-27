@@ -81,6 +81,14 @@ For other databases(replace `mssql` to `mysql` or `pgsql`):
 TEST_MSSQL_HOST=localhost:1433 TEST_MSSQL_DBNAME=test TEST_MSSQL_USERNAME=sa TEST_MSSQL_PASSWORD=MwantsaSecurePassword1 make test-e2e-mssql#example
 ```
 
+## Running a shard of the tests
+
+CI splits the e2e spec files across 4 runners. With `TEST_SHARD` (1-based) and `TEST_TOTAL_SHARDS` set, `TestE2e` runs only its share of the sorted spec files, dealt out round-robin:
+
+```
+TEST_SHARD=2 TEST_TOTAL_SHARDS=4 make test-e2e-sqlite
+```
+
 ## Visual testing
 
 Although the main goal of e2e is assertion testing, we have added a framework for visual regress testing. If you are working on front-end features, please use the following:

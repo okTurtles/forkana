@@ -543,7 +543,7 @@ generate-ini-sqlite:
 
 .PHONY: test-sqlite
 test-sqlite: integrations.sqlite.test generate-ini-sqlite
-	GITEA_ROOT="$(CURDIR)" GITEA_CONF=tests/sqlite.ini ./integrations.sqlite.test
+	GITEA_ROOT="$(CURDIR)" GITEA_CONF=tests/sqlite.ini ./tools/test-integration.sh ./integrations.sqlite.test
 
 .PHONY: test-sqlite\#%
 test-sqlite\#%: integrations.sqlite.test generate-ini-sqlite
@@ -587,7 +587,7 @@ generate-ini-pgsql:
 
 .PHONY: test-pgsql
 test-pgsql: integrations.pgsql.test generate-ini-pgsql
-	GITEA_ROOT="$(CURDIR)" GITEA_CONF=tests/pgsql.ini ./integrations.pgsql.test
+	GITEA_ROOT="$(CURDIR)" GITEA_CONF=tests/pgsql.ini ./tools/test-integration.sh ./integrations.pgsql.test
 
 .PHONY: test-pgsql\#%
 test-pgsql\#%: integrations.pgsql.test generate-ini-pgsql

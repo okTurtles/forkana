@@ -7,6 +7,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"hash"
 	"hash/fnv"
@@ -80,6 +81,16 @@ func NewNilResponseHashSumRecorder() *NilResponseHashSumRecorder {
 }
 
 func TestMain(m *testing.M) {
+	// -test.list (used by tools/test-integration.sh to shard the tests) must skip the
+	// environment setup below, which requires a database.
+	flag.Parse()
+	if flag.Lookup("test.list").Value.String() != "" {
+		os.Exit(m.Run())
+	}
+	os.Exit(testMain(m))
+}
+
+func testMain(m *testing.M) int {
 	defer log.GetManager().Close()
 
 	managerCtx, cancel := context.WithCancel(context.Background())
@@ -96,7 +107,7 @@ func TestMain(m *testing.M) {
 	)
 	if err != nil {
 		fmt.Printf("Error initializing test database: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	// FIXME: the console logger is deleted by mistake, so if there is any `log.Fatal`, developers won't see any error message.
@@ -105,14 +116,14 @@ func TestMain(m *testing.M) {
 
 	if err = util.RemoveAll(setting.Indexer.IssuePath); err != nil {
 		fmt.Printf("util.RemoveAll: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	if err = util.RemoveAll(setting.Indexer.RepoPath); err != nil {
 		fmt.Printf("Unable to remove repo indexer: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
-	os.Exit(exitCode)
+	return exitCode
 }
 
 type TestSession struct {

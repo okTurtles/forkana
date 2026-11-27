@@ -20,6 +20,11 @@ jobs:
     if: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.frontend == 'true' || needs.files-changed.outputs.actions == 'true' || needs.files-changed.outputs.e2e == 'true'
     needs: files-changed
     runs-on: ubuntu-latest
+    # Split the spec files across 4 runners (see e2eShard in tests/e2e/e2e_test.go).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
         id: ca-roots
@@ -39,15 +44,17 @@ jobs:
       - run: make deps-frontend frontend deps-backend
       - run: pnpm exec playwright install --with-deps
       - run: make test-e2e-sqlite
-        timeout-minutes: 40
+        timeout-minutes: 20
         env:
           USE_REPO_TEST_DIR: 1
+          TEST_SHARD: ${{ matrix.shard }}
+          TEST_TOTAL_SHARDS: 4
       # Skipped when fix-ubuntu-ca-roots fails: the CA bundle can then still
       # trust a removed root, and this step sends the runtime token through it.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.ca-roots.outcome == 'success' }}
         with:
-          name: playwright-report-${{ github.run_id }}
+          name: playwright-report-${{ github.run_id }}-${{ matrix.shard }}
           path: |
             tests/e2e/test-artifacts/
             tests/e2e/reports/
