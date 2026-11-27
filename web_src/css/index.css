@@ -50,6 +50,7 @@
 @import "./features/moderation.css";
 @import "./features/subject-compare.css";
 @import "./features/changes-hub.css";
+@import "./features/help.css";
 @import "./features/user-settings.css";
 @import "./features/status-pages.css";
 @import "./features/notifications.css";

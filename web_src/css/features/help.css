@@ -1,0 +1,552 @@
+/* The help pages (#541, custom/templates/help/), after Figma "D4 · Community guidelines: What
+   can be reported" (8159:873) and its phone frame (8159:1144). Values are Figma px; the node
+   each one comes from is named next to it. */
+
+/* the 70% #d1d9e0 rule between the rows of the sidebar and between the reasons */
+.help-page {
+  --color-help-rule: color-mix(in srgb, var(--color-border-light) 70%, transparent);
+  /* the content warning over an image, the same in every theme */
+  --color-help-cw-overlay: #14171a8c;
+  --color-help-cw-text: #fff;
+}
+
+/* The 1080px column (Page 8159:875: 32px under the navbar, 180px in on a 1440px frame), with
+   the page's 16px gutter once the window is narrower. Back, then the columns 24px under it.
+   The selector outweighs base.css's 16px top margin for a page's first child. */
+.page-content.help-page > .help-container:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: calc(1080px + 2 * 16px);
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+}
+
+/* Back (8159:876): a 16px chevron, 4px, Inter 400 14/20 #4e40fa */
+.help-back {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-primary);
+}
+
+.help-back:hover {
+  color: var(--color-primary-hover);
+}
+
+/* the sidebar, 36px from the content (8159:879) */
+.help-columns {
+  display: flex;
+  align-items: flex-start;
+  gap: 36px;
+}
+
+/* ── Help nav (8159:880) ─────────────────────────────────────────────────────
+   204px, a 1px #d1d9e0 border, 6px corners. "Help" on #f6f8fa (8px around, Inter 600 16/24
+   #59636e); each row under a 70% rule: a group name (12px 8px 4px, Inter 600 11/20 #59636e,
+   in capitals) or an entry (12px 8px, a 16px icon 8px from Inter 400 14/20 #1f2328). The
+   current page's entry is on #f6f8fa in Inter 600. */
+.help-nav {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 204px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.help-nav-title {
+  padding: 8px;
+  background: var(--color-surface-muted);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-muted-text);
+}
+
+.help-nav-group,
+.help-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--color-help-rule);
+}
+
+.help-nav-group {
+  padding: 12px 8px 4px;
+  font-size: 11px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  color: var(--color-muted-text);
+}
+
+.help-nav-item {
+  padding: 12px 8px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.help-nav-item:hover {
+  background: var(--color-button-hover);
+  color: var(--color-text-primary);
+}
+
+.help-nav-item.active {
+  background: var(--color-surface-muted);
+  font-weight: var(--font-weight-semibold);
+}
+
+.help-nav-item .svg {
+  flex-shrink: 0;
+}
+
+/* ── Content (8159:911) ──────────────────────────────────────────────────────
+   840px, a 1px #d1d9e0 border, 6px corners; its title on #f6f8fa over a 70% rule (8px 12px,
+   Inter 600 16/24 #59636e), then the body: 36px 64px 48px, its blocks 28px apart. */
+.help-content {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+}
+
+.help-content-title {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-help-rule);
+  border-radius: 6px 6px 0 0;
+  background: var(--color-surface-muted);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-muted-text);
+}
+
+.help-content-body {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 36px 64px 48px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-primary);
+}
+
+.help-content-body p {
+  margin: 0;
+}
+
+/* the intro (8159:913), 12px between its lines: Inter 600 14/20, then a 690px Inter 400
+   14/20 paragraph, then "Jump to:" (Inter 600 12/18 #59636e) and the reasons' labels, 8px
+   apart */
+.help-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.help-intro p {
+  max-width: 690px;
+}
+
+.help-intro-title,
+.help-group {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.help-jump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.help-jump-label {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-muted-text);
+}
+
+/* A reason's label (IssueLabel 8359:266999): 20px, 1px 7px, 100px corners, Inter 600 12/18
+   #1f2328 on #dad5ff (#4e40fa at 21% on white, as the Announcement draws it). Child safety's
+   (8359:267003) is on #ffebe9, red like its moderation label. */
+.help-reason-label {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 1px 7px;
+  border-radius: 100px;
+  background: color-mix(in srgb, var(--color-primary) 21%, var(--color-surface));
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.help-reason-label.severe {
+  background: var(--color-danger-bg);
+}
+
+a.help-reason-label:hover {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+}
+
+/* ── A reason (Section/Child safety 8159:930) ────────────────────────────────
+   Under a 70% rule, 24px down: its name (Inter 600 16/24), a 690px description, the two boxes,
+   then what moderators do and any link, 12px apart. */
+.help-reason {
+  padding-top: 24px;
+  border-top: 1px solid var(--color-help-rule);
+  scroll-margin-top: 16px;
+}
+
+.help-reason-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.help-reason-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.help-reason-body > p {
+  max-width: 690px;
+}
+
+/* the boxes (8159:934), 16px apart, each as tall as its list: 12px 16px, 6px corners, a 1px
+   border at 40%; the title (a 16px icon 8px from Inter 600 14/20) and the examples (Inter
+   400 14/20, each starting with a bullet) 8px apart. Not allowed is #ffebe9 with a #ff8182
+   border and a #d1242f x-circle; Allowed #dafbe1 with a #4ac26b border and a #1a7f37
+   check-circle. */
+.help-examples {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  align-self: stretch;
+}
+
+.help-examples-box {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 15px;
+  border: 1px solid;
+  border-radius: 6px;
+}
+
+.help-examples-box.not-allowed {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+}
+
+.help-examples-box.allowed {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+}
+
+.help-examples-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.help-examples-box.not-allowed .help-examples-title .svg {
+  color: var(--color-danger-fg);
+}
+
+.help-examples-box.allowed .help-examples-title .svg {
+  color: var(--color-green-dark-1);
+}
+
+.help-examples-box ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.help-examples-box li::before {
+  content: "• ";
+}
+
+/* what moderators do (8159:947): a 16px #59636e shield-check 8px from Inter 400 14/20
+   #59636e */
+.help-reason-action {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--color-muted-text);
+}
+
+.help-reason-action .svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* a link to another help page (8159:1075): a 16px book 4px from Inter 600 14/20 #4e40fa */
+.help-reason-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+}
+
+.help-reason-link:hover {
+  color: var(--color-primary-hover);
+}
+
+/* ── The content warning example (8159:1011) ─────────────────────────────────
+   Its label (Inter 600 12/16 #59636e), the excerpt, then the note (Inter 400 12/16 #59636e),
+   8px apart. The excerpt (8159:1013): 16px in, a 1px #d1d9e0 border, 6px corners; the text
+   (Inter 400 14/22), the 220px image (6px corners) and its caption (Inter 400 12/16 #59636e),
+   12px apart. */
+.help-cw-example {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.help-cw-label,
+.help-cw-note,
+.help-cw-caption {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-muted-text);
+}
+
+.help-cw-label {
+  font-weight: var(--font-weight-semibold);
+}
+
+.help-cw-excerpt {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+.help-cw-excerpt > p:first-child {
+  line-height: 22px;
+}
+
+/* Hidden (8159:1015), the image is blurred (layer blur 36, half of it in CSS) under #14171a
+   at 55%, with the warning in the middle: a white 24px eye-closed, Inter 600 14/20 and Inter
+   400 12/16 white lines and the small "Show image" button, 8px apart. Shown (8159:1028), the
+   small "Hide image" button sits 12px from its top right corner. */
+.help-cw {
+  position: relative;
+  height: 220px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: linear-gradient(90deg, #8c8573 0%, #615e54 50%, #a8a394 100%);
+}
+
+.help-cw-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(18px);
+  transform: scale(1.1); /* keeps the blurred edges inside the frame */
+}
+
+.help-cw::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-help-cw-overlay);
+}
+
+.help-cw-warning {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--color-help-cw-text);
+  text-align: center;
+}
+
+.help-cw-warning-title {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.help-cw-warning-reason {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.help-cw-hide {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+}
+
+/* not just "display: none" on .help-cw-hide: .forkana-btn's display would win if button.css were
+   imported after this file */
+.help-cw:not(.revealed) .help-cw-hide {
+  display: none;
+}
+
+.help-cw.revealed .help-cw-image {
+  filter: none;
+  transform: none;
+}
+
+.help-cw.revealed::after,
+.help-cw.revealed .help-cw-warning {
+  display: none;
+}
+
+/* the toggle that opens a reason on a phone; a heading on a desktop */
+.help-reason-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+/* a narrow desktop: the body keeps the boxes side by side with less space around */
+@media (min-width: 768px) and (max-width: 1011.98px) {
+  .help-content-body {
+    padding: 24px 24px 32px;
+  }
+}
+
+/* ── Phone (8159:1144) ───────────────────────────────────────────────────────
+   16px around and between the blocks: Help, the title (Inter 700 32/48), the intro (Inter
+   400 14/20 #59636e) and the reasons in one box (a 1px #d1d9e0 border, 6px corners). Each
+   group starts with its name on #f6f8fa (8px 16px, Inter 600 12/18 #59636e); each reason is
+   a row (12px 16px, under a 70% rule) with its label and a chevron, opened to show the same
+   blocks 12px apart, the boxes stacked, 12px in, with an Inter 600 12/18 title, and what
+   moderators do in Inter 400 12/16. */
+@media (max-width: 767.98px) {
+  .page-content.help-page > .help-container:first-child {
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .help-columns {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .help-content {
+    display: contents;
+  }
+
+  .help-mobile-title {
+    margin: 0;
+    font-size: 32px;
+    line-height: 48px;
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+  }
+
+  .help-mobile-intro {
+    margin: 0;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-muted-text);
+  }
+
+  .help-content-body {
+    gap: 0;
+    padding: 0;
+    border: 1px solid var(--color-border-light);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .help-group {
+    padding: 8px 16px;
+    background: var(--color-surface-muted);
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--color-muted-text);
+  }
+
+  .help-reason {
+    padding: 12px 16px;
+  }
+
+  .help-reason-title {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .help-reason:not(.open) .help-reason-body {
+    display: none;
+  }
+
+  .help-reason.open .help-reason-chevron {
+    transform: rotate(180deg);
+  }
+
+  .help-examples {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .help-examples-box {
+    padding: 11px;
+  }
+
+  .help-examples-title {
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .help-reason-action {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .help-reason-action .svg {
+    margin-top: 0;
+  }
+}

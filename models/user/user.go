@@ -604,6 +604,7 @@ var (
 
 		"explore",
 		"feeds", // user feeds page
+		"help",  // help pages
 		"issues",
 		"pulls",
 		"milestones",

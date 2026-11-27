@@ -1,0 +1,81 @@
+{{/* #541 "What can be reported": Figma D4 8159:873 (desktop) and 8159:1144 (phone). The
+     reasons are those of the report form, in its groups and order (routers/web/help). On a
+     phone they are an accordion, the first one open; on a desktop every reason is shown. */}}
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content help-page">
+	<div class="help-container">
+		{{/* back to the page that linked here, usually the report form (?redirect_to=). The phone
+		     frame has "‹ Help" (up to Help) instead: that waits for a /help page, as the phone has no
+		     other way back to the report form */}}
+		<a href="{{.BackLink}}" class="help-back">{{svg "octicon-chevron-left"}}{{ctx.Locale.Tr "help.back"}}</a>
+
+		<div class="help-columns">
+			<nav class="help-nav not-mobile" aria-label="{{ctx.Locale.Tr "help.title"}}">
+				<div class="help-nav-title">{{ctx.Locale.Tr "help.title"}}</div>
+				{{range .HelpNavGroups}}
+					<div class="help-nav-group">{{ctx.Locale.Tr (print "help." .Key)}}</div>
+					{{range .Items}}
+						<a class="help-nav-item{{if eq .Slug $.HelpActive}} active{{end}}" href="{{AppSubUrl}}/help/{{.Slug}}"{{if eq .Slug $.HelpActive}} aria-current="page"{{end}}>
+							{{svg .Icon}}{{ctx.Locale.Tr (print "help." .Key)}}
+						</a>
+					{{end}}
+				{{end}}
+			</nav>
+
+			<div class="help-content">
+				<h1 class="help-content-title not-mobile">{{ctx.Locale.Tr "help.what_can_be_reported"}}</h1>
+				<h1 class="help-mobile-title only-mobile">{{ctx.Locale.Tr "help.what_can_be_reported"}}</h1>
+				<p class="help-mobile-intro only-mobile">{{ctx.Locale.Tr "help.report.intro_mobile"}}</p>
+
+				<div class="help-content-body">
+					<div class="help-intro not-mobile">
+						<h2 class="help-intro-title">{{ctx.Locale.Tr "help.report.intro_title"}}</h2>
+						<p>{{ctx.Locale.Tr "help.report.intro"}}</p>
+						<div class="help-jump">
+							<span class="help-jump-label">{{ctx.Locale.Tr "help.report.jump_to"}}</span>
+							{{range .ReasonGroups}}{{range .Reasons}}
+								<a class="help-reason-label{{if .Severe}} severe{{end}}" href="#{{.Slug}}">{{ctx.Locale.Tr (print "help.report." .Key ".name")}}</a>
+							{{end}}{{end}}
+						</div>
+					</div>
+
+					{{range $i, $group := .ReasonGroups}}
+						<h2 class="help-group">{{ctx.Locale.Tr (print "help.report." $group.Key)}}</h2>
+						{{range $j, $r := $group.Reasons}}
+							{{$name := ctx.Locale.Tr (print "help.report." $r.Key ".name")}}
+							{{/* the first reason starts open on a phone */}}
+							<section class="help-reason{{if and (eq $i 0) (eq $j 0)}} open{{end}}" id="{{$r.Slug}}" aria-labelledby="{{$r.Slug}}-title">
+								<h3 class="help-reason-title" id="{{$r.Slug}}-title">
+									<span class="not-mobile">{{$name}}</span>
+									<button type="button" class="help-reason-toggle only-mobile" aria-expanded="{{if and (eq $i 0) (eq $j 0)}}true{{else}}false{{end}}" aria-controls="{{$r.Slug}}-body" data-global-click="onHelpReasonToggle">
+										<span class="help-reason-label{{if $r.Severe}} severe{{end}}">{{$name}}</span>
+										{{svg "octicon-chevron-down" 16 "help-reason-chevron"}}
+									</button>
+								</h3>
+								<div class="help-reason-body" id="{{$r.Slug}}-body">
+									<p>{{ctx.Locale.Tr (print "help.report." $r.Key ".description")}}</p>
+									<div class="help-examples">
+										<div class="help-examples-box not-allowed">
+											<div class="help-examples-title">{{svg "octicon-x-circle"}}{{ctx.Locale.Tr "help.report.not_allowed"}}</div>
+											<ul>{{range $r.NotAllowed}}<li>{{ctx.Locale.Tr .}}</li>{{end}}</ul>
+										</div>
+										<div class="help-examples-box allowed">
+											<div class="help-examples-title">{{svg "octicon-check-circle"}}{{ctx.Locale.Tr "help.report.allowed"}}</div>
+											<ul>{{range $r.Allowed}}<li>{{ctx.Locale.Tr .}}</li>{{end}}</ul>
+										</div>
+									</div>
+									{{if $r.Example}}{{template "help/content_warning_example" $}}{{end}}
+									<p class="help-reason-action">{{svg "octicon-shield-check"}}<span>{{ctx.Locale.Tr (print "help.report." $r.Key ".action")}}</span></p>
+									{{if $r.LinkSlug}}
+										<a class="help-reason-link" href="{{AppSubUrl}}/help/{{$r.LinkSlug}}">{{svg "octicon-book"}}{{ctx.Locale.Tr $r.LinkKey}}</a>
+									{{end}}
+								</div>
+							</section>
+						{{end}}
+					{{end}}
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}

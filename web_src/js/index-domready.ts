@@ -42,6 +42,7 @@ import {initArticleEditor} from './features/article-editor.ts';
 import {initArticleSummary} from './features/article-summary.ts';
 import {initArticleSettings} from './features/article-settings.ts';
 import {initArticleWatchMenu} from './features/article-watch-menu.ts';
+import {initHelpPage} from './features/help-page.ts';
 import {initModerationPassage} from './features/moderation-passage.ts';
 import {initUserSettingsMenu} from './features/user-settings-menu.ts';
 import {initCompSearchUserBox} from './features/comp/SearchUserBox.ts';
@@ -149,6 +150,7 @@ const initPerformanceTracer = callInitFunctions([
   initArticleSummary,
   initArticleSettings,
   initArticleWatchMenu,
+  initHelpPage,
   initModerationPassage,
   initUserSettingsMenu,
   initRepoGraphGit,
