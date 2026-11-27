@@ -93,6 +93,14 @@ For other databases(replace `mssql` to `mysql`, or `pgsql`):
 TEST_MSSQL_HOST=localhost:1433 TEST_MSSQL_DBNAME=test TEST_MSSQL_USERNAME=sa TEST_MSSQL_PASSWORD=MwantsaSecurePassword1 make test-mssql#GPG
 ```
 
+## Running a shard of the tests
+
+CI splits the sqlite and pgsql integration tests across 4 runners. `make test-sqlite` and `make test-pgsql` run one shard when `TEST_SHARD` (1-based) and `TEST_TOTAL_SHARDS` are set: `tools/test-integration.sh` lists the top-level tests, sorts them and deals them out round-robin.
+
+```
+TEST_SHARD=2 TEST_TOTAL_SHARDS=4 make test-sqlite
+```
+
 ## Setting timeouts for declaring long-tests and long-flushes
 
 We appreciate that some testing machines may not be very powerful and
