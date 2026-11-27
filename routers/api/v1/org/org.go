@@ -5,6 +5,7 @@
 package org
 
 import (
+	"errors"
 	"net/http"
 
 	activities_model "code.gitea.io/gitea/models/activities"
@@ -343,6 +344,8 @@ func Rename(ctx *context.APIContext) {
 	if err := user_service.RenameUser(ctx, orgUser, form.NewName); err != nil {
 		if user_model.IsErrUserAlreadyExist(err) || db.IsErrNameReserved(err) || db.IsErrNamePatternNotAllowed(err) || db.IsErrNameCharsNotAllowed(err) {
 			ctx.APIError(http.StatusUnprocessableEntity, err)
+		} else if errors.Is(err, user_service.ErrModerationOrgFixed) {
+			ctx.APIError(http.StatusForbidden, err)
 		} else {
 			ctx.APIErrorInternal(err)
 		}

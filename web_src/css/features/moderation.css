@@ -1,0 +1,14 @@
+/* Moderation passage anchors (web_src/js/features/moderation-passage.ts). Placeholder styling
+   until the case review (1.6) and the report modal (1.1) bring their design. */
+.moderation-passage-root[data-passage-select] [data-source-range] {
+  cursor: pointer;
+}
+
+.moderation-passage-root .moderation-passage-hover {
+  background: var(--color-primary-alpha-10);
+}
+
+.moderation-passage-root .moderation-passage-highlight {
+  background: var(--color-primary-alpha-20);
+  box-shadow: -4px 0 0 var(--color-primary);
+}

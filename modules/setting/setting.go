@@ -140,6 +140,7 @@ func loadCommonSettingsFrom(cfg ConfigProvider) error {
 	}
 	loadUIFrom(cfg)
 	loadAdminFrom(cfg)
+	loadModerationFrom(cfg)
 	loadAPIFrom(cfg)
 	loadMetricsFrom(cfg)
 	loadCamoFrom(cfg)

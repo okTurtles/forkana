@@ -217,6 +217,10 @@ func DeleteIssue(ctx *context.Context) {
 	}
 
 	if err := issue_service.DeleteIssue(ctx, ctx.Doer, issue); err != nil {
+		if errors.Is(err, issue_service.ErrModerationIssueFixed) {
+			ctx.HTTPError(http.StatusForbidden, err.Error())
+			return
+		}
 		ctx.ServerError("DeleteIssueByID", err)
 		return
 	}

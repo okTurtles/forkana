@@ -1,0 +1,6 @@
+{{/* The moderation workspace layout, after templates/admin/layout_head.tmpl. Placeholder until
+     the queue (1.5) and the case review (1.6) bring their design. */}}
+{{template "base/head" .ctxData}}
+<div role="main" aria-label="{{.ctxData.Title}}" class="page-content moderation {{.pageClass}}">
+	<div class="ui container">
+		{{template "base/alert" .ctxData}}

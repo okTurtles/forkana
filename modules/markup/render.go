@@ -63,6 +63,14 @@ type RenderOptions struct {
 	// from their text, like Markdown headings get, so they can be linked to. Only enabled for
 	// repository files and wiki pages: comments etc. don't have heading permalinks.
 	EnableHeadingIDGeneration bool
+
+	// SourceRanges gives the blocks of a Markdown article a "data-source-range" attribute,
+	// their byte range in the README, so that a moderation report can anchor to a block
+	// (markdown.SourceRangeAttr). Off everywhere by default; only moderation pages set it.
+	// With it off, an author can still write the attribute, in raw HTML or a code block's info
+	// string: the sanitizer keeps only a well-formed range, and the server re-checks every
+	// reported range against its own parse of the README.
+	SourceRanges bool
 }
 
 // RenderContext represents a render context
@@ -133,6 +141,12 @@ func (ctx *RenderContext) WithUseAbsoluteLink(v bool) *RenderContext {
 
 func (ctx *RenderContext) WithEnableHeadingIDGeneration(v bool) *RenderContext {
 	ctx.RenderOptions.EnableHeadingIDGeneration = v
+	return ctx
+}
+
+// WithSourceRanges sets RenderOptions.SourceRanges (moderation passage anchors).
+func (ctx *RenderContext) WithSourceRanges(v bool) *RenderContext {
+	ctx.RenderOptions.SourceRanges = v
 	return ctx
 }
 

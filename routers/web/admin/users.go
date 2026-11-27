@@ -276,6 +276,8 @@ func ViewUser(ctx *context.Context) {
 		OrderBy:     db.SearchOrderByAlphabetically,
 		Private:     true,
 		Collaborate: optional.Some(false),
+		// Like the admin repository list, this page shows the moderation cases repository.
+		IncludeModerationCasesRepo: true,
 	})
 	if err != nil {
 		ctx.ServerError("SearchRepository", err)

@@ -50,6 +50,9 @@ func Repos(ctx *context.Context) {
 		// A tombstone is hidden everywhere else, and its owner's settings page is
 		// redirected away, so this listing is the only place it can be acted on.
 		IncludeTombstoned: true,
+		// The moderation cases repository is hidden from every other listing: this is where an
+		// administrator finds it.
+		IncludeModerationCasesRepo: true,
 	})
 }
 

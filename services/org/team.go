@@ -265,7 +265,9 @@ func AddTeamMember(ctx context.Context, team *organization.Team, user *user_mode
 
 		go func(repos []*repo_model.Repository) {
 			for _, repo := range repos {
-				if err = repo_model.WatchRepo(graceful.GetManager().ShutdownContext(), user, repo, true); err != nil {
+				// AutoWatchRepo skips the moderation cases repository before watching, rather than
+				// leaving it to be unwatched later, which would race this goroutine.
+				if err = repo_model.AutoWatchRepo(graceful.GetManager().ShutdownContext(), user, repo); err != nil {
 					log.Error("watch repo failed: %v", err)
 				}
 			}
