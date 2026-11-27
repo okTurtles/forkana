@@ -10,6 +10,8 @@ import (
 	issues_model "code.gitea.io/gitea/models/issues"
 	moderation_model "code.gitea.io/gitea/models/moderation"
 	"code.gitea.io/gitea/models/unittest"
+	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
@@ -19,6 +21,9 @@ import (
 func TestModerationRecords(t *testing.T) {
 	require.NoError(t, unittest.PrepareTestDatabase())
 	ctx := t.Context()
+	// The fixture issues 1 and 5 stand for case issues: their repository is the cases repo.
+	defer test.MockVariableValue(&setting.Moderation.Org, "user2")()
+	defer test.MockVariableValue(&setting.Moderation.Repo, "repo1")()
 
 	// issue 1 is open, issue 5 is closed (fixtures)
 	open := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 1})
@@ -69,6 +74,15 @@ func TestModerationRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	assert.Equal(t, open.ID, all[0].IssueID)
+	t.Run("OnlyInTheCurrentCasesRepo", func(t *testing.T) {
+		defer test.MockVariableValue(&setting.Moderation.Repo, "repo2")()
+		c, err := moderation_model.FindOpenCase(ctx, 42, "history", doxxing)
+		require.NoError(t, err)
+		assert.Nil(t, c, "a case left in the previous cases repository isn't reused")
+		all, err := moderation_model.FindOpenCasesByTargetRepo(ctx, 42)
+		require.NoError(t, err)
+		assert.Empty(t, all)
+	})
 
 	require.NoError(t, moderation_model.SetCasePart(ctx, open.ID, moderation_model.SectionIntro, ""))
 	c, err = moderation_model.FindOpenCase(ctx, 42, moderation_model.SectionIntro, doxxing)

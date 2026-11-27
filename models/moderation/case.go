@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"code.gitea.io/gitea/models/db"
+	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"xorm.io/builder"
@@ -152,9 +153,13 @@ func GetCase(ctx context.Context, issueID int64) (*Case, error) {
 	return c, nil
 }
 
-// openCasesOfRepo selects the open cases of a repository target; the query joins issue.
+// openCasesOfRepo selects the open cases of a repository target; the query joins issue. Only
+// cases in the current cases repository count: after [moderation] REPO is changed and setup
+// run again, the cases left in the old one are out of the workspace, so a new report opens a
+// new case rather than joining one that moderators can no longer reach.
 func openCasesOfRepo(repoID int64) builder.Cond {
-	return builder.Eq{"moderation_case.target_repo_id": repoID, "issue.is_closed": false}
+	return builder.Eq{"moderation_case.target_repo_id": repoID, "issue.is_closed": false}.
+		And(builder.In("issue.repo_id", repo_model.ModerationCasesRepoIDCond()))
 }
 
 // FindOpenCase returns the open case for a reason on a part of a repository target, or nil.
