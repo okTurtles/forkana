@@ -54,9 +54,12 @@ func runModerationSetup(ctx context.Context, c *cli.Command) error {
 	if err := git.InitSimple(); err != nil {
 		return err
 	}
-	// Creating the organization saves its generated avatar.
-	if err := storage.Init(); err != nil {
-		return err
+	// Creating the organization saves its generated avatar. A dry run writes nothing, and
+	// initializing local storage would create its directories.
+	if !c.Bool("dry-run") {
+		if err := storage.Init(); err != nil {
+			return err
+		}
 	}
 
 	var owner *user_model.User
