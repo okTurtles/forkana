@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"code.gitea.io/gitea/models/db"
 	issues_model "code.gitea.io/gitea/models/issues"
@@ -105,6 +106,9 @@ func EnsureSetup(ctx context.Context, opts SetupOptions) (*SetupResult, error) {
 			return nil, fmt.Errorf("create organization %q: %w", cfg.Org, err)
 		}
 	} else {
+		if err := checkOrgOwners(ctx, org); err != nil {
+			return nil, err
+		}
 		result.add("organization", cfg.Org, false)
 	}
 
@@ -190,6 +194,30 @@ func EnsureSetup(ctx context.Context, opts SetupOptions) (*SetupResult, error) {
 		}
 	}
 	return result, nil
+}
+
+// checkOrgOwners refuses an existing organization that has an owner who isn't a site
+// administrator. Owners can read every repository of the organization, so such an owner would
+// read every report and its reporter. Setup creates the organization with an administrator as
+// its only owner; another owner means it was added since, or that someone took the name first.
+func checkOrgOwners(ctx context.Context, org *organization.Organization) error {
+	owners, err := org.GetOwnerTeam(ctx)
+	if err != nil {
+		return fmt.Errorf("get the owners of organization %q: %w", org.Name, err)
+	}
+	if err := owners.LoadMembers(ctx); err != nil {
+		return fmt.Errorf("get the owners of organization %q: %w", org.Name, err)
+	}
+	var others []string
+	for _, u := range owners.Members {
+		if !u.IsAdmin {
+			others = append(others, u.Name)
+		}
+	}
+	if len(others) > 0 {
+		return fmt.Errorf("organization %s has owners who aren't site administrators (%s), and owners can read every report: remove them, or set [moderation] ORG to another organization", org.Name, strings.Join(others, ", "))
+	}
+	return nil
 }
 
 // casesRepoUnitsName names the cases repository's units in the setup result.

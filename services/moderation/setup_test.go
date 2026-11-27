@@ -18,6 +18,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/test"
+	org_service "code.gitea.io/gitea/services/org"
 	repo_service "code.gitea.io/gitea/services/repository"
 
 	"github.com/stretchr/testify/assert"
@@ -154,6 +155,25 @@ func TestEnsureSetup(t *testing.T) {
 		require.NoError(t, repo.LoadUnits(t.Context()))
 		require.Len(t, repo.Units, 1)
 		assert.True(t, repo.Units[0].IssuesConfig().EnableDependencies)
+	})
+
+	t.Run("RefusesOwnersWhoArentAdmins", func(t *testing.T) {
+		org, err := organization.GetOrgByName(t.Context(), "test-moderation")
+		require.NoError(t, err)
+		owners, err := org.GetOwnerTeam(t.Context())
+		require.NoError(t, err)
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		require.False(t, user.IsAdmin)
+		require.NoError(t, org_service.AddTeamMember(t.Context(), owners, user))
+
+		for _, dryRun := range []bool{false, true} {
+			_, err = EnsureSetup(t.Context(), SetupOptions{DryRun: dryRun})
+			require.ErrorContains(t, err, "aren't site administrators (user2)")
+		}
+
+		require.NoError(t, org_service.RemoveTeamMember(t.Context(), owners, user))
+		_, err = EnsureSetup(t.Context(), SetupOptions{})
+		require.NoError(t, err)
 	})
 
 	t.Run("RefusesAPublicRepository", func(t *testing.T) {
