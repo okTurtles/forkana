@@ -28,7 +28,7 @@ func TestHelpWhatCanBeReported(t *testing.T) {
 	})
 	assert.Equal(t, []string{
 		"child-safety", "hate-or-harassment", "doxxing", "graphic-violence", "adult-sexual-content",
-		"illegal-in-region", "no-reliable-source", "plagiarism-or-copyright", "off-topic-or-spam",
+		"illegal-in-region", "no-source", "plagiarism-or-copyright", "off-topic-or-spam",
 	}, ids)
 	assert.Equal(t, 9, doc.Find(".help-jump a.help-reason-label").Length())
 	assert.Equal(t, "/help/what-can-be-reported", doc.Find(".help-nav-item.active").AttrOr("href", ""))

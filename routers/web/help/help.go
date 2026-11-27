@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
+	moderation_model "code.gitea.io/gitea/models/moderation"
 	"code.gitea.io/gitea/modules/httplib"
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/templates"
@@ -64,8 +65,8 @@ type reasonGroup struct {
 
 // reason builds a reportReason whose examples are help.report.<key>.not_allowed_1…notAllowed
 // and help.report.<key>.allowed_1…allowed.
-func reason(slug, key string, notAllowed, allowed int) reportReason {
-	r := reportReason{Slug: slug, Key: key}
+func reason(slug moderation_model.Reason, key string, notAllowed, allowed int) reportReason {
+	r := reportReason{Slug: string(slug), Key: key}
 	for i := 1; i <= notAllowed; i++ {
 		r.NotAllowed = append(r.NotAllowed, fmt.Sprintf("help.report.%s.not_allowed_%d", key, i))
 	}
@@ -78,28 +79,28 @@ func reason(slug, key string, notAllowed, allowed int) reportReason {
 // reasonGroups lists the reasons in the report form's groups and order. "Something else" has
 // nothing to explain, so the page leaves it out, as the design does.
 func reasonGroups() []reasonGroup {
-	childSafety := reason("child-safety", "child_safety", 3, 2)
+	childSafety := reason(moderation_model.ReasonChildSafety, "child_safety", 3, 2)
 	childSafety.Severe = true
-	graphicViolence := reason("graphic-violence", "graphic_violence", 2, 2)
+	graphicViolence := reason(moderation_model.ReasonGraphicViolence, "graphic_violence", 2, 2)
 	graphicViolence.Example = true
-	illegalInRegion := reason("illegal-in-region", "illegal_in_region", 1, 1)
+	illegalInRegion := reason(moderation_model.ReasonIllegalInRegion, "illegal_in_region", 1, 1)
 	illegalInRegion.LinkSlug, illegalInRegion.LinkKey = "location-restrictions", "help.location_restrictions"
-	noReliableSource := reason("no-reliable-source", "no_reliable_source", 2, 2)
+	noReliableSource := reason(moderation_model.ReasonNoSource, "no_reliable_source", 2, 2)
 	noReliableSource.LinkSlug, noReliableSource.LinkKey = "contributing-guidelines", "help.report.sourcing_rules"
 
 	return []reasonGroup{
 		{"group_harmful", []reportReason{
 			childSafety,
-			reason("hate-or-harassment", "hate_or_harassment", 4, 3),
-			reason("doxxing", "doxxing", 2, 2),
+			reason(moderation_model.ReasonHateOrHarassment, "hate_or_harassment", 4, 3),
+			reason(moderation_model.ReasonDoxxing, "doxxing", 2, 2),
 			graphicViolence,
-			reason("adult-sexual-content", "adult_sexual_content", 2, 2),
+			reason(moderation_model.ReasonAdultSexualContent, "adult_sexual_content", 2, 2),
 			illegalInRegion,
 		}},
 		{"group_accuracy", []reportReason{
 			noReliableSource,
-			reason("plagiarism-or-copyright", "plagiarism_or_copyright", 2, 2),
-			reason("off-topic-or-spam", "off_topic_or_spam", 3, 2),
+			reason(moderation_model.ReasonPlagiarism, "plagiarism_or_copyright", 2, 2),
+			reason(moderation_model.ReasonOffTopicOrSpam, "off_topic_or_spam", 3, 2),
 		}},
 	}
 }
