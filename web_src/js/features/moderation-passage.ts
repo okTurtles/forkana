@@ -80,14 +80,16 @@ export function passageFromSelection(selection: Selection | null, root: Element)
   return {anchor: 'quote_only', quote, section: sectionOf(common, root)};
 }
 
-// highlightPassage marks the block whose range is exactly the value, and unmarks the others.
-// It returns the block, or null when the article has no such block (another revision).
+// highlightPassage marks the blocks whose range is exactly the value, and unmarks the others.
+// It returns the first, or null when the article has no such block (another revision). Every
+// match is marked: an author's raw HTML can carry the attribute too (the sanitizer allows it),
+// and a forged copy placed before the real block must not take its highlight.
 export function highlightPassage(root: Element, range: string): HTMLElement | null {
   for (const el of root.querySelectorAll(`.${highlightClass}`)) el.classList.remove(highlightClass);
   if (!parseSourceRange(range)) return null;
-  const block = root.querySelector<HTMLElement>(`[${sourceRangeAttr}="${range}"]`);
-  block?.classList.add(highlightClass);
-  return block;
+  const blocks = root.querySelectorAll<HTMLElement>(`[${sourceRangeAttr}="${range}"]`);
+  for (const block of blocks) block.classList.add(highlightClass);
+  return blocks[0] ?? null;
 }
 
 /* initPassageRoot wires one rendered article:

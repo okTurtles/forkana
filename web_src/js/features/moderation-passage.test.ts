@@ -96,6 +96,15 @@ test('highlightPassage marks one block', () => {
   expect(root.querySelectorAll('.moderation-passage-highlight')).toHaveLength(0);
 });
 
+test('highlightPassage marks a block an author forged too', () => {
+  const root = setup();
+  root.insertAdjacentHTML('afterbegin', '<p data-source-range="35-80">forged</p>');
+  expect(highlightPassage(root, '35-80')?.textContent).toBe('forged');
+  const marked = root.querySelectorAll('.moderation-passage-highlight');
+  expect(marked).toHaveLength(2);
+  expect(marked[1].textContent).not.toBe('forged'); // the real block keeps its highlight
+});
+
 test('initPassageRoot highlights and selects', () => {
   const root = setup();
   root.setAttribute('data-passage-highlight', '110-113');
