@@ -100,12 +100,15 @@ func InitTest(requireGitea bool) {
 	case setting.Database.Type.IsPostgreSQL():
 		var db *sql.DB
 		var err error
+		// Connect without a database name (the server's default one) to check for and create
+		// the test database: connecting to it directly fails when it does not exist yet, e.g. on
+		// a CI shard that skips the migration tests, which would otherwise have created it.
 		if setting.Database.Host[0] == '/' {
-			db, err = sql.Open("postgres", fmt.Sprintf("postgres://%s:%s@/%s?sslmode=%s&host=%s",
-				setting.Database.User, setting.Database.Passwd, setting.Database.Name, setting.Database.SSLMode, setting.Database.Host))
+			db, err = sql.Open("postgres", fmt.Sprintf("postgres://%s:%s@/?sslmode=%s&host=%s",
+				setting.Database.User, setting.Database.Passwd, setting.Database.SSLMode, setting.Database.Host))
 		} else {
-			db, err = sql.Open("postgres", fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s",
-				setting.Database.User, setting.Database.Passwd, setting.Database.Host, setting.Database.Name, setting.Database.SSLMode))
+			db, err = sql.Open("postgres", fmt.Sprintf("postgres://%s:%s@%s/?sslmode=%s",
+				setting.Database.User, setting.Database.Passwd, setting.Database.Host, setting.Database.SSLMode))
 		}
 
 		defer db.Close()
