@@ -23,6 +23,7 @@ import (
 	"code.gitea.io/gitea/modules/timeutil"
 	routers_moderation "code.gitea.io/gitea/routers/web/moderation"
 	moderation_service "code.gitea.io/gitea/services/moderation"
+	files_service "code.gitea.io/gitea/services/repository/files"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/google/uuid"
@@ -444,6 +445,26 @@ func TestModerationReport(t *testing.T) {
 		assert.Contains(t, unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: c.IssueID}).Title, "user2/repo1#1")
 		assert.Equal(t, before, unittest.GetCount(t, &issues_model.Comment{IssueID: 1}), "no reference comment from the case title")
 		unittest.AssertNotExistsBean(t, &issues_model.Comment{RefIssueID: c.IssueID})
+	})
+
+	// Last: it renames the article's README.
+	t.Run("LowercaseReadme", func(t *testing.T) {
+		resp, err := files_service.ChangeRepoFiles(t.Context(), article, article.Owner, &files_service.ChangeRepoFilesOptions{
+			Files:     []*files_service.ChangeRepoFile{{Operation: "rename", FromTreePath: "README.md", TreePath: "readme.md"}},
+			Message:   "lowercase readme",
+			OldBranch: article.DefaultBranch,
+			// no server runs the hooks in this test
+			InternalPush: true,
+		})
+		require.NoError(t, err)
+		out := post(t, readerSession, reportBody{
+			ClientToken: uuid.NewString(), Anchor: "exact", CommitSHA: resp.Commit.SHA, Range: blockRange,
+			Reasons: []reportReason{{"illegal-in-region", "Not allowed here."}},
+		}, http.StatusOK)
+		assert.Equal(t, "filed", out.Status)
+		sub, err := moderation_model.GetSubmission(t.Context(), out.SubmissionID)
+		require.NoError(t, err)
+		assert.Equal(t, "readme.md", sub.TreePath, "the file the report was read from")
 	})
 }
 

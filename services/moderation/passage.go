@@ -52,7 +52,7 @@ func RenderCasePassage(ctx context.Context, c *moderation_model.Case) (*CasePass
 	} else if err != nil {
 		return nil, fmt.Errorf("get case article: %w", err)
 	}
-	raw, err := readArticleAt(ctx, repo, sub.CommitSHA)
+	raw, _, err := readArticleAt(ctx, repo, sub.CommitSHA)
 	if errors.Is(err, ErrInvalidReport) {
 		return nil, nil
 	} else if err != nil {

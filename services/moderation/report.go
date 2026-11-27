@@ -4,6 +4,7 @@
 package moderation
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -25,13 +26,16 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/modules/util"
+	"code.gitea.io/gitea/services/sharemeta"
 
 	"github.com/google/uuid"
 	"xorm.io/builder"
 )
 
 const (
-	// ArticleTreePath is the file an article is made of.
+	// ArticleTreePath is the file an article is made of, as Forkana creates it. An article can
+	// have another README name (readArticleOf finds it as the article view does): the
+	// submission records the one it was read from.
 	ArticleTreePath = "README.md"
 	// MaxExplanationLength caps a reason's explanation, in runes.
 	MaxExplanationLength = 2000
@@ -178,7 +182,7 @@ func SubmitReport(ctx context.Context, in ReportInput) (*ReportResult, error) {
 			ClientToken:   in.ClientToken,
 			TargetRepoID:  in.Repo.ID,
 			CommitSHA:     anchor.commitSHA,
-			TreePath:      ArticleTreePath,
+			TreePath:      cmp.Or(anchor.treePath, ArticleTreePath),
 			SourceStart:   int64(anchor.start),
 			SourceEnd:     int64(anchor.end),
 			Quote:         anchor.quote,
@@ -290,6 +294,7 @@ func existingSubmission(ctx context.Context, in ReportInput) (*ReportResult, err
 
 type resolvedAnchor struct {
 	commitSHA  string
+	treePath   string
 	start, end int
 	quote      string
 	section    string
@@ -309,7 +314,7 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 	if !isFullCommitID(in.CommitSHA) {
 		return nil, invalid("commit must be a full commit ID")
 	}
-	raw, err := readArticleAt(ctx, in.Repo, in.CommitSHA)
+	raw, treePath, err := readArticleAt(ctx, in.Repo, in.CommitSHA)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +328,7 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 			return nil, err
 		}
 		return &resolvedAnchor{
-			commitSHA: in.CommitSHA, start: block.Start, end: block.End,
+			commitSHA: in.CommitSHA, treePath: treePath, start: block.Start, end: block.End,
 			quote: block.Quote, section: block.SectionAnchor,
 			sectionTitle: headingTitle(blocks, block.SectionAnchor),
 		}, nil
@@ -344,7 +349,7 @@ func resolveAnchor(ctx context.Context, in ReportInput) (*resolvedAnchor, error)
 			section = in.Section
 		}
 	}
-	return &resolvedAnchor{commitSHA: in.CommitSHA, quote: quote, section: section, sectionTitle: title}, nil
+	return &resolvedAnchor{commitSHA: in.CommitSHA, treePath: treePath, quote: quote, section: section, sectionTitle: title}, nil
 }
 
 // headingTitle returns the text of the article's heading with the id, or "" when there is
@@ -400,40 +405,45 @@ func isFullCommitID(sha string) bool {
 	return true
 }
 
-// readArticleAt reads the article's README at a commit of its repository. A commit or README
-// that doesn't exist is an invalid report; other failures are server errors.
-func readArticleAt(ctx context.Context, repo *repo_model.Repository, sha string) ([]byte, error) {
+// readArticleAt reads the article's README at a commit of its repository, and returns its
+// path. A commit or README that doesn't exist is an invalid report; other failures are server
+// errors.
+func readArticleAt(ctx context.Context, repo *repo_model.Repository, sha string) ([]byte, string, error) {
 	gitRepo, err := gitrepo.OpenRepository(ctx, repo)
 	if err != nil {
-		return nil, fmt.Errorf("open repository: %w", err)
+		return nil, "", fmt.Errorf("open repository: %w", err)
 	}
 	defer gitRepo.Close()
 	commit, err := gitRepo.GetCommit(sha)
 	if errors.Is(err, util.ErrNotExist) {
-		return nil, invalid("unknown commit %s", sha)
+		return nil, "", invalid("unknown commit %s", sha)
 	} else if err != nil {
-		return nil, fmt.Errorf("get commit %s: %w", sha, err)
+		return nil, "", fmt.Errorf("get commit %s: %w", sha, err)
 	}
 	return readArticleOf(commit)
 }
 
-// readArticleOf reads the article's README in a commit. A README larger than maxReadmeSize is
+// readArticleOf reads the article's README in a commit: the file the article view renders
+// (sharemeta.FindReadme), whose name may be lowercase. A README larger than maxReadmeSize is
 // refused rather than cut, so that ranges past the cut aren't reported as unknown blocks.
-func readArticleOf(commit *git.Commit) ([]byte, error) {
-	blob, err := commit.Tree.GetBlobByPath(ArticleTreePath)
-	if errors.Is(err, util.ErrNotExist) {
-		return nil, invalid("the article has no %s at %s", ArticleTreePath, commit.ID)
-	} else if err != nil {
-		return nil, fmt.Errorf("get %s at %s: %w", ArticleTreePath, commit.ID, err)
+func readArticleOf(commit *git.Commit) ([]byte, string, error) {
+	entries, err := commit.ListEntries()
+	if err != nil {
+		return nil, "", fmt.Errorf("list the files at %s: %w", commit.ID, err)
 	}
+	entry := sharemeta.FindReadme(entries)
+	if entry == nil {
+		return nil, "", invalid("the article has no %s at %s", ArticleTreePath, commit.ID)
+	}
+	blob := entry.Blob()
 	if blob.Size() > maxReadmeSize {
-		return nil, invalid("the article at %s is too large to check a passage in", commit.ID)
+		return nil, "", invalid("the article at %s is too large to check a passage in", commit.ID)
 	}
 	raw, err := blob.GetBlobBytes(maxReadmeSize)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", ArticleTreePath, err)
+		return nil, "", fmt.Errorf("read %s: %w", entry.Name(), err)
 	}
-	return raw, nil
+	return raw, entry.Name(), nil
 }
 
 func coreLabelsByName(ctx context.Context, orgID int64) (map[string]*issues_model.Label, error) {

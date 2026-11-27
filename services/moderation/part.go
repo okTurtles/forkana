@@ -234,7 +234,7 @@ func partTitle(ctx context.Context, repo *repo_model.Repository, section string)
 	if err != nil {
 		return "", fmt.Errorf("get the article's %s: %w", repo.DefaultBranch, err)
 	}
-	raw, err := readArticleOf(commit)
+	raw, _, err := readArticleOf(commit)
 	if err != nil {
 		return "", err
 	}
