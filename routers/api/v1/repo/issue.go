@@ -985,6 +985,10 @@ func DeleteIssue(ctx *context.APIContext) {
 	}
 
 	if err = issue_service.DeleteIssue(ctx, ctx.Doer, issue); err != nil {
+		if errors.Is(err, issue_service.ErrModerationIssueFixed) {
+			ctx.APIError(http.StatusForbidden, err)
+			return
+		}
 		ctx.APIErrorInternal(err)
 		return
 	}

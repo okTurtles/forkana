@@ -21,6 +21,16 @@
   --color-primary-hover: #3C2EED;
   --color-primary-active: #3328D8;
   --color-secondary-nav-bg: #fff;
+  /* #532: the hover of the navbar's items, logo excepted (the design system's
+     control/transparent/bgColor/hover, #818b98 at 10%: Figma "Navbar – how it works
+     (for dev)" 40001058:1049, Button 40001058:1071), the only background in the nav */
+  --color-nav-hover-bg: #818b981a;
+  /* the same hover laid over the navbar's background, opaque: the ring of the bell's
+     badge on a hovered item, which must hide the icon under it */
+  --color-nav-hover-bg-solid: color-mix(in srgb, #818b98 10%, var(--color-body));
+  /* CounterLabel primary (18959:64968): bgColor/neutral/emphasis under a white number */
+  --color-counter-primary-bg: #59636e;
+  --color-counter-primary-fg: #ffffff;
 
   --color-hover: #E9E7FF66;
   --color-muted: #F6F8FA;
@@ -73,11 +83,19 @@
   --color-button-primary-border: #1f232826;
   /* the landing title "What's on your mind?" (Figma 6313:56405) */
   --color-home-title: #000000;
+  /* the border of the sign in / sign up card (Sign in/up 7368:264604: #d1d9e0 at 70%) and of
+     the other one-card pages that follow it (web_src/css/user.css) */
+  --color-card-border: #d1d9e0b3;
+  /* the secondary button's fill (Button 30258:5582: #f6f8fa); a token of its own since the dark
+     theme (#336, 5629:47722) fills it #212830, not the muted surface */
+  --color-button-secondary-bg: #f6f8fa;
+  /* the unavailable primary button (View Tab 641:65671: #dad5ff); dark: 5629:49603 */
+  --color-primary-unavailable-bg: #dad5ff;
 
   /* Border colors */
   --color-border: #d0d7de;
   --color-border-light: #d1d9e0;
-  --color-border-input: #d1d7dd;
+  --color-border-input: #d1d9e0; /* TextInput stroke (7581:68933); was #d1d7dd */
   --color-border-muted: #eee;
 
   /* Surface colors */

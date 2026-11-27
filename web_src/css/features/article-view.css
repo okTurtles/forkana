@@ -11,9 +11,10 @@
    640px column (Frame 759 7368:264687, Frame 965 7368:264897 and 7368:263261), so the
    Read / Edit / History row stays still between them, and the subject header above is
    the one of every other view, Follow and Compare included (repo/header.css): nothing
-   above the content moves when the view or the tab changes. */
+   above the content moves when the view or the tab changes. #476: 800px from a 1280px
+   window, as every other view's column (--article-column-width, base.css). */
 #article-view-root {
-  max-width: 640px;
+  max-width: var(--article-column-width);
   margin-inline: auto;
 }
 
@@ -291,8 +292,8 @@
 /* ── The "…" button and its menu (#478) ──────────────────────────────────────
    The button: Action 7368:264704 (Read 7368:264676; 7368:263274 in "Article view /
    History" 7368:263253), 40×28, 6px 12px, 6px corners, no fill, a 16px
-   kebab-horizontal-24 #1f2328, 9px after Watch (Frame 5's gap), at the end of the 640px
-   row.
+   kebab-horizontal-24 #1f2328, 9px after Watch (Frame 5's gap), at the end of the row (the
+   column's width: 640px, 800px from a 1280px window, #476).
    The menu: "Profile" 7368:404268 ("Report" 7368:404084), 108px wide, white, 12px
    corners, 12px padding and three shadows, its right edge on the button's and its top
    2.5px under it. Its one item (1st Checkbox 7368:404276): a 16px flag (Flag-16 434:36114,
@@ -514,6 +515,26 @@
   font-size: 16px;
   line-height: 24px;
   font-weight: var(--font-weight-semibold);
+}
+
+/* #476: the article's text is 16px on 24px lines (the design system's 1.5), its
+   paragraphs too: base.css gives every <p> 1.4285 (22.86px at 16px). Unitless, so a
+   paragraph in smaller text keeps the ratio. */
+.file-view.article-content.markup p {
+  line-height: 1.5;
+}
+
+/* #476: the article's pictures fill the column and keep their proportions (a 16:9 one is
+   800×450 in the 800px column), the narrower ones stretched to it too. Not the emoji, nor
+   the pictures in a list or a table: imported articles have 20px icons in lists ("Science
+   portal") and 60px ones in tables (the "does not cite any sources" box), which would
+   become 800px wide. The custom emoji are an <img> in a span.emoji, which would break
+   the line if it were a block. A picture given a width (<img width="120">) keeps it. */
+.file-view.article-content.markup img:not(.emoji, .emoji img, :is(li, table) img, [width]) {
+  display: block;
+  width: 100%;
+  height: auto;
+  box-sizing: border-box;
 }
 
 /* ── Edit ───────────────────────────────────────────────────────────────────
@@ -760,7 +781,7 @@
    A 1px #d1d9e0 frame with 6px corners. Header (Column headers 7368:263301): 32px,
    #f6f8fa, 6px 12px, Inter 600 12/20 #59636e; columns at 640 (#469): User 168, Code 88,
    Date 104 and the 32px icon column, the Message filling the rest on one line that ends
-   with "…". Rows (Frame 609 7368:263310): 36px, 6px 12px, Inter 12/20 under a 1px
+   with "…" (#476: in the 800px column, the Message takes the extra 160px). Rows (Frame 609 7368:263310): 36px, 6px 12px, Inter 12/20 under a 1px
    #d1d9e0 rule; the user's 24px avatar has 6px corners (Avatar 7368:263314) and their
    name is semibold; the date #59636e. */
 /* (positioned so that the rows' absolutely placed screen-reader labels, .tw-sr-only, are

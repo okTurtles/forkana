@@ -24,9 +24,13 @@
 				{{/* #386 item 3, #326: no "View modes" entry; the Bubble/Table/Article tabs under the
 				     subject title already switch views, and a change request page links back to its
 				     article from its title */}}
-				{{/* #94: "Change request" opens the change requests hub, its counter the open
-				     change requests to the user's articles (Button 7368:274543 in the Changes
-				     hub frames, CounterLabel 6484:44075); the open page is underlined there */}}
+				{{/* #94: "Change requests" opens the change requests hub, its counter the open
+				     change requests to the user's articles.
+				     #532 (Figma "Navbar – how it works (for dev)" 40001058:1049): no line under
+				     the current page, which is bold with aria-current="page"; the counter is
+				     CounterLabel primary (18959:64968) when one of those change requests has an
+				     unread notification ("something new"), secondary (18959:64969) otherwise,
+				     on every page, and absent at 0. */}}
 				{{/* (on the hub, the count its Received tab already made) */}}
 				{{$crCount := 0}}
 				{{if .PageIsChangeRequestsHub}}
@@ -34,9 +38,14 @@
 				{{else if .PageGlobalData}}
 					{{$crCount = call .PageGlobalData.GetOpenReceivedChangeRequestCount}}
 				{{end}}
-				<a id="navbar-change-requests" class="item{{if or .PageIsPullList .PageIsPulls .PageIsChangeRequestsHub}} navbar-item-current{{end}}" href="{{AppSubUrl}}/pulls"{{if or .PageIsPullList .PageIsPulls .PageIsChangeRequestsHub}} aria-current="page"{{end}}>
+				{{$crUnread := false}}
+				{{if and $crCount .PageGlobalData}}
+					{{$crUnread = call .PageGlobalData.GetHasUnreadReceivedChangeRequest}}
+				{{end}}
+				{{$crCurrent := or .PageIsPullList .PageIsPulls .PageIsChangeRequestsHub}}
+				<a id="navbar-change-requests" class="item navbar-nav-item{{if $crCurrent}} navbar-item-current{{end}}" href="{{AppSubUrl}}/pulls"{{if $crCurrent}} aria-current="page"{{end}}>
 					<span class="navbar-item-label">{{ctx.Locale.Tr "change_requests_hub.nav"}}</span>
-					{{if $crCount}}<span class="navbar-counter" data-tooltip-content="{{ctx.Locale.Tr "change_requests_hub.nav_count" $crCount}}">{{CountFmt $crCount}}</span>{{end}}
+					{{if $crCount}}<span class="navbar-counter {{if $crUnread}}navbar-counter-primary{{else}}navbar-counter-secondary{{end}}" data-tooltip-content="{{ctx.Locale.Tr "change_requests_hub.nav_count" $crCount}}">{{CountFmt $crCount}}</span>{{end}}
 				</a>
 			{{end}}
 			{{/* Milestones link hidden - not used in Forkana
@@ -46,11 +55,13 @@
 				{{end}}
 			{{end}}
 			*/}}
-			<a class="item{{if .PageIsExplore}} active{{end}}" href="{{AppSubUrl}}/explore/subjects">{{ctx.Locale.Tr "explore"}}</a>
-		{{else if .IsLandingPageOrganizations}}
-			<a class="item{{if .PageIsExplore}} active{{end}}" href="{{AppSubUrl}}/explore/organizations">{{ctx.Locale.Tr "explore"}}</a>
+			{{/* #532: on an Explore page, Explore is the current page, marked as Change
+			     requests is (bold, aria-current), never with a background or a line */}}
+			<a id="navbar-explore" class="item navbar-nav-item{{if .PageIsExplore}} navbar-item-current{{end}}" href="{{AppSubUrl}}/explore/subjects"{{if .PageIsExplore}} aria-current="page"{{end}}>{{ctx.Locale.Tr "explore"}}</a>
 		{{else}}
-			<a class="item{{if .PageIsExplore}} active{{end}}" href="{{AppSubUrl}}/explore/subjects">{{ctx.Locale.Tr "explore"}}</a>
+			{{/* #532: signed out, the navbar is the "Current=Signed out" variant (Figma
+			     8494:3283): Explore stays a normal item on every page */}}
+			<a id="navbar-explore" class="item navbar-nav-item" href="{{AppSubUrl}}/explore/{{if .IsLandingPageOrganizations}}organizations{{else}}subjects{{end}}">{{ctx.Locale.Tr "explore"}}</a>
 		{{end}}
 
 		{{template "custom/extra_links" .}}
@@ -113,6 +124,17 @@
 						{{svg "octicon-gear"}}
 						{{ctx.Locale.Tr "your_settings"}}
 					</a>
+					{{/* 1.4: the moderation workspace, for moderators and site administrators while
+					     [moderation] ENABLED is on; the badge counts the moderator's own open
+					     cases. No role pill or "Signed in as" here (#386 removed them). */}}
+					{{if and .PageGlobalData (call .PageGlobalData.IsModerator)}}
+						{{$modCount := call .PageGlobalData.GetModeratorOpenCaseCount}}
+						<a id="navbar-moderation" class="{{if .PageIsModeration}}active {{end}}item" href="{{AppSubUrl}}/-/moderation">
+							{{svg "octicon-shield"}}
+							{{ctx.Locale.Tr "moderation.nav"}}
+							{{if $modCount}}<span class="ui small label tw-ml-auto" data-tooltip-content="{{ctx.Locale.Tr "moderation.nav_count" $modCount}}">{{CountFmt $modCount}}</span>{{end}}
+						</a>
+					{{end}}
 					{{/* #386 item 10: no Help entry — it led to the external Gitea docs,
 					     which are not Forkana's documentation */}}
 					<div class="divider"></div>

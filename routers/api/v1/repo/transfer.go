@@ -115,7 +115,7 @@ func Transfer(ctx *context.APIContext) {
 			ctx.APIError(http.StatusUnprocessableEntity, err)
 		case repo_service.IsRepositoryLimitReached(err):
 			ctx.APIError(http.StatusForbidden, err)
-		case errors.Is(err, user_model.ErrBlockedUser):
+		case errors.Is(err, user_model.ErrBlockedUser), errors.Is(err, repo_service.ErrModerationCasesRepoFixed):
 			ctx.APIError(http.StatusForbidden, err)
 		default:
 			ctx.APIErrorInternal(err)

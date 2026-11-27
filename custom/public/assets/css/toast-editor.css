@@ -787,7 +787,8 @@
 }
 
 /* Below 624px of editor the Visual/Source tabs take their own row above the buttons,
-   and the buttons start at the left and wrap. From 624px, which the 640px column has
+   and the buttons start at the left and wrap. From 624px, which the column has (640px, and 800px from a
+   1280px window, #476)
    (figma "Article view / Logged out - Edit" 7368:264887, Toolbar 7368:264999), the tabs
    and the buttons share one row: the 260px the tabs take, the article editor's buttons
    (four groups of 72, 72, 72 and 64px around three 9px separators: 307px) and the 7px

@@ -79,6 +79,12 @@ func (g *ASTTransformer) Transform(node *ast.Document, reader text.Reader, pc pa
 		return ast.WalkContinue, nil
 	})
 
+	// Moderation passage anchors, before the table of contents is added (front matter and TOC
+	// nodes have no source segments, so they would get no range anyway).
+	if ctx.RenderOptions.SourceRanges {
+		annotateSourceRanges(node, rc)
+	}
+
 	showTocInMain := tocMode == "true" /* old behavior, in main view */ || tocMode == "main"
 	showTocInSidebar := !showTocInMain && tocMode != "false" // not hidden, not main, then show it in sidebar
 	if len(tocList) > 0 && (showTocInMain || showTocInSidebar) {

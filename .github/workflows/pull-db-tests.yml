@@ -20,6 +20,11 @@ jobs:
     if: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
     needs: files-changed
     runs-on: ubuntu-latest
+    # Split across 4 runners (tools/test-integration.sh); migration tests run on shard 1 only.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       pgsql:
         image: postgres:14
@@ -56,11 +61,14 @@ jobs:
         env:
           TAGS: bindata
       - name: run migration tests
+        if: matrix.shard == 1
         run: make test-pgsql-migration
       - name: run tests
         run: make test-pgsql
-        timeout-minutes: 50
+        timeout-minutes: 25
         env:
+          TEST_SHARD: ${{ matrix.shard }}
+          TEST_TOTAL_SHARDS: 4
           TAGS: bindata gogit
           RACE_ENABLED: true
           TEST_TAGS: gogit
@@ -71,6 +79,11 @@ jobs:
     if: needs.files-changed.outputs.backend == 'true' || needs.files-changed.outputs.actions == 'true'
     needs: files-changed
     runs-on: ubuntu-latest
+    # Split across 4 runners (tools/test-integration.sh); migration tests run on shard 1 only.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: okTurtles/libcheloniajs/.github/actions/fix-ubuntu-ca-roots@main
       - uses: actions/checkout@v4
@@ -83,11 +96,14 @@ jobs:
         env:
           TAGS: bindata gogit sqlite sqlite_unlock_notify
       - name: run migration tests
+        if: matrix.shard == 1
         run: make test-sqlite-migration
       - name: run tests
         run: make test-sqlite
-        timeout-minutes: 50
+        timeout-minutes: 25
         env:
+          TEST_SHARD: ${{ matrix.shard }}
+          TEST_TOTAL_SHARDS: 4
           TAGS: bindata gogit sqlite sqlite_unlock_notify
           RACE_ENABLED: true
           TEST_TAGS: gogit sqlite sqlite_unlock_notify

@@ -10,6 +10,8 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/test"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -29,6 +31,17 @@ func TestGetRefEndNamesAndURLs(t *testing.T) {
 		2: repoLink + "/src/tag/tag1",
 		3: repoLink + "/src/commit/c0ffee",
 	}, urls)
+}
+
+func TestIssue_DeleteModerationIssue(t *testing.T) {
+	assert.NoError(t, unittest.PrepareTestDatabase())
+	defer test.MockVariableValue(&setting.Moderation.Org, "org3")()
+	defer test.MockVariableValue(&setting.Moderation.Repo, "repo3")()
+
+	issue := unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 6, RepoID: 3})
+	doer := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 1})
+	assert.ErrorIs(t, DeleteIssue(t.Context(), doer, issue), ErrModerationIssueFixed)
+	unittest.AssertExistsAndLoadBean(t, &issues_model.Issue{ID: 6})
 }
 
 func TestIssue_DeleteIssue(t *testing.T) {

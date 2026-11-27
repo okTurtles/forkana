@@ -10,6 +10,7 @@
 //	go run build/forkana-locales.go check           # fail on broken translations or outdated files, warn on missing/stale ones
 //	go run build/forkana-locales.go check -strict   # fail on missing/stale translations too
 //	go run build/forkana-locales.go todo <dir>      # write <dir>/locale_<lang>.ini: the strings to translate
+//	go run build/forkana-locales.go todo -max N <dir> # the same, but at most N strings in all
 //	go run build/forkana-locales.go merge <dir>     # merge translated <dir>/locale_<lang>.ini files, then generate
 package main
 
@@ -38,7 +39,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: go run build/forkana-locales.go generate | check [-strict] | todo <dir> | merge <dir>")
+	fmt.Fprintln(os.Stderr, "usage: go run build/forkana-locales.go generate | check [-strict] | todo [-max N] <dir> | merge <dir>")
 	os.Exit(2)
 }
 
@@ -46,6 +47,7 @@ func run(r *forkanalocale.Repository, command string, args []string) error {
 	fs := flag.NewFlagSet(command, flag.ExitOnError)
 	fs.Usage = usage
 	strict := fs.Bool("strict", false, "check: fail on missing or stale translations too")
+	limit := fs.Int("max", 0, "todo: write at most this many strings in all, whole English strings at a time (0: no limit)")
 	_ = fs.Parse(args)
 	dir := func() string {
 		if fs.NArg() != 1 {
@@ -53,7 +55,7 @@ func run(r *forkanalocale.Repository, command string, args []string) error {
 		}
 		return fs.Arg(0)
 	}
-	if (command != "check" && *strict) || (command != "todo" && command != "merge" && fs.NArg() > 0) {
+	if (command != "check" && *strict) || (command != "todo" && *limit != 0) || (command != "todo" && command != "merge" && fs.NArg() > 0) {
 		usage()
 	}
 
@@ -66,14 +68,19 @@ func run(r *forkanalocale.Repository, command string, args []string) error {
 	case "check":
 		return check(r, *strict)
 	case "todo":
-		counts, err := r.Todo(dir())
+		counts, total, err := r.Todo(dir(), *limit)
 		if err != nil {
 			return err
 		}
+		written := 0
 		for _, lang := range r.Languages {
 			if n := counts[lang]; n > 0 {
 				fmt.Printf("%s: %d string(s) to translate\n", forkanalocale.FileName(lang), n)
+				written += n
 			}
+		}
+		if written < total {
+			fmt.Printf("warning: -max %d: wrote %d of the %d string(s) to translate; run todo again after merging them\n", *limit, written, total)
 		}
 		if len(counts) == 0 {
 			fmt.Println("nothing to translate")

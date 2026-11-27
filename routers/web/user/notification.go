@@ -20,6 +20,7 @@ import (
 	"code.gitea.io/gitea/modules/setting"
 	"code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/templates"
+	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/modules/util"
 	"code.gitea.io/gitea/services/context"
 	issue_service "code.gitea.io/gitea/services/issue"
@@ -50,10 +51,13 @@ func prepareUserNotificationsData(ctx *context.Context) {
 	page := max(1, ctx.FormInt("page"))
 	perPage := util.IfZero(ctx.FormInt("perPage"), 20) // this value is never used or exposed ....
 	queryStatus := util.Iif(pageType == "read", activities_model.NotificationStatusRead, activities_model.NotificationStatusUnread)
+	// Forkana: the list's "Type" filter (notification_forkana.go)
+	sourceFilter, sources := notificationSourceFilter(ctx.FormString("source"))
 
 	total, err := db.Count[activities_model.Notification](ctx, activities_model.FindNotificationOptions{
 		UserID: ctx.Doer.ID,
 		Status: []activities_model.NotificationStatus{queryStatus},
+		Source: sources,
 	})
 	if err != nil {
 		ctx.ServerError("ErrGetNotificationCount", err)
@@ -75,6 +79,7 @@ func prepareUserNotificationsData(ctx *context.Context) {
 		},
 		UserID: ctx.Doer.ID,
 		Status: statuses,
+		Source: sources,
 	})
 	if err != nil {
 		ctx.ServerError("db.Find[activities_model.Notification]", err)
@@ -126,6 +131,15 @@ func prepareUserNotificationsData(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("notifications")
 	ctx.Data["PageType"] = pageType
 	ctx.Data["Notifications"] = notifications
+	ctx.Data["NotificationGroups"] = groupNotificationsByDay(notifications, timeutil.TimeStampNow().AsLocalTime())
+	ctx.Data["NotificationSource"] = sourceFilter
+	ctx.Data["NotificationTypeKeys"] = notificationTypeKeys
+	actors, err := loadNotificationActors(ctx, notifications)
+	if err != nil {
+		ctx.ServerError("loadNotificationActors", err)
+		return
+	}
+	ctx.Data["NotificationActors"] = actors
 	ctx.Data["Link"] = setting.AppSubURL + "/notifications"
 	ctx.Data["SequenceNumber"] = ctx.FormString("sequence-number")
 	pager.AddParamFromRequest(ctx.Req)

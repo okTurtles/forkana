@@ -2,7 +2,7 @@
 // article tab (Read, Edit, History); an info bar sits in the flow above it. figma
 // "Notes – Width system" (7368:275653): the title block is 136px (24px, the 56px title,
 // the 32px Follow, 24px), then the 48px view tabs row; below it, the Table view and the
-// Article view's tabs are a 640px column.
+// Article view's tabs are a 640px column, 800px from a 1280px window (#476).
 import {test, expect} from '@playwright/test';
 import {create_article_via_api, login_user, load_logged_in_context} from './utils_e2e.ts';
 import type {Page} from '@playwright/test';
@@ -95,9 +95,9 @@ test.beforeAll(async () => {
 });
 
 // With no article chosen (two articles, none selected in the Bubble view), the Article
-// view says "Please select an article…" in the same 640px column as the Table view's table
+// view says "Please select an article…" in the same column as the Table view's table
 // (figma "Notes – Width system" 7368:275653), not across the whole page.
-for (const width of [1440, 1024, 375]) {
+for (const width of [1440, 1100, 1024, 375]) {
   test(`at ${width}px the "select an article" message is the Table view's column`, async ({page}) => {
     await page.setViewportSize({width, height: 900});
     await open(page, 'table');
@@ -141,7 +141,8 @@ for (const width of [1440, 375]) {
 // reader's Edit tab has the sign-in banner, which pushes the header down (tested below);
 // the signed-in tests cover the Edit tab without it.
 const layouts = [
-  {width: 1440, column: 640},
+  {width: 1440, column: 800}, // #476: 800px from a 1280px window
+  {width: 1100, column: 640},
   {width: 375, column: 343},
 ];
 const compared = ['table', 'read', 'history'];
@@ -289,7 +290,7 @@ test.describe('signed in', () => {
     await login_user(browser, workerInfo, owner);
   });
 
-  for (const width of [1440, 375]) {
+  for (const {width, column} of layouts) {
     test(`at ${width}px the header does not move between views and tabs`, async ({browser}, workerInfo) => {
       const context = await load_logged_in_context(browser, workerInfo, owner);
       const page = await context.newPage();
@@ -299,7 +300,13 @@ test.describe('signed in', () => {
       for (const view of ['table', 'read', 'edit', 'history']) {
         await open(page, view);
         expectSameHeader(await headerOf(page), reference, view);
+        // #476: the Edit tab's column too
+        const content = await boxOf(page, '.history-view-section:not([hidden]) :is(.history-table, #article-view-root)');
+        expect(content.width, `${view}: content column`).toBe(column);
       }
+      // the editor fills the Edit tab's column
+      await open(page, 'edit');
+      expect((await boxOf(page, '.article-editor-box')).width, 'editor').toBeCloseTo(column, 0);
       // a signed-in reader has no sign-in banner
       await expect(page.locator('#article-signin-banner')).toHaveCount(0);
       await context.close();

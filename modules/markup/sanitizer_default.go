@@ -27,6 +27,12 @@ func (st *Sanitizer) createDefaultPolicy() *bluemonday.Policy {
 	policy.AllowAttrs("type").Matching(regexp.MustCompile(`^checkbox$`)).OnElements("input")
 	policy.AllowAttrs("checked", "disabled", "data-source-position").OnElements("input")
 
+	// Moderation passage anchors (RenderOptions.SourceRanges): the source range of a block.
+	// An author's own raw HTML can carry one too; the server re-checks every range against the
+	// README before it records a report, so a forged one only ever names another real block.
+	policy.AllowAttrs("data-source-range").Matching(regexp.MustCompile(`^\d{1,10}-\d{1,10}$`)).
+		OnElements("p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote", "pre", "table", "dl")
+
 	// Chroma always uses 1-2 letters for style names, we could tolerate it at the moment
 	policy.AllowAttrs("class").Matching(regexp.MustCompile(`^\w{0,2}$`)).OnElements("span")
 

@@ -45,12 +45,12 @@ func addRepositoryToTeam(ctx context.Context, t *organization.Team, repo *repo_m
 	}
 
 	// Make all team members watch this repo if enabled in global settings
-	if setting.Service.AutoWatchNewRepos {
+	if setting.Service.AutoWatchNewRepos && !repo.IsModerationCasesRepo() { // AutoWatchRepo would skip every member
 		if err = t.LoadMembers(ctx); err != nil {
 			return fmt.Errorf("getMembers: %w", err)
 		}
 		for _, u := range t.Members {
-			if err = repo_model.WatchRepo(ctx, u, repo, true); err != nil {
+			if err = repo_model.AutoWatchRepo(ctx, u, repo); err != nil {
 				return fmt.Errorf("watchRepo: %w", err)
 			}
 		}

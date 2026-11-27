@@ -707,6 +707,8 @@ func updateBasicProperties(ctx *context.APIContext, opts api.EditRepoOption) err
 				ctx.APIError(http.StatusUnprocessableEntity, err)
 			case db.IsErrNamePatternNotAllowed(err):
 				ctx.APIError(http.StatusUnprocessableEntity, err)
+			case errors.Is(err, repo_service.ErrModerationCasesRepoFixed):
+				ctx.APIError(http.StatusForbidden, err)
 			default:
 				ctx.APIError(http.StatusUnprocessableEntity, fmt.Errorf("ChangeRepositoryName: %w", err))
 			}
