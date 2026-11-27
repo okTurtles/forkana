@@ -10,6 +10,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"net/url"
 	"os"
@@ -132,9 +133,11 @@ func TestE2e(t *testing.T) {
 // are set (see the test-e2e matrix in .github/workflows/pull-e2e-tests.yml), or all of them.
 // The files are dealt round-robin in sorted order. Sharding happens here rather than with
 // Playwright's --shard because each spec file runs against its own Gitea in a subtest.
+// A run narrowed with -test.run (make test-e2e-sqlite#name) is not sharded, so a requested
+// spec on another shard is not silently skipped.
 func e2eShard(t *testing.T, paths []string) []string {
 	shardEnv, totalEnv := os.Getenv("TEST_SHARD"), os.Getenv("TEST_TOTAL_SHARDS")
-	if shardEnv == "" {
+	if shardEnv == "" || flag.Lookup("test.run").Value.String() != "" {
 		return paths
 	}
 	total, err := strconv.Atoi(totalEnv)

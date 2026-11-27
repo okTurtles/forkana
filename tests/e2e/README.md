@@ -83,7 +83,7 @@ TEST_MSSQL_HOST=localhost:1433 TEST_MSSQL_DBNAME=test TEST_MSSQL_USERNAME=sa TES
 
 ## Running a shard of the tests
 
-CI splits the e2e spec files across 4 runners. With `TEST_SHARD` (1-based) and `TEST_TOTAL_SHARDS` set, `TestE2e` runs only its share of the sorted spec files, dealt out round-robin:
+CI splits the e2e spec files across 4 runners. With `TEST_SHARD` (1-based) and `TEST_TOTAL_SHARDS` set, `TestE2e` runs only its share of the sorted spec files, dealt out round-robin (a run narrowed with `-test.run`, such as `make test-e2e-sqlite#example`, ignores them):
 
 ```
 TEST_SHARD=2 TEST_TOTAL_SHARDS=4 make test-e2e-sqlite
