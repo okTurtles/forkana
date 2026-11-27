@@ -16,6 +16,7 @@ import (
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/test"
 	"code.gitea.io/gitea/modules/timeutil"
 	org_service "code.gitea.io/gitea/services/org"
 	repo_service "code.gitea.io/gitea/services/repository"
@@ -163,6 +164,14 @@ func TestRenameUser(t *testing.T) {
 		assert.ErrorIs(t, RenameUser(t.Context(), user, existUser.LowerName), user_model.ErrUserAlreadyExist{Name: existUser.LowerName})
 		newUsername := fmt.Sprintf("uSEr%d", existUser.ID)
 		assert.ErrorIs(t, RenameUser(t.Context(), user, newUsername), user_model.ErrUserAlreadyExist{Name: newUsername})
+	})
+
+	t.Run("Moderation organization", func(t *testing.T) {
+		org := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 3, Type: user_model.UserTypeOrganization})
+		defer test.MockVariableValue(&setting.Moderation.Org, strings.ToUpper(org.Name))()
+
+		assert.ErrorIs(t, RenameUser(t.Context(), org, "trust-and-safety"), ErrModerationOrgFixed)
+		unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: org.ID, Name: org.Name})
 	})
 
 	t.Run("Normal", func(t *testing.T) {

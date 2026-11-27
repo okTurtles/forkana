@@ -31,10 +31,20 @@ import (
 	repo_service "code.gitea.io/gitea/services/repository"
 )
 
+// ErrModerationOrgFixed is returned for a rename of the moderation organization.
+var ErrModerationOrgFixed = util.NewPermissionDeniedErrorf("the moderation organization can't be renamed")
+
 // RenameUser renames a user
 func RenameUser(ctx context.Context, u *user_model.User, newUserName string) error {
 	if newUserName == u.Name {
 		return nil
+	}
+
+	// The moderation organization is found by [moderation] ORG, so a rename would lose the
+	// cases repository and the moderators team. A change of capitalization keeps them: names
+	// are looked up case-insensitively.
+	if u.IsOrganization() && strings.EqualFold(u.Name, setting.Moderation.Org) && !strings.EqualFold(newUserName, u.Name) {
+		return ErrModerationOrgFixed
 	}
 
 	// Non-local users are not allowed to change their username.

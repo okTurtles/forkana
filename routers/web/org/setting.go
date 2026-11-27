@@ -5,6 +5,7 @@
 package org
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 
@@ -220,6 +221,8 @@ func SettingsRenamePost(ctx *context.Context) {
 			ctx.JSONError(ctx.Tr("org.form.name_reserved", newOrgName))
 		} else if db.IsErrNamePatternNotAllowed(err) {
 			ctx.JSONError(ctx.Tr("org.form.name_pattern_not_allowed", newOrgName))
+		} else if errors.Is(err, user_service.ErrModerationOrgFixed) {
+			ctx.JSONError(ctx.Tr("org.settings.moderation_org_fixed"))
 		} else {
 			log.Error("RenameOrganization: %v", err)
 			ctx.JSONError(util.Iif(ctx.Doer.IsAdmin, err.Error(), string(ctx.Tr("org.settings.rename_failed"))))
