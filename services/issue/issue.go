@@ -20,6 +20,7 @@ import (
 	"code.gitea.io/gitea/modules/gitrepo"
 	"code.gitea.io/gitea/modules/log"
 	"code.gitea.io/gitea/modules/storage"
+	"code.gitea.io/gitea/modules/util"
 	notify_service "code.gitea.io/gitea/services/notify"
 )
 
@@ -180,11 +181,20 @@ func UpdateAssignees(ctx context.Context, issue *issues_model.Issue, oneAssignee
 	return err
 }
 
+// ErrModerationIssueFixed is returned for a deletion of an issue of the moderation cases
+// repository.
+var ErrModerationIssueFixed = util.NewPermissionDeniedErrorf("issues of the moderation cases repository can't be deleted")
+
 // DeleteIssue deletes an issue
 func DeleteIssue(ctx context.Context, doer *user_model.User, issue *issues_model.Issue) error {
 	// load issue before deleting it
 	if err := issue.LoadAttributes(ctx); err != nil {
 		return err
+	}
+	// Cases and reports keep their moderation rows, dependencies and audit trail: deleting the
+	// issue would leave those behind, and a deleted report would still count as pending.
+	if issue.Repo.IsModerationCasesRepo() {
+		return ErrModerationIssueFixed
 	}
 	if err := issue.LoadPullRequest(ctx); err != nil {
 		return err

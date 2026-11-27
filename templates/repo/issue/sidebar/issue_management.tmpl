@@ -81,6 +81,7 @@
 			</form>
 		</div>
 	</div>
+	{{if not .Repository.IsModerationCasesRepo}}{{/* Forkana: cases and reports can't be deleted */}}
 	<button class="tw-mt-1 fluid ui show-modal button" data-modal="#sidebar-delete-issue">
 		{{svg "octicon-trash"}}
 		{{ctx.Locale.Tr "repo.issues.delete"}}
@@ -107,4 +108,5 @@
 			{{template "base/modal_actions_confirm" .}}
 		</form>
 	</div>
+	{{end}}
 {{end}}

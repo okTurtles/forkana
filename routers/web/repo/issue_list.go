@@ -5,6 +5,7 @@ package repo
 
 import (
 	"bytes"
+	"errors"
 	"maps"
 	"net/http"
 	"slices"
@@ -399,6 +400,10 @@ func BatchDeleteIssues(ctx *context.Context) {
 	}
 	for _, issue := range issues {
 		if err := issue_service.DeleteIssue(ctx, ctx.Doer, issue); err != nil {
+			if errors.Is(err, issue_service.ErrModerationIssueFixed) {
+				ctx.JSONError(err.Error())
+				return
+			}
 			ctx.ServerError("DeleteIssue", err)
 			return
 		}
