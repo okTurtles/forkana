@@ -55,6 +55,7 @@ jobs:
               - "go.mod"
               - "go.sum"
               - "Makefile"
+              - "tools/test-integration.sh"
               - ".golangci.yml"
               - ".editorconfig"
               - "options/locale/locale_en-US.ini"
